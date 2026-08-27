@@ -21,12 +21,18 @@ import {
   KeyRound,
   Save,
   RotateCcw,
+  Globe,
+  RefreshCw,
+  Coins,
+  DollarSign,
+  TrendingUp,
 } from 'lucide-react';
-import { JournalEntry, JournalEntryLine, Account } from '../types';
+import { JournalEntry, JournalEntryLine, Account, CurrencyCode } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { formDraftStorage } from '../utils/formDrafts';
+import { currencyService, SUPPORTED_CURRENCIES } from '../utils/currencyService';
 
 interface JournalEntriesViewProps {
   state: DatabaseState;
@@ -43,6 +49,13 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
   const [entryToEdit, setEntryToEdit] = useState<JournalEntry | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
+  // Multi-Currency State
+  const [entryCurrency, setEntryCurrency] = useState<CurrencyCode>('EGP');
+  const [exchangeRate, setExchangeRate] = useState<number>(1.0);
+  const [isFetchingRates, setIsFetchingRates] = useState<boolean>(false);
+  const [ratesLastUpdated, setRatesLastUpdated] = useState<string | null>(null);
+  const [ratesSource, setRatesSource] = useState<string | null>(null);
+
   // Smart suggestion state
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -54,14 +67,34 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
   const [description, setDescription] = useState('');
   const [entryType, setEntryType] = useState<JournalEntry['entryType']>('GENERAL');
   const [lines, setLines] = useState<JournalEntryLine[]>([
-    { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
-    { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+    { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, foreignDebit: 0, foreignCredit: 0, currency: 'EGP', exchangeRate: 1.0, description: '' },
+    { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, foreignDebit: 0, foreignCredit: 0, currency: 'EGP', exchangeRate: 1.0, description: '' },
   ]);
 
   // Auto-Save & Draft State
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string | null>(null);
   const [draftRestoredNotice, setDraftRestoredNotice] = useState<string | null>(null);
   const isInitialDraftLoaded = useRef(false);
+
+  // Fetch live exchange rates on mount
+  useEffect(() => {
+    const loadRates = async () => {
+      setIsFetchingRates(true);
+      try {
+        const rates = await currencyService.fetchLiveRates();
+        if (rates[entryCurrency]) {
+          setExchangeRate(rates[entryCurrency].rateAgainstEgp);
+          setRatesLastUpdated(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
+          setRatesSource(rates[entryCurrency].source === 'LIVE_API' ? 'سعر حي (Live API)' : 'سعر مرجعي موثوق');
+        }
+      } catch (err) {
+        console.error('Error fetching initial currency rates:', err);
+      } finally {
+        setIsFetchingRates(false);
+      }
+    };
+    loadRates();
+  }, []);
 
   // Load existing draft on initial component mount if present
   useEffect(() => {
@@ -78,6 +111,8 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       setDate(savedDraft.date || new Date().toISOString().slice(0, 10));
       setDescription(savedDraft.description || '');
       setEntryType((savedDraft.entryType as any) || 'GENERAL');
+      if (savedDraft.currency) setEntryCurrency(savedDraft.currency);
+      if (savedDraft.exchangeRate) setExchangeRate(savedDraft.exchangeRate);
       if (savedDraft.lines && savedDraft.lines.length >= 2) {
         setLines(savedDraft.lines);
       }
@@ -107,6 +142,8 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       const meta = formDraftStorage.saveJournalDraft({
         date,
         entryType,
+        currency: entryCurrency,
+        exchangeRate,
         description,
         lines,
         aiPrompt,
@@ -117,7 +154,81 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [date, entryType, description, lines, aiPrompt, aiAmount, aiExplanation, editingEntryId]);
+  }, [date, entryType, entryCurrency, exchangeRate, description, lines, aiPrompt, aiAmount, aiExplanation, editingEntryId]);
+
+  const handleRefreshRates = async () => {
+    setIsFetchingRates(true);
+    try {
+      const rates = await currencyService.fetchLiveRates();
+      const current = rates[entryCurrency];
+      if (current) {
+        setExchangeRate(current.rateAgainstEgp);
+        setRatesLastUpdated(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        setRatesSource(current.source === 'LIVE_API' ? 'سعر حي متصل بالـ API' : 'سعر مرجعي معتمد');
+        
+        // Recalculate line EGP amounts if foreign amounts exist
+        if (entryCurrency !== 'EGP') {
+          const rate = current.rateAgainstEgp;
+          setLines(prev => prev.map(l => ({
+            ...l,
+            currency: entryCurrency,
+            exchangeRate: rate,
+            debit: l.foreignDebit ? Number((l.foreignDebit * rate).toFixed(2)) : l.debit,
+            credit: l.foreignCredit ? Number((l.foreignCredit * rate).toFixed(2)) : l.credit,
+          })));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh rates', err);
+    } finally {
+      setIsFetchingRates(false);
+    }
+  };
+
+  const handleCurrencyChange = (newCur: CurrencyCode) => {
+    setEntryCurrency(newCur);
+    const newRate = currencyService.getRate(newCur);
+    setExchangeRate(newRate);
+
+    // Update lines with new currency and recalculate
+    setLines(prev => prev.map(l => {
+      if (newCur === 'EGP') {
+        return {
+          ...l,
+          currency: 'EGP',
+          exchangeRate: 1.0,
+          foreignDebit: 0,
+          foreignCredit: 0,
+        };
+      } else {
+        const fDeb = l.foreignDebit || (l.debit > 0 ? Number((l.debit / newRate).toFixed(2)) : 0);
+        const fCred = l.foreignCredit || (l.credit > 0 ? Number((l.credit / newRate).toFixed(2)) : 0);
+        return {
+          ...l,
+          currency: newCur,
+          exchangeRate: newRate,
+          foreignDebit: fDeb,
+          foreignCredit: fCred,
+          debit: Number((fDeb * newRate).toFixed(2)),
+          credit: Number((fCred * newRate).toFixed(2)),
+        };
+      }
+    }));
+  };
+
+  const handleExchangeRateChange = (newRate: number) => {
+    const validRate = isNaN(newRate) || newRate <= 0 ? 1 : newRate;
+    setExchangeRate(validRate);
+
+    if (entryCurrency !== 'EGP') {
+      setLines(prev => prev.map(l => ({
+        ...l,
+        exchangeRate: validRate,
+        debit: l.foreignDebit ? Number((l.foreignDebit * validRate).toFixed(2)) : l.debit,
+        credit: l.foreignCredit ? Number((l.foreignCredit * validRate).toFixed(2)) : l.credit,
+      })));
+    }
+  };
 
   const handleClearDraft = () => {
     if (window.confirm('هل تريد مسح المسودة المحفوظة والبدء بنموذج قيد فارغ جديد؟')) {
@@ -125,12 +236,14 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       setDate(new Date().toISOString().slice(0, 10));
       setDescription('');
       setEntryType('GENERAL');
+      setEntryCurrency('EGP');
+      setExchangeRate(1.0);
       setAiPrompt('');
       setAiAmount('');
       setAiExplanation(null);
       setLines([
-        { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
-        { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+        { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, foreignDebit: 0, foreignCredit: 0, currency: 'EGP', exchangeRate: 1.0, description: '' },
+        { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, foreignDebit: 0, foreignCredit: 0, currency: 'EGP', exchangeRate: 1.0, description: '' },
       ]);
       setLastAutoSaveTime(null);
       setDraftRestoredNotice(null);
@@ -139,7 +252,10 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
   const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+  const foreignTotalDebit = lines.reduce((s, l) => s + (Number(l.foreignDebit) || 0), 0);
+  const foreignTotalCredit = lines.reduce((s, l) => s + (Number(l.foreignCredit) || 0), 0);
   const difference = Math.abs(totalDebit - totalCredit);
+  const foreignDifference = Math.abs(foreignTotalDebit - foreignTotalCredit);
   const isBalanced = totalDebit > 0 && difference < 0.01;
 
   const handleAccountSelect = (index: number, accountId: string) => {
@@ -151,23 +267,73 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       accountId: acc.id,
       accountCode: acc.code,
       accountName: acc.name,
+      currency: newLines[index].currency || entryCurrency,
+      exchangeRate: newLines[index].exchangeRate || exchangeRate,
     };
     setLines(newLines);
   };
 
   const handleLineChange = (index: number, field: keyof JournalEntryLine, value: any) => {
     const newLines = [...lines];
-    newLines[index] = {
-      ...newLines[index],
-      [field]: value,
-    };
+    const currentRate = newLines[index].exchangeRate || exchangeRate || 1.0;
+
+    if (field === 'foreignDebit') {
+      const fVal = Number(value) || 0;
+      newLines[index] = {
+        ...newLines[index],
+        foreignDebit: fVal,
+        foreignCredit: 0,
+        debit: entryCurrency !== 'EGP' ? Number((fVal * currentRate).toFixed(2)) : fVal,
+        credit: 0,
+      };
+    } else if (field === 'foreignCredit') {
+      const fVal = Number(value) || 0;
+      newLines[index] = {
+        ...newLines[index],
+        foreignCredit: fVal,
+        foreignDebit: 0,
+        credit: entryCurrency !== 'EGP' ? Number((fVal * currentRate).toFixed(2)) : fVal,
+        debit: 0,
+      };
+    } else if (field === 'debit') {
+      const egpVal = Number(value) || 0;
+      newLines[index] = {
+        ...newLines[index],
+        debit: egpVal,
+        foreignDebit: entryCurrency !== 'EGP' && currentRate > 0 ? Number((egpVal / currentRate).toFixed(2)) : egpVal,
+      };
+    } else if (field === 'credit') {
+      const egpVal = Number(value) || 0;
+      newLines[index] = {
+        ...newLines[index],
+        credit: egpVal,
+        foreignCredit: entryCurrency !== 'EGP' && currentRate > 0 ? Number((egpVal / currentRate).toFixed(2)) : egpVal,
+      };
+    } else {
+      newLines[index] = {
+        ...newLines[index],
+        [field]: value,
+      };
+    }
     setLines(newLines);
   };
 
   const addLine = () => {
     setLines([
       ...lines,
-      { id: `l-${Date.now()}`, accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+      {
+        id: `l-${Date.now()}`,
+        accountId: '',
+        accountCode: '',
+        accountName: '',
+        debit: 0,
+        credit: 0,
+        foreignDebit: 0,
+        foreignCredit: 0,
+        currency: entryCurrency,
+        exchangeRate: exchangeRate,
+        description: '',
+      },
     ]);
   };
 
@@ -396,7 +562,13 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     setDate(entryToEdit.date);
     setDescription(entryToEdit.description);
     setEntryType(entryToEdit.entryType || 'GENERAL');
-    setLines(entryToEdit.lines.map((l) => ({ ...l })));
+    setEntryCurrency(entryToEdit.currency || 'EGP');
+    setExchangeRate(entryToEdit.exchangeRate || 1.0);
+    setLines(entryToEdit.lines.map((l) => ({
+      ...l,
+      currency: l.currency || entryToEdit.currency || 'EGP',
+      exchangeRate: l.exchangeRate || entryToEdit.exchangeRate || 1.0,
+    })));
     setIsAuthModalOpen(false);
     setSelectedEntryForView(null);
     setIsNewEntryModalOpen(true);
@@ -419,6 +591,10 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       db.updateJournalEntry(editingEntryId, {
         date,
         description: description || 'قيد يومية عامة',
+        currency: entryCurrency,
+        exchangeRate: exchangeRate,
+        foreignTotalDebit: entryCurrency !== 'EGP' ? foreignTotalDebit : undefined,
+        foreignTotalCredit: entryCurrency !== 'EGP' ? foreignTotalCredit : undefined,
         lines,
         totalDebit,
         totalCredit,
@@ -429,6 +605,10 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       db.addJournalEntry({
         date,
         description: description || 'قيد يومية عامة',
+        currency: entryCurrency,
+        exchangeRate: exchangeRate,
+        foreignTotalDebit: entryCurrency !== 'EGP' ? foreignTotalDebit : undefined,
+        foreignTotalCredit: entryCurrency !== 'EGP' ? foreignTotalCredit : undefined,
         lines,
         totalDebit,
         totalCredit,
@@ -446,10 +626,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     setEntryToEdit(null);
     // Reset form
     setDescription('');
+    setEntryCurrency('EGP');
+    setExchangeRate(1.0);
     setAiExplanation(null);
     setLines([
-      { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
-      { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+      { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, foreignDebit: 0, foreignCredit: 0, currency: 'EGP', exchangeRate: 1.0, description: '' },
+      { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, foreignDebit: 0, foreignCredit: 0, currency: 'EGP', exchangeRate: 1.0, description: '' },
     ]);
   };
 
@@ -565,7 +747,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
             >
               {/* Entry Card Header */}
               <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="font-mono text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-800 text-white shadow-2xs">
                     {entry.serialNumber}
                   </span>
@@ -582,6 +764,14 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                   <span className="text-[10px] text-slate-400 font-mono">
                     {entry.entryType}
                   </span>
+
+                  {/* Multi-Currency Badge */}
+                  {entry.currency && entry.currency !== 'EGP' && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1 font-mono">
+                      <Globe className="w-3 h-3 text-blue-600" />
+                      <span>{entry.currency} {entry.foreignTotalDebit ? Number(entry.foreignTotalDebit).toLocaleString() : ''} (سعر: {entry.exchangeRate || 1} ج.م)</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -618,8 +808,15 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
               </div>
 
               {/* Description */}
-              <div className="px-5 py-2.5 text-xs font-medium text-slate-800 bg-white">
-                <span className="text-slate-400 ml-1">البيان:</span> {entry.description}
+              <div className="px-5 py-2.5 text-xs font-medium text-slate-800 bg-white flex items-center justify-between">
+                <div>
+                  <span className="text-slate-400 ml-1">البيان:</span> {entry.description}
+                </div>
+                {entry.currency && entry.currency !== 'EGP' && (
+                  <span className="text-[11px] text-blue-700 font-semibold bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
+                    معاملة بالعملة الأجنبية: <strong>{SUPPORTED_CURRENCIES.find(c => c.code === entry.currency)?.nameAr || entry.currency}</strong> (معيار EAS 13)
+                  </span>
+                )}
               </div>
 
               {/* Journal Lines Table */}
@@ -629,6 +826,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                     <tr className="bg-slate-50/50 text-slate-500 font-semibold border-b border-slate-100">
                       <th className="py-2 px-5">كود الحساب</th>
                       <th className="py-2 px-5">اسم الحساب</th>
+                      {entry.currency && entry.currency !== 'EGP' && (
+                        <>
+                          <th className="py-2 px-5 text-left text-blue-700">مدين ({entry.currency})</th>
+                          <th className="py-2 px-5 text-left text-amber-700">دائن ({entry.currency})</th>
+                        </>
+                      )}
                       <th className="py-2 px-5 text-left">مدين (ج.م)</th>
                       <th className="py-2 px-5 text-left">دائن (ج.م)</th>
                       <th className="py-2 px-5">شرح الطرف</th>
@@ -639,6 +842,16 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                       <tr key={line.id || idx} className="hover:bg-slate-50/50">
                         <td className="py-2 px-5 font-mono text-slate-600">{line.accountCode}</td>
                         <td className="py-2 px-5 font-medium text-slate-900">{line.accountName}</td>
+                        {entry.currency && entry.currency !== 'EGP' && (
+                          <>
+                            <td className="py-2 px-5 font-mono font-semibold text-left text-blue-700">
+                              {line.foreignDebit && line.foreignDebit > 0 ? Number(line.foreignDebit).toLocaleString() : '-'}
+                            </td>
+                            <td className="py-2 px-5 font-mono font-semibold text-left text-amber-700">
+                              {line.foreignCredit && line.foreignCredit > 0 ? Number(line.foreignCredit).toLocaleString() : '-'}
+                            </td>
+                          </>
+                        )}
                         <td className="py-2 px-5 font-mono font-bold text-left text-blue-800">
                           {line.debit > 0 ? formatEgyptianCurrency(line.debit) : '-'}
                         </td>
@@ -824,10 +1037,94 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                 </div>
               </div>
 
+              {/* Multi-Currency & Live Exchange Rate Section */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-emerald-700" />
+                    <span className="font-bold text-slate-800 text-xs">تعدد العملات وسعر الصرف مقابل الجنيه المصري (معيار EAS 13)</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {entryCurrency !== 'EGP' && (
+                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded border border-emerald-300">
+                        1 {entryCurrency} = {exchangeRate} ج.م
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRefreshRates}
+                      disabled={isFetchingRates}
+                      className="text-[11px] px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                      title="تحديث أسعار الصرف الحية من واجهة API الرسمية"
+                    >
+                      <RefreshCw className={`w-3 h-3 text-emerald-600 ${isFetchingRates ? 'animate-spin' : ''}`} />
+                      <span>{isFetchingRates ? 'جاري جلب الأسعار...' : 'تحديث أسعار الصرف الحية'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1 text-[11px]">عملة القيد</label>
+                    <select
+                      value={entryCurrency}
+                      onChange={(e) => handleCurrencyChange(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold"
+                    >
+                      {SUPPORTED_CURRENCIES.map((curr) => (
+                        <option key={curr.code} value={curr.code}>
+                          {curr.flag} {curr.code} - {curr.nameAr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1 text-[11px]">
+                      سعر الصرف مقابل (ج.م)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.0001"
+                        disabled={entryCurrency === 'EGP'}
+                        value={exchangeRate}
+                        onChange={(e) => handleExchangeRateChange(Number(e.target.value) || 1)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold disabled:bg-slate-100 disabled:text-slate-500"
+                      />
+                      <span className="absolute left-2.5 top-1.5 text-[10px] text-slate-400 font-bold pointer-events-none">
+                        ج.م
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2 flex items-center">
+                    {entryCurrency !== 'EGP' ? (
+                      <div className="text-[11px] text-blue-800 bg-blue-50/80 p-2 rounded-lg border border-blue-200/80 w-full flex items-center justify-between">
+                        <span>يتم تحويل المبالغ الأجنبية تلقائياً إلى معادلها بالجنيه المصري وفقاً للمعيار المصري رقم 13.</span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-500 bg-white p-2 rounded-lg border border-slate-200 w-full">
+                        العملة الأساسية للنظام هي <strong>الجنيه المصري (EGP)</strong>. اختر عملة أخرى لتفعيل التحويل التلقائي.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Lines Table Editor */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="bg-slate-100 px-4 py-2 flex items-center justify-between border-b border-slate-200">
-                  <span className="font-bold text-slate-700">أطراف القيد المحاسبي (مدين / دائن)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-700">أطراف القيد المحاسبي (مدين / دائن)</span>
+                    {entryCurrency !== 'EGP' && (
+                      <span className="text-[11px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+                        القيم بالعملة الأجنبية ({entryCurrency}) والتحويل التلقائي إلى (ج.م)
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={addLine}
@@ -840,8 +1137,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
                 <div className="p-3 space-y-2 max-h-72 overflow-y-auto">
                   {lines.map((line, idx) => (
-                    <div key={line.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50/70 p-2 rounded-lg border border-slate-200/60">
-                      <div className="col-span-5">
+                    <div
+                      key={line.id}
+                      className="grid grid-cols-12 gap-2 items-center bg-slate-50/70 p-2 rounded-lg border border-slate-200/60"
+                    >
+                      {/* Account selection */}
+                      <div className={entryCurrency !== 'EGP' ? 'col-span-3' : 'col-span-4'}>
                         <select
                           required
                           value={line.accountId}
@@ -857,39 +1158,79 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                         </select>
                       </div>
 
-                      <div className="col-span-2">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          value={line.debit || ''}
-                          onChange={(e) => {
-                            const val = Number(e.target.value) || 0;
-                            handleLineChange(idx, 'debit', val);
-                            if (val > 0) handleLineChange(idx, 'credit', 0);
-                          }}
-                          placeholder="مدين"
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-blue-900"
-                        />
+                      {/* Foreign currency inputs if not EGP */}
+                      {entryCurrency !== 'EGP' && (
+                        <>
+                          <div className="col-span-2">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={line.foreignDebit || ''}
+                              onChange={(e) => handleLineChange(idx, 'foreignDebit', e.target.value)}
+                              placeholder={`مدين (${entryCurrency})`}
+                              className="w-full px-2 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-mono font-bold text-blue-900 placeholder:text-blue-300"
+                            />
+                          </div>
+
+                          <div className="col-span-2">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={line.foreignCredit || ''}
+                              onChange={(e) => handleLineChange(idx, 'foreignCredit', e.target.value)}
+                              placeholder={`دائن (${entryCurrency})`}
+                              className="w-full px-2 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-mono font-bold text-amber-900 placeholder:text-amber-300"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {/* EGP Debit */}
+                      <div className={entryCurrency !== 'EGP' ? 'col-span-1.5' : 'col-span-2'}>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={line.debit || ''}
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              handleLineChange(idx, 'debit', val);
+                              if (val > 0) handleLineChange(idx, 'credit', 0);
+                            }}
+                            placeholder="مدين ج.م"
+                            className={`w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-blue-900 ${
+                              entryCurrency !== 'EGP' ? 'bg-slate-50 text-[11px]' : ''
+                            }`}
+                          />
+                        </div>
                       </div>
 
-                      <div className="col-span-2">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          value={line.credit || ''}
-                          onChange={(e) => {
-                            const val = Number(e.target.value) || 0;
-                            handleLineChange(idx, 'credit', val);
-                            if (val > 0) handleLineChange(idx, 'debit', 0);
-                          }}
-                          placeholder="دائن"
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-amber-900"
-                        />
+                      {/* EGP Credit */}
+                      <div className={entryCurrency !== 'EGP' ? 'col-span-1.5' : 'col-span-2'}>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={line.credit || ''}
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              handleLineChange(idx, 'credit', val);
+                              if (val > 0) handleLineChange(idx, 'debit', 0);
+                            }}
+                            placeholder="دائن ج.م"
+                            className={`w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-amber-900 ${
+                              entryCurrency !== 'EGP' ? 'bg-slate-50 text-[11px]' : ''
+                            }`}
+                          />
+                        </div>
                       </div>
 
-                      <div className="col-span-2">
+                      {/* Line Description */}
+                      <div className={entryCurrency !== 'EGP' ? 'col-span-1.5' : 'col-span-3'}>
                         <input
                           type="text"
                           value={line.description || ''}
@@ -899,7 +1240,8 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                         />
                       </div>
 
-                      <div className="col-span-1 text-center">
+                      {/* Remove Button */}
+                      <div className="col-span-0.5 text-center">
                         <button
                           type="button"
                           onClick={() => removeLine(idx)}
@@ -913,24 +1255,39 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                 </div>
 
                 {/* Balance Footer */}
-                <div className="bg-slate-100 px-4 py-3 border-t border-slate-200 flex items-center justify-between font-bold">
-                  <div className="flex items-center gap-4">
-                    <span className="text-slate-700">إجمالي المدين: <span className="font-mono text-blue-900">{formatEgyptianCurrency(totalDebit)}</span></span>
-                    <span className="text-slate-700">إجمالي الدائن: <span className="font-mono text-amber-900">{formatEgyptianCurrency(totalCredit)}</span></span>
-                  </div>
+                <div className="bg-slate-100 px-4 py-3 border-t border-slate-200 space-y-2">
+                  {entryCurrency !== 'EGP' && (
+                    <div className="flex items-center justify-between text-xs text-blue-900 pb-2 border-b border-slate-200">
+                      <div className="flex items-center gap-4 font-bold">
+                        <span>إجمالي بالعملة الأجنبية ({entryCurrency}):</span>
+                        <span>مدين: <span className="font-mono">{Number(foreignTotalDebit).toLocaleString()}</span></span>
+                        <span>دائن: <span className="font-mono">{Number(foreignTotalCredit).toLocaleString()}</span></span>
+                      </div>
+                      <span className="text-[11px] text-blue-700 font-semibold">
+                        فارق العملة الأجنبية: <span className="font-mono">{Number(foreignDifference).toLocaleString()}</span>
+                      </span>
+                    </div>
+                  )}
 
-                  <div className="flex items-center gap-2">
-                    {isBalanced ? (
-                      <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full text-xs">
-                        <CheckCircle className="w-4 h-4" />
-                        <span>القيد متوازن تماماً</span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-red-700 bg-red-100 px-3 py-1 rounded-full text-xs">
-                        <XCircle className="w-4 h-4" />
-                        <span>فارق عدم التوازن: {formatEgyptianCurrency(difference)}</span>
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between font-bold">
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-700">إجمالي المدين (ج.م): <span className="font-mono text-blue-900">{formatEgyptianCurrency(totalDebit)}</span></span>
+                      <span className="text-slate-700">إجمالي الدائن (ج.م): <span className="font-mono text-amber-900">{formatEgyptianCurrency(totalCredit)}</span></span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isBalanced ? (
+                        <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full text-xs">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>القيد متوازن تماماً</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-red-700 bg-red-100 px-3 py-1 rounded-full text-xs">
+                          <XCircle className="w-4 h-4" />
+                          <span>فارق عدم التوازن: {formatEgyptianCurrency(difference)}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -991,7 +1348,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 text-xs animate-in zoom-in-95 duration-150">
             {/* Header with View-Only Badge */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="font-mono font-bold text-sm text-emerald-900 px-2.5 py-1 bg-emerald-50 rounded-lg border border-emerald-200">
                   {selectedEntryForView.serialNumber}
                 </span>
@@ -1000,6 +1357,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                   <Eye className="w-3 h-3 text-blue-600" />
                   <span>نظام عرض بيانات</span>
                 </span>
+                {selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' && (
+                  <span className="text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                    <Globe className="w-3 h-3 text-emerald-600" />
+                    <span>{selectedEntryForView.currency} (سعر الصرف: {selectedEntryForView.exchangeRate || 1} ج.م)</span>
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => setSelectedEntryForView(null)}
@@ -1027,20 +1390,43 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
             </div>
 
             <div className="space-y-4 mt-3 max-h-[60vh] overflow-y-auto pr-1">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="font-bold text-slate-900 mb-1">البيان:</div>
-                <p className="text-slate-700">{selectedEntryForView.description}</p>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">البيان:</div>
+                  <p className="text-slate-700">{selectedEntryForView.description}</p>
+                </div>
+                {selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' && (
+                  <div className="text-left bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">معادلة الصرف المعتمدة:</span>
+                    <span className="font-mono font-bold text-xs text-blue-900">
+                      1 {selectedEntryForView.currency} = {selectedEntryForView.exchangeRate} ج.م
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Read-Only Lines Table */}
               <div>
-                <div className="font-bold text-slate-900 mb-2">أطراف وحسابات القيد:</div>
+                <div className="font-bold text-slate-900 mb-2 flex items-center justify-between">
+                  <span>أطراف وحسابات القيد:</span>
+                  {selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' && (
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      مترجم بالعملة المحلية وفق معيار المحاسبة المصري (EAS 13)
+                    </span>
+                  )}
+                </div>
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                   <table className="w-full text-right text-xs">
                     <thead>
                       <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                         <th className="p-2.5">كود الحساب</th>
                         <th className="p-2.5">اسم الحساب</th>
+                        {selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' && (
+                          <>
+                            <th className="p-2.5 text-left text-blue-700">مدين ({selectedEntryForView.currency})</th>
+                            <th className="p-2.5 text-left text-amber-700">دائن ({selectedEntryForView.currency})</th>
+                          </>
+                        )}
                         <th className="p-2.5 text-left">مدين (ج.م)</th>
                         <th className="p-2.5 text-left">دائن (ج.م)</th>
                         <th className="p-2.5">شرح الطرف</th>
@@ -1051,6 +1437,16 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                         <tr key={idx} className="hover:bg-slate-50">
                           <td className="p-2.5 font-mono text-slate-600">{line.accountCode}</td>
                           <td className="p-2.5 font-bold text-slate-900">{line.accountName}</td>
+                          {selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' && (
+                            <>
+                              <td className="p-2.5 font-mono font-bold text-left text-blue-700">
+                                {line.foreignDebit && line.foreignDebit > 0 ? Number(line.foreignDebit).toLocaleString() : '-'}
+                              </td>
+                              <td className="p-2.5 font-mono font-bold text-left text-amber-700">
+                                {line.foreignCredit && line.foreignCredit > 0 ? Number(line.foreignCredit).toLocaleString() : '-'}
+                              </td>
+                            </>
+                          )}
                           <td className="p-2.5 font-mono font-bold text-left text-blue-700">
                             {line.debit > 0 ? formatEgyptianCurrency(line.debit) : '-'}
                           </td>
@@ -1062,8 +1458,22 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                       ))}
                     </tbody>
                     <tfoot>
+                      {selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' && (
+                        <tr className="bg-blue-50/50 font-bold text-blue-900 border-t border-slate-200">
+                          <td colSpan={2} className="p-2.5 text-right">إجمالي {selectedEntryForView.currency}:</td>
+                          <td className="p-2.5 font-mono text-left text-blue-800">
+                            {Number(selectedEntryForView.foreignTotalDebit || 0).toLocaleString()}
+                          </td>
+                          <td className="p-2.5 font-mono text-left text-amber-800">
+                            {Number(selectedEntryForView.foreignTotalCredit || 0).toLocaleString()}
+                          </td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      )}
                       <tr className="bg-slate-50 font-bold text-slate-900 border-t border-slate-200">
-                        <td colSpan={2} className="p-2.5 text-right">الإجمالي المتوازن:</td>
+                        <td colSpan={selectedEntryForView.currency && selectedEntryForView.currency !== 'EGP' ? 4 : 2} className="p-2.5 text-right">
+                          الإجمالي المعادل بالجنيه المصري (EGP):
+                        </td>
                         <td className="p-2.5 font-mono text-left text-blue-800">
                           {formatEgyptianCurrency(selectedEntryForView.totalDebit)}
                         </td>

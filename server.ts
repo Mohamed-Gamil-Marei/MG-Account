@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import { etaMiddleware } from "./server/etaMiddleware.js";
 
 dotenv.config();
 
@@ -32,6 +33,75 @@ async function startServer() {
       system: "منظومة المحاسب والمراجع القانوني - محمد جميل مرعي",
       time: new Date().toISOString(),
     });
+  });
+
+  // Live Currency Exchange Rates vs EGP API endpoint
+  app.get("/api/currency/rates", async (_req, res) => {
+    try {
+      // Default baseline official rates for Central Bank of Egypt / Market
+      const defaultRates: Record<string, number> = {
+        EGP: 1.0,
+        USD: 48.65,
+        EUR: 52.85,
+        SAR: 12.97,
+        AED: 13.24,
+        GBP: 62.90,
+        KWD: 158.80,
+        QAR: 13.36,
+        CNY: 6.78,
+      };
+
+      try {
+        // Try fetching live rates from open exchange API with 3.5s timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+        const response = await fetch("https://open.er-api.com/v6/latest/USD", {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data: any = await response.json();
+          if (data && data.rates && data.rates.EGP) {
+            const usdToEgp = Number(data.rates.EGP) || defaultRates.USD;
+            const rates: Record<string, number> = {
+              EGP: 1.0,
+              USD: parseFloat(usdToEgp.toFixed(4)),
+              EUR: parseFloat(((1 / (data.rates.EUR || 0.92)) * usdToEgp).toFixed(4)),
+              SAR: parseFloat(((1 / (data.rates.SAR || 3.75)) * usdToEgp).toFixed(4)),
+              AED: parseFloat(((1 / (data.rates.AED || 3.67)) * usdToEgp).toFixed(4)),
+              GBP: parseFloat(((1 / (data.rates.GBP || 0.77)) * usdToEgp).toFixed(4)),
+              KWD: parseFloat(((1 / (data.rates.KWD || 0.306)) * usdToEgp).toFixed(4)),
+              QAR: parseFloat(((1 / (data.rates.QAR || 3.64)) * usdToEgp).toFixed(4)),
+              CNY: parseFloat(((1 / (data.rates.CNY || 7.18)) * usdToEgp).toFixed(4)),
+            };
+
+            return res.json({
+              success: true,
+              base: "EGP",
+              rates,
+              lastUpdated: data.time_last_update_utc || new Date().toISOString(),
+              source: "Global FX Open Exchange & CBE Rates Engine",
+            });
+          }
+        }
+      } catch (fetchErr) {
+        console.warn("External currency fetch notice, returning reference rates:", fetchErr);
+      }
+
+      // Fallback response
+      res.json({
+        success: true,
+        base: "EGP",
+        rates: defaultRates,
+        lastUpdated: new Date().toISOString(),
+        source: "Egyptian Central Bank Reference Rates",
+      });
+    } catch (err: any) {
+      console.error("Currency Rates Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // Smart Egyptian Accounting AI Assistant endpoint (suggesting journal entries, audit insights, tax analysis)
@@ -161,6 +231,116 @@ async function startServer() {
       res.json({ success: true, data: parsed });
     } catch (err: any) {
       console.error("AI Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- Egyptian Tax Authority (ETA) SDK Middleware API Endpoints ---
+
+  // 1. Get/Refresh OAuth2 Access Token
+  app.post("/api/eta/token", async (req, res) => {
+    try {
+      const forceRefresh = req.body?.forceRefresh === true;
+      const tokenData = await etaMiddleware.getAccessToken(forceRefresh);
+      res.json({ success: true, data: tokenData });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 2. Submit single invoice directly to ETA Gateway
+  app.post("/api/eta/documents/submit", async (req, res) => {
+    try {
+      const { invoice } = req.body;
+      if (!invoice || !invoice.invoiceNumber) {
+        return res.status(400).json({ success: false, message: "بيانات الفاتورة غير مكتملة." });
+      }
+      const result = await etaMiddleware.submitInvoiceDirect(invoice);
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error("ETA Submission Error:", err);
+      res.status(500).json({ success: false, message: err.message, error: err.message });
+    }
+  });
+
+  // 3. Batch submit multiple invoices
+  app.post("/api/eta/documents/batch-submit", async (req, res) => {
+    try {
+      const { invoices } = req.body;
+      if (!Array.isArray(invoices) || invoices.length === 0) {
+        return res.status(400).json({ success: false, message: "قائمة الفواتير فارغة." });
+      }
+      const result = await etaMiddleware.submitBatchDirect(invoices);
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error("ETA Batch Submission Error:", err);
+      res.status(500).json({ success: false, message: err.message, error: err.message });
+    }
+  });
+
+  // 4. Query document status by UUID
+  app.get("/api/eta/documents/:uuid", async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const statusData = await etaMiddleware.getDocumentStatus(uuid);
+      res.json({ success: true, data: statusData });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5. ETA Gateway Connectivity & Diagnostics
+  app.get("/api/eta/diagnostics", async (_req, res) => {
+    try {
+      const diagnostics = await etaMiddleware.runDiagnostics();
+      res.json({ success: true, data: diagnostics });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 6. Get Transmission Logs
+  app.get("/api/eta/logs", (_req, res) => {
+    try {
+      const logs = etaMiddleware.getLogs();
+      res.json({ success: true, data: logs });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 7. Clear Transmission Logs
+  app.delete("/api/eta/logs", (_req, res) => {
+    try {
+      etaMiddleware.clearLogs();
+      res.json({ success: true, message: "تم مسح سجل الإرسال بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 8. Get current Server ETA config
+  app.get("/api/eta/config", (_req, res) => {
+    try {
+      const config = etaMiddleware.getConfig();
+      // Mask secret for security
+      const safeConfig = {
+        ...config,
+        clientSecret: config.clientSecret ? "••••••••••••••••" : "",
+        hasSecret: !!config.clientSecret,
+      };
+      res.json({ success: true, data: safeConfig });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 9. Update Server ETA config
+  app.post("/api/eta/config", (req, res) => {
+    try {
+      const updated = etaMiddleware.updateConfig(req.body);
+      res.json({ success: true, data: updated, message: "تم تحديث إعدادات الوسيط بنجاح." });
+    } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   });

@@ -43,6 +43,7 @@ import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
+import { ClientDocumentManager } from './ClientDocumentManager';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
@@ -1308,51 +1309,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                 </div>
               )}
 
-              {/* TAB 4: ATTACHED DOCUMENTS */}
+              {/* TAB 4: ATTACHED DOCUMENTS & FOLDERS */}
               {activeTab === 'DOCUMENTS' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between font-bold text-slate-900 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <span>الأرشيف والمستندات الإلكترونية المرفقة للعميل</span>
-                    <button
-                      onClick={() => handleAddSampleDoc(liveSelectedClient)}
-                      className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 font-bold cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>إرفاق مستند جديد</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {liveSelectedClient.documents && liveSelectedClient.documents.length > 0 ? (
-                      liveSelectedClient.documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="p-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between hover:border-emerald-300 transition-all"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <FileText className="w-5 h-5 text-emerald-700" />
-                            <div>
-                              <span className="font-bold text-slate-900 block">{doc.title}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {doc.fileName} • {doc.fileSize || '2 MB'} • تاريخ الرفع: {doc.uploadedAt}
-                              </span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => alert(`جاري تنزيل الملف المرفق: ${doc.title}`)}
-                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
-                          >
-                            معاينة / تنزيل
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-8 bg-slate-50 rounded-xl text-center text-slate-400 italic">
-                        لا توجد مستندات مرفقة حتى الآن.
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ClientDocumentManager client={liveSelectedClient} />
               )}
             </div>
 

@@ -11,16 +11,23 @@ import {
   Printer,
   Sparkles,
   Laptop,
+  Users,
+  Shield,
+  Keyboard,
+  Search,
 } from 'lucide-react';
 import { db } from '../db/localDatabase';
-import { OfficeProfile } from '../types';
+import { OfficeProfile, NavigationTab, SystemUser } from '../types';
+import { GlobalSearchBar } from './GlobalSearchBar';
+import { UserManagerModal } from './UserManagerModal';
 
 interface HeaderProps {
   onOpenQuickJournal: () => void;
   onOpenQuickTreasury: () => void;
   onOpenBackupModal: () => void;
   onOpenDesktopModal?: () => void;
-  onSelectTab: (tabId: string) => void;
+  onOpenShortcutsModal?: () => void;
+  onSelectTab: (tabId: NavigationTab) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,14 +35,20 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenQuickTreasury,
   onOpenBackupModal,
   onOpenDesktopModal,
+  onOpenShortcutsModal,
   onSelectTab,
 }) => {
   const [profile, setProfile] = useState<OfficeProfile>(db.getState().officeProfile);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentUser, setCurrentUser] = useState<SystemUser>(db.getCurrentUser());
+  const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
+  const [dbState, setDbState] = useState(db.getState());
 
   useEffect(() => {
     const unsub = db.subscribe(() => {
       setProfile(db.getState().officeProfile);
+      setCurrentUser(db.getCurrentUser());
+      setDbState(db.getState());
     });
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => {
@@ -48,12 +61,6 @@ export const Header: React.FC<HeaderProps> = ({
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  });
-  const dateString = currentTime.toLocaleDateString('ar-EG', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
   });
 
   return (
@@ -84,19 +91,41 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* System Actions & Status */}
+        {/* Center: Global Search Bar */}
+        <div className="flex-1 max-w-md mx-2">
+          <GlobalSearchBar state={dbState} onNavigate={onSelectTab} />
+        </div>
+
+        {/* System Actions, RBAC User, & Status */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Realtime Local DB indicator */}
-          <div className="hidden lg:flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span>قاعدة البيانات المحلية (متصلة وآمنة)</span>
-            <span className="text-slate-500">|</span>
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-mono text-slate-200">{timeString}</span>
-          </div>
+          {/* User Profile & Role Switcher */}
+          <button
+            onClick={() => setIsUserManagerOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+            title="إدارة المستخدمين وصلاحيات الوصول (RBAC)"
+          >
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+              currentUser.role === 'ADMIN' ? 'bg-amber-400 text-slate-900 font-black' : currentUser.role === 'AUDITOR' ? 'bg-blue-400 text-slate-900 font-bold' : 'bg-slate-200 text-slate-900'
+            }`}>
+              {currentUser.name.slice(0, 1)}
+            </div>
+            <div className="text-right">
+              <span className="block text-xs text-slate-100">{currentUser.name}</span>
+              <span className="block text-[9px] text-emerald-400 font-mono">{currentUser.roleTitleArabic}</span>
+            </div>
+          </button>
+
+          {/* Shortcuts hint button */}
+          {onOpenShortcutsModal && (
+            <button
+              onClick={onOpenShortcutsModal}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg text-xs border border-slate-700 cursor-pointer"
+              title="لوحة اختصارات لوحة المفاتيح (Ctrl + K)"
+            >
+              <Keyboard className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="font-mono text-[10px] font-bold">Ctrl+K</span>
+            </button>
+          )}
 
           {/* Quick Action Buttons */}
           <button
@@ -106,18 +135,20 @@ export const Header: React.FC<HeaderProps> = ({
             title="تسجيل قيد يومية جديد"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>قيد يومية جديد</span>
+            <span>قيد يومية</span>
           </button>
 
-          <button
-            onClick={onOpenQuickTreasury}
-            id="btn-quick-treasury-entry"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
-            title="سند قبض أتعاب أو صرف خزنة المكتب"
-          >
-            <Building className="w-4 h-4" />
-            <span>سند خزنة المكتب</span>
-          </button>
+          {currentUser.canAccessTreasury && (
+            <button
+              onClick={onOpenQuickTreasury}
+              id="btn-quick-treasury-entry"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
+              title="سند قبض أتعاب أو صرف خزنة المكتب"
+            >
+              <Building className="w-4 h-4" />
+              <span>سند الخزنة</span>
+            </button>
+          )}
 
           {onOpenDesktopModal && (
             <button
@@ -127,7 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="تحميل وتثبيت المنظومة لتعمل على سطح المكتب"
             >
               <Laptop className="w-4 h-4 text-emerald-200" />
-              <span>تحميل لسطح المكتب</span>
+              <span>للسطح المكتب</span>
             </button>
           )}
 
@@ -138,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="استيراد وتصدير جميع النماذج بجميع الصيغ"
           >
             <Download className="w-4 h-4 text-white" />
-            <span>استيراد وتصدير النماذج</span>
+            <span>استيراد وتصدير</span>
           </button>
 
           <button
@@ -156,6 +187,14 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
       </div>
+
+      {/* User Manager Modal */}
+      <UserManagerModal
+        isOpen={isUserManagerOpen}
+        onClose={() => setIsUserManagerOpen(false)}
+        state={dbState}
+      />
     </header>
   );
 };
+

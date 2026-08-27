@@ -4,26 +4,34 @@ import {
   JournalEntry,
   ClientArchiveRecord,
   ClientProcedureTask,
+  ClientDocumentFolder,
+  ClientDocument,
   OfficeTreasuryTransaction,
   TaxDeclarationRecord,
+  TaxMandateTask,
   ProfessionalCertificate,
   Invoice,
   FeasibilityStudy,
   CreditModelSimulation,
   OfficeProfile,
   AuditRecord,
+  SystemUser,
+  UserRole,
 } from '../types';
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import {
   DEFAULT_OFFICE_PROFILE,
+  DEFAULT_CLIENT_FOLDERS,
   SAMPLE_CLIENTS,
   SAMPLE_JOURNAL_ENTRIES,
   SAMPLE_TREASURY_TRANSACTIONS,
   SAMPLE_TAX_DECLARATIONS,
+  SAMPLE_TAX_MANDATES,
   SAMPLE_CERTIFICATES,
   SAMPLE_INVOICES,
   SAMPLE_FEASIBILITY_STUDY,
   SAMPLE_CREDIT_SIMULATION,
+  SAMPLE_SYSTEM_USERS,
 } from '../data/sampleData';
 
 const STORAGE_KEYS = {
@@ -32,12 +40,15 @@ const STORAGE_KEYS = {
   CLIENTS: 'egy_acc_clients_v1',
   TREASURY: 'egy_acc_treasury_v1',
   TAXES: 'egy_acc_taxes_v1',
+  TAX_MANDATES: 'egy_acc_tax_mandates_v1',
   CERTIFICATES: 'egy_acc_certificates_v1',
   INVOICES: 'egy_acc_invoices_v1',
   FEASIBILITY: 'egy_acc_feasibility_v1',
   CREDIT_SIM: 'egy_acc_credit_sim_v1',
   OFFICE_PROFILE: 'egy_acc_office_profile_v1',
   AUDIT_LOGS: 'egy_acc_audit_logs_v1',
+  SYSTEM_USERS: 'egy_acc_system_users_v1',
+  CURRENT_USER_ID: 'egy_acc_current_user_id_v1',
 };
 
 export interface DatabaseState {
@@ -46,12 +57,15 @@ export interface DatabaseState {
   clients: ClientArchiveRecord[];
   treasuryTransactions: OfficeTreasuryTransaction[];
   taxDeclarations: TaxDeclarationRecord[];
+  taxMandates: TaxMandateTask[];
   certificates: ProfessionalCertificate[];
   invoices: Invoice[];
   feasibilityStudies: FeasibilityStudy[];
   creditSimulations: CreditModelSimulation[];
   officeProfile: OfficeProfile;
   auditLogs: AuditRecord[];
+  users: SystemUser[];
+  currentUserId: string;
 }
 
 export class LocalDatabase {
@@ -69,24 +83,43 @@ export class LocalDatabase {
       const clientsJson = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       const treasuryJson = localStorage.getItem(STORAGE_KEYS.TREASURY);
       const taxesJson = localStorage.getItem(STORAGE_KEYS.TAXES);
+      const mandatesJson = localStorage.getItem(STORAGE_KEYS.TAX_MANDATES);
       const certificatesJson = localStorage.getItem(STORAGE_KEYS.CERTIFICATES);
       const invoicesJson = localStorage.getItem(STORAGE_KEYS.INVOICES);
       const feasibilityJson = localStorage.getItem(STORAGE_KEYS.FEASIBILITY);
       const creditSimJson = localStorage.getItem(STORAGE_KEYS.CREDIT_SIM);
       const officeProfileJson = localStorage.getItem(STORAGE_KEYS.OFFICE_PROFILE);
       const auditLogsJson = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+      const usersJson = localStorage.getItem(STORAGE_KEYS.SYSTEM_USERS);
+      const currentUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'user-admin';
+
+      let loadedClients: ClientArchiveRecord[] = clientsJson ? JSON.parse(clientsJson) : SAMPLE_CLIENTS;
+      // Ensure each client has default folders if missing
+      loadedClients = loadedClients.map((cl) => {
+        if (!cl.folders || cl.folders.length === 0) {
+          cl.folders = DEFAULT_CLIENT_FOLDERS.map((f, idx) => ({
+            ...f,
+            id: `fld-${cl.id}-${idx + 1}`,
+            clientId: cl.id,
+          }));
+        }
+        return cl;
+      });
 
       return {
         accounts: accountsJson ? JSON.parse(accountsJson) : DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
         journalEntries: journalJson ? JSON.parse(journalJson) : SAMPLE_JOURNAL_ENTRIES,
-        clients: clientsJson ? JSON.parse(clientsJson) : SAMPLE_CLIENTS,
+        clients: loadedClients,
         treasuryTransactions: treasuryJson ? JSON.parse(treasuryJson) : SAMPLE_TREASURY_TRANSACTIONS,
         taxDeclarations: taxesJson ? JSON.parse(taxesJson) : SAMPLE_TAX_DECLARATIONS,
+        taxMandates: mandatesJson ? JSON.parse(mandatesJson) : SAMPLE_TAX_MANDATES,
         certificates: certificatesJson ? JSON.parse(certificatesJson) : SAMPLE_CERTIFICATES,
         invoices: invoicesJson ? JSON.parse(invoicesJson) : SAMPLE_INVOICES,
         feasibilityStudies: feasibilityJson ? JSON.parse(feasibilityJson) : [SAMPLE_FEASIBILITY_STUDY],
         creditSimulations: creditSimJson ? JSON.parse(creditSimJson) : [SAMPLE_CREDIT_SIMULATION],
         officeProfile: officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE,
+        users: usersJson ? JSON.parse(usersJson) : SAMPLE_SYSTEM_USERS,
+        currentUserId: currentUserId,
         auditLogs: auditLogsJson ? JSON.parse(auditLogsJson) : [
           {
             timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -104,11 +137,14 @@ export class LocalDatabase {
         clients: SAMPLE_CLIENTS,
         treasuryTransactions: SAMPLE_TREASURY_TRANSACTIONS,
         taxDeclarations: SAMPLE_TAX_DECLARATIONS,
+        taxMandates: SAMPLE_TAX_MANDATES,
         certificates: SAMPLE_CERTIFICATES,
         invoices: SAMPLE_INVOICES,
         feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
         creditSimulations: [SAMPLE_CREDIT_SIMULATION],
         officeProfile: DEFAULT_OFFICE_PROFILE,
+        users: SAMPLE_SYSTEM_USERS,
+        currentUserId: 'user-admin',
         auditLogs: [],
       };
     }
@@ -121,12 +157,15 @@ export class LocalDatabase {
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(this.state.clients));
       localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(this.state.treasuryTransactions));
       localStorage.setItem(STORAGE_KEYS.TAXES, JSON.stringify(this.state.taxDeclarations));
+      localStorage.setItem(STORAGE_KEYS.TAX_MANDATES, JSON.stringify(this.state.taxMandates));
       localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(this.state.certificates));
       localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(this.state.invoices));
       localStorage.setItem(STORAGE_KEYS.FEASIBILITY, JSON.stringify(this.state.feasibilityStudies));
       localStorage.setItem(STORAGE_KEYS.CREDIT_SIM, JSON.stringify(this.state.creditSimulations));
       localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(this.state.officeProfile));
       localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
+      localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(this.state.users));
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, this.state.currentUserId);
     } catch (e) {
       console.error('Error saving state to localStorage:', e);
     }
@@ -625,6 +664,262 @@ export class LocalDatabase {
     return this.state.taxDeclarations[index];
   }
 
+  // --- Client Document Folders & Categorization ---
+  public addClientFolder(clientId: string, folder: Omit<ClientDocumentFolder, 'id' | 'clientId' | 'createdAt'>): ClientDocumentFolder | null {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return null;
+    if (!client.folders) client.folders = [];
+
+    const newFolder: ClientDocumentFolder = {
+      ...folder,
+      id: `fld-${clientId}-${Date.now()}`,
+      clientId,
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    client.folders.push(newFolder);
+    client.updatedAt = new Date().toISOString();
+    this.logAudit('CREATE', `إنشاء مجلد مستندات جديد [${folder.name}] لملف العميل: ${client.name}`);
+    this.saveState();
+    return newFolder;
+  }
+
+  public updateClientFolder(clientId: string, folderId: string, updates: Partial<ClientDocumentFolder>): boolean {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !client.folders) return false;
+    const folder = client.folders.find((f) => f.id === folderId);
+    if (!folder) return false;
+
+    const oldName = folder.name;
+    Object.assign(folder, updates);
+    // If folder name changed, update existing documents folderName
+    if (updates.name && updates.name !== oldName && client.documents) {
+      client.documents.forEach((doc) => {
+        if (doc.folderId === folderId) {
+          doc.folderName = updates.name;
+        }
+      });
+    }
+    client.updatedAt = new Date().toISOString();
+    this.saveState();
+    return true;
+  }
+
+  public deleteClientFolder(clientId: string, folderId: string): boolean {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !client.folders) return false;
+    const folderIndex = client.folders.findIndex((f) => f.id === folderId);
+    if (folderIndex === -1) return false;
+
+    const deletedFolder = client.folders[folderIndex];
+    // Move docs in this folder to default folder or unassign folderId
+    if (client.documents) {
+      client.documents.forEach((doc) => {
+        if (doc.folderId === folderId) {
+          doc.folderId = undefined;
+          doc.folderName = undefined;
+        }
+      });
+    }
+    client.folders.splice(folderIndex, 1);
+    client.updatedAt = new Date().toISOString();
+    this.logAudit('DELETE', `حذف مجلد المستندات [${deletedFolder.name}] لملف العميل: ${client.name}`);
+    this.saveState();
+    return true;
+  }
+
+  public addClientDocument(clientId: string, doc: Omit<ClientDocument, 'id' | 'clientId' | 'uploadedAt'>): ClientDocument | null {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return null;
+    if (!client.documents) client.documents = [];
+
+    const newDoc: ClientDocument = {
+      ...doc,
+      id: `doc-${Date.now()}`,
+      clientId,
+      uploadedAt: new Date().toISOString().slice(0, 10),
+    };
+    client.documents.push(newDoc);
+    client.updatedAt = new Date().toISOString();
+    this.logAudit('CREATE', `أرشفة مستند جديد [${doc.title}] في مجلد [${doc.folderName || 'العام'}] لملف العميل: ${client.name}`);
+    this.saveState();
+    return newDoc;
+  }
+
+  public deleteClientDocument(clientId: string, documentId: string): boolean {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !client.documents) return false;
+    const docIndex = client.documents.findIndex((d) => d.id === documentId);
+    if (docIndex === -1) return false;
+
+    const doc = client.documents[docIndex];
+    client.documents.splice(docIndex, 1);
+    client.updatedAt = new Date().toISOString();
+    this.logAudit('DELETE', `حذف مستند [${doc.title}] من أرشيف العميل: ${client.name}`);
+    this.saveState();
+    return true;
+  }
+
+  public moveClientDocument(clientId: string, documentId: string, targetFolderId: string, targetFolderName: string): boolean {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !client.documents) return false;
+    const doc = client.documents.find((d) => d.id === documentId);
+    if (!doc) return false;
+
+    doc.folderId = targetFolderId;
+    doc.folderName = targetFolderName;
+    client.updatedAt = new Date().toISOString();
+    this.saveState();
+    return true;
+  }
+
+  // --- Tax Mandates & Task Scheduler CRUD ---
+  public addTaxMandate(mandate: Omit<TaxMandateTask, 'id' | 'mandateCode' | 'createdAt' | 'updatedAt'>): TaxMandateTask {
+    const now = new Date().toISOString();
+    const count = this.state.taxMandates.length + 1;
+    const code = `TAX-MAND-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`;
+    const newTask: TaxMandateTask = {
+      ...mandate,
+      id: `mand-${Date.now()}`,
+      mandateCode: code,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.taxMandates.push(newTask);
+    this.logAudit('CREATE', `جدولة تكليف ضريبي جديد: [${code}] ${mandate.mandateTitle} للعميل: ${mandate.clientName}`);
+    this.saveState();
+    return newTask;
+  }
+
+  public updateTaxMandate(id: string, updates: Partial<TaxMandateTask>): TaxMandateTask | null {
+    const index = this.state.taxMandates.findIndex((m) => m.id === id);
+    if (index === -1) return null;
+    const old = this.state.taxMandates[index];
+    const updated: TaxMandateTask = {
+      ...old,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    this.state.taxMandates[index] = updated;
+    this.logAudit('UPDATE', `تحديث حالة التكليف الضريبي [${old.mandateCode}] إلى (${updated.status})`);
+    this.saveState();
+    return updated;
+  }
+
+  public deleteTaxMandate(id: string): boolean {
+    const index = this.state.taxMandates.findIndex((m) => m.id === id);
+    if (index === -1) return false;
+    const deleted = this.state.taxMandates[index];
+    this.state.taxMandates.splice(index, 1);
+    this.logAudit('DELETE', `حذف التكليف الضريبي رقم: [${deleted.mandateCode}] ${deleted.mandateTitle}`);
+    this.saveState();
+    return true;
+  }
+
+  public batchGenerateMandates(taxType: TaxMandateTask['taxType'], periodName: string, deadlineDate: string, taxYear: number): number {
+    const primaryClients = this.state.clients.filter((c) => c.clientType === 'PRIMARY');
+    let addedCount = 0;
+    const now = new Date().toISOString();
+
+    const taxTypeTitles: Record<TaxMandateTask['taxType'], string> = {
+      VAT_10: 'إقرار ضريبة القيمة المضافة (نموذج 10)',
+      INCOME_27_CORP: 'إقرار ضريبة الدخل السنوي للشركات (نموذج 27)',
+      INCOME_28_INDIV: 'إقرار ضريبة الدخل للأشخاص الطبيعيين (نموذج 28)',
+      PAYROLL_4: 'نموذج 4 ضريبة كسب العمل والمرتبات',
+      ANNUAL_PAYROLL: 'التسوية السنوية لضريبة كسب العمل',
+      WHT_41: 'نموذج 41 خصم وتحصيل تحت حساب الضريبة',
+      STAMP_TAX: 'إقرار ضريبة الدمغة النسبية والنوعية',
+      REAL_ESTATE_TAX: 'إقرار الضريبة العقارية على المنشآت',
+      TAX_AUDIT_SESSION: 'جلسة فحص ضريبي أو لجنة طعن بمأمورية الضرائب',
+      OTHER: 'تكليف والتزام ضريبي دوري',
+    };
+
+    primaryClients.forEach((client) => {
+      // Check if already exists
+      const exists = this.state.taxMandates.some(
+        (m) => m.clientId === client.id && m.taxType === taxType && m.periodName === periodName && m.taxYear === taxYear
+      );
+      if (!exists) {
+        const count = this.state.taxMandates.length + 1;
+        const code = `TAX-MAND-${taxYear}-${String(count).padStart(3, '0')}`;
+        const title = `${taxTypeTitles[taxType] || 'تكليف ضريبي'} - ${periodName}`;
+        this.state.taxMandates.push({
+          id: `mand-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          mandateCode: code,
+          clientId: client.id,
+          clientName: client.name,
+          mandateTitle: title,
+          taxType,
+          periodName,
+          taxYear,
+          deadlineDate,
+          reminderDaysBefore: 7,
+          assignedTo: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
+          status: 'NOT_STARTED',
+          priority: taxType.includes('INCOME') ? 'CRITICAL' : 'HIGH',
+          createdAt: now,
+          updatedAt: now,
+        });
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      this.logAudit('CREATE', `توليد جماعي لـ (${addedCount}) تكليف ضريبي دوري (${periodName}) لعملاء المكتب الأساسيين`);
+      this.saveState();
+    }
+    return addedCount;
+  }
+
+  // --- Multi-User Access Control (RBAC) ---
+  public getCurrentUser(): SystemUser {
+    const user = this.state.users.find((u) => u.id === this.state.currentUserId);
+    return user || this.state.users[0] || SAMPLE_SYSTEM_USERS[0];
+  }
+
+  public switchCurrentUser(userId: string): SystemUser | null {
+    const user = this.state.users.find((u) => u.id === userId);
+    if (!user) return null;
+    this.state.currentUserId = user.id;
+    this.logAudit('UPDATE', `تبديل المستخدم الحالي إلى: [${user.name}] بصلاحية (${user.roleTitleArabic})`);
+    this.saveState();
+    return user;
+  }
+
+  public addUser(user: Omit<SystemUser, 'id' | 'createdAt'>): SystemUser {
+    const newUser: SystemUser = {
+      ...user,
+      id: `user-${Date.now()}`,
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    this.state.users.push(newUser);
+    this.logAudit('CREATE', `إضافة مستخدم جديد للنظام: [${user.name}] بدور (${user.roleTitleArabic})`);
+    this.saveState();
+    return newUser;
+  }
+
+  public updateUser(userId: string, updates: Partial<SystemUser>): boolean {
+    const user = this.state.users.find((u) => u.id === userId);
+    if (!user) return false;
+    Object.assign(user, updates);
+    this.logAudit('UPDATE', `تعديل صلاحيات وبيانات المستخدم: [${user.name}]`);
+    this.saveState();
+    return true;
+  }
+
+  public deleteUser(userId: string): boolean {
+    if (this.state.users.length <= 1) return false; // Prevent deleting all users
+    const index = this.state.users.findIndex((u) => u.id === userId);
+    if (index === -1) return false;
+    const deleted = this.state.users[index];
+    this.state.users.splice(index, 1);
+    if (this.state.currentUserId === userId) {
+      this.state.currentUserId = this.state.users[0].id;
+    }
+    this.logAudit('DELETE', `حذف المستخدم: [${deleted.name}] من النظام`);
+    this.saveState();
+    return true;
+  }
+
   // --- Professional Certificates CRUD ---
   public addCertificate(cert: Omit<ProfessionalCertificate, 'id' | 'certificateNumber' | 'createdAt'>): ProfessionalCertificate {
     const count = this.state.certificates.length + 1;
@@ -678,6 +973,27 @@ export class LocalDatabase {
     this.logAudit('CREATE', `إصدار فاتورة رقم ${invNum} بمبلغ ${inv.grandTotal} ج.م`);
     this.saveState();
     return newInv;
+  }
+
+  public batchAddInvoices(invoicesList: Omit<Invoice, 'id' | 'createdAt'>[]): Invoice[] {
+    const now = new Date().toISOString();
+    const created: Invoice[] = [];
+
+    invoicesList.forEach((inv, idx) => {
+      const invNum = inv.invoiceNumber || `INV-${new Date().getFullYear()}-${String(this.state.invoices.length + idx + 1).padStart(4, '0')}`;
+      const newInv: Invoice = {
+        ...inv,
+        id: `inv-${Date.now()}-${idx}`,
+        invoiceNumber: invNum,
+        createdAt: now,
+      };
+      this.state.invoices.push(newInv);
+      created.push(newInv);
+    });
+
+    this.logAudit('CREATE', `استيراد وإدراج جماعي لـ (${created.length}) فاتورة وإيصال إلكتروني عبر ملف الإكسل`);
+    this.saveState();
+    return created;
   }
 
   public updateInvoice(id: string, updates: Partial<Invoice>): Invoice | null {
@@ -750,10 +1066,13 @@ export class LocalDatabase {
       clients: SAMPLE_CLIENTS,
       treasuryTransactions: SAMPLE_TREASURY_TRANSACTIONS,
       taxDeclarations: SAMPLE_TAX_DECLARATIONS,
+      taxMandates: SAMPLE_TAX_MANDATES,
       certificates: SAMPLE_CERTIFICATES,
       invoices: SAMPLE_INVOICES,
       feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
       creditSimulations: [SAMPLE_CREDIT_SIMULATION],
+      users: SAMPLE_SYSTEM_USERS,
+      currentUserId: 'user-admin',
       officeProfile: DEFAULT_OFFICE_PROFILE,
       auditLogs: [
         {
@@ -792,10 +1111,13 @@ export class LocalDatabase {
           clients: dataToImport.clients || [],
           treasuryTransactions: dataToImport.treasuryTransactions || [],
           taxDeclarations: dataToImport.taxDeclarations || [],
+          taxMandates: dataToImport.taxMandates || SAMPLE_TAX_MANDATES,
           certificates: dataToImport.certificates || [],
           invoices: dataToImport.invoices || [],
           feasibilityStudies: dataToImport.feasibilityStudies || [],
           creditSimulations: dataToImport.creditSimulations || [],
+          users: dataToImport.users || SAMPLE_SYSTEM_USERS,
+          currentUserId: dataToImport.currentUserId || 'user-admin',
           officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
           auditLogs: [
             {
@@ -903,6 +1225,24 @@ export class LocalDatabase {
       const ws = XLSX.utils.json_to_sheet(rows);
       XLSX.utils.book_append_sheet(wb, ws, 'الإقرارات الضريبية');
       XLSX.writeFile(wb, `سجل_الإقرارات_الضريبية_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } else if (tableName === 'INVOICES') {
+      const rows = this.state.invoices.map((inv) => ({
+        'رقم الفاتورة': inv.invoiceNumber,
+        'التاريخ': inv.date,
+        'نوع المستند': inv.isReceipt ? 'إيصال إلكتروني B2C' : inv.invoiceType === 'SALES' ? 'فاتورة مبيعات B2B' : 'فاتورة مشتريات',
+        'اسم الطرف / العميل': inv.partnerName,
+        'الرقم الضريبي': inv.partnerTaxNo || '',
+        'إجمالي البضاعة': inv.subtotal,
+        'الخصم': inv.totalDiscount,
+        'ضريبة القيمة المضافة 14%': inv.totalVat,
+        'الخصم والتحصيل 1%': inv.totalWht,
+        'صافي الفاتورة': inv.grandTotal,
+        'المعرف الضريبي ETA UUID': inv.etaUuid || '',
+        'حالة المنظومة': inv.etaStatus || 'مسودة',
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'سجل الفواتير والإيصالات');
+      XLSX.writeFile(wb, `سجل_الفواتير_الإلكترونية_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
   }
 }

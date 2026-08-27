@@ -12,19 +12,28 @@ import {
   Clock,
   Send,
   CreditCard,
+  Layers,
+  Sparkles,
+  Printer,
+  FileText,
 } from 'lucide-react';
 import { TaxDeclarationRecord } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+import { TaxMandateScheduler } from './TaxMandateScheduler';
+import { EgyptianTaxDeclarationPdfModal } from './EgyptianTaxDeclarationPdfModal';
 
 interface TaxTrackerViewProps {
   state: DatabaseState;
 }
 
 export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
+  const [activeMainTab, setActiveMainTab] = useState<'SCHEDULER' | 'DECLARATIONS'>('SCHEDULER');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [selectedDeclForPdf, setSelectedDeclForPdf] = useState<TaxDeclarationRecord | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -104,38 +113,84 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Percent className="w-6 h-6 text-red-600" />
-            <h2 className="text-lg font-bold text-slate-900">
-              منظومة متابعة الإقرارات والالتزامات الضريبية (Tax Tracker)
-            </h2>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            متابعة مواعيد استحقاق نماذج مصلحة الضرائب المصرية (نموذج 10 قيمة مضافة، نموذج 27 شركات، نموذج 4 كسب عمل، ونموذج 41 خصم).
-          </p>
-        </div>
+      {/* Top Main Navigation Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-200/80 rounded-2xl w-full sm:w-fit">
+        <button
+          onClick={() => setActiveMainTab('SCHEDULER')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeMainTab === 'SCHEDULER'
+              ? 'bg-white text-indigo-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Clock className="w-4 h-4 text-indigo-700" />
+          <span>جدول التكليفات والمواعيد الضريبية (Scheduler)</span>
+        </button>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => db.exportTableToExcel('TAXES')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>تصدير إكسل</span>
-          </button>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            id="btn-add-tax-declaration"
-            className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل إقرار ضريبي جديد</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setActiveMainTab('DECLARATIONS')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeMainTab === 'DECLARATIONS'
+              ? 'bg-white text-red-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Percent className="w-4 h-4 text-red-600" />
+          <span>سجل الإقرارات والنماذج الضريبية ({state.taxDeclarations.length})</span>
+        </button>
       </div>
+
+      {/* TAB 1: SCHEDULER */}
+      {activeMainTab === 'SCHEDULER' && <TaxMandateScheduler state={state} />}
+
+      {/* TAB 2: DECLARATIONS */}
+      {activeMainTab === 'DECLARATIONS' && (
+        <div className="space-y-5">
+          {/* Header */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Percent className="w-6 h-6 text-red-600" />
+                <h2 className="text-lg font-bold text-slate-900">
+                  سجل الإقرارات والالتزامات الضريبية (Tax Declarations)
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                متابعة مواعيد استحقاق نماذج مصلحة الضرائب المصرية (نموذج 10 قيمة مضافة، نموذج 27 شركات، نموذج 4 كسب عمل، ونموذج 41 خصم).
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => {
+                  setSelectedDeclForPdf(null);
+                  setIsPdfModalOpen(true);
+                }}
+                id="btn-export-tax-declaration-pdf"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 text-white rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer"
+                title="توليد وتصدير إقرار ضريبي منسق ببيانات الإقرار الجاهزة للتقديم وفق النموذج المصري"
+              >
+                <Printer className="w-4 h-4" />
+                <span>تصدير إقرار ضريبي (PDF)</span>
+              </button>
+
+              <button
+                onClick={() => db.exportTableToExcel('TAXES')}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+                <span>تصدير إكسل</span>
+              </button>
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                id="btn-add-tax-declaration"
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>تسجيل إقرار ضريبي جديد</span>
+              </button>
+            </div>
+          </div>
 
       {/* Filter and Search */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
@@ -265,6 +320,18 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          setSelectedDeclForPdf(decl);
+                          setIsPdfModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        title="تصدير وطباعة نموذج الإقرار الضريبي الرسمي (PDF)"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-red-700" />
+                        <span>تصدير PDF</span>
+                      </button>
+
                       {decl.status !== 'PAID' && (
                         <button
                           onClick={() => handleUpdateStatus(decl, 'PAID')}
@@ -289,6 +356,8 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
           </table>
         </div>
       </div>
+    </div>
+  )}
 
       {/* Add Tax Declaration Modal */}
       {isAddModalOpen && (
@@ -454,6 +523,18 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Egyptian Tax Return Form Official PDF Generator Modal */}
+      {isPdfModalOpen && (
+        <EgyptianTaxDeclarationPdfModal
+          state={state}
+          selectedDeclaration={selectedDeclForPdf}
+          onClose={() => {
+            setIsPdfModalOpen(false);
+            setSelectedDeclForPdf(null);
+          }}
+        />
       )}
     </div>
   );

@@ -23,13 +23,29 @@ export interface Account {
   isSystem?: boolean;
 }
 
+export type CurrencyCode = 'EGP' | 'USD' | 'EUR' | 'SAR' | 'AED' | 'GBP' | 'KWD' | 'QAR' | 'CNY';
+
+export interface CurrencyRateInfo {
+  code: CurrencyCode;
+  nameAr: string;
+  nameEn: string;
+  symbol: string;
+  rateToEgp: number; // e.g. 48.65 for USD
+  flag: string;
+  updatedAt?: string;
+}
+
 export interface JournalEntryLine {
   id: string;
   accountId: string;
   accountCode: string;
   accountName: string;
-  debit: number;
-  credit: number;
+  currency?: CurrencyCode; // العملة الخاصة بالسطر
+  exchangeRate?: number;   // سعر الصرف مقابل الجنيه المصري
+  foreignDebit?: number;   // المبلغ بالعملة الأجنبية مدين
+  foreignCredit?: number;  // المبلغ بالعملة الأجنبية دائن
+  debit: number;           // القيمة المعيارية بالجنيه المصري (EGP)
+  credit: number;          // القيمة المعيارية بالجنيه المصري (EGP)
   costCenter?: string;
   description?: string;
 }
@@ -49,9 +65,13 @@ export interface JournalEntry {
   serialNumber: string; // e.g. "JV-2026-0001"
   date: string;
   description: string;
+  currency?: CurrencyCode;     // العملة الرئيسية للقيد (افتراضياً EGP)
+  exchangeRate?: number;       // سعر الصرف المطبق على القيد
+  foreignTotalDebit?: number;  // إجمالي المدين بالعملة الأجنبية
+  foreignTotalCredit?: number; // إجمالي الدائن بالعملة الأجنبية
   lines: JournalEntryLine[];
-  totalDebit: number;
-  totalCredit: number;
+  totalDebit: number;          // إجمالي المدين بالجنيه المصري
+  totalCredit: number;         // إجمالي الدائن بالجنيه المصري
   isPosted: boolean;
   entryType: 'GENERAL' | 'ADJUSTING' | 'CLOSING' | 'RECEIPT' | 'PAYMENT' | 'SALES' | 'PURCHASE';
   referenceNumber?: string;
@@ -112,14 +132,29 @@ export interface ClientProcedureTask {
   updatedAt: string;
 }
 
+export interface ClientDocumentFolder {
+  id: string;
+  clientId: string;
+  name: string; // e.g. "القوائم المالية والتقارير", "المستندات القانونية والتأسيسية", "الإقرارات والفواتير الضريبية", "المراجعة والتكليفات", "العقود والاتفاقيات"
+  icon?: string; // 'folder' | 'file-text' | 'shield' | 'percent' | 'scale' | 'briefcase'
+  color?: string;
+  description?: string;
+  isDefault?: boolean;
+  createdAt: string;
+}
+
 export interface ClientDocument {
   id: string;
+  clientId?: string;
+  folderId?: string;
+  folderName?: string;
   title: string;
-  documentType: 'TAX_CARD' | 'COMMERCIAL_REG' | 'ARTICLES_OF_INC' | 'FINANCIAL_REPORT' | 'POWER_OF_ATTORNEY' | 'RECEIPT' | 'OTHER';
+  documentType: 'TAX_CARD' | 'COMMERCIAL_REG' | 'ARTICLES_OF_INC' | 'FINANCIAL_REPORT' | 'POWER_OF_ATTORNEY' | 'RECEIPT' | 'AUDIT_REPORT' | 'TAX_RETURN' | 'CONTRACT' | 'OTHER';
   fileDataUrl: string; // Base64 or Blob URL
   fileName: string;
   fileSize?: string;
   uploadedAt: string;
+  tag?: string;
   notes?: string;
 }
 
@@ -142,6 +177,7 @@ export interface ClientArchiveRecord {
   email: string;
   address: string;
   activity: string;
+  folders?: ClientDocumentFolder[]; // المجلدات والتصنيفات للمستندات
   documents: ClientDocument[];
   procedures?: ClientProcedureTask[]; // السجل الإداري الشامل للإجراءات والمهام
   tasksHistory?: { id: string; date: string; taskDescription: string; status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'; fees: number; treasuryTxId?: string }[];
@@ -223,17 +259,48 @@ export interface ProfessionalCertificate {
 
 export interface InvoiceItem {
   id: string;
-  itemCode: string;
+  itemType?: 'EGS' | 'GS1'; // نظام التكويد المصري أو الدولي
+  itemCode: string; // e.g. "EG-100200300-ITM01" or "6221234567890"
   description: string;
+  unitType?: string; // EA (قطعة), C62 (وحدة), KGM (كجم), MTR (متر), JOB (خدمة/عملية), HUR (ساعة)
   quantity: number;
   unitPrice: number;
   discountRate: number; // %
+  discountAmount?: number;
   vatRate: number; // usually 14%
   whtRate: number; // usually 1% or 0%
   totalBeforeTax: number;
+  salesTotal?: number;
   vatAmount: number;
   whtAmount: number;
   netTotal: number;
+}
+
+export type EtaDocumentType = 'I' | 'C' | 'D' | 'R'; // Invoice (I), Credit Note (C), Debit Note (D), Receipt (R)
+export type EtaEnvironment = 'PREPROD' | 'PROD';
+export type EtaReceiverType = 'B' | 'P' | 'F'; // Business (B), Person/Individual (P), Foreigner (F)
+export type EtaSubmissionStatus = 'NOT_SUBMITTED' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'CANCELLED' | 'REJECTED';
+
+export interface EtaConfig {
+  environment: EtaEnvironment;
+  clientId: string;
+  clientSecret: string;
+  posSerial?: string; // لمعاملات الإيصال الإلكتروني POS
+  posOsVersion?: string;
+  issuerTaxRegNo: string; // الرقم الضريبي للمصدر
+  issuerName: string;
+  issuerActivityCode: string; // e.g. "6920" أنشطة المحاسبة والمراجعة القانونية
+  branchId: string; // "0" الفرع الرئيسي
+  country: string; // "EG"
+  governate: string; // "Cairo", "Giza", "Alexandria"...
+  regionCity: string;
+  street: string;
+  buildingNumber: string;
+  postalCode?: string;
+  tokenPin?: string;
+  tokenType: 'USB_TOKEN' | 'HSM' | 'SOFT_CERT' | 'SIMULATED';
+  tokenSubject?: string;
+  autoSubmitOnIssue: boolean;
 }
 
 export interface Invoice {
@@ -245,8 +312,15 @@ export interface Invoice {
   partnerId?: string;
   partnerName: string;
   partnerTaxNo?: string;
+  partnerNationalId?: string;
   partnerCommercialReg?: string;
   partnerAddress?: string;
+  receiverType?: EtaReceiverType;
+  receiverCountry?: string;
+  receiverGovernate?: string;
+  receiverCity?: string;
+  receiverStreet?: string;
+  receiverBuildingNumber?: string;
   items: InvoiceItem[];
   subtotal: number;
   totalDiscount: number;
@@ -256,9 +330,24 @@ export interface Invoice {
   paidAmount: number;
   remainingAmount: number;
   status: 'DRAFT' | 'ISSUED' | 'PAID' | 'PARTIAL' | 'CANCELLED';
-  paymentMethod: 'CASH' | 'CREDIT' | 'BANK';
+  paymentMethod: 'CASH' | 'CREDIT' | 'BANK' | 'INSTAPAY';
   qrPayload: string;
   notes?: string;
+  
+  // ETA Electronic Invoicing & e-Receipt SDK specific fields
+  isReceipt?: boolean; // هل هو إيصال إلكتروني B2C
+  etaDocumentType?: EtaDocumentType; // 'I' | 'C' | 'D' | 'R'
+  etaDocumentVersion?: '1.0' | '0.9';
+  etaStatus?: EtaSubmissionStatus;
+  etaUuid?: string; // المعرف الفريد الصادر من مصلحة الضرائب
+  etaLongId?: string;
+  etaSubmissionId?: string;
+  etaSubmissionDate?: string;
+  etaValidationErrors?: string[];
+  etaCanonicalHash?: string; // بصمة التشفير المعيارية SHA-256
+  etaSignatureValue?: string; // التوقيع الرقمي CAdES-BES
+  etaPublicUrl?: string; // رابط التحقق من المستند على بوابة المصلحة
+  
   createdAt: string;
 }
 
@@ -387,3 +476,89 @@ export interface OfficeProfile {
   stampUrl?: string;
   notes: string;
 }
+
+// Tax Mandates & Task Scheduler Types
+export type TaxMandateType =
+  | 'VAT_10'
+  | 'INCOME_27_CORP'
+  | 'INCOME_28_INDIV'
+  | 'PAYROLL_4'
+  | 'ANNUAL_PAYROLL'
+  | 'WHT_41'
+  | 'STAMP_TAX'
+  | 'REAL_ESTATE_TAX'
+  | 'TAX_AUDIT_SESSION'
+  | 'OTHER';
+
+export type TaxMandateStatus =
+  | 'NOT_STARTED'
+  | 'COLLECTING_DOCS'
+  | 'RECONCILING'
+  | 'READY_TO_SUBMIT'
+  | 'SUBMITTED'
+  | 'PAID'
+  | 'OVERDUE';
+
+export interface TaxMandateTask {
+  id: string;
+  mandateCode: string; // e.g. "TAX-MAND-2026-001"
+  clientId: string;
+  clientName: string;
+  mandateTitle: string; // e.g. "إقرار ضريبة القيمة المضافة لشهر يناير 2026"
+  taxType: TaxMandateType;
+  periodName: string; // "شهر يناير 2026", "الربع الأول 2026"
+  taxYear: number;
+  deadlineDate: string; // YYYY-MM-DD
+  reminderDaysBefore: number;
+  assignedTo: string;
+  status: TaxMandateStatus;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  estimatedTaxAmount?: number;
+  actualTaxAmount?: number;
+  receiptNumber?: string;
+  etaSubmissionRef?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Multi-User Access Control (RBAC)
+export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT';
+
+export type NavigationTab =
+  | 'DASHBOARD'
+  | 'CHART_OF_ACCOUNTS'
+  | 'JOURNAL_ENTRIES'
+  | 'GENERAL_LEDGER'
+  | 'TRIAL_BALANCE'
+  | 'FINANCIAL_STATEMENTS'
+  | 'AUDITOR_REPORT'
+  | 'CREDIT_SIMULATOR'
+  | 'OFFICE_TREASURY'
+  | 'CLIENTS_ARCHIVE'
+  | 'TAX_TRACKER'
+  | 'CERTIFICATES'
+  | 'FEASIBILITY_STUDY'
+  | 'INVOICING'
+  | 'AUDIT_TRAIL';
+
+export interface SystemUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  roleTitleArabic: string; // "مدير النظام والشريك المسؤول", "مراقب حسابات / مراجع أول", "محاسب مالي / مسجل قيود"
+  pinCode?: string; // e.g. "1234"
+  avatarInitials?: string;
+  canAccessTreasury: boolean;
+  canAccessAuditTrail: boolean;
+  canManageUsers?: boolean;
+  canPostEntries?: boolean;
+  canEditPostedEntries?: boolean;
+  canDeleteRecords?: boolean;
+  canIssueInvoices?: boolean;
+  canModifySettings?: boolean;
+  restrictedTabs?: NavigationTab[] | string[];
+  createdAt: string;
+}
+

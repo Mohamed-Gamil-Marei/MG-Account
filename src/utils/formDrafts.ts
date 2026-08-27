@@ -11,11 +11,17 @@ export interface JournalEntryDraft {
   date: string;
   entryType: string;
   description: string;
+  currency?: string;
+  exchangeRate?: number;
   lines: Array<{
     id: string;
     accountId: string;
     accountCode: string;
     accountName: string;
+    currency?: string;
+    exchangeRate?: number;
+    foreignDebit?: number;
+    foreignCredit?: number;
     debit: number;
     credit: number;
     description: string;

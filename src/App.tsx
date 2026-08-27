@@ -20,6 +20,10 @@ import { BackupExportModal } from './components/BackupExportModal';
 import { DesktopAppModal } from './components/DesktopAppModal';
 import { UpdateNotificationModal } from './components/UpdateNotificationModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { GlobalSearchBar } from './components/GlobalSearchBar';
+import { UserManagerModal } from './components/UserManagerModal';
+import { AccessRestrictedGate } from './components/AccessRestrictedGate';
+import { NavigationTab, SystemUser } from './types';
 import {
   UpdateCheckerService,
   AppVersionInfo,
@@ -37,16 +41,20 @@ import {
   RefreshCw,
   Zap,
   Keyboard,
+  Shield,
+  Users,
 } from 'lucide-react';
 
 export default function App() {
   const [state, setState] = useState<DatabaseState>(db.getState());
   const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(2025);
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(2026);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDesktopModalOpen, setIsDesktopModalOpen] = useState<boolean>(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+  const [isUserManagerOpen, setIsUserManagerOpen] = useState<boolean>(false);
+  const [unlockedTabs, setUnlockedTabs] = useState<string[]>([]);
 
   // Update check states
   const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
@@ -262,7 +270,37 @@ export default function App() {
     }
   };
 
+  const currentUser = db.getCurrentUser();
+
+  const isTabRestricted = (tab: string): { restricted: boolean; name: string } => {
+    if (unlockedTabs.includes(tab)) return { restricted: false, name: '' };
+    if (currentUser.role === 'ADMIN') return { restricted: false, name: '' };
+
+    if (tab === 'OFFICE_TREASURY' && !currentUser.canAccessTreasury) {
+      return { restricted: true, name: 'خزنة المكتب وحسابات الأتعاب والمصروفات' };
+    }
+    if (tab === 'AUDIT_TRAIL' && !currentUser.canAccessAuditTrail) {
+      return { restricted: true, name: 'سجل المراجعة والرقابة والتدقيق (Audit Trail)' };
+    }
+    if (currentUser.restrictedTabs?.includes(tab as any)) {
+      return { restricted: true, name: tab };
+    }
+    return { restricted: false, name: '' };
+  };
+
   const renderActiveView = () => {
+    const restrictionCheck = isTabRestricted(activeTab);
+    if (restrictionCheck.restricted) {
+      return (
+        <AccessRestrictedGate
+          currentUser={currentUser}
+          targetTabName={restrictionCheck.name}
+          onOverrideSuccess={() => setUnlockedTabs((prev) => [...prev, activeTab])}
+          onNavigateHome={() => setActiveTab('DASHBOARD')}
+        />
+      );
+    }
+
     switch (activeTab) {
       case 'DASHBOARD':
         return (
@@ -371,8 +409,8 @@ export default function App() {
         )}
 
         {/* Top Header Bar - Professional Polish style */}
-        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between z-10 shrink-0 shadow-xs">
-          <div className="flex items-center gap-3">
+        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between z-10 shrink-0 shadow-xs gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer border border-slate-200"
@@ -392,31 +430,64 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <h1 className="text-sm sm:text-base font-bold text-slate-900 line-clamp-1">
-                  مرحباً أ/ {state.officeProfile.auditorName}
+              <div className="hidden lg:block">
+                <h1 className="text-sm font-bold text-slate-900 line-clamp-1">
+                  أ/ {state.officeProfile.auditorName}
                 </h1>
-                <span className="text-[10px] text-blue-600 font-semibold hidden md:inline-block">
-                  مكتب المحاسبة والمراجع القانونية • المعايير المحاسبية المصرية
+                <span className="text-[10px] text-emerald-700 font-semibold block">
+                  المعايير المحاسبية المصرية (EAS)
                 </span>
               </div>
             </div>
           </div>
 
+          {/* Center: Multi-record Global Search Bar */}
+          <div className="flex-1 max-w-lg mx-2 hidden sm:block">
+            <GlobalSearchBar
+              state={state}
+              onNavigate={(tab, recordId) => {
+                setActiveTab(tab);
+              }}
+            />
+          </div>
+
           {/* Header Quick Actions & Controls */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* User Profile & Role Switcher */}
+            <button
+              onClick={() => setIsUserManagerOpen(true)}
+              className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              title="إدارة المستخدمين وصلاحيات الوصول (Multi-User RBAC)"
+            >
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  currentUser.role === 'ADMIN'
+                    ? 'bg-amber-500 text-white'
+                    : currentUser.role === 'AUDITOR'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700 text-white'
+                }`}
+              >
+                {currentUser.name.slice(0, 1)}
+              </div>
+              <div className="text-right hidden md:block">
+                <span className="block text-xs text-slate-900 font-bold leading-tight">{currentUser.name}</span>
+                <span className="block text-[9px] text-slate-500 font-mono leading-tight">{currentUser.roleTitleArabic}</span>
+              </div>
+            </button>
+
             {/* Fiscal Year Selector */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs">
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-slate-500 font-medium text-[11px] hidden sm:inline">السنة المالية:</span>
+              <span className="text-slate-500 font-medium text-[11px] hidden xl:inline">السنة:</span>
               <select
                 value={selectedFiscalYear}
                 onChange={(e) => setSelectedFiscalYear(Number(e.target.value))}
                 className="bg-transparent font-bold font-mono text-slate-800 focus:outline-none cursor-pointer text-xs"
               >
-                <option value={2026}>2026 (الحالية)</option>
-                <option value={2025}>2025 (السابقة)</option>
-                <option value={2024}>2024 (المقارنة)</option>
+                <option value={2026}>2026</option>
+                <option value={2025}>2025</option>
+                <option value={2024}>2024</option>
               </select>
             </div>
 
@@ -424,12 +495,12 @@ export default function App() {
             <button
               onClick={() => setIsShortcutsModalOpen(true)}
               id="header-btn-shortcuts"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-lg text-xs font-bold transition-all cursor-pointer border border-blue-200"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-lg text-xs font-bold transition-all cursor-pointer border border-indigo-200"
               title="اختصارات لوحة المفاتيح والتنقل السريع (Ctrl+K)"
             >
-              <Keyboard className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">اختصارات</span>
-              <kbd className="hidden md:inline-block font-mono text-[10px] bg-white text-blue-700 px-1.5 py-0.5 rounded border border-blue-300 shadow-2xs">
+              <Keyboard className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden xl:inline">اختصارات</span>
+              <kbd className="font-mono text-[10px] bg-white text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-300 shadow-2xs">
                 Ctrl+K
               </kbd>
             </button>
@@ -439,7 +510,7 @@ export default function App() {
               onClick={handleManualCheckUpdate}
               disabled={isCheckingUpdate}
               id="header-btn-check-update"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer border border-slate-200"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer border border-slate-200"
               title="فحص التحديثات والإصدارات الجديدة"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
@@ -453,18 +524,17 @@ export default function App() {
             <button
               onClick={() => setIsDesktopModalOpen(true)}
               id="header-btn-desktop-app"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer border border-emerald-400/30"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer border border-emerald-400/30"
               title="تحميل وتثبيت البرنامج ليعمل على سطح المكتب"
             >
               <Laptop className="w-3.5 h-3.5 text-emerald-200" />
-              <span className="hidden sm:inline">تحميل لسطح المكتب</span>
-              <span className="sm:hidden">تثبيت</span>
+              <span>تحميل للديسكتوب</span>
             </button>
 
             {/* Quick Action Button: New Journal */}
             <button
               onClick={() => setActiveTab('JOURNAL_ENTRIES')}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
+              className="hidden 2xl:flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
               title="إضافة قيد يومية جديد"
             >
               <PlusCircle className="w-3.5 h-3.5" />
@@ -472,14 +542,16 @@ export default function App() {
             </button>
 
             {/* Quick Action Button: Treasury */}
-            <button
-              onClick={() => setActiveTab('OFFICE_TREASURY')}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
-              title="حركة بخزنة المكتب"
-            >
-              <Building className="w-3.5 h-3.5" />
-              <span>خزنة المكتب</span>
-            </button>
+            {currentUser.canAccessTreasury && (
+              <button
+                onClick={() => setActiveTab('OFFICE_TREASURY')}
+                className="hidden 2xl:flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                title="حركة بخزنة المكتب"
+              >
+                <Building className="w-3.5 h-3.5" />
+                <span>خزنة المكتب</span>
+              </button>
+            )}
 
             {/* Backup / Export Button */}
             <button
@@ -488,7 +560,7 @@ export default function App() {
               title="النسخ الاحتياطي وتصدير البيانات"
             >
               <Download className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">النسخ والترحيل</span>
+              <span className="hidden md:inline">النسخ والترحيل</span>
             </button>
           </div>
         </header>
@@ -550,6 +622,13 @@ export default function App() {
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
         onCheckUpdate={handleManualCheckUpdate}
+      />
+
+      {/* User Manager RBAC Modal */}
+      <UserManagerModal
+        isOpen={isUserManagerOpen}
+        onClose={() => setIsUserManagerOpen(false)}
+        state={state}
       />
     </div>
   );
