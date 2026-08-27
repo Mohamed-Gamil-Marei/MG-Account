@@ -1,0 +1,1150 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Receipt,
+  Plus,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  Sparkles,
+  Download,
+  Search,
+  Filter,
+  Eye,
+  FileSpreadsheet,
+  QrCode,
+  History,
+  ArrowRight,
+  AlertCircle,
+  FileText,
+  Lock,
+  Edit2,
+  KeyRound,
+  Save,
+  RotateCcw,
+} from 'lucide-react';
+import { JournalEntry, JournalEntryLine, Account } from '../types';
+import { db, DatabaseState } from '../db/localDatabase';
+import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
+import { SecurityAuthModal } from './SecurityAuthModal';
+import { formDraftStorage } from '../utils/formDrafts';
+
+interface JournalEntriesViewProps {
+  state: DatabaseState;
+}
+
+export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterPosted, setFilterPosted] = useState<'ALL' | 'POSTED' | 'DRAFT'>('ALL');
+  const [isNewEntryModalOpen, setIsNewEntryModalOpen] = useState(false);
+  const [selectedEntryForView, setSelectedEntryForView] = useState<JournalEntry | null>(null);
+
+  // Security Auth for Edit Mode
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [entryToEdit, setEntryToEdit] = useState<JournalEntry | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+  // Smart suggestion state
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiAmount, setAiAmount] = useState<number | ''>('');
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+
+  // Form State for Entry Creation
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [description, setDescription] = useState('');
+  const [entryType, setEntryType] = useState<JournalEntry['entryType']>('GENERAL');
+  const [lines, setLines] = useState<JournalEntryLine[]>([
+    { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+    { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+  ]);
+
+  // Auto-Save & Draft State
+  const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string | null>(null);
+  const [draftRestoredNotice, setDraftRestoredNotice] = useState<string | null>(null);
+  const isInitialDraftLoaded = useRef(false);
+
+  // Load existing draft on initial component mount if present
+  useEffect(() => {
+    if (isInitialDraftLoaded.current) return;
+    isInitialDraftLoaded.current = true;
+
+    const savedDraft = formDraftStorage.getJournalDraft();
+    if (
+      savedDraft &&
+      (savedDraft.description?.trim() ||
+        savedDraft.aiPrompt?.trim() ||
+        savedDraft.lines?.some((l) => l.accountId || l.debit > 0 || l.credit > 0))
+    ) {
+      setDate(savedDraft.date || new Date().toISOString().slice(0, 10));
+      setDescription(savedDraft.description || '');
+      setEntryType((savedDraft.entryType as any) || 'GENERAL');
+      if (savedDraft.lines && savedDraft.lines.length >= 2) {
+        setLines(savedDraft.lines);
+      }
+      if (savedDraft.aiPrompt) setAiPrompt(savedDraft.aiPrompt);
+      if (savedDraft.aiAmount !== undefined) setAiAmount(savedDraft.aiAmount);
+      if (savedDraft.aiExplanation) setAiExplanation(savedDraft.aiExplanation);
+
+      setDraftRestoredNotice(
+        `تم استعادة مسودة القيد تلقائياً (${savedDraft.meta?.timeFormatted || 'سابقاً'}) لحماية البيانات من الإغلاق غير المتوقع.`
+      );
+      setLastAutoSaveTime(savedDraft.meta?.timeFormatted || null);
+    }
+  }, []);
+
+  // Auto-save changes to localStorage whenever fields update in new entry mode
+  useEffect(() => {
+    if (editingEntryId) return; // Do not overwrite new draft when editing an existing archived record
+
+    const hasMeaningfulData =
+      Boolean(description.trim()) ||
+      Boolean(aiPrompt.trim()) ||
+      lines.some((l) => l.accountId || (Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0);
+
+    if (!hasMeaningfulData) return;
+
+    const timer = setTimeout(() => {
+      const meta = formDraftStorage.saveJournalDraft({
+        date,
+        entryType,
+        description,
+        lines,
+        aiPrompt,
+        aiAmount,
+        aiExplanation,
+      });
+      setLastAutoSaveTime(meta.timeFormatted);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [date, entryType, description, lines, aiPrompt, aiAmount, aiExplanation, editingEntryId]);
+
+  const handleClearDraft = () => {
+    if (window.confirm('هل تريد مسح المسودة المحفوظة والبدء بنموذج قيد فارغ جديد؟')) {
+      formDraftStorage.clearJournalDraft();
+      setDate(new Date().toISOString().slice(0, 10));
+      setDescription('');
+      setEntryType('GENERAL');
+      setAiPrompt('');
+      setAiAmount('');
+      setAiExplanation(null);
+      setLines([
+        { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+        { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+      ]);
+      setLastAutoSaveTime(null);
+      setDraftRestoredNotice(null);
+    }
+  };
+
+  const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+  const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+  const difference = Math.abs(totalDebit - totalCredit);
+  const isBalanced = totalDebit > 0 && difference < 0.01;
+
+  const handleAccountSelect = (index: number, accountId: string) => {
+    const acc = state.accounts.find((a) => a.id === accountId);
+    if (!acc) return;
+    const newLines = [...lines];
+    newLines[index] = {
+      ...newLines[index],
+      accountId: acc.id,
+      accountCode: acc.code,
+      accountName: acc.name,
+    };
+    setLines(newLines);
+  };
+
+  const handleLineChange = (index: number, field: keyof JournalEntryLine, value: any) => {
+    const newLines = [...lines];
+    newLines[index] = {
+      ...newLines[index],
+      [field]: value,
+    };
+    setLines(newLines);
+  };
+
+  const addLine = () => {
+    setLines([
+      ...lines,
+      { id: `l-${Date.now()}`, accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+    ]);
+  };
+
+  const removeLine = (index: number) => {
+    if (lines.length <= 2) {
+      alert('يجب أن يحتوي القيد المحاسبي على طرفين على الأقل (مدين ودائن)');
+      return;
+    }
+    setLines(lines.filter((_, i) => i !== index));
+  };
+
+  // Smart Pre-built Egyptian Templates
+  const applyPresetTemplate = (templateType: string) => {
+    const amountVal = typeof aiAmount === 'number' && aiAmount > 0 ? aiAmount : 100000;
+
+    if (templateType === 'SALES_VAT_WHT') {
+      const vat = amountVal * 0.14;
+      const wht = amountVal * 0.01;
+      const netClient = amountVal + vat - wht;
+
+      setDescription(`إثبات فاتورة مبيعات بضاعة بقيمة ${amountVal} ج.م + ضريبة ق.م 14% - خصم 1% أ.ت.ص`);
+      setEntryType('SALES');
+      setLines([
+        {
+          id: 'l1',
+          accountId: state.accounts.find((a) => a.code === '1220')?.id || '',
+          accountCode: '1220',
+          accountName: 'العملاء والمدينون التجاريون',
+          debit: netClient,
+          credit: 0,
+          description: 'صافي المطالبة المستحقة على العميل',
+        },
+        {
+          id: 'l2',
+          accountId: state.accounts.find((a) => a.code === '1230')?.id || '',
+          accountCode: '1230',
+          accountName: 'مصلحة الضرائب المصرية - ضريبة خصم وتحصيل (أ.ت.ص)',
+          debit: wht,
+          credit: 0,
+          description: 'خصم أ.ت.ص 1% محتجز لدى العميل',
+        },
+        {
+          id: 'l3',
+          accountId: state.accounts.find((a) => a.code === '4110')?.id || '',
+          accountCode: '4110',
+          accountName: 'إيرادات المبيعات والنشاط التجاري والصناعي',
+          debit: 0,
+          credit: amountVal,
+          description: 'قيمة المبيعات الإجمالية قبل الضريبة',
+        },
+        {
+          id: 'l4',
+          accountId: state.accounts.find((a) => a.code === '2230')?.id || '',
+          accountCode: '2230',
+          accountName: 'مصلحة الضرائب على القيمة المضافة - مخرجات ومبيعات',
+          debit: 0,
+          credit: vat,
+          description: 'ضريبة القيمة المضافة 14% مخرجات',
+        },
+      ]);
+      setAiExplanation('تم إعداد قيد المبيعات وفقاً لمعيار المحاسبة المصري رقم (48) وقانون الضريبة على القيمة المضافة رقم 67 لسنة 2016.');
+    } else if (templateType === 'PURCHASE_VAT_WHT') {
+      const vat = amountVal * 0.14;
+      const wht = amountVal * 0.01;
+      const netSupplier = amountVal + vat - wht;
+
+      setDescription(`شراء خامات وبضاعة بقيمة ${amountVal} ج.م مع ضريبة ق.م 14% وخصم 1% أ.ت.ص`);
+      setEntryType('PURCHASE');
+      setLines([
+        {
+          id: 'l1',
+          accountId: state.accounts.find((a) => a.code === '5110')?.id || '',
+          accountCode: '5110',
+          accountName: 'مشتريات خامات وبضاعة بغرض البيع',
+          debit: amountVal,
+          credit: 0,
+          description: 'تكلفة المشتريات الخاضعة للضريبة',
+        },
+        {
+          id: 'l2',
+          accountId: state.accounts.find((a) => a.code === '1235')?.id || '',
+          accountCode: '1235',
+          accountName: 'مصلحة الضرائب على القيمة المضافة - مدخلات ومشتريات',
+          debit: vat,
+          credit: 0,
+          description: 'ضريبة ق.م 14% مدخلات قابلة للخصم',
+        },
+        {
+          id: 'l3',
+          accountId: state.accounts.find((a) => a.code === '2238')?.id || '',
+          accountCode: '2238',
+          accountName: 'مصلحة الضرائب - ضريبة الخصم والتحصيل أ.ت.ص مستحقة',
+          debit: 0,
+          credit: wht,
+          description: 'ضريبة خصم 1% محتجزة لتوريدها بنموذج 41',
+        },
+        {
+          id: 'l4',
+          accountId: state.accounts.find((a) => a.code === '2210')?.id || '',
+          accountCode: '2210',
+          accountName: 'الموردون والدائنون التجاريون',
+          debit: 0,
+          credit: netSupplier,
+          description: 'صافي مستحق المورد الآجل',
+        },
+      ]);
+      setAiExplanation('تم احتساب ضريبة القيمة المضافة للمدخلات 14% واحتجاز ضريبة الخصم والتحصيل 1% للتوريد الربع سنوي بمصلحة الضرائب.');
+    } else if (templateType === 'PAYROLL_EAS') {
+      const grossSalaries = amountVal;
+      const companyInsurance = grossSalaries * 0.1875;
+      const payrollTax = grossSalaries * 0.08;
+      const totalInsurance = grossSalaries * 0.2975; // 11% employee + 18.75% company
+      const netSalaries = grossSalaries + companyInsurance - payrollTax - totalInsurance;
+
+      setDescription(`استحقاق رواتب وأجور العاملين بإجمالي ${grossSalaries} ج.م وحصة التأمينات وكسب العمل`);
+      setEntryType('GENERAL');
+      setLines([
+        {
+          id: 'l1',
+          accountId: state.accounts.find((a) => a.code === '5310')?.id || '',
+          accountCode: '5310',
+          accountName: 'أجور ومرتبات وبدلات العاملين',
+          debit: grossSalaries,
+          credit: 0,
+          description: 'إجمالي الأجور المستحقة',
+        },
+        {
+          id: 'l2',
+          accountId: state.accounts.find((a) => a.code === '5320')?.id || '',
+          accountCode: '5320',
+          accountName: 'حصة المنشأة في التأمينات الاجتماعية (18.75%)',
+          debit: companyInsurance,
+          credit: 0,
+          description: 'مساهمة صاحب العمل في التأمينات الاجتماعية',
+        },
+        {
+          id: 'l3',
+          accountId: state.accounts.find((a) => a.code === '2235')?.id || '',
+          accountCode: '2235',
+          accountName: 'مصلحة الضرائب - ضريبة كسب العمل',
+          debit: 0,
+          credit: payrollTax,
+          description: 'ضريبة كسب العمل المستقطعة للتوريد بنموذج 4',
+        },
+        {
+          id: 'l4',
+          accountId: state.accounts.find((a) => a.code === '2240')?.id || '',
+          accountCode: '2240',
+          accountName: 'الهيئة القومية للتأمين الاجتماعي',
+          debit: 0,
+          credit: totalInsurance,
+          description: 'إجمالي التأمينات الاجتماعية المستحقة (29.75%)',
+        },
+        {
+          id: 'l5',
+          accountId: state.accounts.find((a) => a.code === '1260')?.id || '',
+          accountCode: '1260',
+          accountName: 'البنك الأهلي المصري - حساب جاري',
+          debit: 0,
+          credit: netSalaries,
+          description: 'تحويل صافي الرواتب لحسابات الموظفين',
+        },
+      ]);
+      setAiExplanation('قيد استحقاق وصرف أجور طبقاً لقانون التأمينات الاجتماعية رقم 148 لسنة 2019 وقانون الضريبة على الدخل وتعديلاته.');
+    }
+  };
+
+  const handleSmartAiGenerate = async () => {
+    if (!aiPrompt) {
+      alert('يرجى كتابة وصف العملية المحاسبية أولاً');
+      return;
+    }
+    setIsAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/suggest-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: aiPrompt,
+          amount: aiAmount || 0,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const aiData = data.data;
+        setDescription(aiPrompt);
+        setAiExplanation(aiData.explanation + (aiData.taxNotes ? ` | ${aiData.taxNotes}` : ''));
+
+        if (aiData.entries && aiData.entries.length > 0) {
+          const generatedLines: JournalEntryLine[] = aiData.entries.map((item: any, idx: number) => {
+            const matchedAcc = state.accounts.find(
+              (a) => a.code === item.accountCode || a.name.includes(item.accountName)
+            );
+            return {
+              id: `ai-l-${idx}`,
+              accountId: matchedAcc ? matchedAcc.id : '',
+              accountCode: item.accountCode || (matchedAcc ? matchedAcc.code : '1110'),
+              accountName: item.accountName || (matchedAcc ? matchedAcc.name : 'حساب عام'),
+              debit: Number(item.debit) || 0,
+              credit: Number(item.credit) || 0,
+              description: item.notes || '',
+            };
+          });
+          setLines(generatedLines);
+        }
+      } else {
+        // Fallback to local rule based suggestions
+        applyPresetTemplate('SALES_VAT_WHT');
+      }
+    } catch (e) {
+      console.error(e);
+      applyPresetTemplate('SALES_VAT_WHT');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  const handleRequestEdit = (entry: JournalEntry) => {
+    setEntryToEdit(entry);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleAuthSuccess = () => {
+    if (!entryToEdit) return;
+    setEditingEntryId(entryToEdit.id);
+    setDate(entryToEdit.date);
+    setDescription(entryToEdit.description);
+    setEntryType(entryToEdit.entryType || 'GENERAL');
+    setLines(entryToEdit.lines.map((l) => ({ ...l })));
+    setIsAuthModalOpen(false);
+    setSelectedEntryForView(null);
+    setIsNewEntryModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isBalanced) {
+      alert('لا يمكن حفظ القيد: إجمالي المدين يجب أن يتساوى تماماً مع إجمالي الدائن');
+      return;
+    }
+
+    const unassigned = lines.some((l) => !l.accountId);
+    if (unassigned) {
+      alert('يرجى التأكد من اختيار الحساب المحاسبي لجميع أطراف القيد');
+      return;
+    }
+
+    if (editingEntryId) {
+      db.updateJournalEntry(editingEntryId, {
+        date,
+        description: description || 'قيد يومية عامة',
+        lines,
+        totalDebit,
+        totalCredit,
+        entryType,
+      });
+      alert('تم حفظ وتحديث بيانات القيد بنجاح بعد التحقق من الرقم السري (Mg120).');
+    } else {
+      db.addJournalEntry({
+        date,
+        description: description || 'قيد يومية عامة',
+        lines,
+        totalDebit,
+        totalCredit,
+        isPosted: true, // auto post to General Ledger
+        entryType,
+      });
+      // Clear draft on successful submission
+      formDraftStorage.clearJournalDraft();
+      setLastAutoSaveTime(null);
+      setDraftRestoredNotice(null);
+    }
+
+    setIsNewEntryModalOpen(false);
+    setEditingEntryId(null);
+    setEntryToEdit(null);
+    // Reset form
+    setDescription('');
+    setAiExplanation(null);
+    setLines([
+      { id: 'l1', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+      { id: 'l2', accountId: '', accountCode: '', accountName: '', debit: 0, credit: 0, description: '' },
+    ]);
+  };
+
+  const filteredEntries = state.journalEntries.filter((entry) => {
+    const matchesSearch =
+      entry.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.lines.some((l) => l.accountName.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesPosted =
+      filterPosted === 'ALL' ||
+      (filterPosted === 'POSTED' && entry.isPosted) ||
+      (filterPosted === 'DRAFT' && !entry.isPosted);
+
+    return matchesSearch && matchesPosted;
+  });
+
+  return (
+    <div className="space-y-5">
+      {/* Header Bar */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Receipt className="w-6 h-6 text-emerald-700" />
+            <h2 className="text-lg font-bold text-slate-900">
+              دفتر اليومية العامة والترحيل الذكي (General Journal)
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            تسجيل القيود المزدوجة المتوازنة، الترحيل الآلي للأستاذ العام، مع مساعد القيود الذكي للضرائب والرواتب المصرية.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => db.exportTableToExcel('JOURNAL')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+            <span>تصدير إكسل</span>
+          </button>
+
+          <button
+            onClick={() => setIsNewEntryModalOpen(true)}
+            id="btn-create-journal-entry"
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>تسجيل قيد جديد</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="relative w-full md:w-96">
+          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="بحث برقم القيد أو البيان أو اسم الحساب..."
+            className="w-full pl-3 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilterPosted('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+              filterPosted === 'ALL'
+                ? 'bg-slate-800 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            جميع القيود ({state.journalEntries.length})
+          </button>
+          <button
+            onClick={() => setFilterPosted('POSTED')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+              filterPosted === 'POSTED'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            المرحلة للأستاذ ({state.journalEntries.filter((e) => e.isPosted).length})
+          </button>
+          <button
+            onClick={() => setFilterPosted('DRAFT')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+              filterPosted === 'DRAFT'
+                ? 'bg-amber-800 text-white'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            المسودات ({state.journalEntries.filter((e) => !e.isPosted).length})
+          </button>
+        </div>
+      </div>
+
+      {/* Entries List Cards (American / Full Journal view) */}
+      <div className="space-y-4">
+        {filteredEntries.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-500">
+            <Receipt className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+            <p className="font-bold text-sm">لا توجد قيود يومية مطابقة للبحث</p>
+          </div>
+        ) : (
+          filteredEntries.slice().reverse().map((entry) => (
+            <div
+              key={entry.id}
+              className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden hover:border-slate-300 transition-colors"
+            >
+              {/* Entry Card Header */}
+              <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-800 text-white shadow-2xs">
+                    {entry.serialNumber}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-600">{entry.date}</span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      entry.isPosted
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}
+                  >
+                    {entry.isPosted ? '✓ مرحل للأستاذ' : 'مسودة'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {entry.entryType}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-bold text-slate-800 ml-2">
+                    الإجمالي: <span className="font-mono text-emerald-700">{formatEgyptianCurrency(entry.totalDebit)}</span>
+                  </div>
+                  <button
+                    onClick={() => db.togglePostEntry(entry.id)}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      entry.isPosted
+                        ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    }`}
+                  >
+                    {entry.isPosted ? 'إلغاء الترحيل' : 'ترحيل للأستاذ'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedEntryForView(entry)}
+                    className="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-50 cursor-pointer flex items-center gap-1 text-xs font-bold border border-blue-200"
+                    title="نظام عرض البيانات"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>عرض</span>
+                  </button>
+                  <button
+                    onClick={() => handleRequestEdit(entry)}
+                    className="p-1.5 text-amber-700 hover:text-amber-900 rounded-lg hover:bg-amber-50 cursor-pointer flex items-center gap-1 text-xs font-bold border border-amber-200"
+                    title="تعديل القيد (يتطلب الرقم السري Mg120)"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>تعديل</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="px-5 py-2.5 text-xs font-medium text-slate-800 bg-white">
+                <span className="text-slate-400 ml-1">البيان:</span> {entry.description}
+              </div>
+
+              {/* Journal Lines Table */}
+              <div className="overflow-x-auto border-t border-slate-100">
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/50 text-slate-500 font-semibold border-b border-slate-100">
+                      <th className="py-2 px-5">كود الحساب</th>
+                      <th className="py-2 px-5">اسم الحساب</th>
+                      <th className="py-2 px-5 text-left">مدين (ج.م)</th>
+                      <th className="py-2 px-5 text-left">دائن (ج.م)</th>
+                      <th className="py-2 px-5">شرح الطرف</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {entry.lines.map((line, idx) => (
+                      <tr key={line.id || idx} className="hover:bg-slate-50/50">
+                        <td className="py-2 px-5 font-mono text-slate-600">{line.accountCode}</td>
+                        <td className="py-2 px-5 font-medium text-slate-900">{line.accountName}</td>
+                        <td className="py-2 px-5 font-mono font-bold text-left text-blue-800">
+                          {line.debit > 0 ? formatEgyptianCurrency(line.debit) : '-'}
+                        </td>
+                        <td className="py-2 px-5 font-mono font-bold text-left text-amber-800">
+                          {line.credit > 0 ? formatEgyptianCurrency(line.credit) : '-'}
+                        </td>
+                        <td className="py-2 px-5 text-slate-500 text-[11px]">{line.description || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* New Journal Entry Modal */}
+      {isNewEntryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-emerald-700" />
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingEntryId ? 'تعديل القيد المحاسبي (وضع التعديل المصرح به)' : 'تسجيل قيد يومية عامة جديد'}
+                </h3>
+                {editingEntryId ? (
+                  <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <KeyRound className="w-3 h-3 text-amber-700" />
+                    <span>تم التحقق (Mg120)</span>
+                  </span>
+                ) : lastAutoSaveTime ? (
+                  <span className="text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs">
+                    <Save className="w-3 h-3 text-emerald-600 animate-pulse" />
+                    <span>حفظ تلقائي للمسودة: {lastAutoSaveTime}</span>
+                  </span>
+                ) : null}
+              </div>
+              <button
+                onClick={() => {
+                  setIsNewEntryModalOpen(false);
+                  setEditingEntryId(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Restored Draft Alert Banner */}
+            {!editingEntryId && draftRestoredNotice && (
+              <div className="mt-3 p-3 bg-blue-50/90 border border-blue-200 text-blue-900 rounded-xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="font-medium">{draftRestoredNotice}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleClearDraft}
+                    className="text-slate-600 hover:text-red-700 underline font-bold cursor-pointer text-[11px]"
+                  >
+                    مسح المسودة والبدء من جديد
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDraftRestoredNotice(null)}
+                    className="text-blue-500 hover:text-blue-700 p-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Smart Egyptian AI Assistant Box */}
+            <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-emerald-950 to-slate-900 text-white space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-emerald-300">
+                    مساعد القيد الذكي واقتراح الحسابات بالمعايير المصرية
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => applyPresetTemplate('SALES_VAT_WHT')}
+                    className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer"
+                  >
+                    قيد مبيعات 14% + 1%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPresetTemplate('PURCHASE_VAT_WHT')}
+                    className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer"
+                  >
+                    قيد مشتريات 14% + 1%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPresetTemplate('PAYROLL_EAS')}
+                    className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer"
+                  >
+                    قيد مرتبات وكسب عمل
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="اكتب المعاملة باللغة الطبيعية (مثال: بيع بضاعة بمبلغ 250 ألف وسداد النصف بالبنك والباقي آجل)..."
+                  className="flex-1 px-3 py-2 text-xs bg-slate-800/80 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
+                <input
+                  type="number"
+                  value={aiAmount}
+                  onChange={(e) => setAiAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="المبلغ (ج.م)"
+                  className="w-28 px-3 py-2 text-xs bg-slate-800/80 border border-slate-700 rounded-lg text-white font-mono placeholder-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleSmartAiGenerate}
+                  disabled={isAiLoading}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{isAiLoading ? 'جاري التحليل...' : 'اقتراح القيد'}</span>
+                </button>
+              </div>
+
+              {aiExplanation && (
+                <div className="text-[11px] text-emerald-200 bg-emerald-900/40 p-2.5 rounded-lg border border-emerald-500/20">
+                  {aiExplanation}
+                </div>
+              )}
+            </div>
+
+            {/* Entry Form */}
+            <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">تاريخ القيد *</label>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">نوع العملية</label>
+                  <select
+                    value={entryType}
+                    onChange={(e) => setEntryType(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                  >
+                    <option value="GENERAL">يومية عامة</option>
+                    <option value="SALES">مبيعات</option>
+                    <option value="PURCHASE">مشتريات</option>
+                    <option value="RECEIPT">مقبوضات</option>
+                    <option value="PAYMENT">مدفوعات</option>
+                    <option value="ADJUSTING">تسويات جردية</option>
+                    <option value="CLOSING">إقفال حسابات</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">البيان الرئيسي للقيد *</label>
+                  <input
+                    type="text"
+                    required
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="شرح العملية المحاسبية..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Lines Table Editor */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="bg-slate-100 px-4 py-2 flex items-center justify-between border-b border-slate-200">
+                  <span className="font-bold text-slate-700">أطراف القيد المحاسبي (مدين / دائن)</span>
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة طرف جديد</span>
+                  </button>
+                </div>
+
+                <div className="p-3 space-y-2 max-h-72 overflow-y-auto">
+                  {lines.map((line, idx) => (
+                    <div key={line.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50/70 p-2 rounded-lg border border-slate-200/60">
+                      <div className="col-span-5">
+                        <select
+                          required
+                          value={line.accountId}
+                          onChange={(e) => handleAccountSelect(idx, e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                        >
+                          <option value="">-- اختر الحساب من الدليل --</option>
+                          {state.accounts.map((acc) => (
+                            <option key={acc.id} value={acc.id}>
+                              [{acc.code}] {acc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={line.debit || ''}
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            handleLineChange(idx, 'debit', val);
+                            if (val > 0) handleLineChange(idx, 'credit', 0);
+                          }}
+                          placeholder="مدين"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-blue-900"
+                        />
+                      </div>
+
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={line.credit || ''}
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            handleLineChange(idx, 'credit', val);
+                            if (val > 0) handleLineChange(idx, 'debit', 0);
+                          }}
+                          placeholder="دائن"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-amber-900"
+                        />
+                      </div>
+
+                      <div className="col-span-2">
+                        <input
+                          type="text"
+                          value={line.description || ''}
+                          onChange={(e) => handleLineChange(idx, 'description', e.target.value)}
+                          placeholder="ملاحظات الطرف"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+
+                      <div className="col-span-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeLine(idx)}
+                          className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Balance Footer */}
+                <div className="bg-slate-100 px-4 py-3 border-t border-slate-200 flex items-center justify-between font-bold">
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-700">إجمالي المدين: <span className="font-mono text-blue-900">{formatEgyptianCurrency(totalDebit)}</span></span>
+                    <span className="text-slate-700">إجمالي الدائن: <span className="font-mono text-amber-900">{formatEgyptianCurrency(totalCredit)}</span></span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isBalanced ? (
+                      <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full text-xs">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>القيد متوازن تماماً</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-red-700 bg-red-100 px-3 py-1 rounded-full text-xs">
+                        <XCircle className="w-4 h-4" />
+                        <span>فارق عدم التوازن: {formatEgyptianCurrency(difference)}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  {!editingEntryId && (lastAutoSaveTime || description || aiPrompt) && (
+                    <button
+                      type="button"
+                      onClick={handleClearDraft}
+                      className="text-slate-400 hover:text-red-600 text-xs flex items-center gap-1.5 cursor-pointer py-1 px-2 rounded-lg hover:bg-red-50 transition-colors"
+                      title="مسح المسودة والبدء بقيد جديد"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>مسح المسودة</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNewEntryModalOpen(false);
+                      setEditingEntryId(null);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!isBalanced}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    {editingEntryId ? (
+                      <>
+                        <Edit2 className="w-4 h-4" />
+                        <span>حفظ التعديلات على القيد</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>حفظ وترحيل القيد للأستاذ</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Entry Details - Read-Only View Mode (نظام عرض بيانات) */}
+      {selectedEntryForView && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 text-xs animate-in zoom-in-95 duration-150">
+            {/* Header with View-Only Badge */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2.5">
+                <span className="font-mono font-bold text-sm text-emerald-900 px-2.5 py-1 bg-emerald-50 rounded-lg border border-emerald-200">
+                  {selectedEntryForView.serialNumber}
+                </span>
+                <span className="text-slate-500">• {selectedEntryForView.date}</span>
+                <span className="text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Eye className="w-3 h-3 text-blue-600" />
+                  <span>نظام عرض بيانات</span>
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedEntryForView(null)}
+                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Read-Only Notice */}
+            <div className="mt-3 p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-blue-900 text-xs">
+                <Lock className="w-4 h-4 text-blue-700 shrink-0" />
+                <span>
+                  أنت الآن في <strong>(نظام عرض البيانات)</strong>. لتعديل تفاصيل القيد، انقر على زر التعديل وأدخل الرقم السري المصرح به (<span className="font-mono font-bold">Mg120</span>).
+                </span>
+              </div>
+              <button
+                onClick={() => handleRequestEdit(selectedEntryForView)}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>تعديل القيد (Mg120)</span>
+              </button>
+            </div>
+
+            <div className="space-y-4 mt-3 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="font-bold text-slate-900 mb-1">البيان:</div>
+                <p className="text-slate-700">{selectedEntryForView.description}</p>
+              </div>
+
+              {/* Read-Only Lines Table */}
+              <div>
+                <div className="font-bold text-slate-900 mb-2">أطراف وحسابات القيد:</div>
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-right text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                        <th className="p-2.5">كود الحساب</th>
+                        <th className="p-2.5">اسم الحساب</th>
+                        <th className="p-2.5 text-left">مدين (ج.م)</th>
+                        <th className="p-2.5 text-left">دائن (ج.م)</th>
+                        <th className="p-2.5">شرح الطرف</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedEntryForView.lines.map((line, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="p-2.5 font-mono text-slate-600">{line.accountCode}</td>
+                          <td className="p-2.5 font-bold text-slate-900">{line.accountName}</td>
+                          <td className="p-2.5 font-mono font-bold text-left text-blue-700">
+                            {line.debit > 0 ? formatEgyptianCurrency(line.debit) : '-'}
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-left text-amber-700">
+                            {line.credit > 0 ? formatEgyptianCurrency(line.credit) : '-'}
+                          </td>
+                          <td className="p-2.5 text-slate-500">{line.description || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-bold text-slate-900 border-t border-slate-200">
+                        <td colSpan={2} className="p-2.5 text-right">الإجمالي المتوازن:</td>
+                        <td className="p-2.5 font-mono text-left text-blue-800">
+                          {formatEgyptianCurrency(selectedEntryForView.totalDebit)}
+                        </td>
+                        <td className="p-2.5 font-mono text-left text-amber-800">
+                          {formatEgyptianCurrency(selectedEntryForView.totalCredit)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* QR Code and Audit Info */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                <div className="space-y-1">
+                  <div className="font-bold text-emerald-900">رمز التوثيق الإلكتروني المشفر (QR Code)</div>
+                  <div className="text-[10px] text-slate-600 font-mono break-all max-w-md">
+                    {selectedEntryForView.qrPayload}
+                  </div>
+                </div>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: generateQrCodeSvg(selectedEntryForView.qrPayload || 'VALID', 64),
+                  }}
+                />
+              </div>
+
+              {/* Audit Trail */}
+              <div>
+                <div className="font-bold text-slate-900 mb-2 flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-slate-600" />
+                  <span>سجل التدقيق والتعديلات على القيد (Audit Trail)</span>
+                </div>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {selectedEntryForView.auditTrail?.map((record, i) => (
+                    <div key={i} className="p-2 rounded bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px]">
+                      <div>
+                        <span className="font-bold text-slate-800">{record.user}</span>
+                        <span className="text-slate-500 mx-1.5">({record.action})</span>
+                        <span className="text-slate-600">{record.details}</span>
+                      </div>
+                      <span className="font-mono text-slate-400 text-[10px]">{record.timestamp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between pt-3 border-t border-slate-200">
+              <button
+                onClick={() => handleRequestEdit(selectedEntryForView)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5"
+              >
+                <Lock className="w-4 h-4" />
+                <span>تعديل القيد المحاسبي (بإذن Mg120)</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedEntryForView(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Security Auth Modal for Edit Passcode (Mg120) */}
+      {isAuthModalOpen && (
+        <SecurityAuthModal
+          title="طلب إذن تعديل القيد المحاسبي"
+          itemDescription="القيد المحاسبي محفوظ حالياً في (نظام عرض البيانات) لحماية الحسابات من التعديل العفوي."
+          onSuccess={handleAuthSuccess}
+          onClose={() => {
+            setIsAuthModalOpen(false);
+            setEntryToEdit(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};
