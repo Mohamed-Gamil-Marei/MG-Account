@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Users,
   Plus,
@@ -30,6 +30,8 @@ import {
   Printer,
   Lock,
   KeyRound,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import {
   ClientArchiveRecord,
@@ -44,6 +46,7 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { ClientDocumentManager } from './ClientDocumentManager';
+import { ClientNotificationModal } from './ClientNotificationModal';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
@@ -72,6 +75,11 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
   const [quickTxAmount, setQuickTxAmount] = useState<number>(0);
   const [quickTxMethod, setQuickTxMethod] = useState<'CASH' | 'BANK_TRANSFER' | 'INSTAPAY' | 'CHEQUE'>('CASH');
   const [quickTxNotes, setQuickTxNotes] = useState('');
+
+  // Notification Modal State
+  const [isNotifyModalOpen, setIsNotifyModalOpen] = useState(false);
+  const [notifyTargetClient, setNotifyTargetClient] = useState<ClientArchiveRecord | null>(null);
+  const [notifyTargetProcedure, setNotifyTargetProcedure] = useState<ClientProcedureTask | null>(null);
 
   // New Client Form State
   const [clientFormData, setClientFormData] = useState({
@@ -119,29 +127,52 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
     ? state.clients.find((c) => c.id === selectedClient.id) || selectedClient
     : null;
 
-  const filteredClients = state.clients.filter((c) => {
-    const matchesSearch =
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.commercialRegistrationNo.includes(searchTerm) ||
-      c.taxCardNo.includes(searchTerm) ||
-      (c.contactPerson && c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredClients = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return state.clients.filter((c) => {
+      const matchesSearch =
+        !term ||
+        c.name.toLowerCase().includes(term) ||
+        c.commercialRegistrationNo.includes(term) ||
+        c.taxCardNo.includes(term) ||
+        (c.contactPerson && c.contactPerson.toLowerCase().includes(term));
 
-    const matchesType =
-      filterType === 'ALL' ||
-      (filterType === 'PRIMARY' && c.clientType === 'PRIMARY') ||
-      (filterType === 'CASUAL' && c.clientType === 'CASUAL') ||
-      (filterType === c.companyType);
+      const matchesType =
+        filterType === 'ALL' ||
+        (filterType === 'PRIMARY' && c.clientType === 'PRIMARY') ||
+        (filterType === 'CASUAL' && c.clientType === 'CASUAL') ||
+        (filterType === c.companyType);
 
-    return matchesSearch && matchesType;
-  });
+      return matchesSearch && matchesType;
+    });
+  }, [state.clients, searchTerm, filterType]);
 
-  // KPI calculations
-  const totalClientsCount = state.clients.length;
-  const allProcedures = state.clients.flatMap((c) => c.procedures || []);
-  const activeProceduresCount = allProcedures.filter(
-    (p) => p.status === 'IN_PROGRESS' || p.status === 'PENDING' || p.status === 'AT_AUTHORITY' || p.status === 'PENDING_CLIENT_DOCS'
-  ).length;
-  const completedProceduresCount = allProcedures.filter((p) => p.status === 'COMPLETED').length;
+  // Fast Memoized KPI calculations
+  const { totalClientsCount, activeProceduresCount, completedProceduresCount } = useMemo(() => {
+    let active = 0;
+    let completed = 0;
+    for (const c of state.clients) {
+      if (c.procedures) {
+        for (const p of c.procedures) {
+          if (p.status === 'COMPLETED') {
+            completed++;
+          } else if (
+            p.status === 'IN_PROGRESS' ||
+            p.status === 'PENDING' ||
+            p.status === 'AT_AUTHORITY' ||
+            p.status === 'PENDING_CLIENT_DOCS'
+          ) {
+            active++;
+          }
+        }
+      }
+    }
+    return {
+      totalClientsCount: state.clients.length,
+      activeProceduresCount: active,
+      completedProceduresCount: completed,
+    };
+  }, [state.clients]);
 
   const handleRequestEditClient = (client: ClientArchiveRecord) => {
     setClientToEdit(client);
@@ -695,6 +726,18 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
 
                 <div className="flex items-center gap-1.5">
                   <button
+                    onClick={() => {
+                      setNotifyTargetClient(client);
+                      setNotifyTargetProcedure(null);
+                      setIsNotifyModalOpen(true);
+                    }}
+                    className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                    title="إرسال إشعار / رسالة للعميل (واتساب - بريد)"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="hidden sm:inline">إشعار</span>
+                  </button>
+                  <button
                     onClick={() => handleRequestEditClient(client)}
                     className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
                     title="تعديل بيانات الشركة والملف الضريبي (يتطلب الرقم السري Mg120)"
@@ -744,12 +787,24 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => {
+                    setNotifyTargetClient(liveSelectedClient);
+                    setNotifyTargetProcedure(null);
+                    setIsNotifyModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  title="إرسال إشعار / رسالة للعميل (واتساب - بريد)"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>إشعار العميل</span>
+                </button>
+                <button
                   onClick={() => handleRequestEditClient(liveSelectedClient)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                   title="تعديل بيانات الشركة والملف الضريبي (يتطلب الرقم السري Mg120)"
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-700" />
-                  <span>تعديل بيانات الشركة (Mg120)</span>
+                  <span>تعديل (Mg120)</span>
                 </button>
                 <button
                   onClick={() => setIsAddProcedureModalOpen(true)}
@@ -931,6 +986,18 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                                 </div>
 
                                 <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                                  <button
+                                    onClick={() => {
+                                      setNotifyTargetClient(liveSelectedClient);
+                                      setNotifyTargetProcedure(proc);
+                                      setIsNotifyModalOpen(true);
+                                    }}
+                                    className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg text-xs font-bold border border-teal-200 flex items-center gap-1 cursor-pointer"
+                                    title="إشعار العميل بمستجدات هذا الإجراء عبر واتساب أو البريد"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5 text-teal-600" />
+                                    <span className="hidden sm:inline">إشعار بالإجراء</span>
+                                  </button>
                                   <button
                                     onClick={() => {
                                       setTargetProcedure(proc);
@@ -1860,6 +1927,20 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         title="التحقق الأمني لتعديل ملف العميل"
         description={`يرجى إدخال الرقم السري لتعديل بيانات الشركة والملف الضريبي لـ [${clientToEdit?.name || ''}]`}
         actionType="EDIT_RECORD"
+      />
+
+      {/* Client Notification & WhatsApp Modal */}
+      <ClientNotificationModal
+        isOpen={isNotifyModalOpen}
+        onClose={() => {
+          setIsNotifyModalOpen(false);
+          setNotifyTargetClient(null);
+          setNotifyTargetProcedure(null);
+        }}
+        client={notifyTargetClient}
+        procedure={notifyTargetProcedure}
+        officeName={state.officeProfile.officeName}
+        auditorName={state.officeProfile.auditorName}
       />
     </div>
   );

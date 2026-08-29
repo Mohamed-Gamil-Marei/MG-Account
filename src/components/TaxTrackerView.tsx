@@ -16,12 +16,14 @@ import {
   Sparkles,
   Printer,
   FileText,
+  MessageSquare,
 } from 'lucide-react';
-import { TaxDeclarationRecord } from '../types';
+import { TaxDeclarationRecord, ClientArchiveRecord } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { TaxMandateScheduler } from './TaxMandateScheduler';
 import { EgyptianTaxDeclarationPdfModal } from './EgyptianTaxDeclarationPdfModal';
+import { ClientNotificationModal } from './ClientNotificationModal';
 
 interface TaxTrackerViewProps {
   state: DatabaseState;
@@ -34,6 +36,11 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [selectedDeclForPdf, setSelectedDeclForPdf] = useState<TaxDeclarationRecord | null>(null);
+
+  // Notification Modal State
+  const [isNotifyModalOpen, setIsNotifyModalOpen] = useState(false);
+  const [notifyTargetClient, setNotifyTargetClient] = useState<ClientArchiveRecord | null>(null);
+  const [notifyTargetDecl, setNotifyTargetDecl] = useState<TaxDeclarationRecord | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -322,6 +329,41 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
                     <div className="flex items-center justify-center gap-1.5">
                       <button
                         onClick={() => {
+                          const client = state.clients.find((c) => c.id === decl.clientId) || {
+                            id: decl.clientId,
+                            name: decl.clientName,
+                            clientCode: 'CL',
+                            clientType: 'PRIMARY',
+                            companyType: 'LLC',
+                            commercialRegistrationNo: '',
+                            taxCardNo: '',
+                            taxOffice: '',
+                            incomeTaxFileNo: '',
+                            vatRegistrationNo: '',
+                            socialInsuranceNo: '',
+                            capital: 0,
+                            partners: [],
+                            contactPerson: '',
+                            phone: '',
+                            email: '',
+                            address: '',
+                            documents: [],
+                            createdAt: '',
+                            updatedAt: '',
+                          };
+                          setNotifyTargetClient(client as any);
+                          setNotifyTargetDecl(decl);
+                          setIsNotifyModalOpen(true);
+                        }}
+                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        title="إرسال إشعار للعميل بنموذج وتقديم الإقرار الضريبي"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>إشعار</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
                           setSelectedDeclForPdf(decl);
                           setIsPdfModalOpen(true);
                         }}
@@ -536,6 +578,20 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
           }}
         />
       )}
+
+      {/* Client WhatsApp / Notification Modal */}
+      <ClientNotificationModal
+        isOpen={isNotifyModalOpen}
+        onClose={() => {
+          setIsNotifyModalOpen(false);
+          setNotifyTargetClient(null);
+          setNotifyTargetDecl(null);
+        }}
+        client={notifyTargetClient}
+        taxDeclaration={notifyTargetDecl}
+        officeName={state.officeProfile.officeName}
+        auditorName={state.officeProfile.auditorName}
+      />
     </div>
   );
 };

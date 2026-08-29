@@ -14,6 +14,8 @@ import {
   Sparkles,
   QrCode,
   Check,
+  Trash2,
+  ShieldAlert,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import {
@@ -23,6 +25,7 @@ import {
   importModelData,
 } from '../utils/dataImportExport';
 import { generateQrCodeSvg } from '../utils/qrCodeGenerator';
+import { PurgeDatabaseModal } from './PurgeDatabaseModal';
 
 interface BackupExportModalProps {
   state: DatabaseState;
@@ -39,6 +42,7 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
   const [importTargetModel, setImportTargetModel] = useState<ModelType>('ACCOUNTS');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
 
   const modelsList: { id: ModelType; name: string; icon: string; count: number; serialPrefix: string }[] = [
     { id: 'ALL_DATA', name: 'النسخة الكاملة الشاملة لكافة النماذج', icon: '🗄️', count: state.accounts.length + state.journalEntries.length + state.clients.length, serialPrefix: 'ALL' },
@@ -270,12 +274,17 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
           {activeTab === 'IMPORT' && (
             <div className="space-y-4 text-xs">
               <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-amber-900 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-700" />
-                  <span>الاستيراد الذكي للبيانات:</span>
+                <div className="font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-700" />
+                    <span>الاستيراد الذكي للبيانات + الترخيص التلقائي للأجهزة:</span>
+                  </span>
+                  <span className="text-[10px] bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-full font-bold">
+                    🔑 Auto-License Protected
+                  </span>
                 </div>
                 <p className="text-[11px] text-amber-800 leading-relaxed">
-                  يمكنك استيراد ملفات <strong>JSON الشاملة</strong> لاستعادة كامل النظام، أو استيراد ملفات <strong>Excel (.xlsx) و CSV</strong> لشجرة الحسابات، العملاء، وسندات الخزنة مع المطابقة التلقائية للسيريال.
+                  عند استيراد ملف <strong>JSON الشامل</strong> على أي جهاز كمبيوتر أو متصفح جديد، يتم التحقق من التوقيع الرقمي وترخيص الجهاز الجديد فوراً وبشكل تلقائي دون الحاجة لإعادة كتابة كود الماستر.
                 </p>
               </div>
 
@@ -326,21 +335,39 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                 </label>
               </div>
 
-              {/* Reset to Demo Button */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[11px] text-slate-500">هل ترغب في استرجاع التهيئة التجريبية؟</span>
-                <button
-                  onClick={() => {
-                    if (window.confirm('هل أنت متأكد من إعادة ضبط البيانات إلى النماذج التجريبية الشاملة للمكتب؟')) {
-                      db.resetToDemoData();
-                      setStatusMessage({ type: 'success', text: 'تم استعادة البيانات التجريبية الشاملة لجميع النماذج.' });
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-amber-700 hover:bg-amber-50 rounded-xl text-xs font-semibold border border-amber-200 transition-all cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>إعادة تعيين البيانات النموذجية</span>
-                </button>
+              {/* Reset & Danger Zone Buttons */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">هل ترغب في استرجاع التهيئة التجريبية؟</span>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('هل أنت متأكد من إعادة ضبط البيانات إلى النماذج التجريبية الشاملة للمكتب؟')) {
+                        db.resetToDemoData();
+                        setStatusMessage({ type: 'success', text: 'تم استعادة البيانات التجريبية الشاملة لجميع النماذج.' });
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-amber-700 hover:bg-amber-50 rounded-xl text-xs font-semibold border border-amber-200 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>إعادة تعيين البيانات النموذجية</span>
+                  </button>
+                </div>
+
+                {/* Complete Database Purge Button */}
+                <div className="p-3 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-red-900">
+                    <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                    <span className="font-bold text-[11px]">تفريغ وتصفير بيانات المنظومة بالكامل (محمي بـ PIN)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPurgeModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>تفريغ شامل (Mgacc120)</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -394,6 +421,15 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
           معايير المحاسبة المصرية (EAS) • إعداد محاسب ومراجع قانوني محمد جميل مرعي
         </div>
       </div>
+
+      {/* Purge Modal */}
+      <PurgeDatabaseModal
+        isOpen={isPurgeModalOpen}
+        onClose={() => setIsPurgeModalOpen(false)}
+        onPurgeComplete={() => {
+          setStatusMessage({ type: 'success', text: 'تم تفريغ ومسح كافة بيانات المنظومة بنجاح.' });
+        }}
+      />
     </div>
   );
 };

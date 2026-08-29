@@ -88,8 +88,15 @@ export const UserManagerModal: React.FC<UserManagerModalProps> = ({
       setCanEditPosted(false);
       setCanDelete(false);
       setCanInvoices(true);
+    } else if (role === 'SECRETARY') {
+      setRoleTitleInput('سكرتارية واستقبال وإدارة الملفات');
+      setCanTreasury(true);
+      setCanAudit(false);
+      setCanEditPosted(false);
+      setCanDelete(false);
+      setCanInvoices(true);
     } else {
-      setRoleTitleInput('محاسب');
+      setRoleTitleInput('محاسب مالي');
       setCanTreasury(false);
       setCanAudit(false);
       setCanEditPosted(false);
@@ -324,7 +331,8 @@ export const UserManagerModal: React.FC<UserManagerModalProps> = ({
                 >
                   <option value="ADMIN">مدير النظام (Admin) - كافة الصلاحيات</option>
                   <option value="AUDITOR">مراجع قانوني (Auditor) - فحص ومراجعة وخزنة</option>
-                  <option value="ACCOUNTANT">محاسب (Accountant) - تسجيل قيود وفواتير فقط</option>
+                  <option value="ACCOUNTANT">محاسب (Accountant) - تسجيل قيود وفواتير</option>
+                  <option value="SECRETARY">سكرتارية واستقبال (Secretary) - عملاء وخزنة وإقرارات</option>
                 </select>
               </div>
 

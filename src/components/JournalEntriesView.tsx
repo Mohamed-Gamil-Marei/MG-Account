@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Receipt,
   Plus,
@@ -26,6 +26,8 @@ import {
   Coins,
   DollarSign,
   TrendingUp,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { JournalEntry, JournalEntryLine, Account, CurrencyCode } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -635,19 +637,35 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     ]);
   };
 
-  const filteredEntries = state.journalEntries.filter((entry) => {
-    const matchesSearch =
-      entry.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entry.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entry.lines.some((l) => l.accountName.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Pagination State for high-performance large data
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
 
-    const matchesPosted =
-      filterPosted === 'ALL' ||
-      (filterPosted === 'POSTED' && entry.isPosted) ||
-      (filterPosted === 'DRAFT' && !entry.isPosted);
+  const filteredEntries = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return state.journalEntries.filter((entry) => {
+      const matchesSearch =
+        !term ||
+        entry.description.toLowerCase().includes(term) ||
+        entry.serialNumber.toLowerCase().includes(term) ||
+        entry.lines.some((l) => l.accountName.toLowerCase().includes(term) || l.accountCode.includes(term));
 
-    return matchesSearch && matchesPosted;
-  });
+      const matchesPosted =
+        filterPosted === 'ALL' ||
+        (filterPosted === 'POSTED' && entry.isPosted) ||
+        (filterPosted === 'DRAFT' && !entry.isPosted);
+
+      return matchesSearch && matchesPosted;
+    });
+  }, [state.journalEntries, searchTerm, filterPosted]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / (pageSize || 20)));
+
+  const paginatedEntries = useMemo(() => {
+    if (pageSize >= 999999) return filteredEntries;
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredEntries.slice(startIndex, startIndex + pageSize);
+  }, [filteredEntries, currentPage, pageSize]);
 
   return (
     <div className="space-y-5">
@@ -740,7 +758,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
             <p className="font-bold text-sm">لا توجد قيود يومية مطابقة للبحث</p>
           </div>
         ) : (
-          filteredEntries.slice().reverse().map((entry) => (
+          paginatedEntries.map((entry) => (
             <div
               key={entry.id}
               className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden hover:border-slate-300 transition-colors"
@@ -866,6 +884,81 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
               </div>
             </div>
           ))
+        )}
+
+        {/* High Volume Data Pagination Controls */}
+        {filteredEntries.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+            <div className="flex items-center gap-3 text-slate-600">
+              <span>
+                إجمالي القيود: <strong>{filteredEntries.length}</strong> قيد | الصفحة <strong>{currentPage}</strong> من <strong>{totalPages}</strong>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">| عرض:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 font-semibold"
+                >
+                  <option value={20}>20 قيد</option>
+                  <option value={50}>50 قيد</option>
+                  <option value={100}>100 قيد</option>
+                  <option value={250}>250 قيد</option>
+                  <option value={999999}>الكل</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 font-bold flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer text-slate-700"
+              >
+                <ChevronRight className="w-4 h-4" />
+                <span>السابق</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = i + 1;
+                  if (totalPages > 5) {
+                    if (currentPage > 3) {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    if (pageNum > totalPages) {
+                      pageNum = totalPages - 4 + i;
+                    }
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg font-bold transition-all cursor-pointer ${
+                        currentPage === pageNum
+                          ? 'bg-emerald-800 text-white shadow-xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 font-bold flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer text-slate-700"
+              >
+                <span>التالي</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

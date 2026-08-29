@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   History,
   Download,
@@ -11,8 +11,13 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   FileCode,
+  ShieldCheck,
+  Laptop,
+  ShieldAlert,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
+import { PurgeDatabaseModal } from './PurgeDatabaseModal';
+import { DeviceLockModal } from './DeviceLockModal';
 
 interface AuditTrailViewProps {
   state: DatabaseState;
@@ -21,14 +26,20 @@ interface AuditTrailViewProps {
 export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
 
-  const filteredLogs = state.auditLogs.filter((log) => {
-    return (
-      log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  const filteredLogs = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return state.auditLogs.filter((log) => {
+      return (
+        !term ||
+        log.user.toLowerCase().includes(term) ||
+        log.details.toLowerCase().includes(term) ||
+        log.action.toLowerCase().includes(term)
+      );
+    });
+  }, [state.auditLogs, searchTerm]);
 
   const handleDownloadBackup = () => {
     const jsonStr = db.exportFullBackupJson();
@@ -78,20 +89,30 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <History className="w-6 h-6 text-slate-700" />
-            <h2 className="text-lg font-bold text-slate-900">
+            <History className="w-6 h-6 text-slate-700 dark:text-slate-300" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
               سجل التدقيق والرقابة المحاسبية والنسخ الاحتياطي (Audit Trail & Backup)
             </h2>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            سجل غير قابل للتعديل يوثق كافة العمليات والمستخدمين والتعديلات على قيود اليومية والحسابات، مع إدارة التخزين المحلي.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            سجل غير قابل للتعديل يوثق كافة العمليات والمستخدمين والتعديلات على قيود اليومية والحسابات، مع إدارة التخزين المحلي وقفل الجهاز ضد السرقة.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Device Security Button */}
+          <button
+            onClick={() => setIsDeviceModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-xl font-bold text-xs border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer"
+            title="حماية وقفل الجهاز ومنع نقل الملف"
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>قفل الجهاز والأمان</span>
+          </button>
+
           <button
             onClick={handleDownloadBackup}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
@@ -100,8 +121,8 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
             <span>تحميل نسخة احتياطية (JSON)</span>
           </button>
 
-          <label className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 transition-all cursor-pointer">
-            <Upload className="w-4 h-4 text-slate-600" />
+          <label className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer">
+            <Upload className="w-4 h-4 text-slate-600 dark:text-slate-400" />
             <span>استعادة نسخة</span>
             <input
               type="file"
@@ -111,13 +132,14 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
             />
           </label>
 
+          {/* Purge Database Button with PIN Mgacc120 */}
           <button
-            onClick={handleResetData}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 rounded-xl font-semibold text-xs border border-slate-200 transition-all cursor-pointer"
-            title="إعادة ضبط للبيانات النموذجية"
+            onClick={() => setIsPurgeModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-600 hover:text-white text-red-700 dark:text-red-300 rounded-xl font-bold text-xs border border-red-200 dark:border-red-800 transition-all cursor-pointer shadow-2xs"
+            title="تفريغ وتصفير كافة بيانات وسجلات المنظومة برقم سري (Mgacc120)"
           >
-            <RefreshCw className="w-4 h-4" />
-            <span>إعادة تهيئة البيانات</span>
+            <Trash2 className="w-4 h-4 text-red-600" />
+            <span>تفريغ شامل (Mgacc120)</span>
           </button>
         </div>
       </div>
@@ -224,6 +246,21 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
           </table>
         </div>
       </div>
+
+      {/* Device Lock & Binding Modal */}
+      <DeviceLockModal
+        isOpen={isDeviceModalOpen}
+        onClose={() => setIsDeviceModalOpen(false)}
+      />
+
+      {/* Purge Database Modal */}
+      <PurgeDatabaseModal
+        isOpen={isPurgeModalOpen}
+        onClose={() => setIsPurgeModalOpen(false)}
+        onPurgeComplete={() => {
+          setRestoreStatus('تم تفريغ وتصفير كافة بيانات وسجلات المنظومة بنجاح.');
+        }}
+      />
     </div>
   );
 };

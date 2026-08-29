@@ -17,6 +17,11 @@ import {
   AuditRecord,
   SystemUser,
   UserRole,
+  UserPreferences,
+  BrandColor,
+  ThemeMode,
+  FixedAsset,
+  DepreciationHistoryRecord,
 } from '../types';
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import {
@@ -32,6 +37,7 @@ import {
   SAMPLE_FEASIBILITY_STUDY,
   SAMPLE_CREDIT_SIMULATION,
   SAMPLE_SYSTEM_USERS,
+  SAMPLE_FIXED_ASSETS,
 } from '../data/sampleData';
 
 const STORAGE_KEYS = {
@@ -49,6 +55,14 @@ const STORAGE_KEYS = {
   AUDIT_LOGS: 'egy_acc_audit_logs_v1',
   SYSTEM_USERS: 'egy_acc_system_users_v1',
   CURRENT_USER_ID: 'egy_acc_current_user_id_v1',
+  USER_PREFERENCES: 'egy_acc_user_preferences_v1',
+  FIXED_ASSETS: 'egy_acc_fixed_assets_v1',
+};
+
+export const DEFAULT_USER_PREFERENCES: UserPreferences = {
+  themeMode: 'light',
+  brandColor: 'blue',
+  compactView: false,
 };
 
 export interface DatabaseState {
@@ -62,10 +76,12 @@ export interface DatabaseState {
   invoices: Invoice[];
   feasibilityStudies: FeasibilityStudy[];
   creditSimulations: CreditModelSimulation[];
+  fixedAssets: FixedAsset[];
   officeProfile: OfficeProfile;
   auditLogs: AuditRecord[];
   users: SystemUser[];
   currentUserId: string;
+  preferences: UserPreferences;
 }
 
 export class LocalDatabase {
@@ -88,10 +104,12 @@ export class LocalDatabase {
       const invoicesJson = localStorage.getItem(STORAGE_KEYS.INVOICES);
       const feasibilityJson = localStorage.getItem(STORAGE_KEYS.FEASIBILITY);
       const creditSimJson = localStorage.getItem(STORAGE_KEYS.CREDIT_SIM);
+      const fixedAssetsJson = localStorage.getItem(STORAGE_KEYS.FIXED_ASSETS);
       const officeProfileJson = localStorage.getItem(STORAGE_KEYS.OFFICE_PROFILE);
       const auditLogsJson = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
       const usersJson = localStorage.getItem(STORAGE_KEYS.SYSTEM_USERS);
       const currentUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'user-admin';
+      const preferencesJson = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
 
       let loadedClients: ClientArchiveRecord[] = clientsJson ? JSON.parse(clientsJson) : SAMPLE_CLIENTS;
       // Ensure each client has default folders if missing
@@ -106,6 +124,14 @@ export class LocalDatabase {
         return cl;
       });
 
+      let loadedOfficeProfile: OfficeProfile = officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE;
+      if (loadedOfficeProfile && loadedOfficeProfile.licenseNumber && loadedOfficeProfile.licenseNumber.includes('18492')) {
+        loadedOfficeProfile = {
+          ...loadedOfficeProfile,
+          licenseNumber: loadedOfficeProfile.licenseNumber.replace('18492', '43122'),
+        };
+      }
+
       return {
         accounts: accountsJson ? JSON.parse(accountsJson) : DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
         journalEntries: journalJson ? JSON.parse(journalJson) : SAMPLE_JOURNAL_ENTRIES,
@@ -117,9 +143,11 @@ export class LocalDatabase {
         invoices: invoicesJson ? JSON.parse(invoicesJson) : SAMPLE_INVOICES,
         feasibilityStudies: feasibilityJson ? JSON.parse(feasibilityJson) : [SAMPLE_FEASIBILITY_STUDY],
         creditSimulations: creditSimJson ? JSON.parse(creditSimJson) : [SAMPLE_CREDIT_SIMULATION],
-        officeProfile: officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE,
+        fixedAssets: fixedAssetsJson ? JSON.parse(fixedAssetsJson) : SAMPLE_FIXED_ASSETS,
+        officeProfile: loadedOfficeProfile,
         users: usersJson ? JSON.parse(usersJson) : SAMPLE_SYSTEM_USERS,
         currentUserId: currentUserId,
+        preferences: preferencesJson ? JSON.parse(preferencesJson) : DEFAULT_USER_PREFERENCES,
         auditLogs: auditLogsJson ? JSON.parse(auditLogsJson) : [
           {
             timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -142,34 +170,124 @@ export class LocalDatabase {
         invoices: SAMPLE_INVOICES,
         feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
         creditSimulations: [SAMPLE_CREDIT_SIMULATION],
+        fixedAssets: SAMPLE_FIXED_ASSETS,
         officeProfile: DEFAULT_OFFICE_PROFILE,
         users: SAMPLE_SYSTEM_USERS,
         currentUserId: 'user-admin',
+        preferences: DEFAULT_USER_PREFERENCES,
         auditLogs: [],
       };
     }
   }
 
-  public saveState() {
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(this.state.accounts));
-      localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(this.state.journalEntries));
-      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(this.state.clients));
-      localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(this.state.treasuryTransactions));
-      localStorage.setItem(STORAGE_KEYS.TAXES, JSON.stringify(this.state.taxDeclarations));
-      localStorage.setItem(STORAGE_KEYS.TAX_MANDATES, JSON.stringify(this.state.taxMandates));
-      localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(this.state.certificates));
-      localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(this.state.invoices));
-      localStorage.setItem(STORAGE_KEYS.FEASIBILITY, JSON.stringify(this.state.feasibilityStudies));
-      localStorage.setItem(STORAGE_KEYS.CREDIT_SIM, JSON.stringify(this.state.creditSimulations));
-      localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(this.state.officeProfile));
-      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
-      localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(this.state.users));
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, this.state.currentUserId);
-    } catch (e) {
-      console.error('Error saving state to localStorage:', e);
+  private pendingSaveTimeout: any = null;
+  private dirtyKeys: Set<string> = new Set();
+
+  public saveState(specificKey?: keyof typeof STORAGE_KEYS) {
+    if (specificKey) {
+      this.dirtyKeys.add(STORAGE_KEYS[specificKey]);
+    } else {
+      Object.values(STORAGE_KEYS).forEach((k) => this.dirtyKeys.add(k));
     }
+
+    // Immediately notify UI for 0ms zero-lag reactivity
     this.notify();
+
+    // Debounce actual localStorage serialization to keep main thread blazing fast
+    if (this.pendingSaveTimeout) {
+      clearTimeout(this.pendingSaveTimeout);
+    }
+
+    this.pendingSaveTimeout = setTimeout(() => {
+      this.flushDirtyStorage();
+    }, 50);
+  }
+
+  public flushDirtyStorage() {
+    try {
+      if (this.dirtyKeys.has(STORAGE_KEYS.ACCOUNTS)) {
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(this.state.accounts));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.JOURNAL)) {
+        localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(this.state.journalEntries));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CLIENTS)) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(this.state.clients));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.TREASURY)) {
+        localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(this.state.treasuryTransactions));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.TAXES)) {
+        localStorage.setItem(STORAGE_KEYS.TAXES, JSON.stringify(this.state.taxDeclarations));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.TAX_MANDATES)) {
+        localStorage.setItem(STORAGE_KEYS.TAX_MANDATES, JSON.stringify(this.state.taxMandates));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CERTIFICATES)) {
+        localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(this.state.certificates));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.INVOICES)) {
+        localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(this.state.invoices));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.FEASIBILITY)) {
+        localStorage.setItem(STORAGE_KEYS.FEASIBILITY, JSON.stringify(this.state.feasibilityStudies));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CREDIT_SIM)) {
+        localStorage.setItem(STORAGE_KEYS.CREDIT_SIM, JSON.stringify(this.state.creditSimulations));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.OFFICE_PROFILE)) {
+        localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(this.state.officeProfile));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.AUDIT_LOGS)) {
+        localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.SYSTEM_USERS)) {
+        localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(this.state.users));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CURRENT_USER_ID)) {
+        localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, this.state.currentUserId);
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.USER_PREFERENCES)) {
+        localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(this.state.preferences));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.FIXED_ASSETS)) {
+        localStorage.setItem(STORAGE_KEYS.FIXED_ASSETS, JSON.stringify(this.state.fixedAssets));
+      }
+      this.dirtyKeys.clear();
+    } catch (e: any) {
+      // Handle storage quota exceeded gracefully
+      console.warn('Storage write warning (handling high-volume data safely):', e);
+      if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+        // Trim audit logs to save space
+        if (this.state.auditLogs.length > 100) {
+          this.state.auditLogs = this.state.auditLogs.slice(0, 100);
+          try {
+            localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
+          } catch {}
+        }
+      }
+    }
+  }
+
+  // --- Preferences & Theme ---
+  public getPreferences(): UserPreferences {
+    return this.state.preferences || DEFAULT_USER_PREFERENCES;
+  }
+
+  public updatePreferences(updates: Partial<UserPreferences>) {
+    this.state.preferences = {
+      ...(this.state.preferences || DEFAULT_USER_PREFERENCES),
+      ...updates,
+    };
+    this.saveState();
+  }
+
+  public setThemeMode(mode: ThemeMode) {
+    this.updatePreferences({ themeMode: mode });
+  }
+
+  public setBrandColor(color: BrandColor) {
+    this.updatePreferences({ brandColor: color });
   }
 
   public subscribe(listener: () => void): () => void {
@@ -1071,8 +1189,10 @@ export class LocalDatabase {
       invoices: SAMPLE_INVOICES,
       feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
       creditSimulations: [SAMPLE_CREDIT_SIMULATION],
+      fixedAssets: SAMPLE_FIXED_ASSETS,
       users: SAMPLE_SYSTEM_USERS,
       currentUserId: 'user-admin',
+      preferences: DEFAULT_USER_PREFERENCES,
       officeProfile: DEFAULT_OFFICE_PROFILE,
       auditLogs: [
         {
@@ -1086,13 +1206,74 @@ export class LocalDatabase {
     this.saveState();
   }
 
+  // --- Complete Database Purge / Factory Reset with Passcode (Mgacc120) ---
+  public purgeAllDatabaseData(passcode: string): { success: boolean; message: string } {
+    if (passcode.trim() !== 'Mgacc120') {
+      return {
+        success: false,
+        message: 'الرقم السري لتفريغ البيانات غير صحيح! يرجى إدخال الرقم السري المعتمد (Mgacc120).',
+      };
+    }
+
+    // Reset all accounts balances to 0
+    const cleanAccounts: Account[] = DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map((acc) => ({
+      ...acc,
+      openingBalance: 0,
+      currentBalance: 0,
+      debitTotal: 0,
+      creditTotal: 0,
+    }));
+
+    this.state = {
+      accounts: cleanAccounts,
+      journalEntries: [],
+      clients: [],
+      treasuryTransactions: [],
+      taxDeclarations: [],
+      taxMandates: [],
+      certificates: [],
+      invoices: [],
+      feasibilityStudies: [],
+      creditSimulations: [],
+      fixedAssets: [],
+      users: SAMPLE_SYSTEM_USERS,
+      currentUserId: 'user-admin',
+      preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
+      officeProfile: this.state.officeProfile || DEFAULT_OFFICE_PROFILE,
+      auditLogs: [
+        {
+          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          user: this.getCurrentUser().name,
+          action: 'DELETE',
+          details: 'تفريغ وتصفير شامل لكافة بيانات وسجلات المنظومة بالرقم السري المعتمد (Mgacc120)',
+        },
+      ],
+    };
+
+    this.saveState();
+    return {
+      success: true,
+      message: 'تم تفريغ ومسح كافة بيانات وسجلات المنظومة بنجاح والبدء بملف محاسبي نظيف تماماً!',
+    };
+  }
+
   // --- Full Backup JSON Export & Import ---
   public exportFullBackupJson(): string {
+    let securityMeta = null;
+    try {
+      // Lazy load signature from SecurityAuthService
+      const { SecurityAuthService } = require('../services/securityAuth');
+      securityMeta = SecurityAuthService.generateBackupLicenseSignature();
+    } catch {
+      // Fallback
+    }
+
     return JSON.stringify(
       {
         backupVersion: '2.0-EGY-CPA',
         exportedAt: new Date().toISOString(),
         auditor: this.state.officeProfile.auditorName,
+        securityMetadata: securityMeta,
         data: this.state,
       },
       null,
@@ -1104,6 +1285,17 @@ export class LocalDatabase {
     try {
       const parsed = JSON.parse(jsonString);
       const dataToImport = parsed.data || parsed;
+
+      // Automatically validate & license this machine if backup has a valid license signature
+      if (parsed.securityMetadata) {
+        try {
+          const { SecurityAuthService } = require('../services/securityAuth');
+          SecurityAuthService.processImportedBackupLicense(parsed);
+        } catch (e) {
+          console.error('License import error:', e);
+        }
+      }
+
       if (dataToImport.accounts && dataToImport.journalEntries) {
         this.state = {
           accounts: dataToImport.accounts || DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
@@ -1116,15 +1308,17 @@ export class LocalDatabase {
           invoices: dataToImport.invoices || [],
           feasibilityStudies: dataToImport.feasibilityStudies || [],
           creditSimulations: dataToImport.creditSimulations || [],
+          fixedAssets: dataToImport.fixedAssets || SAMPLE_FIXED_ASSETS,
           users: dataToImport.users || SAMPLE_SYSTEM_USERS,
           currentUserId: dataToImport.currentUserId || 'user-admin',
+          preferences: dataToImport.preferences || DEFAULT_USER_PREFERENCES,
           officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
           auditLogs: [
             {
               timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-              user: 'محمد جميل مرعي',
+              user: this.getCurrentUser()?.name || 'محمد جميل مرعي',
               action: 'UPDATE',
-              details: 'استعادة قاعدة البيانات بالكامل من ملف النسخ الاحتياطي',
+              details: 'استعادة قاعدة البيانات بالكامل مع مصادقة ترخيص الأجهزة الرقمي المدمج',
             },
             ...(dataToImport.auditLogs || []),
           ],
@@ -1140,7 +1334,7 @@ export class LocalDatabase {
   }
 
   // --- Excel Exports ---
-  public exportTableToExcel(tableName: 'ACCOUNTS' | 'JOURNAL' | 'CLIENTS' | 'TREASURY' | 'TAXES' | 'CERTIFICATES' | 'INVOICES') {
+  public exportTableToExcel(tableName: 'ACCOUNTS' | 'JOURNAL' | 'CLIENTS' | 'TREASURY' | 'TAXES' | 'CERTIFICATES' | 'INVOICES' | 'FIXED_ASSETS') {
     const wb = XLSX.utils.book_new();
 
     if (tableName === 'ACCOUNTS') {
@@ -1243,7 +1437,214 @@ export class LocalDatabase {
       const ws = XLSX.utils.json_to_sheet(rows);
       XLSX.utils.book_append_sheet(wb, ws, 'سجل الفواتير والإيصالات');
       XLSX.writeFile(wb, `سجل_الفواتير_الإلكترونية_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } else if (tableName === 'FIXED_ASSETS') {
+      const rows = (this.state.fixedAssets || []).map((ast) => ({
+        'كود الأصل': ast.assetCode,
+        'اسم الأصل': ast.name,
+        'الفئة': ast.category,
+        'تاريخ الشراء': ast.purchaseDate,
+        'تكلفة الاقتناء': ast.acquisitionCost,
+        'القيمة التخريدية': ast.scrapValue,
+        'العمر الإنتاجي (سنوات)': ast.usefulLifeYears,
+        'نسبة الإهلاك المحاسبي %': ast.accountingDepreciationRate,
+        'نسبة الإهلاك الضريبي %': ast.taxDepreciationRate,
+        'مجمع الإهلاك الحالي': ast.currentAccumulatedDepreciation,
+        'صافي القيمة الدفترية': ast.currentBookValue,
+        'الموقع': ast.location || '',
+        'المسؤول / العهدة': ast.custodian || '',
+        'مركز التكلفة': ast.costCenter || '',
+        'الحالة': ast.status,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'سجل الأصول الثابتة');
+      XLSX.writeFile(wb, `سجل_الأصول_الثابتة_والإهلاك_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
+  }
+
+  // ==========================================
+  // FIXED ASSETS & DEPRECIATION METHODS (معيار 10 وقانون 91)
+  // ==========================================
+  public getFixedAssets(): FixedAsset[] {
+    return this.state.fixedAssets || [];
+  }
+
+  public getFixedAssetById(id: string): FixedAsset | undefined {
+    return (this.state.fixedAssets || []).find((a) => a.id === id);
+  }
+
+  public addFixedAsset(assetData: Omit<FixedAsset, 'id' | 'createdAt' | 'updatedAt' | 'currentAccumulatedDepreciation' | 'currentBookValue' | 'status'> & { initialAccumulatedDepreciation?: number }): FixedAsset {
+    const id = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const now = new Date().toISOString();
+    const initAccum = assetData.initialAccumulatedDepreciation || 0;
+    const currentBookValue = Math.max(0, assetData.acquisitionCost - initAccum);
+
+    const newAsset: FixedAsset = {
+      ...assetData,
+      id,
+      currentAccumulatedDepreciation: initAccum,
+      currentBookValue,
+      status: currentBookValue <= (assetData.scrapValue || 0) && initAccum > 0 ? 'FULLY_DEPRECIATED' : 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (!this.state.fixedAssets) {
+      this.state.fixedAssets = [];
+    }
+
+    this.state.fixedAssets.unshift(newAsset);
+    this.logAudit('CREATE', `إضافة أصل ثابت جديد للسجل: [${newAsset.name}] كود: (${newAsset.assetCode}) بتكلفة اقتناء: ${newAsset.acquisitionCost.toLocaleString()} ج.م`);
+    this.saveState('FIXED_ASSETS');
+    return newAsset;
+  }
+
+  public updateFixedAsset(id: string, updates: Partial<FixedAsset>): FixedAsset | null {
+    if (!this.state.fixedAssets) return null;
+    const index = this.state.fixedAssets.findIndex((a) => a.id === id);
+    if (index === -1) return null;
+
+    const oldAsset = this.state.fixedAssets[index];
+    const updatedAsset: FixedAsset = {
+      ...oldAsset,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Recalculate book value
+    updatedAsset.currentBookValue = Math.max(0, updatedAsset.acquisitionCost - updatedAsset.currentAccumulatedDepreciation);
+
+    this.state.fixedAssets[index] = updatedAsset;
+    this.logAudit('UPDATE', `تعديل بيانات الأصل الثابت: [${updatedAsset.name}] (كود: ${updatedAsset.assetCode})`);
+    this.saveState('FIXED_ASSETS');
+    return updatedAsset;
+  }
+
+  public deleteFixedAsset(id: string): boolean {
+    if (!this.state.fixedAssets) return false;
+    const asset = this.state.fixedAssets.find((a) => a.id === id);
+    if (!asset) return false;
+
+    this.state.fixedAssets = this.state.fixedAssets.filter((a) => a.id !== id);
+    this.logAudit('DELETE', `حذف الأصل الثابت من السجل: [${asset.name}] (كود: ${asset.assetCode})`);
+    this.saveState('FIXED_ASSETS');
+    return true;
+  }
+
+  public disposeFixedAsset(id: string, disposalData: { disposalDate: string; disposalAmount: number; disposalReason: string }): FixedAsset | null {
+    if (!this.state.fixedAssets) return null;
+    const asset = this.state.fixedAssets.find((a) => a.id === id);
+    if (!asset) return null;
+
+    const capitalGainLoss = disposalData.disposalAmount - asset.currentBookValue;
+
+    const updated = this.updateFixedAsset(id, {
+      status: 'DISPOSED',
+      disposalDate: disposalData.disposalDate,
+      disposalAmount: disposalData.disposalAmount,
+      disposalReason: disposalData.disposalReason,
+      capitalGainLoss,
+    });
+
+    this.logAudit(
+      'UPDATE',
+      `استبعاد / بيع أصل ثابت: [${asset.name}] بمبلغ ${disposalData.disposalAmount.toLocaleString()} ج.م (${capitalGainLoss >= 0 ? 'أرباح رأسمالية' : 'خسائر رأسمالية'}: ${Math.abs(capitalGainLoss).toLocaleString()} ج.م)`
+    );
+
+    return updated;
+  }
+
+  public postDepreciationJournalEntry(params: {
+    year: number;
+    month?: number;
+    periodLabel: string;
+    totalDepreciationAmount: number;
+    depreciatedAssetIds: string[];
+    expenseAccountId?: string;
+    accumAccountId?: string;
+  }): JournalEntry {
+    const entryDate = params.month
+      ? `${params.year}-${String(params.month).padStart(2, '0')}-28`
+      : `${params.year}-12-31`;
+
+    const expenseAcc =
+      this.state.accounts.find((a) => a.id === params.expenseAccountId || a.code === '334' || a.name.includes('إهلاك')) || {
+        id: '334',
+        code: '334',
+        name: 'مصروف إهلاك أصول ثابتة',
+      };
+    const accumAcc =
+      this.state.accounts.find((a) => a.id === params.accumAccountId || a.code === '231' || a.name.includes('مجمع إهلاك')) || {
+        id: '231',
+        code: '231',
+        name: 'مجمع إهلاك أصول ثابتة',
+      };
+
+    const journalEntry = this.addJournalEntry({
+      date: entryDate,
+      description: `إثبات قيد إهلاك الأصول الثابتة للفترة (${params.periodLabel}) - معيار المحاسبة المصري رقم (10)`,
+      entryType: 'ADJUSTING',
+      referenceNumber: `DEP-SCHED-${params.year}`,
+      totalDebit: params.totalDepreciationAmount,
+      totalCredit: params.totalDepreciationAmount,
+      isPosted: true,
+      lines: [
+        {
+          id: `line-${Date.now()}-1`,
+          accountId: expenseAcc.id,
+          accountCode: expenseAcc.code,
+          accountName: expenseAcc.name,
+          debit: params.totalDepreciationAmount,
+          credit: 0,
+          description: `مصروف إهلاك أصول ثابتة عن فترة ${params.periodLabel}`,
+        },
+        {
+          id: `line-${Date.now()}-2`,
+          accountId: accumAcc.id,
+          accountCode: accumAcc.code,
+          accountName: accumAcc.name,
+          debit: 0,
+          credit: params.totalDepreciationAmount,
+          description: `إلى حساب مجمع إهلاك الأصول الثابتة عن فترة ${params.periodLabel}`,
+        },
+      ],
+    });
+
+    // Update accumulated depreciation on assets
+    if (this.state.fixedAssets) {
+      this.state.fixedAssets = this.state.fixedAssets.map((asset) => {
+        if (params.depreciatedAssetIds.includes(asset.id)) {
+          // Calculate this asset's single period share
+          const depreciableAmount = Math.max(0, asset.acquisitionCost - (asset.scrapValue || 0));
+          const annualRate = (asset.accountingDepreciationRate || 10) / 100;
+          const factor = params.month ? 1 / 12 : 1;
+          const assetPeriodDep = Math.min(
+            asset.currentBookValue - (asset.scrapValue || 0),
+            Math.round(depreciableAmount * annualRate * factor)
+          );
+
+          if (assetPeriodDep > 0) {
+            const newAccum = asset.currentAccumulatedDepreciation + assetPeriodDep;
+            const newBook = Math.max(asset.scrapValue || 0, asset.acquisitionCost - newAccum);
+            return {
+              ...asset,
+              currentAccumulatedDepreciation: newAccum,
+              currentBookValue: newBook,
+              status: newBook <= (asset.scrapValue || 0) ? 'FULLY_DEPRECIATED' : asset.status,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+        }
+        return asset;
+      });
+      this.saveState('FIXED_ASSETS');
+    }
+
+    this.logAudit(
+      'POST',
+      `توليد وترحيل قيد إهلاك الأصول الثابتة آلياً (${journalEntry.serialNumber}) بمبلغ ${params.totalDepreciationAmount.toLocaleString()} ج.م لدفتر اليومية`
+    );
+
+    return journalEntry;
   }
 }
 

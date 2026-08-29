@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BookOpen,
   Search,
@@ -23,13 +23,50 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
   const [startDate, setStartDate] = useState<string>('2026-01-01');
   const [endDate, setEndDate] = useState<string>('2026-12-31');
 
-  const calculatedAccounts = computeAccountBalances(state.accounts, state.journalEntries);
-  const postedEntries = state.journalEntries.filter((e) => e.isPosted);
+  const calculatedAccounts = useMemo(() => {
+    return computeAccountBalances(state.accounts, state.journalEntries);
+  }, [state.accounts, state.journalEntries]);
+
+  // Fast single-pass pre-indexing of ledger transactions by account ID
+  const indexedTransactions = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        date: string;
+        serial: string;
+        description: string;
+        debit: number;
+        credit: number;
+      }[]
+    >();
+
+    const posted = state.journalEntries.filter((e) => e.isPosted);
+    for (const entry of posted) {
+      if (entry.date >= startDate && entry.date <= endDate) {
+        for (const line of entry.lines) {
+          if (!line.accountId) continue;
+          if (!map.has(line.accountId)) {
+            map.set(line.accountId, []);
+          }
+          map.get(line.accountId)!.push({
+            date: entry.date,
+            serial: entry.serialNumber,
+            description: line.description || entry.description,
+            debit: line.debit || 0,
+            credit: line.credit || 0,
+          });
+        }
+      }
+    }
+    return map;
+  }, [state.journalEntries, startDate, endDate]);
 
   // Accounts to display
-  const accountsToDisplay = selectedAccountId === 'ALL'
-    ? calculatedAccounts.filter((a) => a.level >= 2)
-    : calculatedAccounts.filter((a) => a.id === selectedAccountId);
+  const accountsToDisplay = useMemo(() => {
+    return selectedAccountId === 'ALL'
+      ? calculatedAccounts.filter((a) => a.level >= 2)
+      : calculatedAccounts.filter((a) => a.id === selectedAccountId);
+  }, [selectedAccountId, calculatedAccounts]);
 
   return (
     <div className="space-y-5">
@@ -101,31 +138,7 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
       {/* Ledger Accounts Cards */}
       <div className="space-y-6">
         {accountsToDisplay.map((acc) => {
-          // Extract entries matching this account within date range
-          const ledgerTransactions: {
-            date: string;
-            serial: string;
-            description: string;
-            debit: number;
-            credit: number;
-          }[] = [];
-
-          for (const entry of postedEntries) {
-            if (entry.date >= startDate && entry.date <= endDate) {
-              for (const line of entry.lines) {
-                if (line.accountId === acc.id) {
-                  ledgerTransactions.push({
-                    date: entry.date,
-                    serial: entry.serialNumber,
-                    description: line.description || entry.description,
-                    debit: line.debit || 0,
-                    credit: line.credit || 0,
-                  });
-                }
-              }
-            }
-          }
-
+          const ledgerTransactions = indexedTransactions.get(acc.id) || [];
           const initialOpening = acc.nature === 'DEBIT' ? acc.openingBalanceDebit : -acc.openingBalanceCredit;
           let runningBalance = initialOpening;
 

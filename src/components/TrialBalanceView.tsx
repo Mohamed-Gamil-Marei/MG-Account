@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Scale,
   Download,
@@ -19,24 +19,55 @@ interface TrialBalanceViewProps {
 
 export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const calculatedAccounts = computeAccountBalances(state.accounts, state.journalEntries);
+  
+  const calculatedAccounts = useMemo(() => {
+    return computeAccountBalances(state.accounts, state.journalEntries);
+  }, [state.accounts, state.journalEntries]);
 
   // Filter leaf/analytical accounts
-  const leafAccounts = calculatedAccounts.filter(
-    (a) =>
-      a.level >= 2 &&
-      (a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.code.includes(searchTerm))
-  );
+  const leafAccounts = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return calculatedAccounts.filter(
+      (a) =>
+        a.level >= 2 &&
+        (!term || a.name.toLowerCase().includes(term) || a.code.includes(term))
+    );
+  }, [calculatedAccounts, searchTerm]);
 
   // Calculate Totals
-  const totalOpeningDebit = leafAccounts.reduce((s, a) => s + (a.openingBalanceDebit || 0), 0);
-  const totalOpeningCredit = leafAccounts.reduce((s, a) => s + (a.openingBalanceCredit || 0), 0);
+  const {
+    totalOpeningDebit,
+    totalOpeningCredit,
+    totalMovementDebit,
+    totalMovementCredit,
+    totalEndingDebit,
+    totalEndingCredit,
+  } = useMemo(() => {
+    let opDeb = 0;
+    let opCred = 0;
+    let movDeb = 0;
+    let movCred = 0;
+    let endDeb = 0;
+    let endCred = 0;
 
-  const totalMovementDebit = leafAccounts.reduce((s, a) => s + (a.movementDebit || 0), 0);
-  const totalMovementCredit = leafAccounts.reduce((s, a) => s + (a.movementCredit || 0), 0);
+    for (const a of leafAccounts) {
+      opDeb += a.openingBalanceDebit || 0;
+      opCred += a.openingBalanceCredit || 0;
+      movDeb += a.movementDebit || 0;
+      movCred += a.movementCredit || 0;
+      endDeb += a.endingBalanceDebit || 0;
+      endCred += a.endingBalanceCredit || 0;
+    }
 
-  const totalEndingDebit = leafAccounts.reduce((s, a) => s + (a.endingBalanceDebit || 0), 0);
-  const totalEndingCredit = leafAccounts.reduce((s, a) => s + (a.endingBalanceCredit || 0), 0);
+    return {
+      totalOpeningDebit: opDeb,
+      totalOpeningCredit: opCred,
+      totalMovementDebit: movDeb,
+      totalMovementCredit: movCred,
+      totalEndingDebit: endDeb,
+      totalEndingCredit: endCred,
+    };
+  }, [leafAccounts]);
 
   const isOpeningBalanced = Math.abs(totalOpeningDebit - totalOpeningCredit) < 1;
   const isMovementBalanced = Math.abs(totalMovementDebit - totalMovementCredit) < 1;

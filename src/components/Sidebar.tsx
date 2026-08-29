@@ -22,6 +22,11 @@ import {
   Sparkles,
   RefreshCw,
   Keyboard,
+  ShieldAlert,
+  FileCode2,
+  Calculator,
+  FileText,
+  Layers,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { OfficeProfile } from '../types';
@@ -39,6 +44,51 @@ interface SidebarProps {
   hasUpdate?: boolean;
 }
 
+export const getParentHub = (tabId: string): string => {
+  switch (tabId) {
+    case 'CHART_OF_ACCOUNTS':
+    case 'JOURNAL_ENTRIES':
+    case 'GENERAL_LEDGER':
+    case 'TRIAL_BALANCE':
+    case 'FIXED_ASSETS':
+    case 'ACCOUNTING_HUB':
+      return 'ACCOUNTING_HUB';
+
+    case 'FINANCIAL_STATEMENTS':
+    case 'FINANCIAL_NOTES':
+    case 'AUDITOR_REPORT':
+    case 'CREDIT_SIMULATOR':
+    case 'FINANCIAL_REPORTING_HUB':
+      return 'FINANCIAL_REPORTING_HUB';
+
+    case 'TAX_TRACKER':
+    case 'TAX_EXPOSURE_SIMULATOR':
+    case 'ETA_RECONCILIATION':
+    case 'PAYROLL_INSURANCE':
+    case 'AUDIT_WORKING_PAPERS':
+    case 'TAX_AUDIT_HUB':
+      return 'TAX_AUDIT_HUB';
+
+    case 'CLIENTS_ARCHIVE':
+    case 'OFFICE_TREASURY':
+    case 'CERTIFICATES':
+    case 'FEASIBILITY_STUDY':
+    case 'OFFICE_HUB':
+      return 'OFFICE_HUB';
+
+    case 'AUDIT_TRAIL':
+    case 'AUDIT_SECURITY_HUB':
+      return 'AUDIT_SECURITY_HUB';
+
+    case 'INVOICING':
+      return 'INVOICING';
+
+    case 'DASHBOARD':
+    default:
+      return 'DASHBOARD';
+  }
+};
+
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
@@ -52,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const state: DatabaseState = db.getState();
   const officeProfile = profile || state.officeProfile;
+  const currentUser = db.getCurrentUser();
 
   const pendingTaxesCount = state.taxDeclarations.filter(
     (t) => t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT'
@@ -59,117 +110,105 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const unpostedEntriesCount = state.journalEntries.filter((e) => !e.isPosted).length;
 
-  const navGroups = [
+  const isItemRestricted = (itemId: string) => {
+    if (currentUser.role === 'ADMIN') return false;
+    if (itemId === 'OFFICE_TREASURY' && !currentUser.canAccessTreasury) return true;
+    if (itemId === 'AUDIT_TRAIL' && !currentUser.canAccessAuditTrail) return true;
+    if (currentUser.restrictedTabs?.includes(itemId as any)) return true;
+    return false;
+  };
+
+  const parentHub = getParentHub(activeTab);
+
+  const hubItems = [
     {
-      groupTitle: 'العمليات المحاسبية والرقابة',
-      items: [
-        {
-          id: 'DASHBOARD',
-          label: 'لوحة التحكم الرئيسية',
-          icon: LayoutDashboard,
-          badge: null,
-        },
-        {
-          id: 'CHART_OF_ACCOUNTS',
-          label: 'شجرة الحسابات المصرية',
-          icon: FolderTree,
-          badge: `${state.accounts.length}`,
-        },
-        {
-          id: 'JOURNAL_ENTRIES',
-          label: 'قيود اليومية والترحيل',
-          icon: Receipt,
-          badge: unpostedEntriesCount > 0 ? `${unpostedEntriesCount} غير مرحل` : `${state.journalEntries.length}`,
-          badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-400',
-        },
-        {
-          id: 'GENERAL_LEDGER',
-          label: 'دفتر الأستاذ العام',
-          icon: BookOpen,
-          badge: null,
-        },
-        {
-          id: 'TRIAL_BALANCE',
-          label: 'ميزان المراجعة بالمجاميع',
-          icon: Scale,
-          badge: null,
-        },
+      id: 'DASHBOARD',
+      label: 'لوحة التحكم الرئيسية',
+      subtitle: 'نظرة شاملة ومؤشرات أداء لحظية',
+      icon: LayoutDashboard,
+      badge: null,
+      subItems: [],
+    },
+    {
+      id: 'ACCOUNTING_HUB',
+      defaultTab: 'JOURNAL_ENTRIES',
+      label: 'مركز الدورة المحاسبية',
+      subtitle: 'القيود، الأستاذ، الشجرة، وميزان المراجعة',
+      icon: Layers,
+      badge: unpostedEntriesCount > 0 ? `${unpostedEntriesCount} غير مرحل` : `${state.journalEntries.length}`,
+      badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-400',
+      subItems: [
+        { id: 'JOURNAL_ENTRIES', label: 'قيود اليومية' },
+        { id: 'CHART_OF_ACCOUNTS', label: 'شجرة الحسابات' },
+        { id: 'GENERAL_LEDGER', label: 'الأستاذ العام' },
+        { id: 'TRIAL_BALANCE', label: 'ميزان المراجعة' },
+        { id: 'FIXED_ASSETS', label: 'إهلاك الأصول' },
       ],
     },
     {
-      groupTitle: 'التقارير والقوائم المالية',
-      items: [
-        {
-          id: 'FINANCIAL_STATEMENTS',
-          label: 'التقارير والقوائم المالية',
-          icon: FileSpreadsheet,
-          badge: 'EAS',
-          badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-        },
-        {
-          id: 'AUDITOR_REPORT',
-          label: 'تقرير مراقب الحسابات المستقل',
-          icon: FileCheck2,
-          badge: 'معتمد',
-          badgeColor: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-        },
-        {
-          id: 'CREDIT_SIMULATOR',
-          label: 'ملف الائتمان ونموذج التوزيع',
-          icon: TrendingUp,
-          badge: 'توزيع ذكي',
-          badgeColor: 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-        },
-        {
-          id: 'INVOICING',
-          label: 'الفواتير والمبيعات والمشتريات',
-          icon: CreditCard,
-          badge: `${state.invoices.length}`,
-        },
+      id: 'FINANCIAL_REPORTING_HUB',
+      defaultTab: 'FINANCIAL_STATEMENTS',
+      label: 'مركز القوائم والتقارير المالية',
+      subtitle: 'القوائم المعتمدة، الإيضاحات، وتقرير المراقب',
+      icon: FileSpreadsheet,
+      badge: 'EAS',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+      subItems: [
+        { id: 'FINANCIAL_STATEMENTS', label: 'القوائم الختامية' },
+        { id: 'FINANCIAL_NOTES', label: 'الإيضاحات (معيار 1)' },
+        { id: 'AUDITOR_REPORT', label: 'تقرير المراقب' },
+        { id: 'CREDIT_SIMULATOR', label: 'ملف الائتمان' },
       ],
     },
     {
-      groupTitle: 'إدارة المكتب والضرائب والعملاء',
-      items: [
-        {
-          id: 'TAX_TRACKER',
-          label: 'إقرارات القيمة المضافة والضرائب',
-          icon: Percent,
-          badge: pendingTaxesCount > 0 ? `${pendingTaxesCount} مستحق` : 'مكتمل',
-          badgeColor: pendingTaxesCount > 0 ? 'bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse' : 'bg-emerald-500/20 text-emerald-300',
-        },
-        {
-          id: 'CLIENTS_ARCHIVE',
-          label: 'الأرشيف وبيانات العملاء',
-          icon: Users,
-          badge: `${state.clients.length} عميل`,
-        },
-        {
-          id: 'OFFICE_TREASURY',
-          label: 'خزنة المكتب (مستقلة)',
-          icon: Building2,
-          badge: `${state.treasuryTransactions.length} حركة`,
-          isTreasurySpecial: true,
-          badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-        },
-        {
-          id: 'CERTIFICATES',
-          label: 'الشهادات المهنية الذكية (QR)',
-          icon: Award,
-          badge: `${state.certificates.length}`,
-        },
-        {
-          id: 'FEASIBILITY_STUDY',
-          label: 'دراسات الجدوى الاقتصادية',
-          icon: LineChart,
-          badge: `${state.feasibilityStudies.length}`,
-        },
-        {
-          id: 'AUDIT_TRAIL',
-          label: 'سجل التدقيق والنسخ الاحتياطي',
-          icon: History,
-          badge: `${state.auditLogs.length}`,
-        },
+      id: 'TAX_AUDIT_HUB',
+      defaultTab: 'TAX_TRACKER',
+      label: 'مركز الضرائب والمراجعة',
+      subtitle: 'الإقرارات، فحص المخاطر، ETA، وكسب العمل',
+      icon: Percent,
+      badge: pendingTaxesCount > 0 ? `${pendingTaxesCount} مستحق` : 'مكتمل',
+      badgeColor: pendingTaxesCount > 0 ? 'bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse' : 'bg-emerald-500/20 text-emerald-300',
+      subItems: [
+        { id: 'TAX_TRACKER', label: 'إقرارات الضرائب' },
+        { id: 'TAX_EXPOSURE_SIMULATOR', label: 'محاكي الفحص' },
+        { id: 'ETA_RECONCILIATION', label: 'مطابقة ETA' },
+        { id: 'PAYROLL_INSURANCE', label: 'كسب العمل والتأمينات' },
+        { id: 'AUDIT_WORKING_PAPERS', label: 'أوراق العمل (320)' },
+      ],
+    },
+    {
+      id: 'INVOICING',
+      defaultTab: 'INVOICING',
+      label: 'مركز الفواتير والمبيعات',
+      subtitle: 'الفاتورة والإيصال الإلكتروني ETA SDK v1.0',
+      icon: CreditCard,
+      badge: `${state.invoices.length}`,
+      subItems: [],
+    },
+    {
+      id: 'OFFICE_HUB',
+      defaultTab: 'CLIENTS_ARCHIVE',
+      label: 'مركز إدارة المكتب والعملاء',
+      subtitle: 'الأرشيف، الخزنة المستقلة، الشهادات، والجدوى',
+      icon: Building2,
+      badge: `${state.clients.length} عميل`,
+      badgeColor: 'bg-indigo-500/20 text-indigo-300',
+      subItems: [
+        { id: 'CLIENTS_ARCHIVE', label: 'أرشيف العملاء' },
+        { id: 'OFFICE_TREASURY', label: 'خزنة المكتب' },
+        { id: 'CERTIFICATES', label: 'الشهادات QR' },
+        { id: 'FEASIBILITY_STUDY', label: 'دراسات الجدوى' },
+      ],
+    },
+    {
+      id: 'AUDIT_SECURITY_HUB',
+      defaultTab: 'AUDIT_TRAIL',
+      label: 'مركز الرقابة والأمان والنسخ',
+      subtitle: 'سجل التدقيق، الترحيل، والأجهزة المعتمدة',
+      icon: ShieldCheck,
+      badge: `${state.auditLogs.length}`,
+      subItems: [
+        { id: 'AUDIT_TRAIL', label: 'سجل التدقيق' },
       ],
     },
   ];
@@ -215,96 +254,97 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation Items List */}
-        <nav className="flex-1 py-4 px-3 space-y-4 overflow-y-auto">
-          {navGroups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1">
-              <div className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                {group.groupTitle}
-              </div>
-              <div className="space-y-1 mt-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  const isTreasury = (item as any).isTreasurySpecial;
+        {/* Navigation Items List - Unified Hubs */}
+        <nav className="flex-1 py-4 px-3 space-y-2 overflow-y-auto">
+          <div className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-2">
+            مراكز العمل والرقابة المالية
+          </div>
 
-                  if (isActive) {
-                    return (
-                      <button
-                        key={item.id}
-                        id={`nav-item-${item.id}`}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          if (window.innerWidth < 1024) setIsOpen(false);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2 bg-blue-600 text-white rounded-lg shadow-xs font-semibold text-right cursor-pointer transition-all"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <span className="w-2 h-2 rounded-full bg-blue-200 shrink-0"></span>
-                          <span className="text-xs sm:text-sm font-medium truncate">{item.label}</span>
-                        </div>
-                        {item.badge && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-700/80 text-white shrink-0">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  }
+          {hubItems.map((hub) => {
+            const Icon = hub.icon;
+            const isHubActive = parentHub === hub.id;
+            const hasSubItems = hub.subItems && hub.subItems.length > 0;
 
-                  if (isTreasury) {
-                    return (
-                      <button
-                        key={item.id}
-                        id={`nav-item-${item.id}`}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          if (window.innerWidth < 1024) setIsOpen(false);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-amber-400 hover:bg-slate-800 rounded-lg transition-colors font-semibold border border-amber-500/20 text-right cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <Icon className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span className="text-xs sm:text-sm font-medium truncate">{item.label}</span>
-                        </div>
-                        {item.badge && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  }
-
-                  return (
-                    <button
-                      key={item.id}
-                      id={`nav-item-${item.id}`}
-                      onClick={() => {
-                        setActiveTab(item.id);
-                        if (window.innerWidth < 1024) setIsOpen(false);
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors text-right cursor-pointer"
+            return (
+              <div key={hub.id} className="space-y-1">
+                {/* Main Hub Button */}
+                <button
+                  id={`nav-item-${hub.id}`}
+                  onClick={() => {
+                    setActiveTab(hub.defaultTab || hub.id);
+                    if (window.innerWidth < 1024) setIsOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all text-right cursor-pointer group ${
+                    isHubActive
+                      ? 'bg-blue-600 text-white shadow-md font-bold ring-1 ring-blue-400/40'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
+                        isHubActive ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-300'
+                      }`}
                     >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <Icon className="w-4 h-4 text-slate-400 shrink-0" />
-                        <span className="text-xs sm:text-sm font-medium truncate">{item.label}</span>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="truncate">
+                      <div className="text-xs font-bold truncate leading-tight">{hub.label}</div>
+                      <div
+                        className={`text-[10px] truncate leading-tight mt-0.5 ${
+                          isHubActive ? 'text-blue-100' : 'text-slate-400'
+                        }`}
+                      >
+                        {hub.subtitle}
                       </div>
-                      {item.badge && (
-                        <span
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
-                            item.badgeColor || 'bg-slate-800 text-slate-400'
+                    </div>
+                  </div>
+
+                  {hub.badge && (
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                        isHubActive
+                          ? 'bg-blue-800 text-white border border-blue-400/30'
+                          : hub.badgeColor || 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {hub.badge}
+                    </span>
+                  )}
+                </button>
+
+                {/* Sub-item quick pills (displayed when hub is active or accessible) */}
+                {hasSubItems && isHubActive && (
+                  <div className="pr-10 pl-2 py-1 space-y-0.5">
+                    {hub.subItems.map((sub) => {
+                      const isSubActive = activeTab === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => {
+                            setActiveTab(sub.id);
+                            if (window.innerWidth < 1024) setIsOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-right text-[11px] transition-colors cursor-pointer ${
+                            isSubActive
+                              ? 'text-white font-bold bg-blue-500/20 border-r-2 border-blue-400'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                           }`}
                         >
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isSubActive ? 'bg-blue-400 ring-2 ring-blue-400/30' : 'bg-slate-600'
+                            }`}
+                          />
+                          <span>{sub.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Quick Utilities: Shortcuts & Desktop */}

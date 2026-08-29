@@ -21,7 +21,7 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 
 interface SearchResultItem {
   id: string;
-  category: 'JOURNAL' | 'CLIENT' | 'INVOICE' | 'TAX' | 'TREASURY' | 'ACCOUNT' | 'CERTIFICATE';
+  category: 'JOURNAL' | 'CLIENT' | 'INVOICE' | 'TAX' | 'TREASURY' | 'ACCOUNT' | 'CERTIFICATE' | 'FIXED_ASSET';
   categoryLabel: string;
   title: string;
   subtitle: string;
@@ -254,6 +254,28 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
           targetTab: 'CHART_OF_ACCOUNTS',
           recordId: acc.id,
           icon: Layers,
+        });
+      }
+    });
+
+    // 8. Fixed Assets & Depreciation
+    (state.fixedAssets || []).forEach((ast) => {
+      const matchCode = ast.assetCode.toLowerCase().includes(q);
+      const matchName = ast.name.toLowerCase().includes(q);
+      const matchCust = ast.custodian?.toLowerCase().includes(q);
+      const matchLoc = ast.location?.toLowerCase().includes(q);
+
+      if (matchCode || matchName || matchCust || matchLoc) {
+        results.push({
+          id: `ast-${ast.id}`,
+          category: 'FIXED_ASSET',
+          categoryLabel: 'أصل ثابت وإهلاك (معيار 10)',
+          title: `[${ast.assetCode}] ${ast.name}`,
+          subtitle: `تكلفة الاقتناء: ${formatEgyptianCurrency(ast.acquisitionCost)} • صافي الدفتري: ${formatEgyptianCurrency(ast.currentBookValue)} • إهلاك: ${ast.accountingDepreciationRate}%`,
+          badge: ast.assetCode,
+          targetTab: 'FIXED_ASSETS',
+          recordId: ast.id,
+          icon: BookOpen,
         });
       }
     });

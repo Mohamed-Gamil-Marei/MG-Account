@@ -7,7 +7,12 @@ import { JournalEntriesView } from './components/JournalEntriesView';
 import { GeneralLedgerView } from './components/GeneralLedgerView';
 import { TrialBalanceView } from './components/TrialBalanceView';
 import { FinancialStatementsView } from './components/FinancialStatementsView';
+import { FinancialNotesBuilderView } from './components/FinancialNotesBuilderView';
 import { AuditorReportView } from './components/AuditorReportView';
+import { AuditWorkingPapersView } from './components/AuditWorkingPapersView';
+import { TaxExposureSimulatorView } from './components/TaxExposureSimulatorView';
+import { EtaReconciliationView } from './components/EtaReconciliationView';
+import { PayrollInsuranceEngineView } from './components/PayrollInsuranceEngineView';
 import { CreditFinancialsSimulator } from './components/CreditFinancialsSimulator';
 import { OfficeTreasuryView } from './components/OfficeTreasuryView';
 import { ClientsArchiveView } from './components/ClientsArchiveView';
@@ -16,6 +21,11 @@ import { CertificatesGeneratorView } from './components/CertificatesGeneratorVie
 import { FeasibilityStudyView } from './components/FeasibilityStudyView';
 import { InvoicingView } from './components/InvoicingView';
 import { AuditTrailView } from './components/AuditTrailView';
+import { AccountingHubView } from './components/hubs/AccountingHubView';
+import { FinancialReportingHubView } from './components/hubs/FinancialReportingHubView';
+import { TaxAuditHubView } from './components/hubs/TaxAuditHubView';
+import { OfficePracticeHubView } from './components/hubs/OfficePracticeHubView';
+import { SecurityAuditHubView } from './components/hubs/SecurityAuditHubView';
 import { BackupExportModal } from './components/BackupExportModal';
 import { DesktopAppModal } from './components/DesktopAppModal';
 import { UpdateNotificationModal } from './components/UpdateNotificationModal';
@@ -23,7 +33,11 @@ import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { GlobalSearchBar } from './components/GlobalSearchBar';
 import { UserManagerModal } from './components/UserManagerModal';
 import { AccessRestrictedGate } from './components/AccessRestrictedGate';
-import { NavigationTab, SystemUser } from './types';
+import { ThemeToggle } from './components/ThemeToggle';
+import { DeviceLockModal } from './components/DeviceLockModal';
+import { PurgeDatabaseModal } from './components/PurgeDatabaseModal';
+import { SecurityAuthService } from './services/securityAuth';
+import { NavigationTab, SystemUser, BrandColor, ThemeMode } from './types';
 import {
   UpdateCheckerService,
   AppVersionInfo,
@@ -43,6 +57,8 @@ import {
   Keyboard,
   Shield,
   Users,
+  Lock,
+  Trash2,
 } from 'lucide-react';
 
 export default function App() {
@@ -54,6 +70,9 @@ export default function App() {
   const [isDesktopModalOpen, setIsDesktopModalOpen] = useState<boolean>(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
   const [isUserManagerOpen, setIsUserManagerOpen] = useState<boolean>(false);
+  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState<boolean>(false);
+  const [isDeviceEnforcedLocked, setIsDeviceEnforcedLocked] = useState<boolean>(false);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState<boolean>(false);
   const [unlockedTabs, setUnlockedTabs] = useState<string[]>([]);
 
   // Update check states
@@ -61,6 +80,38 @@ export default function App() {
   const [availableUpdate, setAvailableUpdate] = useState<AppVersionInfo | null>(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
   const [updateBannerVisible, setUpdateBannerVisible] = useState<boolean>(false);
+
+  // User Theme and Brand Color Preferences
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(state.preferences?.themeMode || 'light');
+  const [brandColor, setBrandColorState] = useState<BrandColor>(state.preferences?.brandColor || 'blue');
+
+  const handleThemeChange = (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    db.setThemeMode(mode);
+  };
+
+  const handleBrandColorChange = (color: BrandColor) => {
+    setBrandColorState(color);
+    db.setBrandColor(color);
+  };
+
+  useEffect(() => {
+    if (state.preferences?.themeMode && state.preferences.themeMode !== themeMode) {
+      setThemeModeState(state.preferences.themeMode);
+    }
+    if (state.preferences?.brandColor && state.preferences.brandColor !== brandColor) {
+      setBrandColorState(state.preferences.brandColor);
+    }
+  }, [state.preferences?.themeMode, state.preferences?.brandColor]);
+
+  useEffect(() => {
+    // Validate Hardware & Device Binding (Anti-theft protection)
+    const validation = SecurityAuthService.validateCurrentDevice();
+    if (!validation.isValid) {
+      setIsDeviceEnforcedLocked(true);
+      setIsDeviceModalOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = db.subscribe(() => {
@@ -313,34 +364,69 @@ export default function App() {
             onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
           />
         );
+
+      // 1. Accounting Hub (الدورة المحاسبية العامة)
+      case 'ACCOUNTING_HUB':
+        return <AccountingHubView state={state} initialSubTab="JOURNAL_ENTRIES" fiscalYear={selectedFiscalYear} />;
       case 'CHART_OF_ACCOUNTS':
-        return <ChartOfAccountsView state={state} />;
+        return <AccountingHubView state={state} initialSubTab="CHART_OF_ACCOUNTS" fiscalYear={selectedFiscalYear} />;
       case 'JOURNAL_ENTRIES':
-        return <JournalEntriesView state={state} />;
+        return <AccountingHubView state={state} initialSubTab="JOURNAL_ENTRIES" fiscalYear={selectedFiscalYear} />;
       case 'GENERAL_LEDGER':
-        return <GeneralLedgerView state={state} />;
+        return <AccountingHubView state={state} initialSubTab="GENERAL_LEDGER" fiscalYear={selectedFiscalYear} />;
       case 'TRIAL_BALANCE':
-        return <TrialBalanceView state={state} fiscalYear={selectedFiscalYear} />;
+        return <AccountingHubView state={state} initialSubTab="TRIAL_BALANCE" fiscalYear={selectedFiscalYear} />;
+      case 'FIXED_ASSETS':
+        return <AccountingHubView state={state} initialSubTab="FIXED_ASSETS" fiscalYear={selectedFiscalYear} />;
+
+      // 2. Financial Reporting Hub (القوائم والتقارير المالية)
+      case 'FINANCIAL_REPORTING_HUB':
+        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
       case 'FINANCIAL_STATEMENTS':
-        return <FinancialStatementsView state={state} fiscalYear={selectedFiscalYear} />;
+        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
+      case 'FINANCIAL_NOTES':
+        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_NOTES" fiscalYear={selectedFiscalYear} />;
       case 'AUDITOR_REPORT':
-        return <AuditorReportView state={state} fiscalYear={selectedFiscalYear} />;
+        return <FinancialReportingHubView state={state} initialSubTab="AUDITOR_REPORT" fiscalYear={selectedFiscalYear} />;
       case 'CREDIT_SIMULATOR':
-        return <CreditFinancialsSimulator state={state} />;
-      case 'OFFICE_TREASURY':
-        return <OfficeTreasuryView state={state} />;
-      case 'CLIENTS_ARCHIVE':
-        return <ClientsArchiveView state={state} />;
+        return <FinancialReportingHubView state={state} initialSubTab="CREDIT_SIMULATOR" fiscalYear={selectedFiscalYear} />;
+
+      // 3. Tax & Audit Hub (الضرائب والمراجعة والامتثال)
+      case 'TAX_AUDIT_HUB':
+        return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
       case 'TAX_TRACKER':
-        return <TaxTrackerView state={state} />;
+        return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
+      case 'TAX_EXPOSURE_SIMULATOR':
+        return <TaxAuditHubView state={state} initialSubTab="TAX_EXPOSURE_SIMULATOR" />;
+      case 'ETA_RECONCILIATION':
+        return <TaxAuditHubView state={state} initialSubTab="ETA_RECONCILIATION" />;
+      case 'PAYROLL_INSURANCE':
+        return <TaxAuditHubView state={state} initialSubTab="PAYROLL_INSURANCE" />;
+      case 'AUDIT_WORKING_PAPERS':
+        return <TaxAuditHubView state={state} initialSubTab="AUDIT_WORKING_PAPERS" />;
+
+      // 4. Office Practice Hub (إدارة المكتب والعملاء)
+      case 'OFFICE_HUB':
+        return <OfficePracticeHubView state={state} initialSubTab="CLIENTS_ARCHIVE" />;
+      case 'CLIENTS_ARCHIVE':
+        return <OfficePracticeHubView state={state} initialSubTab="CLIENTS_ARCHIVE" />;
+      case 'OFFICE_TREASURY':
+        return <OfficePracticeHubView state={state} initialSubTab="OFFICE_TREASURY" />;
       case 'CERTIFICATES':
-        return <CertificatesGeneratorView state={state} />;
+        return <OfficePracticeHubView state={state} initialSubTab="CERTIFICATES" />;
       case 'FEASIBILITY_STUDY':
-        return <FeasibilityStudyView state={state} />;
+        return <OfficePracticeHubView state={state} initialSubTab="FEASIBILITY_STUDY" />;
+
+      // 5. Invoicing Hub (مركز الفواتير والمبيعات)
       case 'INVOICING':
         return <InvoicingView state={state} />;
+
+      // 6. Security & Audit Hub (الرقابة والأمان والنسخ الاحتياطي)
+      case 'AUDIT_SECURITY_HUB':
+        return <SecurityAuditHubView state={state} initialSubTab="AUDIT_TRAIL" />;
       case 'AUDIT_TRAIL':
-        return <AuditTrailView state={state} />;
+        return <SecurityAuditHubView state={state} initialSubTab="AUDIT_TRAIL" />;
+
       default:
         return (
           <Dashboard
@@ -353,8 +439,14 @@ export default function App() {
     }
   };
 
+  const isDark = themeMode === 'dark';
+
   return (
-    <div className="flex h-screen bg-[#F8FAFC] overflow-hidden font-['Cairo',sans-serif] text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
+    <div
+      className={`flex h-screen overflow-hidden font-['Cairo',sans-serif] antialiased selection:bg-blue-600 selection:text-white transition-colors duration-200 ${
+        isDark ? 'bg-slate-950 text-slate-100 dark' : 'bg-[#F8FAFC] text-slate-800'
+      }`}
+    >
       {/* Responsive Collapsible Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -409,11 +501,19 @@ export default function App() {
         )}
 
         {/* Top Header Bar - Professional Polish style */}
-        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between z-10 shrink-0 shadow-xs gap-3">
+        <header
+          className={`h-16 border-b px-4 sm:px-6 lg:px-8 flex items-center justify-between z-10 shrink-0 shadow-xs gap-3 transition-colors ${
+            isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}
+        >
           <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer border border-slate-200"
+              className={`p-2 rounded-lg transition-colors cursor-pointer border ${
+                isDark
+                  ? 'text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
+              }`}
               title="إظهار / إخفاء القائمة الجانبية"
             >
               <Menu className="w-5 h-5" />
@@ -421,17 +521,21 @@ export default function App() {
 
             {/* Authority / Profile snippet */}
             <div className="flex items-center gap-3">
-              <div className="bg-slate-100 p-1.5 px-2.5 rounded-lg hidden sm:flex items-center gap-2 border border-slate-200">
+              <div
+                className={`p-1.5 px-2.5 rounded-lg hidden sm:flex items-center gap-2 border ${
+                  isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'
+                }`}
+              >
                 <div className="w-6 h-6 bg-slate-800 grid place-items-center text-[9px] text-white font-mono rounded font-bold">
                   EAS
                 </div>
-                <div className="text-[11px] font-mono text-slate-600 font-bold">
+                <div className={`text-[11px] font-mono font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                   SN: M-2026-0931-J
                 </div>
               </div>
 
               <div className="hidden lg:block">
-                <h1 className="text-sm font-bold text-slate-900 line-clamp-1">
+                <h1 className={`text-sm font-bold line-clamp-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   أ/ {state.officeProfile.auditorName}
                 </h1>
                 <span className="text-[10px] text-emerald-700 font-semibold block">
@@ -453,10 +557,22 @@ export default function App() {
 
           {/* Header Quick Actions & Controls */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Theme & Brand Color Quick Switcher */}
+            <ThemeToggle
+              themeMode={themeMode}
+              onThemeChange={handleThemeChange}
+              brandColor={brandColor}
+              onBrandColorChange={handleBrandColorChange}
+            />
+
             {/* User Profile & Role Switcher */}
             <button
               onClick={() => setIsUserManagerOpen(true)}
-              className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                isDark
+                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+              }`}
               title="إدارة المستخدمين وصلاحيات الوصول (Multi-User RBAC)"
             >
               <div
@@ -465,29 +581,41 @@ export default function App() {
                     ? 'bg-amber-500 text-white'
                     : currentUser.role === 'AUDITOR'
                     ? 'bg-blue-600 text-white'
+                    : currentUser.role === 'SECRETARY'
+                    ? 'bg-purple-600 text-white'
                     : 'bg-slate-700 text-white'
                 }`}
               >
                 {currentUser.name.slice(0, 1)}
               </div>
               <div className="text-right hidden md:block">
-                <span className="block text-xs text-slate-900 font-bold leading-tight">{currentUser.name}</span>
-                <span className="block text-[9px] text-slate-500 font-mono leading-tight">{currentUser.roleTitleArabic}</span>
+                <span className={`block text-xs font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {currentUser.name}
+                </span>
+                <span className={`block text-[9px] font-mono leading-tight ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {currentUser.roleTitleArabic}
+                </span>
               </div>
             </button>
 
             {/* Fiscal Year Selector */}
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-slate-500 font-medium text-[11px] hidden xl:inline">السنة:</span>
+            <div
+              className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 text-xs ${
+                isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-slate-400 font-medium text-[11px] hidden xl:inline">السنة:</span>
               <select
                 value={selectedFiscalYear}
                 onChange={(e) => setSelectedFiscalYear(Number(e.target.value))}
-                className="bg-transparent font-bold font-mono text-slate-800 focus:outline-none cursor-pointer text-xs"
+                className={`bg-transparent font-bold font-mono focus:outline-none cursor-pointer text-xs ${
+                  isDark ? 'text-white' : 'text-slate-800'
+                }`}
               >
-                <option value={2026}>2026</option>
-                <option value={2025}>2025</option>
-                <option value={2024}>2024</option>
+                <option value={2026} className={isDark ? 'bg-slate-900 text-white' : ''}>2026</option>
+                <option value={2025} className={isDark ? 'bg-slate-900 text-white' : ''}>2025</option>
+                <option value={2024} className={isDark ? 'bg-slate-900 text-white' : ''}>2024</option>
               </select>
             </div>
 
@@ -510,14 +638,33 @@ export default function App() {
               onClick={handleManualCheckUpdate}
               disabled={isCheckingUpdate}
               id="header-btn-check-update"
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer border border-slate-200"
+              className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                isDark
+                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+              }`}
               title="فحص التحديثات والإصدارات الجديدة"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
               <span className="hidden xl:inline">فحص التحديثات</span>
               {availableUpdate && (
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
               )}
+            </button>
+
+            {/* Anti-theft Device Lock & Security Button */}
+            <button
+              onClick={() => setIsDeviceModalOpen(true)}
+              id="header-btn-device-lock"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                isDark
+                  ? 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border-indigo-900/50'
+                  : 'bg-indigo-50/70 hover:bg-indigo-100 text-indigo-800 border-indigo-200'
+              }`}
+              title="إدارة وتعدد الأجهزة المصرح بها وقفل الحماية (Device Whitelist)"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden xl:inline">الأجهزة المصرحة</span>
             </button>
 
             {/* Desktop App Download Button */}
@@ -566,21 +713,31 @@ export default function App() {
         </header>
 
         {/* Scrollable Main Content Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7">
+        <main
+          className={`flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7 transition-colors ${
+            isDark ? 'bg-slate-950 text-slate-100' : 'bg-[#F8FAFC] text-slate-800'
+          }`}
+        >
           <div className="max-w-7xl mx-auto space-y-6">
             {renderActiveView()}
           </div>
         </main>
 
         {/* Bottom Status & Footer Bar */}
-        <footer className="h-9 bg-white border-t border-slate-200 px-4 sm:px-6 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+        <footer
+          className={`h-9 border-t px-4 sm:px-6 flex items-center justify-between text-[11px] shrink-0 transition-colors ${
+            isDark
+              ? 'bg-slate-900 border-slate-800 text-slate-400'
+              : 'bg-white border-slate-200 text-slate-500'
+          }`}
+        >
           <div className="flex items-center gap-2 truncate">
             <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
             <span className="truncate">
               النظام المحاسبي المتكامل وفق معايير المحاسبة المصرية (EAS) • قاعدة بيانات محلية مؤمنة
             </span>
           </div>
-          <div className="text-slate-600 font-medium hidden sm:inline-block shrink-0">
+          <div className={`font-medium hidden sm:inline-block shrink-0 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
             إعداد المراجع القانوني: أ/ {state.officeProfile.auditorName} ({state.officeProfile.licenseNumber})
           </div>
         </footer>
@@ -629,6 +786,22 @@ export default function App() {
         isOpen={isUserManagerOpen}
         onClose={() => setIsUserManagerOpen(false)}
         state={state}
+      />
+
+      {/* Anti-Theft Device Lock & Binding Modal */}
+      <DeviceLockModal
+        isOpen={isDeviceModalOpen || isDeviceEnforcedLocked}
+        isEnforced={isDeviceEnforcedLocked}
+        onClose={() => {
+          setIsDeviceModalOpen(false);
+          setIsDeviceEnforcedLocked(false);
+        }}
+      />
+
+      {/* Complete Data Purge Modal (Protected by Mgacc120) */}
+      <PurgeDatabaseModal
+        isOpen={isPurgeModalOpen}
+        onClose={() => setIsPurgeModalOpen(false)}
       />
     </div>
   );

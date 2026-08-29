@@ -533,8 +533,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               <div className="text-[10px] text-slate-400 font-bold mb-1">الختم الإلكتروني المعتمد</div>
               <div className="w-24 h-24 rounded-full border-2 border-dashed border-emerald-700 flex flex-col items-center justify-center text-[9px] font-bold text-emerald-900 p-1 text-center">
                 <span>مكتب المحاسب القانوني</span>
-                <span className="text-emerald-700 font-black">محمد جميل مرعي</span>
-                <span>س.م.م 18492</span>
+                <span className="text-emerald-700 font-black">{profile.auditorName || 'محمد جميل مرعي'}</span>
+                <span>{profile.licenseNumber?.includes('س.م.م') ? profile.licenseNumber.split('-')[0].trim() : 'س.م.م 43122'}</span>
                 <span className="text-[8px] text-slate-500">معتمد</span>
               </div>
             </div>

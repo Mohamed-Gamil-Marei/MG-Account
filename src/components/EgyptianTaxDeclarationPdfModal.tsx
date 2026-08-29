@@ -202,7 +202,7 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
               <span>معتمد بختم المحاسب القانوني: <strong>{profile.auditorName}</strong></span>
             </span>
             <span>•</span>
-            <span className="font-mono text-slate-600">س.م.م: {profile.registrationNumber}</span>
+            <span className="font-mono text-slate-600">{(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}</span>
           </div>
         </div>
 
@@ -459,14 +459,14 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
               </div>
 
               <p className="text-justify text-slate-700 leading-relaxed text-[11px]">
-                أقر أنا المحاسب القانوني المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم ({profile.registrationNumber})، بصفتي مراقب حسابات الممول الموضح بياناته أعلاه، بأن البيانات والمبالغ والضرائب المدرجة بهذا الإقرار مطابقة تماماً لقيود الدفاتر المحاسبية المنتظمة والفواتير والإشعارات الإلكترونية الصادرة والواردة والموثقة بمنظومة الفاتورة والإيصال الإلكتروني بمصلحة الضرائب المصرية، وقد تم إعداد هذا الإقرار وفقاً لمعايير المحاسبة المصرية (EAS) والقوانين واللوائح التنفيذية السارية.
+                أقر أنا المحاسب القانوني المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم ({(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}), بصفتي مراقب حسابات الممول الموضح بياناته أعلاه، بأن البيانات والمبالغ والضرائب المدرجة بهذا الإقرار مطابقة تماماً لقيود الدفاتر المحاسبية المنتظمة والفواتير والإشعارات الإلكترونية الصادرة والواردة والموثقة بمنظومة الفاتورة والإيصال الإلكتروني بمصلحة الضرائب المصرية، وقد تم إعداد هذا الإقرار وفقاً لمعايير المحاسبة المصرية (EAS) والقوانين واللوائح التنفيذية السارية.
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2 text-center">
                 <div className="space-y-1">
                   <span className="text-[10px] text-slate-500 block">المحاسب القانوني ومراقب الحسابات</span>
                   <strong className="text-slate-900 text-xs block">{profile.auditorName}</strong>
-                  <span className="text-[10px] font-mono text-slate-600 block">س.م.م: {profile.registrationNumber}</span>
+                  <span className="text-[10px] font-mono text-slate-600 block">{(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}</span>
                 </div>
 
                 <div className="space-y-1">

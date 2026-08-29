@@ -234,15 +234,37 @@ export interface TaxDeclarationRecord {
   updatedAt: string;
 }
 
+export type CertificateBeneficiaryType = 'NATURAL_PERSON' | 'LEGAL_ENTITY'; // شخص طبيعي (فرد / مهنة حرة / موظف) | شخص اعتباري (شركة / منشأة)
+export type CertificateTemplateType = 
+  | 'INCOME_PROOF'            // إثبات صافي دخل سنوي / شهري
+  | 'FREELANCE_INCOME'        // إثبات صافي دخل مهن حرة واستشارات
+  | 'EMPLOYEE_ADDITIONAL_INC' // إثبات دخول إضافية واستثمارات للأفراد
+  | 'INVESTED_CAPITAL'        // رأس مال مستثمر وحجم أعمال
+  | 'FINANCIAL_SOLVENCY'      // ملاءة مالية وثروة
+  | 'AUDIT_COMPLIANCE'        // فحص ومراجعة حسابات
+  | 'REAL_ESTATE_INCOME';     // إثبات إيرادات عقارية واستثمارية
+
 export interface ProfessionalCertificate {
   id: string;
   certificateNumber: string; // e.g. "CERT-2026-089"
-  certificateType: 'INCOME_PROOF' | 'INVESTED_CAPITAL' | 'WORKING_CAPITAL' | 'FINANCIAL_SOLVENCY';
+  certificateType: CertificateTemplateType;
+  beneficiaryType: CertificateBeneficiaryType; // نوع المستفيد (شخص طبيعي أو اعتباري)
   issueDate: string;
-  clientId: string;
+  clientId?: string;
   clientName: string;
-  recipientEntity: string; // e.g. "بنك مصر - قطاع الائتمان", "سفارة...", "الهيئة العامة للاستثمار"
+  beneficiaryTitle?: string; // e.g. "السيد المهندس", "الدكتور", "السيدة", "السادة"
+  nationalId?: string; // الرقم القومي (14 رقم) للأشخاص الطبيعيين
+  jobTitle?: string; // المهنة / الوظيفة الحالية للأشخاص الطبيعيين
+  address?: string; // محل الإقامة أو المقر
+  commercialRegNo?: string; // السجل التجاري (للشركات والأنشطة الفردية)
+  taxCardNo?: string; // البطاقة الضريبية إن وجدت
+  activityName?: string; // اسم المنشأة / جهة العمل / طبيعة النشاط
+  recipientEntity: string; // e.g. "بنك مصر - قطاع التمويل العقاري والائتمان", "سفارة...", "الهيئة العامة للاستثمار"
   purpose: string;
+  periodText: string; // e.g. "عن السنة المالية المنتهية في 31 ديسمبر 2025" أو "عن متوسط الدخل الشهري لعام 2025"
+  certifiedAmount: number; // المبلغ المعتمد
+  monthlyAmount?: number; // المعادل الشهري إن وجد
+  incomeBreakdown?: { source: string; amount: number }[]; // تفصيل مصادر الدخل (مرتب، استشارات، أرباح أسهم، إيجارات)
   // Key financial parameters
   monthlyNetIncome?: number;
   annualNetIncome?: number;
@@ -523,17 +545,116 @@ export interface TaxMandateTask {
 }
 
 // Multi-User Access Control (RBAC)
-export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT';
+export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT' | 'SECRETARY';
+
+export type BrandColor = 'blue' | 'emerald' | 'indigo' | 'slate' | 'amber';
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export interface UserPreferences {
+  themeMode: ThemeMode;
+  brandColor: BrandColor;
+  compactView?: boolean;
+}
+
+export type FixedAssetCategory =
+  | 'BUILDINGS'              // مباني وإنشاءات (5% قسط ثابت)
+  | 'MACHINERY_EQUIPMENT'   // آلات ومعدات وماكينات (أساس إهلاك 25% مع إمكانية 30% معجل)
+  | 'VEHICLES'              // سيارات ووسائل نقل وانتقال (أساس إهلاك 25%)
+  | 'FURNITURE_FIXTURES'    // أثاث وتجهيزات ومفروشات مكتبية (أساس إهلاك 25%)
+  | 'COMPUTERS_SOFTWARE'    // حواسب آلية وبرامج ونظم معلومات (أساس إهلاك 50%)
+  | 'INTANGIBLE_ASSETS'     // أصول غير ملموسة وشهرة وبراءات (10% قسط ثابت)
+  | 'LANDS';                // أراضي (لا تهلك)
+
+export type DepreciationMethod =
+  | 'STRAIGHT_LINE'         // القسط الثابت
+  | 'DECLINING_BALANCE'     // القسط المتناقص
+  | 'SUM_OF_YEARS_DIGITS'   // مجموع أرقام السنوات
+  | 'TAX_LAW_91';           // معايير مصلحة الضرائب المصرية (قانون 91 لسنة 2005)
+
+export type AssetStatus = 'ACTIVE' | 'DISPOSED' | 'FULLY_DEPRECIATED' | 'UNDER_MAINTENANCE';
+
+export interface DepreciationHistoryRecord {
+  year: number;
+  month?: number;
+  periodLabel: string;
+  openingBookValue: number;
+  depreciationAmount: number;
+  accumulatedDepreciation: number;
+  closingBookValue: number;
+  taxDepreciationAmount?: number;
+  temporaryTaxDifference?: number;
+  isPostedToJournal?: boolean;
+  journalEntryId?: string;
+  date: string;
+}
+
+export interface FixedAsset {
+  id: string;
+  assetCode: string; // e.g. "AST-2026-001"
+  name: string;      // e.g. "خادم رئيسي Dell PowerEdge + خوادم سحابية"
+  category: FixedAssetCategory;
+  purchaseDate: string; // YYYY-MM-DD
+  operationDate: string; // YYYY-MM-DD (تاريخ بدء الاستخدام والتشغيل)
+  acquisitionCost: number; // تكلفة الاقتناء والشراء
+  scrapValue: number; // القيمة التخريدية المقدرة (الخردة)
+  usefulLifeYears: number; // العمر الإنتاجي بالسنوات
+  accountingDepreciationRate: number; // نسبة الإهلاك المحاسبي السنوية %
+  depreciationMethod: DepreciationMethod;
+  
+  // Egyptian Tax Law (قانون 91 لسنة 2005)
+  taxDepreciationRate: number; // نسبة الإهلاك الضريبي القانونية %
+  isEligibleForAcceleratedDepreciation?: boolean; // إهلاك معجل 30% للآلات والمعدات الجديدة
+  acceleratedDepreciationClaimed?: boolean;
+  
+  // Tracking & Custody (العهدة والموقع)
+  location?: string; // e.g. "الفرع الرئيسي - غرفة السيرفرات"
+  custodian?: string; // e.g. "م. حسام الدين عبد المجيد"
+  costCenter?: string; // e.g. "الإدارة العامة وتقنية المعلومات"
+  invoiceRef?: string; // رقم الفاتورة أو المستند
+  serialNumber?: string; // الرقم التسلسلي للأصل
+  
+  // Accounts Mapping (ربط الحسابات المصرية)
+  assetAccountId: string; // كود حساب الأصل (e.g. "122" أصول ثابتة)
+  depreciationExpenseAccountId: string; // كود حساب مصروف الإهلاك (e.g. "334")
+  accumulatedDepreciationAccountId: string; // كود حساب مجمع الإهلاك (e.g. "231" أو الحساب المقابل)
+  
+  // Current Balances (الأرصدة اللحظية)
+  currentAccumulatedDepreciation: number; // مجمع الإهلاك الحالي
+  currentBookValue: number; // صافي القيمة الدفترية الحالية
+  status: AssetStatus;
+  
+  // Disposal Info (في حالة البيع أو الاستبعاد أو التكهين)
+  disposalDate?: string;
+  disposalAmount?: number;
+  disposalReason?: string;
+  capitalGainLoss?: number;
+  
+  depreciationSchedule?: DepreciationHistoryRecord[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export type NavigationTab =
   | 'DASHBOARD'
+  | 'ACCOUNTING_HUB'
+  | 'FINANCIAL_REPORTING_HUB'
+  | 'TAX_AUDIT_HUB'
+  | 'OFFICE_HUB'
+  | 'AUDIT_SECURITY_HUB'
   | 'CHART_OF_ACCOUNTS'
   | 'JOURNAL_ENTRIES'
   | 'GENERAL_LEDGER'
   | 'TRIAL_BALANCE'
+  | 'FIXED_ASSETS'
   | 'FINANCIAL_STATEMENTS'
+  | 'FINANCIAL_NOTES'
   | 'AUDITOR_REPORT'
+  | 'AUDIT_WORKING_PAPERS'
   | 'CREDIT_SIMULATOR'
+  | 'TAX_EXPOSURE_SIMULATOR'
+  | 'ETA_RECONCILIATION'
+  | 'PAYROLL_INSURANCE'
   | 'OFFICE_TREASURY'
   | 'CLIENTS_ARCHIVE'
   | 'TAX_TRACKER'
@@ -547,7 +668,7 @@ export interface SystemUser {
   name: string;
   email: string;
   role: UserRole;
-  roleTitleArabic: string; // "مدير النظام والشريك المسؤول", "مراقب حسابات / مراجع أول", "محاسب مالي / مسجل قيود"
+  roleTitleArabic: string; // "مدير النظام والشريك المسؤول", "مراقب حسابات / مراجع أول", "محاسب مالي / مسجل قيود", "سكرتارية واستقبال"
   pinCode?: string; // e.g. "1234"
   avatarInitials?: string;
   canAccessTreasury: boolean;

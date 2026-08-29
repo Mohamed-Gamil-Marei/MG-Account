@@ -425,6 +425,132 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
+      {/* Audit, Tax & Working Papers Advanced Suite Cards */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-md border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-bold border border-indigo-500/30">
+                منظومة الفحص والمراجعة الميدانية والتحوط الضريبي (EAS / ESA)
+              </span>
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-white">
+              أدوات الفحص الضريبي وأوراق العمل والرواتب والإيضاحات المتممة
+            </h3>
+          </div>
+          <span className="hidden md:inline text-xs text-slate-400">
+            5 أنظمة تنفيذية متوافقة مع القوانين المصرية
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Working Papers */}
+          <button
+            onClick={() => navigate('AUDIT_WORKING_PAPERS')}
+            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-indigo-500 shadow-2xs"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800">
+                  ESA 320
+                </span>
+                <ShieldCheck className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xs font-bold text-white group-hover:text-indigo-300">
+                أوراق عمل المراجعة
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                الأهمية النسبية وملف توثيق أدلة الإثبات
+              </div>
+            </div>
+          </button>
+
+          {/* Tax Exposure Simulator */}
+          <button
+            onClick={() => navigate('TAX_EXPOSURE_SIMULATOR')}
+            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-red-500 shadow-2xs"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-red-400 bg-red-950/60 px-2 py-0.5 rounded border border-red-800">
+                  مخاطر وغرامات
+                </span>
+                <AlertTriangle className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xs font-bold text-white group-hover:text-red-300">
+                محاكي الفحص الضريبي
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                مطابقة ثلاثية وحساب غرامات م. 110
+              </div>
+            </div>
+          </button>
+
+          {/* ETA Invoices Reconciliation */}
+          <button
+            onClick={() => navigate('ETA_RECONCILIATION')}
+            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-teal-500 shadow-2xs"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-teal-400 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800">
+                  ETA SDK
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xs font-bold text-white group-hover:text-teal-300">
+                مطابقة الفواتير الإلكترونية
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                كشف الفواتير الملغاة والمرفوضة
+              </div>
+            </div>
+          </button>
+
+          {/* Payroll & Social Insurance */}
+          <button
+            onClick={() => navigate('PAYROLL_INSURANCE')}
+            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-sky-500 shadow-2xs"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800">
+                  قانون 148
+                </span>
+                <Percent className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xs font-bold text-white group-hover:text-sky-300">
+                كسب العمل والتأمينات
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                مسير الرواتب ونموذج (4) واستمارة (2)
+              </div>
+            </div>
+          </button>
+
+          {/* Financial Notes Builder */}
+          <button
+            onClick={() => navigate('FINANCIAL_NOTES')}
+            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-emerald-500 shadow-2xs"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                  EAS 1
+                </span>
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xs font-bold text-white group-hover:text-emerald-300">
+                الإيضاحات المتممة
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                كراسة الإفصاح والسياسات المحاسبية
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* Two Callout Cards from the Professional Polish theme */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
         <div className="bg-[#1E293B] text-white rounded-xl p-4 sm:p-5 flex items-center justify-between border border-slate-700 shadow-xs">
