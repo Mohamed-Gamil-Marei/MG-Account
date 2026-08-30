@@ -33,6 +33,7 @@ import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
+import { SecurityAuthService } from '../services/securityAuth';
 import { formDraftStorage } from '../utils/formDrafts';
 import { EtaSettingsModal } from './EtaSettingsModal';
 import { ExcelImportModal } from './ExcelImportModal';
@@ -268,6 +269,27 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
 
   const handleRequestEdit = (inv: Invoice) => {
     setInvoiceToEdit(inv);
+    if (!SecurityAuthService.isSecurityAuthEnabled()) {
+      // Direct edit without password modal
+      setEditingInvoiceId(inv.id);
+      setIsReceipt(Boolean(inv.isReceipt));
+      setDocType(inv.etaDocumentType || (inv.isReceipt ? 'R' : 'I'));
+      setReceiverType(inv.receiverType || 'B');
+      setInvoiceType(inv.invoiceType);
+      setDate(inv.date);
+      setDueDate(inv.dueDate || '');
+      setPartnerName(inv.partnerName);
+      setPartnerTaxNo(inv.partnerTaxNo || '');
+      setPartnerNationalId(inv.partnerNationalId || '');
+      setPartnerAddress(inv.partnerAddress || '');
+      setPaymentMethod((inv.paymentMethod as any) || 'BANK');
+      setNotes(inv.notes || '');
+      setItems(inv.items.map((it) => ({ ...it })));
+      setApplyWht(inv.totalWht > 0);
+      setSelectedInvoice(null);
+      setIsNewModalOpen(true);
+      return;
+    }
     setIsAuthModalOpen(true);
   };
 

@@ -53,6 +53,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   const [selectedClientId, setSelectedClientId] = useState<string>('');
 
   // Beneficiary details (Person vs Entity)
+  const [beneficiaryGender, setBeneficiaryGender] = useState<'MALE' | 'FEMALE'>('MALE');
   const [beneficiaryTitle, setBeneficiaryTitle] = useState<string>('السيد /');
   const [beneficiaryName, setBeneficiaryName] = useState<string>('د. سامح عبد العزيز النجار');
   const [nationalId, setNationalId] = useState<string>('27805120101948');
@@ -61,18 +62,24 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   
   // Entity / Business specifics
   const [commercialRegNo, setCommercialRegNo] = useState<string>('');
-  const [taxCardNo, setTaxCardNo] = useState<string>('560-192-384');
-  const [activityName, setActivityName] = useState<string>('عيادة النجار التخصصية لجراحة العظام');
+  const [taxCardNo, setTaxCardNo] = useState<string>('');
+  const [activityName, setActivityName] = useState<string>('عيادة النجار التخصصية');
+
+  // Examination basis preset & customized text (flexible phrasing)
+  const [examinationBasisType, setExaminationBasisType] = useState<string>('GENERAL_DOCS'); // 'GENERAL_DOCS' | 'BANK_STATEMENTS' | 'TAX_RETURNS' | 'CUSTOM'
+  const [customPreambleBasis, setCustomPreambleBasis] = useState<string>('بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والمصروفات');
+  const [customIntroText, setCustomIntroText] = useState<string>('');
+  const [customBodyText, setCustomBodyText] = useState<string>('');
 
   // Certificate specifications
   const [recipientOrganization, setRecipientOrganization] = useState<string>('السادة / بنك مصر - قطاع التمويل العقاري والائتمان');
   const [purpose, setPurpose] = useState<string>('لتقديمها للبنك بناءً على طلب العميل للحصول على تمويل عقاري لشراء وحدة سكنية ومهنية');
   const [certifiedAmount, setCertifiedAmount] = useState<number>(900000);
   const [monthlyAmount, setMonthlyAmount] = useState<number>(75000);
-  const [periodText, setPeriodText] = useState<string>('عن السنة المالية المنتهية في 31 ديسمبر 2025 ومتوسط الدخل الشهري المحقق');
+  const [periodText, setPeriodText] = useState<string>('عن متوسط الدخل السنوي والشهري لعام 2025');
   const [issueDate, setIssueDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [auditorNotes, setAuditorNotes] = useState<string>(
-    'بناءً على الفحص المستندي لدفاتر وسجلات الإيرادات والمصروفات والبطاقة الضريبية رقم 560-192-384 والإقرارات الضريبية المقدمة لمأمورية ضرائب المهن الحرة.'
+    'بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المؤيدة لمصادر الدخل المحققة.'
   );
 
   // Income Breakdown items (for natural persons with multiple sources)
@@ -198,6 +205,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
     const newCert = db.addCertificate({
       certificateType: certType,
       beneficiaryType: beneficiaryType,
+      beneficiaryGender: beneficiaryGender,
       issueDate: issueDate,
       clientId: selectedClientId || undefined,
       clientName: beneficiaryName,
@@ -219,6 +227,9 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
       solvencyNetWorth: certType === 'FINANCIAL_SOLVENCY' ? certifiedAmount : undefined,
       investedCapitalAmount: certType === 'INVESTED_CAPITAL' ? certifiedAmount : undefined,
       auditorNotes: auditorNotes,
+      customIntroText: customIntroText.trim() || undefined,
+      customBodyText: customBodyText.trim() || undefined,
+      customPreambleBasis: customPreambleBasis.trim() || undefined,
       qrPayload: `EGY-CERT|${certNumber}|43122|${beneficiaryType}|${beneficiaryName}|${certifiedAmount}_EGP|VALID`,
       securityHash: `${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
       printedCount: 1,
@@ -241,9 +252,10 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
 
   // Current view values
   const activeBeneficiaryType = selectedCertForView ? selectedCertForView.beneficiaryType : beneficiaryType;
+  const activeBeneficiaryGender = selectedCertForView?.beneficiaryGender || beneficiaryGender;
   const activeCertType = selectedCertForView ? selectedCertForView.certificateType : certType;
   const activeBeneficiaryName = selectedCertForView ? selectedCertForView.clientName : beneficiaryName;
-  const activeBeneficiaryTitle = selectedCertForView ? selectedCertForView.beneficiaryTitle : beneficiaryTitle;
+  const activeBeneficiaryTitle = selectedCertForView ? (selectedCertForView.beneficiaryTitle || (activeBeneficiaryGender === 'FEMALE' ? 'السيدة /' : 'السيد /')) : beneficiaryTitle;
   const activeNationalId = selectedCertForView ? selectedCertForView.nationalId : nationalId;
   const activeJobTitle = selectedCertForView ? selectedCertForView.jobTitle : jobTitle;
   const activeAddress = selectedCertForView ? selectedCertForView.address : address;
@@ -258,6 +270,10 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   const activeIssueDate = selectedCertForView ? selectedCertForView.issueDate : issueDate;
   const activeAuditorNotes = selectedCertForView ? selectedCertForView.auditorNotes : auditorNotes;
   const activeIncomeBreakdown = selectedCertForView ? (selectedCertForView.incomeBreakdown || []) : incomeSources;
+  const activeCustomIntroText = selectedCertForView ? selectedCertForView.customIntroText : customIntroText;
+  const activeCustomBodyText = selectedCertForView ? selectedCertForView.customBodyText : customBodyText;
+  const activeCustomPreambleBasis = selectedCertForView ? (selectedCertForView.customPreambleBasis || customPreambleBasis) : customPreambleBasis;
+
 
   // Title helper
   const getCertificateHeading = (type: CertificateTemplateType, benType: CertificateBeneficiaryType) => {
@@ -566,24 +582,61 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
 
             {/* Beneficiary Details Form */}
             <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200 space-y-3">
-              <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                {beneficiaryType === 'NATURAL_PERSON' ? <User className="w-4 h-4 text-blue-600" /> : <Building className="w-4 h-4 text-purple-600" />}
-                <span>
-                  {beneficiaryType === 'NATURAL_PERSON'
-                    ? 'بيانات الشخص الطبيعي (العميل الفرد / صاحب المهنة / الموظف)'
-                    : 'بيانات الشخص الاعتباري (الشركة / المنشأة التجارية)'}
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                  {beneficiaryType === 'NATURAL_PERSON' ? <User className="w-4 h-4 text-blue-600" /> : <Building className="w-4 h-4 text-purple-600" />}
+                  <span>
+                    {beneficiaryType === 'NATURAL_PERSON'
+                      ? 'بيانات الشخص الطبيعي (العميل الفرد / صاحب المهنة / الموظف)'
+                      : 'بيانات الشخص الاعتباري (الشركة / المنشأة التجارية)'}
+                  </span>
+                </div>
+
+                {/* Gender selector for Natural Persons */}
+                {beneficiaryType === 'NATURAL_PERSON' && (
+                  <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-300">
+                    <span className="text-[11px] font-bold text-slate-600 px-1.5">الصفة والنوع:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeneficiaryGender('MALE');
+                        setBeneficiaryTitle('السيد /');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        beneficiaryGender === 'MALE'
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      ذكر (السيد / المقيم)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeneficiaryGender('FEMALE');
+                        setBeneficiaryTitle('السيدة /');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        beneficiaryGender === 'FEMALE'
+                          ? 'bg-pink-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      أنثى (السيدة / المقيمة)
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-slate-600 font-bold mb-1">اللقب / الصفة</label>
+                  <label className="block text-slate-600 font-bold mb-1">اللقب / الصفة بالشهادة</label>
                   <input
                     type="text"
                     value={beneficiaryTitle}
                     onChange={(e) => setBeneficiaryTitle(e.target.value)}
-                    placeholder="السيد / السيد الدكتور / السادة"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                    placeholder={beneficiaryGender === 'FEMALE' ? 'السيدة / السيدة الدكتورة / الآنسة' : 'السيد / السيد المهندس / الدكتور'}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800"
                   />
                 </div>
 
@@ -619,8 +672,8 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                         type="text"
                         value={jobTitle}
                         onChange={(e) => setJobTitle(e.target.value)}
-                        placeholder="طبيب / مهندس / مستشار / موظف بشركة..."
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                        placeholder="طبيب / مهندسة / مستشار / أعمال حرة..."
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800"
                       />
                     </div>
                   </>
@@ -654,20 +707,20 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">
-                    {beneficiaryType === 'NATURAL_PERSON' ? 'طبيعة النشاط أو جهة العمل' : 'اسم النشاط / الغرض التجاري'}
+                    {beneficiaryType === 'NATURAL_PERSON' ? 'طبيعة النشاط أو جهة العمل (اختياري)' : 'اسم النشاط / الغرض التجاري'}
                   </label>
                   <input
                     type="text"
                     value={activityName}
                     onChange={(e) => setActivityName(e.target.value)}
-                    placeholder="عيادة خاصة / مكتب استشارات / شركة..."
+                    placeholder="عيادة خاصة / مكتب استشارات / نشاط حر..."
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
                   />
                 </div>
 
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">
-                    {beneficiaryType === 'NATURAL_PERSON' ? 'البطاقة الضريبية للمهنة الحرة (إن وجدت)' : 'عنوان المقر الرئيسي'}
+                    {beneficiaryType === 'NATURAL_PERSON' ? 'البطاقة الضريبية (اتركه فارغاً إن لم يوجد)' : 'عنوان المقر الرئيسي'}
                   </label>
                   <input
                     type="text"
@@ -676,7 +729,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                       if (beneficiaryType === 'NATURAL_PERSON') setTaxCardNo(e.target.value);
                       else setAddress(e.target.value);
                     }}
-                    placeholder={beneficiaryType === 'NATURAL_PERSON' ? '560-192-384' : 'المعادي - القاهرة'}
+                    placeholder={beneficiaryType === 'NATURAL_PERSON' ? 'اتركه فارغاً إن لم يوجد' : 'المعادي - القاهرة'}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
                   />
                 </div>
@@ -695,6 +748,125 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 </div>
               </div>
             </div>
+
+            {/* Examination Basis & Wording Flexibility Selector */}
+            <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-700" />
+                  <span>مرونة صياغة الشهادة وسند الفحص (بدون كشوف حسابات أو إقرارات إذا رغبت)</span>
+                </div>
+                <span className="text-[11px] text-amber-800 font-medium">
+                  اختر النموذج الأنسب أو اكتب صياغتك المخصصة بالكامل
+                </span>
+              </div>
+
+              {/* Preset Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExaminationBasisType('GENERAL_DOCS');
+                    const isF = beneficiaryGender === 'FEMALE';
+                    setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والدخل');
+                    setAuditorNotes('بناءً على الفحص المستندي للوثائق والمستندات والعقود المقدمة من العميل والمؤيدة لمصادر الدخل المحقق.');
+                  }}
+                  className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                    examinationBasisType === 'GENERAL_DOCS'
+                      ? 'bg-amber-100/90 border-amber-600 text-amber-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>1. مستندي عام (بدون كشوف أو ضرائب)</span>
+                    {examinationBasisType === 'GENERAL_DOCS' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    فحص مستندات وإيرادات فقط دون ذكر كشوف بنكية أو إقرارات ضريبية.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExaminationBasisType('CONTRACTS_RECEIPTS');
+                    setCustomPreambleBasis('بناءً على الاطلاع على عقود العمل والاستشارات وإيصالات المعاملات وإفادات جهة العمل المؤيدة للدخل');
+                    setAuditorNotes('بناءً على الاطلاع على عقود العمل ومستندات الإيرادات وإيصالات التحصيل المقدمة.');
+                  }}
+                  className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                    examinationBasisType === 'CONTRACTS_RECEIPTS'
+                      ? 'bg-amber-100/90 border-amber-600 text-amber-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>2. عقود وإفادات دخل</span>
+                    {examinationBasisType === 'CONTRACTS_RECEIPTS' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    الاستناد إلى عقود الاستشارات، العمل، وإفادات الدخل والإيراد.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExaminationBasisType('FULL_AUDIT');
+                    setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للسجلات المحاسبية المنتظمة، وكشوف الحسابات المصرفية، والإقرارات الضريبية المعتمدة');
+                    setAuditorNotes('بناءً على الفحص المكتبي لكشوف الحسابات البنكية والسجلات والدفاتر المحاسبية والإقرارات الضريبية.');
+                  }}
+                  className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                    examinationBasisType === 'FULL_AUDIT'
+                      ? 'bg-amber-100/90 border-amber-600 text-amber-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>3. فحص كامل (كشوف وإقرارات)</span>
+                    {examinationBasisType === 'FULL_AUDIT' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    للشركات والعملاء الراغبين في ذكر كشوف الحسابات والإقرارات.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setExaminationBasisType('CUSTOM')}
+                  className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                    examinationBasisType === 'CUSTOM'
+                      ? 'bg-amber-100/90 border-amber-600 text-amber-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>4. صياغة مخصصة يدوياً</span>
+                    {examinationBasisType === 'CUSTOM' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    تعديل نص سند الفحص والمقدمة يدوياً وحفظها مع الشهادة.
+                  </div>
+                </button>
+              </div>
+
+              {/* Editable Preamble Basis */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1 text-xs">
+                  نص عبارة الفحص والاستناد في مقدمة الشهادة (قابل للتعديل بحرية):
+                </label>
+                <input
+                  type="text"
+                  value={customPreambleBasis}
+                  onChange={(e) => {
+                    setCustomPreambleBasis(e.target.value);
+                    setExaminationBasisType('CUSTOM');
+                  }}
+                  placeholder="اكتب عبارة الفحص هنا (مثال: بناءً على المستندات والعقود المؤيدة للإيراد...)"
+                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-amber-50/30"
+                />
+              </div>
+            </div>
+
 
             {/* Financial Parameters & Recipient */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -796,7 +968,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               </div>
             )}
 
-            {/* Purpose and Auditor Notes */}
+            {/* Purpose, Custom Text and Auditor Notes */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">الغرض من إصدار الشهادة</label>
@@ -817,6 +989,34 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
                 />
               </div>
+            </div>
+
+            {/* Optional Full Custom Body Override */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-slate-800 font-bold text-xs">
+                  كتابة نص مخصص بالكامل لصلب الشهادة (اختياري - لتجاوز الصياغة التلقائية تماماً):
+                </label>
+                {customBodyText && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomBodyText('')}
+                    className="text-xs text-red-600 hover:underline cursor-pointer"
+                  >
+                    استعادة الصياغة التلقائية
+                  </button>
+                )}
+              </div>
+              <textarea
+                rows={3}
+                value={customBodyText}
+                onChange={(e) => setCustomBodyText(e.target.value)}
+                placeholder="إذا كنت ترغب في صياغة مخصصة يدوياً بدون أي شروط، اكتب النص الكامل هنا وسيتم طباعته كما هو تماماً مع بيانات الشهادة والختم..."
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs leading-relaxed"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                عند ترك هذا الحقل فارغاً، يتم استخدام الصياغة الرسمية الذكية المعتمدة تلقائياً بناءً على النوع (ذكر / أنثى) وسند الفحص المختار.
+              </p>
             </div>
 
             {/* Save & Document Button */}
@@ -849,7 +1049,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               <div className="text-left font-mono text-[11px] text-slate-600 space-y-1">
                 <div>رقم الشهادة: <strong className="text-emerald-950">{certNumber}</strong></div>
                 <div>تاريخ الإصدار: <strong>{activeIssueDate}</strong></div>
-                <div>نوع الكيان: <strong>{activeBeneficiaryType === 'NATURAL_PERSON' ? 'شخص طبيعي' : 'شخص اعتباري'}</strong></div>
+                <div>نوع الكيان: <strong>{activeBeneficiaryType === 'NATURAL_PERSON' ? (activeBeneficiaryGender === 'FEMALE' ? 'شخص طبيعي (أنثى)' : 'شخص طبيعي (ذكر)') : 'شخص اعتباري'}</strong></div>
               </div>
             </div>
 
@@ -872,23 +1072,31 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
 
             {/* Body Text */}
             <div className="space-y-4 text-justify text-slate-800 leading-7 text-xs sm:text-sm">
-              {activeBeneficiaryType === 'NATURAL_PERSON' ? (
-                /* NATURAL PERSON BODY TEMPLATE */
+              {activeCustomBodyText ? (
+                /* USER CUSTOM BODY OVERRIDE */
+                <p className="whitespace-pre-line leading-8 font-normal">
+                  {activeCustomBodyText}
+                </p>
+              ) : activeBeneficiaryType === 'NATURAL_PERSON' ? (
+                /* NATURAL PERSON BODY TEMPLATE (GENDER AWARE) */
                 <p>
-                  بناءً على طلب العميل / <strong>{activeBeneficiaryTitle} {activeBeneficiaryName}</strong>
+                  بناءً على طلب {activeBeneficiaryGender === 'FEMALE' ? 'العميلة' : 'العميل'} / <strong>{activeBeneficiaryTitle} {activeBeneficiaryName}</strong>
                   {activeNationalId && (
-                    <> - حامل بطاقة الرقم القومي رقم (<strong className="font-mono">{activeNationalId}</strong>)</>
+                    <> - بطاقة الرقم القومي رقم (<strong className="font-mono">{activeNationalId}</strong>)</>
                   )}
                   {activeJobTitle && (
-                    <> - والمهنة: <strong>{activeJobTitle}</strong></>
+                    <> - {activeBeneficiaryGender === 'FEMALE' ? 'والمهنة / الوظيفة' : 'والمهنة / الوظيفة'}: <strong>{activeJobTitle}</strong></>
                   )}
                   {activeAddress && (
-                    <> - المقيم في: <strong>{activeAddress}</strong></>
+                    <> - {activeBeneficiaryGender === 'FEMALE' ? 'المقيمة في' : 'المقيم في'}: <strong>{activeAddress}</strong></>
                   )}
                   {activeTaxCardNo && (
                     <> - وبطاقة ضريبية رقم (<strong className="font-mono">{activeTaxCardNo}</strong>)</>
                   )}
-                  ، وبناءً على الفحص المكتبي والمستندي للوثائق والمستندات المؤيدة للإيرادات والمصروفات، وكشوف الحسابات المصرفية المنتظمة، والإقرارات الضريبية المقدمة لمصلحة الضرائب المصرية:
+                  {activeActivityName && (
+                    <> - ونشاط: <strong>{activeActivityName}</strong></>
+                  )}
+                  ، و{activeCustomPreambleBasis || 'بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والدخل'}:
                 </p>
               ) : (
                 /* LEGAL ENTITY BODY TEMPLATE */
@@ -903,9 +1111,10 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   {activeAddress && (
                     <> - الكائن مقرها في: <strong>{activeAddress}</strong></>
                   )}
-                  ، وبصفتنا المحاسب القانوني ومراقب الحسابات للنشاط المذكور أعلاه، وبناءً على المراجعة والفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، وموازين المراجعة، والقوائم المالية والإقرارات الضريبية المعتمدة:
+                  ، وبصفتنا المحاسب القانوني ومراقب الحسابات للنشاط المذكور أعلاه، و{activeCustomPreambleBasis || 'بناءً على المراجعة والفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، وموازين المراجعة، والقوائم المالية والإقرارات الضريبية المعتمدة'}:
                 </p>
               )}
+
 
               {/* Highlighted Certified Amount Box */}
               <div className="p-5 rounded-xl bg-slate-50 border-2 border-slate-300 space-y-3">

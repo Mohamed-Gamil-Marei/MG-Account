@@ -63,6 +63,8 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   themeMode: 'light',
   brandColor: 'blue',
   compactView: false,
+  securityAuthEnabled: false,
+  customEditPassword: 'Mg120',
 };
 
 export interface DatabaseState {

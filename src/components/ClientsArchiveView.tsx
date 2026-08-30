@@ -45,6 +45,7 @@ import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
+import { SecurityAuthService } from '../services/securityAuth';
 import { ClientDocumentManager } from './ClientDocumentManager';
 import { ClientNotificationModal } from './ClientNotificationModal';
 
@@ -176,6 +177,31 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
 
   const handleRequestEditClient = (client: ClientArchiveRecord) => {
     setClientToEdit(client);
+    if (!SecurityAuthService.isSecurityAuthEnabled()) {
+      // Direct edit without password modal
+      setEditingClientId(client.id);
+      setClientFormData({
+        name: client.name,
+        clientCode: client.clientCode,
+        clientType: client.clientType,
+        companyType: client.companyType,
+        commercialRegistrationNo: client.commercialRegistrationNo || '',
+        taxCardNo: client.taxCardNo || '',
+        taxOffice: client.taxOffice || '',
+        incomeTaxFileNo: client.incomeTaxFileNo || '',
+        vatRegistrationNo: client.vatRegistrationNo || '',
+        socialInsuranceNo: client.socialInsuranceNo || '',
+        capital: client.capital || 0,
+        activity: client.activity || '',
+        contactPerson: client.contactPerson || '',
+        phone: client.phone || '',
+        email: client.email || '',
+        address: client.address || '',
+        notes: client.notes || '',
+      });
+      setIsAddClientModalOpen(true);
+      return;
+    }
     setIsAuthModalOpen(true);
   };
 

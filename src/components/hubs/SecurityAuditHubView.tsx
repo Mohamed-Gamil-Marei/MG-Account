@@ -9,6 +9,11 @@ import {
   ShieldAlert,
   Database,
   Sparkles,
+  Lock,
+  KeyRound,
+  CheckCircle2,
+  Check,
+  Sliders,
 } from 'lucide-react';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { AuditTrailView } from '../AuditTrailView';
@@ -244,6 +249,92 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
 
         {activeSubTab === 'USERS_DEVICES' && (
           <div className="space-y-6">
+            {/* Master Security PIN / Password Settings Toggle */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center">
+                    <KeyRound className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-slate-900">سياسة طلب الرقم السري عند التعديل والحذف</h3>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        state.preferences?.securityAuthEnabled
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {state.preferences?.securityAuthEnabled ? 'مفعل (مطلوب كلمة سر)' : 'معطل (تعديل مباشر)'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      تحكم اختياري: يمكنك تفعيل أو إلغاء نافذة الرقم السري عند تعديل الفواتير، القيود اليومية، أو بيانات العملاء.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      const newEnabled = !state.preferences?.securityAuthEnabled;
+                      db.updatePreferences({
+                        securityAuthEnabled: newEnabled,
+                      });
+                    }}
+                    id="btn-toggle-security-auth"
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs ${
+                      state.preferences?.securityAuthEnabled
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    }`}
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>
+                      {state.preferences?.securityAuthEnabled
+                        ? 'إلغاء تفعيل التحقق بالرقم السري'
+                        : 'تفعيل التحقق بالرقم السري'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 text-xs">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-500 block mb-1 font-semibold">حالة التحقق الحالية:</span>
+                  <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                    {state.preferences?.securityAuthEnabled ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="text-amber-700">يطلب الرقم السري قبل فتح أي تعديل</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700">دخول وتعديل مباشر بدون طلب أرقام سرية</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-500 block mb-1 font-semibold">كلمة المرور المعتمدة:</span>
+                  <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block">
+                    {state.preferences?.customEditPassword || 'Mg120'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-1">(تقبل حروف كبيرة أو صغيرة مثل mg120 أو Mg120)</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-500 block mb-1 font-semibold">تأمين الباركود والشهادات:</span>
+                  <span className="font-bold text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>مفعل ويعمل بكفاءة عبر التوقيع الرقمي</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-1">تشفير QR والختم الإلكتروني مستقل تماماً</span>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Multi-user RBAC Card */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between">

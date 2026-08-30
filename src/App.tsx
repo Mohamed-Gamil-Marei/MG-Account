@@ -1,41 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { db, DatabaseState } from './db/localDatabase';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
-import { ChartOfAccountsView } from './components/ChartOfAccountsView';
-import { JournalEntriesView } from './components/JournalEntriesView';
-import { GeneralLedgerView } from './components/GeneralLedgerView';
-import { TrialBalanceView } from './components/TrialBalanceView';
-import { FinancialStatementsView } from './components/FinancialStatementsView';
-import { FinancialNotesBuilderView } from './components/FinancialNotesBuilderView';
-import { AuditorReportView } from './components/AuditorReportView';
-import { AuditWorkingPapersView } from './components/AuditWorkingPapersView';
-import { TaxExposureSimulatorView } from './components/TaxExposureSimulatorView';
-import { EtaReconciliationView } from './components/EtaReconciliationView';
-import { PayrollInsuranceEngineView } from './components/PayrollInsuranceEngineView';
-import { CreditFinancialsSimulator } from './components/CreditFinancialsSimulator';
-import { OfficeTreasuryView } from './components/OfficeTreasuryView';
-import { ClientsArchiveView } from './components/ClientsArchiveView';
-import { TaxTrackerView } from './components/TaxTrackerView';
-import { CertificatesGeneratorView } from './components/CertificatesGeneratorView';
-import { FeasibilityStudyView } from './components/FeasibilityStudyView';
-import { InvoicingView } from './components/InvoicingView';
-import { AuditTrailView } from './components/AuditTrailView';
-import { AccountingHubView } from './components/hubs/AccountingHubView';
-import { FinancialReportingHubView } from './components/hubs/FinancialReportingHubView';
-import { TaxAuditHubView } from './components/hubs/TaxAuditHubView';
-import { OfficePracticeHubView } from './components/hubs/OfficePracticeHubView';
-import { SecurityAuditHubView } from './components/hubs/SecurityAuditHubView';
-import { BackupExportModal } from './components/BackupExportModal';
-import { DesktopAppModal } from './components/DesktopAppModal';
-import { UpdateNotificationModal } from './components/UpdateNotificationModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { GlobalSearchBar } from './components/GlobalSearchBar';
-import { UserManagerModal } from './components/UserManagerModal';
 import { AccessRestrictedGate } from './components/AccessRestrictedGate';
 import { ThemeToggle } from './components/ThemeToggle';
-import { DeviceLockModal } from './components/DeviceLockModal';
-import { PurgeDatabaseModal } from './components/PurgeDatabaseModal';
 import { SecurityAuthService } from './services/securityAuth';
 import { NavigationTab, SystemUser, BrandColor, ThemeMode } from './types';
 import {
@@ -60,6 +29,33 @@ import {
   Lock,
   Trash2,
 } from 'lucide-react';
+
+// Lazy load Hubs and Modals for instant startup and lightweight memory footprint
+const AccountingHubView = lazy(() => import('./components/hubs/AccountingHubView').then(m => ({ default: m.AccountingHubView })));
+const FinancialReportingHubView = lazy(() => import('./components/hubs/FinancialReportingHubView').then(m => ({ default: m.FinancialReportingHubView })));
+const TaxAuditHubView = lazy(() => import('./components/hubs/TaxAuditHubView').then(m => ({ default: m.TaxAuditHubView })));
+const OfficePracticeHubView = lazy(() => import('./components/hubs/OfficePracticeHubView').then(m => ({ default: m.OfficePracticeHubView })));
+const SecurityAuditHubView = lazy(() => import('./components/hubs/SecurityAuditHubView').then(m => ({ default: m.SecurityAuditHubView })));
+const InvoicingView = lazy(() => import('./components/InvoicingView').then(m => ({ default: m.InvoicingView })));
+
+const BackupExportModal = lazy(() => import('./components/BackupExportModal').then(m => ({ default: m.BackupExportModal })));
+const DesktopAppModal = lazy(() => import('./components/DesktopAppModal').then(m => ({ default: m.DesktopAppModal })));
+const UpdateNotificationModal = lazy(() => import('./components/UpdateNotificationModal').then(m => ({ default: m.UpdateNotificationModal })));
+const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
+const UserManagerModal = lazy(() => import('./components/UserManagerModal').then(m => ({ default: m.UserManagerModal })));
+const DeviceLockModal = lazy(() => import('./components/DeviceLockModal').then(m => ({ default: m.DeviceLockModal })));
+const PurgeDatabaseModal = lazy(() => import('./components/PurgeDatabaseModal').then(m => ({ default: m.PurgeDatabaseModal })));
+
+function HubLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px] w-full">
+      <div className="flex flex-col items-center gap-3 text-slate-500">
+        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-xs font-semibold text-slate-600">جاري تحميل الوحدة بسرعة وسلاسة...</span>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [state, setState] = useState<DatabaseState>(db.getState());
@@ -719,7 +715,9 @@ export default function App() {
           }`}
         >
           <div className="max-w-7xl mx-auto space-y-6">
-            {renderActiveView()}
+            <Suspense fallback={<HubLoadingFallback />}>
+              {renderActiveView()}
+            </Suspense>
           </div>
         </main>
 
@@ -743,66 +741,76 @@ export default function App() {
         </footer>
       </div>
 
-      {/* Backup & Export Modal */}
-      {isBackupModalOpen && (
-        <BackupExportModal
-          state={state}
-          onClose={() => setIsBackupModalOpen(false)}
-        />
-      )}
+      <Suspense fallback={null}>
+        {/* Backup & Export Modal */}
+        {isBackupModalOpen && (
+          <BackupExportModal
+            state={state}
+            onClose={() => setIsBackupModalOpen(false)}
+          />
+        )}
 
-      {/* Desktop App Installation / Download Modal */}
-      {isDesktopModalOpen && (
-        <DesktopAppModal
-          state={state}
-          onClose={() => setIsDesktopModalOpen(false)}
-        />
-      )}
+        {/* Desktop App Installation / Download Modal */}
+        {isDesktopModalOpen && (
+          <DesktopAppModal
+            state={state}
+            onClose={() => setIsDesktopModalOpen(false)}
+          />
+        )}
 
-      {/* Update Notification Modal */}
-      {isUpdateModalOpen && availableUpdate && (
-        <UpdateNotificationModal
-          versionInfo={availableUpdate}
-          onClose={() => setIsUpdateModalOpen(false)}
-          onOpenDesktopModal={() => {
-            setIsUpdateModalOpen(false);
-            setIsDesktopModalOpen(true);
-          }}
-        />
-      )}
+        {/* Update Notification Modal */}
+        {isUpdateModalOpen && availableUpdate && (
+          <UpdateNotificationModal
+            versionInfo={availableUpdate}
+            onClose={() => setIsUpdateModalOpen(false)}
+            onOpenDesktopModal={() => {
+              setIsUpdateModalOpen(false);
+              setIsDesktopModalOpen(true);
+            }}
+          />
+        )}
 
-      {/* Keyboard Shortcuts Command Palette Modal */}
-      <KeyboardShortcutsModal
-        isOpen={isShortcutsModalOpen}
-        onClose={() => setIsShortcutsModalOpen(false)}
-        onNavigate={(tabId) => setActiveTab(tabId)}
-        onOpenBackupModal={() => setIsBackupModalOpen(true)}
-        onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
-        onCheckUpdate={handleManualCheckUpdate}
-      />
+        {/* Keyboard Shortcuts Command Palette Modal */}
+        {isShortcutsModalOpen && (
+          <KeyboardShortcutsModal
+            isOpen={isShortcutsModalOpen}
+            onClose={() => setIsShortcutsModalOpen(false)}
+            onNavigate={(tabId) => setActiveTab(tabId)}
+            onOpenBackupModal={() => setIsBackupModalOpen(true)}
+            onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
+            onCheckUpdate={handleManualCheckUpdate}
+          />
+        )}
 
-      {/* User Manager RBAC Modal */}
-      <UserManagerModal
-        isOpen={isUserManagerOpen}
-        onClose={() => setIsUserManagerOpen(false)}
-        state={state}
-      />
+        {/* User Manager RBAC Modal */}
+        {isUserManagerOpen && (
+          <UserManagerModal
+            isOpen={isUserManagerOpen}
+            onClose={() => setIsUserManagerOpen(false)}
+            state={state}
+          />
+        )}
 
-      {/* Anti-Theft Device Lock & Binding Modal */}
-      <DeviceLockModal
-        isOpen={isDeviceModalOpen || isDeviceEnforcedLocked}
-        isEnforced={isDeviceEnforcedLocked}
-        onClose={() => {
-          setIsDeviceModalOpen(false);
-          setIsDeviceEnforcedLocked(false);
-        }}
-      />
+        {/* Anti-Theft Device Lock & Binding Modal */}
+        {(isDeviceModalOpen || isDeviceEnforcedLocked) && (
+          <DeviceLockModal
+            isOpen={isDeviceModalOpen || isDeviceEnforcedLocked}
+            isEnforced={isDeviceEnforcedLocked}
+            onClose={() => {
+              setIsDeviceModalOpen(false);
+              setIsDeviceEnforcedLocked(false);
+            }}
+          />
+        )}
 
-      {/* Complete Data Purge Modal (Protected by Mgacc120) */}
-      <PurgeDatabaseModal
-        isOpen={isPurgeModalOpen}
-        onClose={() => setIsPurgeModalOpen(false)}
-      />
+        {/* Complete Data Purge Modal (Protected by Mgacc120) */}
+        {isPurgeModalOpen && (
+          <PurgeDatabaseModal
+            isOpen={isPurgeModalOpen}
+            onClose={() => setIsPurgeModalOpen(false)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

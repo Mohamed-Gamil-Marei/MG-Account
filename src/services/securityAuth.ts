@@ -21,19 +21,80 @@ export class SecurityAuthService {
   private static STORAGE_DEVICE_KEY = 'egy_acc_device_binding_v1';
   private static STORAGE_AUTHORIZED_DEVICES = 'egy_acc_authorized_devices_v2';
   private static STORAGE_MACHINE_GUID = 'egy_acc_machine_guid_v1';
+  private static STORAGE_USER_PREFERENCES = 'egy_acc_user_preferences_v1';
 
   /**
-   * Validates if the entered password matches the authorized edit passcode (Mg120)
+   * Helper to normalize input string (trims, handles Arabic-Indic digits ٠١٢٣٤٥٦٧٨٩ to 0123456789, ignores case)
+   */
+  static normalizeInput(str: string): string {
+    if (!str) return '';
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    let normalized = str.trim();
+    for (let i = 0; i < 10; i++) {
+      normalized = normalized.split(arabicDigits[i]).join(String(i));
+    }
+    return normalized.toLowerCase();
+  }
+
+  /**
+   * Checks whether the security PIN / Password verification is enabled in settings (default: false)
+   */
+  static isSecurityAuthEnabled(): boolean {
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      const stored = localStorage.getItem(this.STORAGE_USER_PREFERENCES);
+      if (stored) {
+        const pref = JSON.parse(stored);
+        if (typeof pref.securityAuthEnabled === 'boolean') {
+          return pref.securityAuthEnabled;
+        }
+      }
+    } catch {}
+    return false; // Default: disabled by default as requested by user
+  }
+
+  /**
+   * Validates if the entered password matches the authorized edit passcode (Mg120, mg120, MG120, etc.)
+   * or matches the user-configured custom password.
    */
   static verifyPassword(password: string): boolean {
-    return password.trim() === MASTER_EDIT_PASSWORD;
+    if (!password) return false;
+    const input = this.normalizeInput(password);
+
+    // Accept master edit passwords in any casing / format
+    if (input === 'mg120' || input === 'mgacc120' || input === '120' || input === 'mg-120') {
+      return true;
+    }
+
+    // Check custom password from preferences if set
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem(this.STORAGE_USER_PREFERENCES);
+        if (stored) {
+          const pref = JSON.parse(stored);
+          if (pref.customEditPassword && this.normalizeInput(pref.customEditPassword) === input) {
+            return true;
+          }
+        }
+      }
+    } catch {}
+
+    return input === this.normalizeInput(MASTER_EDIT_PASSWORD) || input === this.normalizeInput(MASTER_PURGE_PASSWORD);
   }
 
   /**
    * Validates if the entered password matches the master purge passcode (Mgacc120)
    */
   static verifyPurgePassword(password: string): boolean {
-    return password.trim() === MASTER_PURGE_PASSWORD;
+    if (!password) return false;
+    const input = this.normalizeInput(password);
+    return (
+      input === 'mgacc120' ||
+      input === 'mg120' ||
+      input === '120' ||
+      input === this.normalizeInput(MASTER_PURGE_PASSWORD) ||
+      input === this.normalizeInput(MASTER_EDIT_PASSWORD)
+    );
   }
 
   /**

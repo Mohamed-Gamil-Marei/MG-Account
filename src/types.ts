@@ -252,7 +252,12 @@ export interface ProfessionalCertificate {
   issueDate: string;
   clientId?: string;
   clientName: string;
-  beneficiaryTitle?: string; // e.g. "السيد المهندس", "الدكتور", "السيدة", "السادة"
+  beneficiaryTitle?: string; // اللقب أو الصفة (مثل: السيد /، السيدة /، الدكتور /)
+  beneficiaryGender?: 'MALE' | 'FEMALE'; // ذكر أو أنثى لضبط الصياغة والتأنيث/التذكير
+  customIntroText?: string; // صيغة مخصصة للديباجة ومقدمة الشهادة
+  customBodyText?: string; // صيغة مخصصة لمتن الشهادة
+  customPreambleBasis?: string; // صيغة الفحص والاستناد المخصصة
+
   nationalId?: string; // الرقم القومي (14 رقم) للأشخاص الطبيعيين
   jobTitle?: string; // المهنة / الوظيفة الحالية للأشخاص الطبيعيين
   address?: string; // محل الإقامة أو المقر
@@ -554,6 +559,8 @@ export interface UserPreferences {
   themeMode: ThemeMode;
   brandColor: BrandColor;
   compactView?: boolean;
+  securityAuthEnabled?: boolean; // تفعيل أو إلغاء التحقق بالرقم السري عند التعديل
+  customEditPassword?: string;   // كلمة المرور المخصصة للتعديل (الافتراضية: Mg120)
 }
 
 export type FixedAssetCategory =

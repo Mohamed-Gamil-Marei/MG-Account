@@ -33,6 +33,7 @@ import { JournalEntry, JournalEntryLine, Account, CurrencyCode } from '../types'
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { SecurityAuthModal } from './SecurityAuthModal';
+import { SecurityAuthService } from '../services/securityAuth';
 import { formDraftStorage } from '../utils/formDrafts';
 import { currencyService, SUPPORTED_CURRENCIES } from '../utils/currencyService';
 
@@ -555,6 +556,23 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
   const handleRequestEdit = (entry: JournalEntry) => {
     setEntryToEdit(entry);
+    if (!SecurityAuthService.isSecurityAuthEnabled()) {
+      // Security PIN is disabled in settings -> Open directly without password
+      setEditingEntryId(entry.id);
+      setDate(entry.date);
+      setDescription(entry.description);
+      setEntryType(entry.entryType || 'GENERAL');
+      setEntryCurrency(entry.currency || 'EGP');
+      setExchangeRate(entry.exchangeRate || 1.0);
+      setLines(entry.lines.map((l) => ({
+        ...l,
+        currency: l.currency || entry.currency || 'EGP',
+        exchangeRate: l.exchangeRate || entry.exchangeRate || 1.0,
+      })));
+      setSelectedEntryForView(null);
+      setIsNewEntryModalOpen(true);
+      return;
+    }
     setIsAuthModalOpen(true);
   };
 

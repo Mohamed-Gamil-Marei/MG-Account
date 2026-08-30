@@ -13,14 +13,21 @@ import {
 import { SecurityAuthService, MASTER_EDIT_PASSWORD } from '../services/securityAuth';
 
 interface SecurityAuthModalProps {
+  isOpen?: boolean;
   title?: string;
+  actionTitle?: string;
+  description?: string;
   itemDescription?: string;
+  actionType?: string;
   onSuccess: () => void;
   onClose: () => void;
 }
 
 export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
+  isOpen = true,
   title = 'تأكيد إذن تعديل السجل المحاسبي',
+  actionTitle,
+  description,
   itemDescription = 'البيانات المعروضة حالياً تعمل في (نظام عرض البيانات) لمنع التعديل غير المقصود.',
   onSuccess,
   onClose,
@@ -30,6 +37,11 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  if (isOpen === false) return null;
+
+  const displayTitle = actionTitle || title;
+  const displayDescription = description || itemDescription;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (SecurityAuthService.verifyPassword(password)) {
@@ -37,9 +49,9 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
       setIsSuccess(true);
       setTimeout(() => {
         onSuccess();
-      }, 400);
+      }, 300);
     } else {
-      setErrorMessage('الرقم السري غير صحيح! يرجى إدخال الرقم السري المصرح به (Mg120).');
+      setErrorMessage('الرقم السري غير مطابق! (الرقم السري الافتراضي: Mg120)');
     }
   };
 
@@ -54,9 +66,9 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
             </div>
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60">
-                حماية السجلات المحاسبية
+                حماية وتأمين السجلات
               </span>
-              <h3 className="text-sm font-bold text-white mt-1">{title}</h3>
+              <h3 className="text-sm font-bold text-white mt-1">{displayTitle}</h3>
             </div>
           </div>
 
@@ -73,10 +85,10 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
           <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2.5">
             <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
             <div className="text-slate-700 text-xs leading-relaxed">
-              <p className="font-semibold text-slate-900 mb-0.5">وضع الحماية وعرض البيانات مفعّل</p>
-              <p>{itemDescription}</p>
+              <p className="font-semibold text-slate-900 mb-0.5">وضع الحماية وعرض البيانات</p>
+              <p>{displayDescription}</p>
               <p className="mt-1 text-[11px] text-amber-900 font-bold">
-                أدخل الرقم السري المصرح به للتعديل (<span className="font-mono text-emerald-800">Mg120</span>) لفتح وضع التعديل الكامل.
+                أدخل الرقم السري المصرح به (<span className="font-mono text-emerald-800 font-bold">Mg120</span>) لتأكيد العملية.
               </p>
             </div>
           </div>
@@ -85,7 +97,7 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
             <label className="block text-slate-700 font-bold mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-slate-500" />
-                <span>الرقم السري لأمر التعديل:</span>
+                <span>الرقم السري للتأكيد:</span>
               </span>
               <span className="text-[11px] font-mono text-slate-400">Mg120</span>
             </label>
@@ -100,7 +112,8 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
                   if (errorMessage) setErrorMessage(null);
                 }}
                 placeholder="أدخل الرقم السري (Mg120)..."
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 pl-10"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 pl-10 text-right"
+                dir="ltr"
               />
               <button
                 type="button"
@@ -123,7 +136,7 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
           {isSuccess && (
             <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>تم التحقق من الصلاحية بنجاح! جاري فتح وضع التعديل...</span>
+              <span>تم التحقق بنجاح! جاري المتابعة...</span>
             </div>
           )}
 
@@ -142,7 +155,7 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <KeyRound className="w-3.5 h-3.5" />
-              <span>تأكيد وفتح التعديل</span>
+              <span>تأكيد المتابعة</span>
             </button>
           </div>
         </form>
