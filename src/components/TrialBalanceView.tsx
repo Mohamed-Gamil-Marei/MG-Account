@@ -11,6 +11,7 @@ import {
 import { db, DatabaseState } from '../db/localDatabase';
 import { computeAccountBalances } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import * as XLSX from 'xlsx';
 
 interface TrialBalanceViewProps {
@@ -120,20 +121,11 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state }) => 
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={exportExcel}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>تصدير إكسل</span>
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة الميزان المعتمد</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="ACCOUNTS"
+            title="ميزان المراجعة بالمجاميع والأرصدة"
+            count={leafAccounts.length}
+          />
         </div>
       </div>
 

@@ -21,6 +21,7 @@ import {
 } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface FinancialStatementsViewProps {
   state: DatabaseState;
@@ -67,13 +68,11 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </select>
           </div>
 
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة القوائم المعتمدة</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="FINANCIAL_STATEMENTS"
+            title="القوائم المالية والحسابات الختامية"
+            showImport={false}
+          />
         </div>
       </div>
 

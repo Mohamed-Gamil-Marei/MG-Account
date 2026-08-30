@@ -17,6 +17,7 @@ import { Account, AccountCategory, AccountNature } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { computeAccountBalances } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface ChartOfAccountsViewProps {
   state: DatabaseState;
@@ -179,13 +180,11 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ state 
             </button>
           </div>
 
-          <button
-            onClick={() => db.exportTableToExcel('ACCOUNTS')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>تصدير إكسل</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="ACCOUNTS"
+            title="دليل شجرة الحسابات"
+            count={filteredAccounts.length}
+          />
 
           <button
             onClick={() => handleOpenAdd()}

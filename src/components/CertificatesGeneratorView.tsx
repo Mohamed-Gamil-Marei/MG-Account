@@ -32,6 +32,7 @@ import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { ProfessionalCertificate, CertificateBeneficiaryType, CertificateTemplateType } from '../types';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface CertificatesGeneratorViewProps {
   state: DatabaseState;
@@ -354,13 +355,11 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
             </button>
           </div>
 
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة الشهادة الرسمية</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="CERTIFICATES"
+            title="الشهادات المهنية المعتمدة"
+            count={certificates.length}
+          />
         </div>
       </div>
 
@@ -1180,6 +1179,9 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 <div className="text-emerald-800 font-semibold">{profile.title}</div>
                 <div className="text-slate-600 font-mono text-[11px]">
                   رقم القيد بسجل المحاسبين والمراجعين بوزارة المالية: <strong>{profile.licenseNumber || 'س.م.م / 43122'}</strong>
+                </div>
+                <div className="text-emerald-950 font-mono font-bold text-[11px]">
+                  هاتف المكتب والتواصل: <strong>{profile.phone || '01003335360'}</strong>
                 </div>
               </div>
 

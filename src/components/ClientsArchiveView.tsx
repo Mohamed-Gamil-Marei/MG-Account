@@ -43,6 +43,7 @@ import {
 } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { SecurityAuthService } from '../services/securityAuth';
@@ -546,13 +547,11 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => db.exportTableToExcel('CLIENTS')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>تصدير الأرشيف إكسل</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="CLIENTS"
+            title="أرشيف ملفات العملاء والشركات"
+            count={filteredClients.length}
+          />
           <button
             onClick={() => setIsAddClientModalOpen(true)}
             id="btn-add-client"

@@ -127,11 +127,14 @@ export class LocalDatabase {
       });
 
       let loadedOfficeProfile: OfficeProfile = officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE;
-      if (loadedOfficeProfile && loadedOfficeProfile.licenseNumber && loadedOfficeProfile.licenseNumber.includes('18492')) {
-        loadedOfficeProfile = {
-          ...loadedOfficeProfile,
-          licenseNumber: loadedOfficeProfile.licenseNumber.replace('18492', '43122'),
-        };
+      if (loadedOfficeProfile) {
+        if (!loadedOfficeProfile.phone || loadedOfficeProfile.phone === '02-27945620' || loadedOfficeProfile.mobile?.includes('01001234567')) {
+          loadedOfficeProfile.phone = '01003335360';
+          loadedOfficeProfile.mobile = '01003335360';
+        }
+        if (loadedOfficeProfile.licenseNumber && loadedOfficeProfile.licenseNumber.includes('18492')) {
+          loadedOfficeProfile.licenseNumber = loadedOfficeProfile.licenseNumber.replace('18492', '43122');
+        }
       }
 
       return {

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { DatabaseState } from '../db/localDatabase';
 import { generateQrCodeSvg } from '../utils/qrCodeGenerator';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface AuditorReportViewProps {
   state: DatabaseState;
@@ -40,13 +41,11 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة التقرير المعتمد</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="AUDITOR_REPORT"
+            title="تقرير مراقب الحسابات المستقل"
+            showImport={false}
+          />
         </div>
       </div>
 
@@ -156,6 +155,9 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
             <div className="text-emerald-800 font-semibold">{profile.title}</div>
             <div className="text-slate-500 font-mono text-[11px]">
               رقم القيد بسجل المحاسبين: {profile.licenseNumber}
+            </div>
+            <div className="text-emerald-900 font-mono font-bold text-[11px]">
+              هاتف وتواصل المكتب: {profile.phone || '01003335360'}
             </div>
             <div className="text-slate-500 text-[11px]">
               عضو جمعية المحاسبين والمراجعين المصرية (ESAA)

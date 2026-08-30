@@ -18,6 +18,7 @@ import {
 import { db, DatabaseState } from '../db/localDatabase';
 import { PurgeDatabaseModal } from './PurgeDatabaseModal';
 import { DeviceLockModal } from './DeviceLockModal';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface AuditTrailViewProps {
   state: DatabaseState;
@@ -113,17 +114,24 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
             <span>قفل الجهاز والأمان</span>
           </button>
 
+          <ScreenActionToolbar
+            modelType="AUDIT"
+            title="سجل التدقيق والرقابة المحاسبية"
+            count={filteredLogs.length}
+            showImport={false}
+          />
+
           <button
             onClick={handleDownloadBackup}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>تحميل نسخة احتياطية (JSON)</span>
+            <span>نسخة احتياطية كاملة (JSON)</span>
           </button>
 
           <label className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer">
             <Upload className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-            <span>استعادة نسخة</span>
+            <span>استعادة قاعدة البيانات</span>
             <input
               type="file"
               accept=".json"

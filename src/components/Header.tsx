@@ -8,6 +8,7 @@ import {
   Clock,
   ShieldCheck,
   Building,
+  Phone,
   Printer,
   Sparkles,
   Laptop,
@@ -81,6 +82,10 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 {profile.licenseNumber}
+              </span>
+              <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                <Phone className="w-3 h-3 text-blue-300" />
+                {profile.phone || '01003335360'}
               </span>
             </div>
             <p className="text-xs text-slate-300 flex items-center gap-2 mt-0.5">

@@ -389,6 +389,7 @@ export function exportModelData(
     let txtContent = `====================================================\n`;
     txtContent += `مكتب المحاسب القانوني ومراقب الحسابات: ${state.officeProfile.auditorName}\n`;
     txtContent += `رقم القيد بسجل المحاسبين والمراجعين: ${state.officeProfile.licenseNumber}\n`;
+    txtContent += `هاتف وتواصل المكتب: ${state.officeProfile.phone || '01003335360'}\n`;
     txtContent += `تقرير تصدير نموذج: ${baseName}\n`;
     txtContent += `تاريخ ووقت التصدير: ${new Date().toLocaleString('ar-EG')}\n`;
     txtContent += `إجمالي السجلات المعتمدة: ${rows.length}\n`;
@@ -625,6 +626,103 @@ function parseAndImportTabularRows(model: ModelType, rows: Record<string, any>[]
         model,
         recordsCount: count,
         message: `تم استيراد ${count} سند حركة في خزنة المكتب مع توليد السيريال والـ QR`,
+      };
+    }
+
+    case 'CERTIFICATES': {
+      for (const r of rows) {
+        const clientName = String(r['اسم العميل / الممول'] || r['اسم العميل'] || r['العميل'] || r['clientName'] || '').trim();
+        if (!clientName) continue;
+
+        const certType = String(r['نوع الشهادة'] || r['certificateType'] || 'INCOME_PROOF') as any;
+        const certAmount = Number(r['صافي الدخل السنوي'] || r['المبلغ المعتمد'] || r['certifiedAmount'] || r['annualNetIncome'] || 0);
+        const monthlyAmt = Number(r['صافي الدخل الشهري'] || r['الدخل الشهري'] || r['monthlyAmount'] || (certAmount ? Math.round(certAmount / 12) : 0));
+        const recipient = String(r['الجهة الموجه إليها'] || r['الجهة'] || r['recipientEntity'] || 'من يهمه الأمر');
+        const purpose = String(r['الغرض من الشهادة'] || r['الغرض'] || r['purpose'] || 'لتقديمها للجهات الرسمية والمصرفية المختصة');
+        const issueDate = String(r['تاريخ الإصدار'] || r['التاريخ'] || r['issueDate'] || new Date().toISOString().slice(0, 10));
+        const nationalId = String(r['الرقم القومي'] || r['بطاقة الرقم القومي'] || r['nationalId'] || '');
+        const taxCard = String(r['البطاقة الضريبية'] || r['taxCardNo'] || '');
+        const benType = nationalId || (!taxCard && !r['السجل التجاري']) ? 'NATURAL_PERSON' : 'LEGAL_ENTITY';
+
+        db.addCertificate({
+          certificateType: certType,
+          beneficiaryType: benType,
+          issueDate,
+          clientName,
+          recipientEntity: recipient,
+          purpose,
+          periodText: `عن الفترة المنتهية في ${issueDate}`,
+          certifiedAmount: certAmount,
+          monthlyAmount: monthlyAmt,
+          annualNetIncome: certAmount,
+          monthlyNetIncome: monthlyAmt,
+          nationalId: nationalId || undefined,
+          taxCardNo: taxCard || undefined,
+          auditorNotes: String(r['ملاحظات المراجع القانوني'] || r['سند الفحص'] || r['auditorNotes'] || 'بناءً على الفحص المكتبي والمستندي للدفاتر والمستندات المؤيدة'),
+          qrPayload: `CERT|${clientName}|${certAmount}|${issueDate}`,
+          securityHash: `SEC-${Date.now().toString(36).toUpperCase()}`,
+          printedCount: 0,
+        });
+        count++;
+      }
+      return {
+        success: true,
+        model,
+        recordsCount: count,
+        message: `تم استيراد ${count} شهادة مهنية معتمدة وتوثيقها في سجل المكتب بنجاح`,
+      };
+    }
+
+    case 'INVOICES': {
+      for (const r of rows) {
+        const partnerName = String(r['اسم الطرف الآخر (العميل/المورد)'] || r['الطرف الآخر'] || r['العميل'] || r['partnerName'] || '').trim();
+        if (!partnerName) continue;
+
+        const subtotal = Number(r['إجمالي ما قبل الضريبة'] || r['المبلغ'] || r['subtotal'] || 0);
+        const vat = Number(r['ضريبة القيمة المضافة (14%)'] || r['القيمة المضافة'] || r['totalVat'] || (subtotal * 0.14));
+        const grandTotal = Number(r['الصافي الإجمالي'] || r['الإجمالي'] || r['grandTotal'] || (subtotal + vat));
+        const invType = String(r['نوع الفاتورة'] || r['invoiceType'] || 'SALES_INVOICE') as any;
+
+        const invDate = String(r['التاريخ'] || r['date'] || new Date().toISOString().slice(0, 10));
+        db.addInvoice({
+          invoiceType: (invType === 'SALES_INVOICE' || invType === 'SALES') ? 'SALES' : (invType === 'PURCHASE' ? 'PURCHASE' : 'OFFICE_SERVICE'),
+          date: invDate,
+          partnerName,
+          partnerTaxNo: String(r['الرقم الضريبي'] || r['partnerTaxNo'] || ''),
+          subtotal,
+          totalDiscount: Number(r['إجمالي الخصم'] || 0),
+          totalVat: vat,
+          totalWht: Number(r['خصم أ.ت.ص (WHT)'] || 0),
+          grandTotal,
+          paidAmount: Number(r['المسدد'] || grandTotal),
+          remainingAmount: Number(r['المتبقي'] || 0),
+          status: 'ISSUED',
+          paymentMethod: 'BANK',
+          qrPayload: `INV|${partnerName}|${grandTotal}|${vat}|${invDate}`,
+          items: [{
+            id: 'item-1',
+            itemCode: 'EG-SERV-01',
+            itemType: 'EGS',
+            description: 'خدمات وأتعاب مهنية محاسبية واستشارية',
+            quantity: 1,
+            unitPrice: subtotal || 1000,
+            discountRate: 0,
+            discountAmount: 0,
+            vatRate: 14,
+            whtRate: 0,
+            totalBeforeTax: subtotal || 1000,
+            vatAmount: vat,
+            whtAmount: 0,
+            netTotal: grandTotal,
+          }],
+        });
+        count++;
+      }
+      return {
+        success: true,
+        model,
+        recordsCount: count,
+        message: `تم استيراد ${count} فاتورة إلكترونية مع الختم والـ QR بنجاح`,
       };
     }
 

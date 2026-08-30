@@ -13,6 +13,7 @@ import { Account, JournalEntry } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { computeAccountBalances, CalculatedAccount } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface GeneralLedgerViewProps {
   state: DatabaseState;
@@ -85,13 +86,11 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4 text-slate-600" />
-            <span>طباعة كشف الأستاذ</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="JOURNAL"
+            title="دفتر الأستاذ العام وحركات الحسابات"
+            count={accountsToDisplay.length}
+          />
         </div>
       </div>
 

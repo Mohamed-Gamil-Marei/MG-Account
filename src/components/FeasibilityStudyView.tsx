@@ -15,6 +15,7 @@ import { FeasibilityStudy } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import * as XLSX from 'xlsx';
 
 interface FeasibilityStudyViewProps {
@@ -99,20 +100,11 @@ export const FeasibilityStudyView: React.FC<FeasibilityStudyViewProps> = ({ stat
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={exportExcelFeasibility}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs border border-slate-200 transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>تصدير إكسل</span>
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة تقرير الجدوى</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="FEASIBILITY"
+            title="دراسات الجدوى الاقتصادية والمالية"
+            showImport={false}
+          />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/egyptianTaxCalculations';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import {
   Users,
   Calculator,
@@ -282,13 +283,12 @@ export const PayrollInsuranceEngineView: React.FC<PayrollInsuranceEngineProps> =
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={handlePrint}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-white/20 transition-all cursor-pointer shadow-sm"
-          >
-            <Printer className="w-4 h-4 text-slate-200" />
-            <span>طباعة مسير الرواتب المعتمد</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="PAYROLL"
+            title="مسير الرواتب والأجور والتأمينات"
+            count={employees.length}
+            showImport={false}
+          />
         </div>
       </div>
 

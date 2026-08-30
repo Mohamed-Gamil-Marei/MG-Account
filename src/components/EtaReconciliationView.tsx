@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/egyptianTaxCalculations';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import {
   FileCode2,
   CheckCircle2,
@@ -219,13 +220,12 @@ export const EtaReconciliationView: React.FC<EtaReconciliationProps> = ({ state 
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={handlePrint}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-white/20 transition-all cursor-pointer shadow-sm"
-          >
-            <Printer className="w-4 h-4 text-slate-200" />
-            <span>طباعة تقرير المطابقة</span>
-          </button>
+          <ScreenActionToolbar
+            modelType="INVOICES"
+            title="تسوية ومطابقة منظومة الفواتير الإلكترونية"
+            count={filteredRecords.length}
+            showImport={false}
+          />
         </div>
       </div>
 
