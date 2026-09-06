@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   TrendingUp,
   Wallet,
@@ -9,20 +9,25 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ArrowDownLeft,
-  Calendar,
-  CheckCircle2,
   FileCheck2,
   Award,
-  Sparkles,
   ShieldCheck,
-  Percent,
-  PlusCircle,
+  Gauge,
+  AlertOctagon,
+  Zap,
+  Layers,
+  Calculator,
+  Landmark,
+  BookOpen,
+  Network,
+  Printer,
   FileSpreadsheet,
-  ArrowRight,
-  Laptop,
-  Download,
-  Keyboard,
+  ExternalLink,
+  Search,
+  CheckCircle2,
 } from 'lucide-react';
+import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { ActionMenu, ActionMenuItem } from './common/ActionMenu';
 import { DatabaseState } from '../db/localDatabase';
 import {
   computeAccountBalances,
@@ -30,6 +35,8 @@ import {
   generateBalanceSheet,
 } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+
+export type KpiCategory = 'ALL' | 'FINANCIAL' | 'LIQUIDITY' | 'TAX' | 'OPERATIONS';
 
 interface DashboardProps {
   state: DatabaseState;
@@ -39,6 +46,22 @@ interface DashboardProps {
   onOpenQuickTreasury?: () => void;
   onOpenDesktopModal?: () => void;
   onOpenShortcutsModal?: () => void;
+  onOpenPromoModal?: () => void;
+  fiscalYear?: number;
+}
+
+interface KpiCardItem {
+  id: string;
+  title: string;
+  value: string | number;
+  badge: string;
+  badgeVariant: 'emerald' | 'blue' | 'amber' | 'rose' | 'indigo' | 'slate';
+  category: KpiCategory;
+  targetTab: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconColor: string;
+  iconBg: string;
+  actions: ActionMenuItem[];
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -47,14 +70,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSelectTab,
   onOpenQuickJournal,
   onOpenQuickTreasury,
-  onOpenDesktopModal,
-  onOpenShortcutsModal,
+  fiscalYear = 2026,
 }) => {
   const navigate = onNavigate || onSelectTab || (() => {});
+  const [selectedCategory, setSelectedCategory] = useState<KpiCategory>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const calculatedAccounts = computeAccountBalances(state.accounts, state.journalEntries);
-  const incomeData = generateIncomeStatement(calculatedAccounts);
-  const balanceData = generateBalanceSheet(calculatedAccounts, incomeData);
+  // 1. Accounting Calculations
+  const calculatedAccounts = useMemo(() => {
+    return computeAccountBalances(state.accounts, state.journalEntries);
+  }, [state.accounts, state.journalEntries]);
+
+  const incomeData = useMemo(() => {
+    return generateIncomeStatement(calculatedAccounts);
+  }, [calculatedAccounts]);
+
+  const balanceData = useMemo(() => {
+    return generateBalanceSheet(calculatedAccounts, incomeData);
+  }, [calculatedAccounts, incomeData]);
 
   // Office treasury summary
   const treasuryIncome = state.treasuryTransactions
@@ -67,524 +100,711 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const treasuryNetBalance = treasuryIncome - treasuryExpense;
 
-  // Unposted entries
-  const unpostedEntries = state.journalEntries.filter((e) => !e.isPosted);
-
   // Tax alerts
   const urgentTaxes = state.taxDeclarations.filter(
     (t) => t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT'
   );
 
+  // Real-Time Liquidity vs Scheduled Tax Liabilities
+  const { liquidCash, scheduledTaxLiabilities, taxCoverageRatio, isCriticalTaxCoverage } = useMemo(() => {
+    const cashAccounts = calculatedAccounts.filter(
+      (a) =>
+        a.code.startsWith('11') ||
+        a.name.includes('خزينة') ||
+        a.name.includes('بنك') ||
+        a.name.includes('صندوق') ||
+        a.name.includes('نقدية')
+    );
+    const accountsCashSum = cashAccounts.reduce(
+      (acc, a) => acc + (a.endingBalanceDebit - a.endingBalanceCredit),
+      0
+    );
+    const totalLiquid = Math.max(0, accountsCashSum + Math.max(0, treasuryNetBalance));
+
+    const taxDecsTotal = state.taxDeclarations
+      .filter((t) => t.status !== 'PAID' && t.status !== 'APPROVED')
+      .reduce((sum, t) => sum + (t.netVatDue || t.totalTaxDue || 0), 0);
+
+    const taxAccounts = calculatedAccounts.filter(
+      (a) =>
+        a.code.startsWith('22') ||
+        a.name.includes('ضريبة') ||
+        a.name.includes('مصلحة الضرائب') ||
+        a.name.includes('كسب عمل') ||
+        a.name.includes('قيمة مضافة')
+    );
+    const taxAccSum = taxAccounts.reduce(
+      (acc, a) => acc + (a.endingBalanceCredit - a.endingBalanceDebit),
+      0
+    );
+    const totalTaxDue = Math.max(1, Math.max(taxDecsTotal, taxAccSum, 35000));
+
+    const coverage = totalTaxDue > 0 ? (totalLiquid / totalTaxDue) * 100 : 100;
+    const isCritical = coverage < 15;
+
+    return {
+      liquidCash: totalLiquid,
+      scheduledTaxLiabilities: totalTaxDue,
+      taxCoverageRatio: Number(coverage.toFixed(1)),
+      isCriticalTaxCoverage: isCritical,
+    };
+  }, [calculatedAccounts, treasuryNetBalance, state.taxDeclarations]);
+
+  // Build the list of Square KPI cards
+  const kpis: KpiCardItem[] = useMemo(() => {
+    return [
+      {
+        id: 'kpi-net-income',
+        title: 'صافي الربح العام',
+        value: formatEgyptianCurrency(incomeData.netIncome),
+        badge: incomeData.netIncome >= 0 ? '+ربح تشغيلي' : '-عجز مالي',
+        badgeVariant: incomeData.netIncome >= 0 ? 'emerald' : 'rose',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: TrendingUp,
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+        actions: [
+          {
+            id: 'act-view-inc',
+            label: 'عرض قائمة الدخل الشامل',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+          {
+            id: 'act-print-inc',
+            label: 'طباعة القوائم المالية',
+            icon: Printer,
+            onClick: () => window.print(),
+          },
+        ],
+      },
+      {
+        id: 'kpi-revenues',
+        title: 'إجمالي إيرادات النشاط',
+        value: formatEgyptianCurrency(incomeData.revenuesTotal),
+        badge: 'نشاط جاري',
+        badgeVariant: 'blue',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: ArrowUpRight,
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        iconBg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',
+        actions: [
+          {
+            id: 'act-view-rev',
+            label: 'كشف حساب الإيرادات',
+            icon: ExternalLink,
+            onClick: () => navigate('GENERAL_LEDGER'),
+          },
+          {
+            id: 'act-invoicing',
+            label: 'فواتير المبيعات',
+            icon: Zap,
+            onClick: () => navigate('INVOICING'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-cogs',
+        title: 'تكلفة النشاط والإنتاج',
+        value: formatEgyptianCurrency(incomeData.costOfGoodsSold),
+        badge: `${
+          incomeData.revenuesTotal > 0
+            ? ((incomeData.costOfGoodsSold / incomeData.revenuesTotal) * 100).toFixed(0)
+            : 0
+        }% من الإيراد`,
+        badgeVariant: 'amber',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: Receipt,
+        iconColor: 'text-amber-600 dark:text-amber-400',
+        iconBg: 'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800',
+        actions: [
+          {
+            id: 'act-cogs-details',
+            label: 'عرض إيضاح تكلفة النشاط',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-gross-profit',
+        title: 'مجمل الربح التجاري',
+        value: formatEgyptianCurrency(incomeData.grossProfit),
+        badge: 'هامش مساهمة',
+        badgeVariant: 'emerald',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: Award,
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+        actions: [
+          {
+            id: 'act-gross-view',
+            label: 'تحليل هامش الربح',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-opex',
+        title: 'المصروفات التشغيلية',
+        value: formatEgyptianCurrency(incomeData.operatingExpenses),
+        badge: 'إدارية وعمومية',
+        badgeVariant: 'slate',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: ArrowDownLeft,
+        iconColor: 'text-slate-600 dark:text-slate-400',
+        iconBg: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        actions: [
+          {
+            id: 'act-opex-view',
+            label: 'كشف المصروفات العامة',
+            icon: ExternalLink,
+            onClick: () => navigate('GENERAL_LEDGER'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-assets',
+        title: 'إجمالي الأصول',
+        value: formatEgyptianCurrency(balanceData.assetsTotal),
+        badge: 'متداولة وثابتة',
+        badgeVariant: 'indigo',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: Landmark,
+        iconColor: 'text-indigo-600 dark:text-indigo-400',
+        iconBg: 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800',
+        actions: [
+          {
+            id: 'act-bs-view',
+            label: 'عرض قائمة المركز المالي',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+          {
+            id: 'act-tb-assets',
+            label: 'مراجعة الأصول بالميزان',
+            icon: Scale,
+            onClick: () => navigate('TRIAL_BALANCE'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-current-assets',
+        title: 'الأصول المتداولة',
+        value: formatEgyptianCurrency(balanceData.currentAssetsTotal),
+        badge: 'قصيرة الأجل',
+        badgeVariant: 'blue',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: Layers,
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        iconBg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',
+        actions: [
+          {
+            id: 'act-ca-view',
+            label: 'عرض الأصول المتداولة',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-equity',
+        title: 'حقوق الملكية',
+        value: formatEgyptianCurrency(balanceData.equityTotal),
+        badge: 'رأس المال والأرباح',
+        badgeVariant: 'emerald',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: ShieldCheck,
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+        actions: [
+          {
+            id: 'act-eq-view',
+            label: 'عرض حقوق المساهمين',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-liabilities',
+        title: 'إجمالي الالتزامات',
+        value: formatEgyptianCurrency(balanceData.liabilitiesTotal),
+        badge: 'خصوم ومطلوبات',
+        badgeVariant: 'amber',
+        category: 'FINANCIAL',
+        targetTab: 'FINANCIAL_STATEMENTS',
+        icon: AlertOctagon,
+        iconColor: 'text-amber-600 dark:text-amber-400',
+        iconBg: 'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800',
+        actions: [
+          {
+            id: 'act-liab-view',
+            label: 'كشف التزامات المركز المالي',
+            icon: ExternalLink,
+            onClick: () => navigate('FINANCIAL_STATEMENTS'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-liquid-cash',
+        title: 'السيولة النقدية الفورية',
+        value: formatEgyptianCurrency(liquidCash),
+        badge: 'خزائن وبنوك',
+        badgeVariant: 'emerald',
+        category: 'LIQUIDITY',
+        targetTab: 'OFFICE_TREASURY',
+        icon: Wallet,
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+        actions: [
+          {
+            id: 'act-cash-treasury',
+            label: 'عرض حركة الخزينة',
+            icon: ExternalLink,
+            onClick: () => navigate('OFFICE_TREASURY'),
+          },
+          {
+            id: 'act-quick-receipt',
+            label: 'إضافة سند قبض/صرف',
+            icon: Receipt,
+            onClick: () => (onOpenQuickTreasury ? onOpenQuickTreasury() : navigate('OFFICE_TREASURY')),
+          },
+        ],
+      },
+      {
+        id: 'kpi-office-treasury',
+        title: 'خزينة المكتب المستقلة',
+        value: formatEgyptianCurrency(treasuryNetBalance),
+        badge: 'رصيد متاح',
+        badgeVariant: 'blue',
+        category: 'LIQUIDITY',
+        targetTab: 'OFFICE_TREASURY',
+        icon: Building2,
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        iconBg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',
+        actions: [
+          {
+            id: 'act-treasury-view',
+            label: 'سجل الخزينة والمصروفات',
+            icon: ExternalLink,
+            onClick: () => navigate('OFFICE_TREASURY'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-tax-liabilities',
+        title: 'الالتزامات الضريبية',
+        value: formatEgyptianCurrency(scheduledTaxLiabilities),
+        badge: 'مستحق السداد',
+        badgeVariant: 'rose',
+        category: 'TAX',
+        targetTab: 'TAX_TRACKER',
+        icon: AlertTriangle,
+        iconColor: 'text-rose-600 dark:text-rose-400',
+        iconBg: 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800',
+        actions: [
+          {
+            id: 'act-tax-tracker',
+            label: 'متابعة جدول الضرائب',
+            icon: ExternalLink,
+            onClick: () => navigate('TAX_TRACKER'),
+          },
+          {
+            id: 'act-tax-sim',
+            label: 'محاكي التعرض الضريبي',
+            icon: Gauge,
+            onClick: () => navigate('TAX_EXPOSURE_SIMULATOR'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-tax-coverage',
+        title: 'تغطية السيولة للضرائب',
+        value: `${taxCoverageRatio}%`,
+        badge: isCriticalTaxCoverage ? 'حرج < 15%' : 'آمن ومغطى',
+        badgeVariant: isCriticalTaxCoverage ? 'rose' : 'emerald',
+        category: 'TAX',
+        targetTab: 'TAX_TRACKER',
+        icon: Gauge,
+        iconColor: isCriticalTaxCoverage ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400',
+        iconBg: isCriticalTaxCoverage
+          ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800'
+          : 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+        actions: [
+          {
+            id: 'act-coverage-view',
+            label: 'فحص سيولة الالتزامات',
+            icon: ExternalLink,
+            onClick: () => navigate('TAX_TRACKER'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-urgent-tax',
+        title: 'الإقرارات العاجلة',
+        value: `${urgentTaxes.length} إقرار`,
+        badge: 'مصلحة الضرائب',
+        badgeVariant: 'amber',
+        category: 'TAX',
+        targetTab: 'TAX_TRACKER',
+        icon: FileCheck2,
+        iconColor: 'text-amber-600 dark:text-amber-400',
+        iconBg: 'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800',
+        actions: [
+          {
+            id: 'act-urgent-view',
+            label: 'جدول مواعيد الإقرارات',
+            icon: ExternalLink,
+            onClick: () => navigate('TAX_TRACKER'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-clients',
+        title: 'الموكلين والشركات',
+        value: `${state.clients.length} عميل`,
+        badge: 'سجل نشط',
+        badgeVariant: 'blue',
+        category: 'OPERATIONS',
+        targetTab: 'CLIENTS_ARCHIVE',
+        icon: Users,
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        iconBg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',
+        actions: [
+          {
+            id: 'act-clients-view',
+            label: 'فتح أرشيف الموكلين',
+            icon: ExternalLink,
+            onClick: () => navigate('CLIENTS_ARCHIVE'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-journals',
+        title: 'قيود اليومية العامة',
+        value: `${state.journalEntries.length} قيد`,
+        badge: 'مرحلة بالكامل',
+        badgeVariant: 'emerald',
+        category: 'OPERATIONS',
+        targetTab: 'JOURNAL_ENTRIES',
+        icon: BookOpen,
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+        actions: [
+          {
+            id: 'act-journal-view',
+            label: 'عرض دفتر القيود',
+            icon: ExternalLink,
+            onClick: () => navigate('JOURNAL_ENTRIES'),
+          },
+          {
+            id: 'act-new-entry',
+            label: 'إضافة قيد جديد',
+            icon: Receipt,
+            onClick: () => (onOpenQuickJournal ? onOpenQuickJournal() : navigate('JOURNAL_ENTRIES')),
+          },
+        ],
+      },
+      {
+        id: 'kpi-accounts',
+        title: 'شجرة ودليل الحسابات',
+        value: `${state.accounts.length} حساب`,
+        badge: 'هرمي معتمد',
+        badgeVariant: 'indigo',
+        category: 'OPERATIONS',
+        targetTab: 'CHART_OF_ACCOUNTS',
+        icon: Network,
+        iconColor: 'text-indigo-600 dark:text-indigo-400',
+        iconBg: 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800',
+        actions: [
+          {
+            id: 'act-coa-view',
+            label: 'عرض شجرة الحسابات',
+            icon: ExternalLink,
+            onClick: () => navigate('CHART_OF_ACCOUNTS'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-trial-balance',
+        title: 'اتزان ميزان المراجعة',
+        value: balanceData.isBalanced ? 'متزن 100%' : 'فارق توازن',
+        badge: balanceData.isBalanced ? 'مدين = دائن' : 'يحتاج تسوية',
+        badgeVariant: balanceData.isBalanced ? 'emerald' : 'rose',
+        category: 'OPERATIONS',
+        targetTab: 'TRIAL_BALANCE',
+        icon: Scale,
+        iconColor: balanceData.isBalanced ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+        iconBg: balanceData.isBalanced
+          ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800'
+          : 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800',
+        actions: [
+          {
+            id: 'act-tb-view',
+            label: 'فتح ميزان المراجعة',
+            icon: ExternalLink,
+            onClick: () => navigate('TRIAL_BALANCE'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-invoices',
+        title: 'الفواتير الإلكترونية',
+        value: `${state.invoices?.length || 0} فاتورة`,
+        badge: 'ETA منظومة',
+        badgeVariant: 'blue',
+        category: 'OPERATIONS',
+        targetTab: 'INVOICING',
+        icon: Zap,
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        iconBg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',
+        actions: [
+          {
+            id: 'act-inv-view',
+            label: 'سجل الفواتير والإشعارات',
+            icon: ExternalLink,
+            onClick: () => navigate('INVOICING'),
+          },
+        ],
+      },
+      {
+        id: 'kpi-fixed-assets',
+        title: 'سجل الأصول الثابتة',
+        value: `${state.fixedAssets?.length || 0} أصل`,
+        badge: 'إهلاك دفتري',
+        badgeVariant: 'slate',
+        category: 'FINANCIAL',
+        targetTab: 'FIXED_ASSETS',
+        icon: Calculator,
+        iconColor: 'text-slate-600 dark:text-slate-400',
+        iconBg: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        actions: [
+          {
+            id: 'act-fa-view',
+            label: 'جدول إهلاك الأصول الثابتة',
+            icon: ExternalLink,
+            onClick: () => navigate('FIXED_ASSETS'),
+          },
+        ],
+      },
+    ];
+  }, [
+    incomeData,
+    balanceData,
+    liquidCash,
+    treasuryNetBalance,
+    scheduledTaxLiabilities,
+    taxCoverageRatio,
+    isCriticalTaxCoverage,
+    urgentTaxes.length,
+    state.clients.length,
+    state.journalEntries.length,
+    state.accounts.length,
+    state.invoices?.length,
+    state.fixedAssets?.length,
+    navigate,
+    onOpenQuickJournal,
+    onOpenQuickTreasury,
+  ]);
+
+  // Filter KPIs by Category and Search Term
+  const filteredKpis = useMemo(() => {
+    return kpis.filter((kpi) => {
+      const matchesCat = selectedCategory === 'ALL' || kpi.category === selectedCategory;
+      const matchesSearch =
+        !searchQuery ||
+        kpi.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(kpi.value).toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCat && matchesSearch;
+    });
+  }, [kpis, selectedCategory, searchQuery]);
+
+  const getBadgeClass = (variant: KpiCardItem['badgeVariant']) => {
+    switch (variant) {
+      case 'emerald':
+        return 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+      case 'rose':
+        return 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+      case 'amber':
+        return 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+      case 'indigo':
+        return 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+      case 'blue':
+        return 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+      default:
+        return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+    }
+  };
+
+  const dashboardHeaderActions: ActionMenuItem[] = [
+    {
+      id: 'act-new-j-entry',
+      label: 'تسجيل قيد يومية جديد',
+      icon: Receipt,
+      onClick: () => (onOpenQuickJournal ? onOpenQuickJournal() : navigate('JOURNAL_ENTRIES')),
+    },
+    {
+      id: 'act-treasury-doc',
+      label: 'سند حركة خزينة',
+      icon: Wallet,
+      onClick: () => (onOpenQuickTreasury ? onOpenQuickTreasury() : navigate('OFFICE_TREASURY')),
+    },
+    {
+      isDivider: true,
+      label: '',
+      onClick: () => {},
+    },
+    {
+      id: 'act-print-kpis',
+      label: 'طباعة لوحة المؤشرات',
+      icon: Printer,
+      onClick: () => window.print(),
+    },
+    {
+      id: 'act-export-excel-kpi',
+      label: 'تصدير المؤشرات (Excel)',
+      icon: FileSpreadsheet,
+      onClick: () => {
+        const csvContent =
+          'data:text/csv;charset=utf-8,\uFEFF' +
+          'المؤشر,القيمة,الحالة,التصنيف\n' +
+          kpis.map((k) => `"${k.title}","${k.value}","${k.badge}","${k.category}"`).join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `kpi_dashboard_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      },
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Top Banner: Professional Polish Welcome & Authority Bar */}
-      <div className="bg-[#1E293B] rounded-xl p-5 sm:p-6 text-white shadow-sm border border-slate-700/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-500/30">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>نظام التدقيق والرقابة المحاسبية المتكامل - جمهورية مصر العربية</span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            مرحباً بك، {state.officeProfile.auditorName}
-          </h2>
-          <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-            المنظومة مهيأة بالكامل وفقاً للمعايير المحاسبية المصرية (EAS) وقوانين الضرائب وهيئة الاستثمار وسجل المحاسبين والمراجعين.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2.5 shrink-0">
-          {onOpenShortcutsModal && (
-            <button
-              onClick={onOpenShortcutsModal}
-              id="dash-btn-shortcuts"
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg font-semibold text-xs sm:text-sm shadow-xs transition-all cursor-pointer border border-slate-600"
-              title="عرض اختصارات لوحة المفاتيح (Ctrl+K)"
+    <UnifiedScreenCard
+      title="لوحة مؤشرات الأداء المالي والمحاسبي"
+      subtitle={`المؤشرات التنفيذية المباشرة • السنة المالية ${fiscalYear}`}
+      icon={Gauge}
+      badge={`${filteredKpis.length} مؤشر نشط`}
+      badgeVariant="emerald"
+      actionMenuItems={dashboardHeaderActions}
+      searchTerm={searchQuery}
+      onSearchChange={setSearchQuery}
+      searchPlaceholder="بحث في مؤشرات الأداء والقيم..."
+      filterButtons={[
+        {
+          id: 'ALL',
+          label: 'كافة المؤشرات',
+          active: selectedCategory === 'ALL',
+          onClick: () => setSelectedCategory('ALL'),
+          count: kpis.length,
+        },
+        {
+          id: 'FINANCIAL',
+          label: 'المالية والقوائم',
+          active: selectedCategory === 'FINANCIAL',
+          onClick: () => setSelectedCategory('FINANCIAL'),
+        },
+        {
+          id: 'LIQUIDITY',
+          label: 'السيولة والخزينة',
+          active: selectedCategory === 'LIQUIDITY',
+          onClick: () => setSelectedCategory('LIQUIDITY'),
+        },
+        {
+          id: 'TAX',
+          label: 'الضرائب والفحص',
+          active: selectedCategory === 'TAX',
+          onClick: () => setSelectedCategory('TAX'),
+        },
+        {
+          id: 'OPERATIONS',
+          label: 'العمليات والموكلين',
+          active: selectedCategory === 'OPERATIONS',
+          onClick: () => setSelectedCategory('OPERATIONS'),
+        },
+      ]}
+    >
+      {/* Equal-sized Square KPI Cards Grid - Seamless CSS Grid across all screens */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        {filteredKpis.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <div
+              key={kpi.id}
+              onClick={() => navigate(kpi.targetTab)}
+              className="aspect-square rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-500/60 dark:hover:border-emerald-500/50 transition-all p-3 flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              title={`انقر للانتقال إلى تفاصيل ${kpi.title}`}
             >
-              <Keyboard className="w-4 h-4 text-blue-400" />
-              <span>اختصارات</span>
-              <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded font-mono text-blue-300">
-                Ctrl+K
-              </span>
-            </button>
-          )}
-          {onOpenDesktopModal && (
-            <button
-              onClick={onOpenDesktopModal}
-              id="dash-btn-desktop-install"
-              className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-lg font-semibold text-xs sm:text-sm shadow-xs transition-all cursor-pointer border border-emerald-400/30"
-              title="تثبيت وتحميل البرنامج ليعمل على سطح المكتب"
-            >
-              <Laptop className="w-4 h-4 text-emerald-200" />
-              <span>تحميل لسطح المكتب</span>
-            </button>
-          )}
-          <button
-            onClick={() => (onOpenQuickJournal ? onOpenQuickJournal() : navigate('JOURNAL_ENTRIES'))}
-            id="dash-btn-journal"
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-xs sm:text-sm shadow-xs transition-all cursor-pointer"
-          >
-            <Receipt className="w-4 h-4" />
-            <span>إضافة قيد يومية</span>
-          </button>
-          <button
-            onClick={() => (onOpenQuickTreasury ? onOpenQuickTreasury() : navigate('OFFICE_TREASURY'))}
-            id="dash-btn-treasury"
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-semibold text-xs sm:text-sm shadow-xs transition-all cursor-pointer"
-          >
-            <Building2 className="w-4 h-4" />
-            <span>حركة بخزنة المكتب</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Revenues */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">إجمالي الإيرادات والمبيعات</span>
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-slate-900 tracking-tight">
-              {formatEgyptianCurrency(incomeData.revenuesTotal)}
-            </div>
-            <div className="text-xs text-blue-600 font-medium mt-1 flex items-center gap-1">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>مجمل الربح: {formatEgyptianCurrency(incomeData.grossProfit)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Net Profit After Tax */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">صافي أرباح العام (بعد الضريبة)</span>
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Scale className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className={`text-2xl font-bold tracking-tight ${incomeData.netProfitAfterTax >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-              {formatEgyptianCurrency(incomeData.netProfitAfterTax)}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-1">
-              ضريبة الدخل التقديرية (22.5%): {formatEgyptianCurrency(incomeData.taxExpense)}
-            </div>
-          </div>
-        </div>
-
-        {/* Total Assets */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">إجمالي أصول المنشأة</span>
-            <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
-              <Wallet className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-slate-900 tracking-tight">
-              {formatEgyptianCurrency(balanceData.totalAssets)}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>المركز المالي: {balanceData.isBalanced ? 'متزن محاسبياً' : 'يوجد فارق تسوية'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Office Treasury Net Balance */}
-        <div className="bg-amber-50/50 rounded-xl p-5 border border-amber-200/80 shadow-xs flex flex-col justify-between hover:border-amber-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">رصيد خزنة المكتب المستقلة</span>
-            <div className="w-10 h-10 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-xs">
-              <Building2 className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-amber-950 tracking-tight">
-              {formatEgyptianCurrency(treasuryNetBalance)}
-            </div>
-            <div className="text-xs text-amber-800 font-medium mt-1 flex items-center justify-between">
-              <span>أتعاب: {formatEgyptianCurrency(treasuryIncome)}</span>
-              <span>مصروفات: {formatEgyptianCurrency(treasuryExpense)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Services Grid & Activity Panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Services Quick Access & Recent Journal Entries */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Quick Services Grid */}
-          <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>الخدمات المحاسبية والرقابية السريعة للمكتب</span>
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <button
-                onClick={() => navigate('FINANCIAL_STATEMENTS')}
-                className="p-3.5 rounded-lg bg-slate-50 hover:bg-blue-50 hover:border-blue-200 border border-slate-200/70 text-right transition-all group cursor-pointer"
-              >
-                <FileCheck2 className="w-5 h-5 text-blue-600 mb-2 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-bold text-slate-900">القوائم المالية</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">مركز مالي ودخل وتدفقات</div>
-              </button>
-
-              <button
-                onClick={() => navigate('AUDITOR_REPORT')}
-                className="p-3.5 rounded-lg bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200/70 text-right transition-all group cursor-pointer"
-              >
-                <ShieldCheck className="w-5 h-5 text-emerald-600 mb-2 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-bold text-slate-900">تقرير المراقب</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">اعتماد محمد جميل مرعي</div>
-              </button>
-
-              <button
-                onClick={() => navigate('CREDIT_SIMULATOR')}
-                className="p-3.5 rounded-lg bg-slate-50 hover:bg-purple-50 hover:border-purple-200 border border-slate-200/70 text-right transition-all group cursor-pointer"
-              >
-                <TrendingUp className="w-5 h-5 text-purple-600 mb-2 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-bold text-slate-900">ملف الائتمان البنكي</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">توزيع نسبي ذكي للمبيعات</div>
-              </button>
-
-              <button
-                onClick={() => navigate('CERTIFICATES')}
-                className="p-3.5 rounded-lg bg-slate-50 hover:bg-amber-50 hover:border-amber-200 border border-slate-200/70 text-right transition-all group cursor-pointer"
-              >
-                <Award className="w-5 h-5 text-amber-600 mb-2 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-bold text-slate-900">الشهادات المهنية</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">دخل ورأس مال وملاءة</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Journal Entries List */}
-          <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-slate-700" />
-                <h3 className="text-sm font-bold text-slate-900">آخر قيود اليومية العامة المسجلة</h3>
-              </div>
-              <button
-                onClick={() => navigate('JOURNAL_ENTRIES')}
-                className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer flex items-center gap-1"
-              >
-                <span>عرض كافة القيود ({state.journalEntries.length})</span>
-                <ArrowRight className="w-3.5 h-3.5 rotate-180" />
-              </button>
-            </div>
-
-            <div className="divide-y divide-slate-100">
-              {state.journalEntries.slice(-5).reverse().map((entry) => (
-                <div key={entry.id} className="py-3 flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                        {entry.serialNumber}
-                      </span>
-                      <span className="text-xs text-slate-400 font-medium">{entry.date}</span>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          entry.isPosted
-                            ? 'bg-slate-100 text-slate-700'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {entry.isPosted ? 'مرحل للأستاذ' : 'مسودة غير مرحلة'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-700 font-medium line-clamp-1">
-                      {entry.description}
-                    </p>
-                  </div>
-                  <div className="text-left shrink-0">
-                    <div className="text-sm font-bold text-slate-900">
-                      {formatEgyptianCurrency(entry.totalDebit)}
-                    </div>
-                    <div className="text-[11px] text-slate-400">{entry.lines.length} أطراف</div>
-                  </div>
+              {/* Card Top: Icon & ActionsMenu */}
+              <div className="flex items-center justify-between gap-1">
+                <div
+                  className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${kpi.iconBg}`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${kpi.iconColor}`} />
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
 
-        {/* Right Col: Tax Declarations & Office Treasury */}
-        <div className="space-y-6">
-          {/* Tax Tracker Card */}
-          <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <h3 className="text-sm font-bold text-slate-900">تنبيهات الإقرارات الضريبية</h3>
-              </div>
-              <button
-                onClick={() => navigate('TAX_TRACKER')}
-                className="text-xs text-blue-600 font-semibold cursor-pointer"
-              >
-                شاشة الضرائب ←
-              </button>
-            </div>
-
-            {urgentTaxes.length === 0 ? (
-              <div className="p-4 rounded-lg bg-emerald-50 text-emerald-800 text-xs text-center font-medium">
-                جميع الإقرارات الضريبية مقدمة ومسددة بالكامل لمصلحة الضرائب المصرية.
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {urgentTaxes.map((tax) => (
-                  <div
-                    key={tax.id}
-                    className="p-3 rounded-lg bg-amber-50/70 border border-amber-200/80 space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-950">
-                        {tax.declarationType === 'VAT_10'
-                          ? 'إقرار ق.م (نموذج 10)'
-                          : tax.declarationType === 'INCOME_27_CORP'
-                          ? 'إقرار دخل شركات (نم 27)'
-                          : tax.declarationType === 'PAYROLL_4'
-                          ? 'إقرار كسب عمل (نم 4)'
-                          : 'إقرار ضريبي'}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
-                        استحقاق: {tax.dueDate}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-700 font-medium truncate">
-                      {tax.clientName}
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-amber-200/60">
-                      <span>الفترة: {tax.period}</span>
-                      <span className="font-bold text-amber-950">
-                        الضريبة: {formatEgyptianCurrency(tax.netVatPayable || tax.netTaxPayable || 0)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Office Treasury Quick Stream */}
-          <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-slate-700" />
-                <h3 className="text-sm font-bold text-slate-900">حركات خزنة المكتب الأخيرة</h3>
-              </div>
-              <button
-                onClick={() => navigate('OFFICE_TREASURY')}
-                className="text-xs text-blue-600 font-semibold cursor-pointer"
-              >
-                الخزنة ←
-              </button>
-            </div>
-
-            <div className="divide-y divide-slate-100">
-              {state.treasuryTransactions.slice(-4).reverse().map((tx) => (
-                <div key={tx.id} className="py-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                        tx.type === 'INCOME_FEES'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {tx.type === 'INCOME_FEES' ? (
-                        <ArrowDownLeft className="w-4 h-4" />
-                      ) : (
-                        <ArrowUpRight className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 line-clamp-1">
-                        {tx.category}
-                      </div>
-                      <div className="text-[10px] text-slate-400">{tx.date} • {tx.clientName || 'مصروف مكتب'}</div>
-                    </div>
-                  </div>
-                  <div
-                    className={`text-xs font-bold ${
-                      tx.type === 'INCOME_FEES' ? 'text-emerald-700' : 'text-red-700'
-                    }`}
-                  >
-                    {tx.type === 'INCOME_FEES' ? '+' : '-'} {formatEgyptianCurrency(tx.amount)}
-                  </div>
+                {/* Stop propagation so clicking the menu button doesn't trigger card navigation */}
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="shrink-0"
+                >
+                  <ActionMenu
+                    items={kpi.actions}
+                    title="خيارات المؤشر"
+                    triggerType="three_dots_vertical"
+                    size="xs"
+                    buttonVariant="ghost"
+                    align="left"
+                  />
                 </div>
-              ))}
+              </div>
+
+              {/* Card Center: Clean Value & Title (Without anatomical descriptive fluff) */}
+              <div className="my-auto text-right min-w-0">
+                <div className="font-mono font-black text-sm sm:text-base text-slate-900 dark:text-slate-100 truncate tracking-tight">
+                  {kpi.value}
+                </div>
+                <h3 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                  {kpi.title}
+                </h3>
+              </div>
+
+              {/* Card Bottom: Concise Badge Indicator */}
+              <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                <span
+                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border truncate ${getBadgeClass(
+                    kpi.badgeVariant
+                  )}`}
+                >
+                  {kpi.badge}
+                </span>
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                  عرض ↵
+                </span>
+              </div>
             </div>
+          );
+        })}
+
+        {filteredKpis.length === 0 && (
+          <div className="col-span-full py-12 text-center text-slate-400 text-xs bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+            لا توجد مؤشرات تطابق معايير البحث أو التصفية الحالية.
           </div>
-        </div>
+        )}
       </div>
-
-      {/* Audit, Tax & Working Papers Advanced Suite Cards */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-md border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-bold border border-indigo-500/30">
-                منظومة الفحص والمراجعة الميدانية والتحوط الضريبي (EAS / ESA)
-              </span>
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-white">
-              أدوات الفحص الضريبي وأوراق العمل والرواتب والإيضاحات المتممة
-            </h3>
-          </div>
-          <span className="hidden md:inline text-xs text-slate-400">
-            5 أنظمة تنفيذية متوافقة مع القوانين المصرية
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Working Papers */}
-          <button
-            onClick={() => navigate('AUDIT_WORKING_PAPERS')}
-            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-indigo-500 shadow-2xs"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800">
-                  ESA 320
-                </span>
-                <ShieldCheck className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-indigo-300">
-                أوراق عمل المراجعة
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                الأهمية النسبية وملف توثيق أدلة الإثبات
-              </div>
-            </div>
-          </button>
-
-          {/* Tax Exposure Simulator */}
-          <button
-            onClick={() => navigate('TAX_EXPOSURE_SIMULATOR')}
-            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-red-500 shadow-2xs"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-red-400 bg-red-950/60 px-2 py-0.5 rounded border border-red-800">
-                  مخاطر وغرامات
-                </span>
-                <AlertTriangle className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-red-300">
-                محاكي الفحص الضريبي
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                مطابقة ثلاثية وحساب غرامات م. 110
-              </div>
-            </div>
-          </button>
-
-          {/* ETA Invoices Reconciliation */}
-          <button
-            onClick={() => navigate('ETA_RECONCILIATION')}
-            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-teal-500 shadow-2xs"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-teal-400 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800">
-                  ETA SDK
-                </span>
-                <CheckCircle2 className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-teal-300">
-                مطابقة الفواتير الإلكترونية
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                كشف الفواتير الملغاة والمرفوضة
-              </div>
-            </div>
-          </button>
-
-          {/* Payroll & Social Insurance */}
-          <button
-            onClick={() => navigate('PAYROLL_INSURANCE')}
-            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-sky-500 shadow-2xs"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800">
-                  قانون 148
-                </span>
-                <Percent className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-sky-300">
-                كسب العمل والتأمينات
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                مسير الرواتب ونموذج (4) واستمارة (2)
-              </div>
-            </div>
-          </button>
-
-          {/* Financial Notes Builder */}
-          <button
-            onClick={() => navigate('FINANCIAL_NOTES')}
-            className="p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/80 text-right transition-all cursor-pointer group flex flex-col justify-between hover:border-emerald-500 shadow-2xs"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
-                  EAS 1
-                </span>
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-emerald-300">
-                الإيضاحات المتممة
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                كراسة الإفصاح والسياسات المحاسبية
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Two Callout Cards from the Professional Polish theme */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-        <div className="bg-[#1E293B] text-white rounded-xl p-4 sm:p-5 flex items-center justify-between border border-slate-700 shadow-xs">
-          <div>
-            <div className="text-xs text-slate-400 font-medium">سجل المراجعين والمحاسبين</div>
-            <div className="text-sm sm:text-base font-bold text-white mt-0.5">
-              ترخيص مزاولة المهنة: {state.officeProfile.licenseNumber}
-            </div>
-            <div className="text-[11px] text-blue-400 mt-1">جمعية المحاسبين والمراجعين المصرية</div>
-          </div>
-          <button
-            onClick={() => navigate('AUDITOR_REPORT')}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
-          >
-            تقرير المراقب
-          </button>
-        </div>
-
-        <div className="bg-emerald-900 text-white rounded-xl p-4 sm:p-5 flex items-center justify-between border border-emerald-800 shadow-xs">
-          <div>
-            <div className="text-xs text-emerald-300 font-medium">المعايير المعتمدة</div>
-            <div className="text-sm sm:text-base font-bold text-white mt-0.5">
-              معايير المحاسبة المصرية (EAS) وقانون الضرائب 91 لسنة 2005
-            </div>
-            <div className="text-[11px] text-emerald-300/80 mt-1">حسابات ختامية ومراكز مالية معتمدة</div>
-          </div>
-          <button
-            onClick={() => navigate('FINANCIAL_STATEMENTS')}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
-          >
-            القوائم الختامية
-          </button>
-        </div>
-      </div>
-    </div>
+    </UnifiedScreenCard>
   );
 };
+
+export default Dashboard;

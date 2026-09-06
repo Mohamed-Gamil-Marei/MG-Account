@@ -16,6 +16,9 @@ import {
   Copy,
   Check,
   FileCode,
+  Smartphone,
+  Cloud,
+  Layers,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { DatabaseState } from '../db/localDatabase';
@@ -28,7 +31,7 @@ interface DesktopAppModalProps {
 export const DesktopAppModal: React.FC<DesktopAppModalProps> = ({ state, onClose }) => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'PWA' | 'WINDOWS_PACKAGE' | 'OFFLINE_STANDALONE' | 'DOCKER_IMAGE'>('PWA');
+  const [activeTab, setActiveTab] = useState<'PWA' | 'WINDOWS_PACKAGE' | 'EXE_APK_BUILD' | 'DOCKER_IMAGE'>('PWA');
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
 
@@ -275,6 +278,18 @@ exit
           </button>
 
           <button
+            onClick={() => setActiveTab('EXE_APK_BUILD')}
+            className={`flex-1 py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'EXE_APK_BUILD'
+                ? 'bg-white text-indigo-700 shadow-xs border border-slate-200 font-black'
+                : 'text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Smartphone className="w-4 h-4 text-indigo-600" />
+            <span>3. تحويل لتطبيق (.EXE & .APK) وسيرفر موحد</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('DOCKER_IMAGE')}
             className={`flex-1 py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'DOCKER_IMAGE'
@@ -283,7 +298,7 @@ exit
             }`}
           >
             <Terminal className="w-4 h-4 text-emerald-600" />
-            <span>3. صورة الحاوية (Docker / Image)</span>
+            <span>4. صورة الحاوية (Docker / Image)</span>
           </button>
         </div>
 
@@ -450,7 +465,148 @@ exit
             </div>
           )}
 
-          {/* TAB 3: Docker & Image Build */}
+          {/* TAB 3: EXE & APK Full Standalone Pipeline */}
+          {activeTab === 'EXE_APK_BUILD' && (
+            <div className="space-y-5">
+              {/* Architecture Blueprint Card */}
+              <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white p-5 rounded-2xl border border-indigo-500/30 shadow-md space-y-3">
+                <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
+                  <Cloud className="w-5 h-5 text-indigo-400" />
+                  <span>معمارية المنظومة: السيرفر الموحد السحابي + تطبيقات الأجهزة المستقلة</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  البرنامج مصمم بتقنية <strong className="text-emerald-400">Offline-First Hybrid Architecture</strong>، مما يعني أن أي نسخة (EXE على الويندوز، APK على الأندرويد، أو PWA) تعمل كنسخة كاملة مستقلة تماماً بدون فتح مواقع متصفح، وترتبط كلها بنفس قاعدة Firebase المركزية كأنها سيرفر واحد.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+                  <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <Laptop className="w-4 h-4" />
+                      نسخة الويندوز (.EXE)
+                    </span>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      تطبيق سطح مكتب مستقل يعمل في شاشة مخصصة، يحفظ البيانات محلياً ويرفع للسحابة فورياً.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                    <span className="font-bold text-blue-400 flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4" />
+                      نسخة الهاتف (.APK)
+                    </span>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      تطبيق أندرويد متكامل يتم تثبيته على أجهزة المحاسبين والمراجعين الميدانيين.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl space-y-1">
+                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <Zap className="w-4 h-4" />
+                      وضع دون إنترنت (Offline)
+                    </span>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      إذا انقطع النت، تعمل كل النسخ بكفاءة 100%، وبمجرد عودة الاتصال يتم دمج التعديلات آلياً.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conversion Steps */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Build .EXE for Windows */}
+                <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 rounded-xl space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold text-xs">
+                        EXE
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                        تحويل المنظومة لملف تثبيت Windows (.exe)
+                      </h4>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    باستخدام محرك <strong>Electron.js</strong> أو <strong>Tauri</strong> المدمج مع ملفات المشروع:
+                  </p>
+
+                  <div className="bg-slate-950 text-slate-200 p-3 rounded-xl text-xs font-mono space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1">
+                      <span>أوامر التوليد السريعة:</span>
+                      <button
+                        onClick={() =>
+                          copyToClipboard(
+                            'npm install -g electron-packager\nnpm run build\nelectron-packager . "AccountingApp" --platform=win32 --arch=x64 --out=dist-exe --overwrite',
+                            'exe-cmd'
+                          )
+                        }
+                        className="text-emerald-400 hover:underline cursor-pointer"
+                      >
+                        {copiedIndex === 'exe-cmd' ? 'تم النسخ ✓' : 'نسخ'}
+                      </button>
+                    </div>
+                    <p className="text-slate-300"># 1. بناء ملفات المنظومة</p>
+                    <p className="text-emerald-400">npm run build</p>
+                    <p className="text-slate-300"># 2. حزم التطبيق كملف .exe</p>
+                    <p className="text-emerald-400">npx nativefier --name "AccountingApp" http://localhost:3000</p>
+                  </div>
+                </div>
+
+                {/* 2. Build .APK for Android */}
+                <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 rounded-xl space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                        APK
+                      </div>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                        تحويل المنظومة لتطبيق Android (.apk)
+                      </h4>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    باستخدام <strong>Capacitor</strong> أو <strong>PWA2APK (Bubblewrap)</strong>:
+                  </p>
+
+                  <div className="bg-slate-950 text-slate-200 p-3 rounded-xl text-xs font-mono space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1">
+                      <span>أوامر التوليد السريعة:</span>
+                      <button
+                        onClick={() =>
+                          copyToClipboard(
+                            'npm install @capacitor/core @capacitor/cli @capacitor/android\nnpx cap init "AccountingApp" com.mgoffice.accounting\nnpm run build\nnpx cap add android\nnpx cap open android',
+                            'apk-cmd'
+                          )
+                        }
+                        className="text-emerald-400 hover:underline cursor-pointer"
+                      >
+                        {copiedIndex === 'apk-cmd' ? 'تم النسخ ✓' : 'نسخ'}
+                      </button>
+                    </div>
+                    <p className="text-slate-300"># 1. توليد حزمة الأندرويد</p>
+                    <p className="text-emerald-400">npx @bubblewrap/cli build</p>
+                    <p className="text-slate-300"># 2. ملف الـ APK الناتج جاهز للتثبيت المباشر</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Central Server & Offline Sync Summary Box */}
+              <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <h5 className="font-bold text-emerald-950 dark:text-emerald-200">
+                    كيف تضمن عمل جميع الأجهزة كأنها سيرفر مركزي واحد؟
+                  </h5>
+                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                    جميع نسخ التطبيق (.exe على الويندوز أو .apk على الهاتف) تستخدم كود Firebase المدمج ذاته. عند تثبيت البرنامج على أي جهاز جديد وتسجيل الدخول، يسحب تلقائياً آخر حالة لقاعدة البيانات من السحابة دون الحاجة لضبط أي شبكة محلية أو خوادم معقدة.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: Docker & Image Build */}
           {activeTab === 'DOCKER_IMAGE' && (
             <div className="space-y-4">
               <div className="bg-slate-900 text-slate-200 p-4 rounded-xl">

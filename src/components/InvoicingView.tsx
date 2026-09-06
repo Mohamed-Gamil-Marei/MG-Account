@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   CreditCard,
   Plus,
@@ -27,6 +27,7 @@ import {
   ExternalLink,
   ChevronDown,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import { Invoice, InvoiceItem, EtaReceiverType, EtaDocumentType } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -34,13 +35,18 @@ import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenera
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { SecurityAuthService } from '../services/securityAuth';
-import { formDraftStorage } from '../utils/formDrafts';
+import { formDraftStorage, useNetworkStatus } from '../utils/formDrafts';
+import { AutoSaveStatusBadge } from './common/AutoSaveStatusBadge';
+import { DraftRecoveryBanner } from './common/DraftRecoveryBanner';
 import { EtaSettingsModal } from './EtaSettingsModal';
 import { ExcelImportModal } from './ExcelImportModal';
 import { EtaSubmissionModal } from './EtaSubmissionModal';
 import { etaService } from '../utils/etaSdkEngine';
 import { EtaExcelEngine } from '../utils/etaExcelEngine';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { ActionMenu } from './common/ActionMenu';
+import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { PostingEngineService } from '../services/PostingEngineService';
 
 interface InvoicingViewProps {
   state: DatabaseState;
@@ -99,10 +105,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     },
   ]);
   const [applyWht, setApplyWht] = useState(true); // 1%
+  const [autoPostOnIssue, setAutoPostOnIssue] = useState(true); // توليد وترحيل قيد اليومية العامة آلياً فور الإصدار
 
   // Auto-Save & Draft State
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState<boolean>(false);
+  const [manualSaveToast, setManualSaveToast] = useState<string | null>(null);
   const [draftRestoredNotice, setDraftRestoredNotice] = useState<string | null>(null);
+  const isOnline = useNetworkStatus();
   const isInitialDraftLoaded = useRef(false);
 
   // Load existing invoice draft on mount if available
@@ -115,24 +125,84 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       savedDraft &&
       (savedDraft.partnerName?.trim() ||
         savedDraft.partnerTaxNo?.trim() ||
-        savedDraft.items?.some((it) => it.description?.trim() || it.unitPrice > 0))
+        savedDraft.notes?.trim() ||
+        savedDraft.items?.some((it) => it.description?.trim() || (Number(it.unitPrice) || 0) > 0))
     ) {
       setInvoiceType(savedDraft.invoiceType || 'SALES');
+      if (typeof savedDraft.isReceipt === 'boolean') setIsReceipt(savedDraft.isReceipt);
+      if (savedDraft.docType) setDocType(savedDraft.docType as any);
+      if (savedDraft.receiverType) setReceiverType(savedDraft.receiverType as any);
       setDate(savedDraft.date || new Date().toISOString().slice(0, 10));
       setDueDate(savedDraft.dueDate || '2026-03-31');
       setPartnerName(savedDraft.partnerName || '');
       setPartnerTaxNo(savedDraft.partnerTaxNo || '');
+      if (savedDraft.partnerNationalId) setPartnerNationalId(savedDraft.partnerNationalId);
+      if (savedDraft.partnerAddress) setPartnerAddress(savedDraft.partnerAddress);
+      if (savedDraft.paymentMethod) setPaymentMethod(savedDraft.paymentMethod as any);
+      if (savedDraft.notes) setNotes(savedDraft.notes);
       if (savedDraft.items && savedDraft.items.length > 0) {
         setItems(savedDraft.items);
       }
       setApplyWht(savedDraft.applyWht ?? true);
+      if (typeof savedDraft.autoPostOnIssue === 'boolean') setAutoPostOnIssue(savedDraft.autoPostOnIssue);
 
       setDraftRestoredNotice(
-        `تم استعادة مسودة الفاتورة تلقائياً (${savedDraft.meta?.timeFormatted || 'سابقاً'}) لحماية البيانات من الإغلاق غير المتوقع.`
+        `تم استعادة مسودة المستند تلقائياً من الذاكرة المحلية (${savedDraft.meta?.timeFormatted || 'سابقاً'}) لتجنب فقدان العمل في حال انقطاع الاتصال أو تحديث الصفحة.`
       );
       setLastAutoSaveTime(savedDraft.meta?.timeFormatted || null);
     }
   }, []);
+
+  // Synchronous flush on page reload or beforeunload to guarantee zero data loss
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (editingInvoiceId) return;
+      const hasMeaningfulData =
+        Boolean(partnerName.trim()) ||
+        Boolean(partnerTaxNo.trim()) ||
+        Boolean(notes.trim()) ||
+        items.some((it) => it.description.trim() || (Number(it.unitPrice) || 0) > 0);
+
+      if (hasMeaningfulData) {
+        formDraftStorage.saveInvoiceDraft({
+          invoiceType,
+          isReceipt,
+          docType,
+          receiverType,
+          date,
+          dueDate,
+          partnerName,
+          partnerTaxNo,
+          partnerNationalId,
+          partnerAddress,
+          paymentMethod,
+          notes,
+          items,
+          applyWht,
+          autoPostOnIssue,
+        });
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [
+    invoiceType,
+    isReceipt,
+    docType,
+    receiverType,
+    date,
+    dueDate,
+    partnerName,
+    partnerTaxNo,
+    partnerNationalId,
+    partnerAddress,
+    paymentMethod,
+    notes,
+    items,
+    applyWht,
+    autoPostOnIssue,
+    editingInvoiceId,
+  ]);
 
   // Auto-save draft changes to localStorage
   useEffect(() => {
@@ -141,28 +211,97 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     const hasMeaningfulData =
       Boolean(partnerName.trim()) ||
       Boolean(partnerTaxNo.trim()) ||
-      items.some((it) => it.description.trim() || it.unitPrice > 0);
+      Boolean(notes.trim()) ||
+      items.some((it) => it.description.trim() || (Number(it.unitPrice) || 0) > 0);
 
     if (!hasMeaningfulData) return;
 
+    setIsAutoSaving(true);
     const timer = setTimeout(() => {
       const meta = formDraftStorage.saveInvoiceDraft({
         invoiceType,
+        isReceipt,
+        docType,
+        receiverType,
         date,
         dueDate,
         partnerName,
         partnerTaxNo,
+        partnerNationalId,
+        partnerAddress,
+        paymentMethod,
+        notes,
         items,
         applyWht,
+        autoPostOnIssue,
       });
       setLastAutoSaveTime(meta.timeFormatted);
+      setIsAutoSaving(false);
     }, 400);
 
-    return () => clearTimeout(timer);
-  }, [invoiceType, date, dueDate, partnerName, partnerTaxNo, items, applyWht, editingInvoiceId]);
+    return () => {
+      clearTimeout(timer);
+      setIsAutoSaving(false);
+    };
+  }, [
+    invoiceType,
+    isReceipt,
+    docType,
+    receiverType,
+    date,
+    dueDate,
+    partnerName,
+    partnerTaxNo,
+    partnerNationalId,
+    partnerAddress,
+    paymentMethod,
+    notes,
+    items,
+    applyWht,
+    autoPostOnIssue,
+    editingInvoiceId,
+  ]);
+
+  // Manual save draft handler
+  const handleManualSaveDraft = () => {
+    if (editingInvoiceId) return;
+    setIsAutoSaving(true);
+    const meta = formDraftStorage.saveInvoiceDraft({
+      invoiceType,
+      isReceipt,
+      docType,
+      receiverType,
+      date,
+      dueDate,
+      partnerName,
+      partnerTaxNo,
+      partnerNationalId,
+      partnerAddress,
+      paymentMethod,
+      notes,
+      items,
+      applyWht,
+      autoPostOnIssue,
+    });
+    setLastAutoSaveTime(meta.timeFormatted);
+    setIsAutoSaving(false);
+    setManualSaveToast(`تم حفظ مسودة الفاتورة يدوياً في ذاكرة المتصفح (${meta.timeFormatted})`);
+    setTimeout(() => setManualSaveToast(null), 3500);
+  };
+
+  // Has unsaved draft flag for screen-level recovery banner
+  const hasUnsavedDraft = useMemo(() => {
+    if (editingInvoiceId) return false;
+    const hasData =
+      Boolean(partnerName.trim()) ||
+      Boolean(partnerTaxNo.trim()) ||
+      Boolean(notes.trim()) ||
+      items.some((it) => it.description.trim() || (Number(it.unitPrice) || 0) > 0);
+    return Boolean(hasData && (lastAutoSaveTime || formDraftStorage.hasInvoiceDraft()));
+  }, [editingInvoiceId, partnerName, partnerTaxNo, notes, items, lastAutoSaveTime]);
 
   const handleClearDraft = () => {
-    if (window.confirm('هل تريد مسح مسودة الفاتورة والبدء بنموذج فاتورة فارغ؟')) {
+    if (window.confirm('هل تريد مسح مسودة المستند والبدء بنموذج فاتورة فارغ جديد؟')) {
       formDraftStorage.clearInvoiceDraft();
       setInvoiceType('SALES');
       setIsReceipt(false);
@@ -197,8 +336,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         },
       ]);
       setApplyWht(true);
+      setAutoPostOnIssue(true);
       setLastAutoSaveTime(null);
       setDraftRestoredNotice(null);
+      setManualSaveToast(null);
     }
   };
 
@@ -382,6 +523,15 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         qrPayload,
       });
 
+      // Smart Invoice Flow: توليد قيد اليومية العامة تلقائياً فور إصدار الفاتورة
+      let postedJournalSerial = '';
+      if (createdInvoice && autoPostOnIssue) {
+        const postResult = PostingEngineService.postInvoice(createdInvoice.id);
+        if (postResult.success && postResult.journalEntry) {
+          postedJournalSerial = postResult.journalEntry.serialNumber;
+        }
+      }
+
       // If auto-submit is enabled in ETA Config
       const config = etaService.getConfig();
       if (config.autoSubmitOnIssue && createdInvoice) {
@@ -405,6 +555,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       formDraftStorage.clearInvoiceDraft();
       setLastAutoSaveTime(null);
       setDraftRestoredNotice(null);
+
+      if (postedJournalSerial) {
+        alert(`✓ تم إصدار المستند بنجاح وتوليد قيد اليومية آلياً برقم [${postedJournalSerial}]`);
+      }
     }
 
     setIsNewModalOpen(false);
@@ -443,6 +597,30 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     }
   };
 
+  const handlePostInvoice = (invoiceId: string) => {
+    const res = PostingEngineService.postInvoice(invoiceId);
+    if (res.success && res.journalEntry) {
+      alert(`✓ تم بنجاح ترحيل الفاتورة وتوليد قيد اليومية رقم [${res.journalEntry.serialNumber}] وتحديث ميزان المراجعة والأستاذ العام.`);
+    } else {
+      alert(res.error || 'تعذر ترحيل الفاتورة.');
+    }
+  };
+
+  const handleBatchPostInvoices = () => {
+    const unposted = state.invoices.filter((inv) => !PostingEngineService.isInvoicePosted(inv.invoiceNumber).isPosted);
+    if (unposted.length === 0) {
+      alert('كافة الفواتير الحالية مرحلة بالفعل لدفتر اليومية العامة.');
+      return;
+    }
+
+    if (!confirm(`هل ترغب في ترحيل عدد (${unposted.length}) فاتورة غير مرحلة إلى دفتر اليومية العامة آلياً؟`)) {
+      return;
+    }
+
+    const res = PostingEngineService.batchPostInvoices(unposted.map((i) => i.id));
+    alert(`✓ اكتمل الترحيل الآلي: تم ترحيل (${res.postedCount}) فاتورة بنجاح إلى قيود اليومية العامة وتحديث ميزان المراجعة.`);
+  };
+
   const filteredInvoices = state.invoices.filter((inv) => {
     let matchesType = true;
     if (filterType === 'SALES') {
@@ -475,348 +653,404 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
   const totalEtaValidCount = state.invoices.filter((i) => i.etaStatus === 'VALID').length;
 
   return (
-    <div className="space-y-5">
-      {/* Header & Integration Bar */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-2xl bg-emerald-700 text-white shadow-xs">
-              <CreditCard className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900">
-                  منظومة الفاتورة والإيصال الإلكتروني (ETA e-Invoicing & Receipts)
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
-                  ETA SDK v1.0
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                تكامل مباشر مع مصلحة الضرائب المصرية • التوقيع الرقمي CAdES-BES • الاستيراد والتصدير بالإكسل وجميع الصيغ المعتمدة.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Global Actions */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {pendingInvoices.length > 0 && (
-            <button
-              onClick={handleBatchSubmit}
-              disabled={isBatchSubmitting}
-              title="إرسال كافة الفواتير والإيصالات المعلقة لمنظومة الضرائب دفعة واحدة"
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs animate-pulse"
-            >
-              {isBatchSubmitting ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              <span>إرسال المعلق للضرائب ({pendingInvoices.length})</span>
-            </button>
-          )}
-
+    <UnifiedScreenCard
+      title="منظومة الفاتورة والإيصال الإلكتروني"
+      subtitle="ETA e-Invoicing & Receipts • تكامل مصلحة الضرائب المصرية"
+      icon={CreditCard}
+      badge="ETA SDK v1.0"
+      badgeVariant="emerald"
+      primaryAction={{
+        id: 'btn-create-invoice',
+        label: 'إصدار مستند',
+        icon: Plus,
+        variant: 'success',
+        onClick: () => {
+          setEditingInvoiceId(null);
+          setIsNewModalOpen(true);
+        },
+      }}
+      actionMenuItems={[
+        {
+          label: 'إصدار فاتورة / إيصال جديد',
+          preset: 'create',
+          variant: 'success',
+          onClick: () => {
+            setEditingInvoiceId(null);
+            setIsNewModalOpen(true);
+          },
+        },
+        ...(pendingInvoices.length > 0
+          ? [
+              {
+                label: `إرسال المعلق للضرائب (${pendingInvoices.length})`,
+                preset: 'send' as const,
+                variant: 'primary' as const,
+                onClick: handleBatchSubmit,
+              },
+            ]
+          : []),
+        {
+          label: 'الترحيل الآلي لقيود اليومية العامة',
+          icon: Sparkles,
+          variant: 'primary',
+          onClick: handleBatchPostInvoices,
+        },
+        {
+          label: '',
+          isDivider: true,
+          onClick: () => {},
+        },
+        {
+          label: 'إعدادات ربط الضرائب (ETA Config)',
+          preset: 'settings',
+          onClick: () => setIsEtaSettingsOpen(true),
+        },
+        {
+          label: 'استيراد فواتير من Excel',
+          preset: 'import_excel',
+          onClick: () => setIsExcelImportOpen(true),
+        },
+        {
+          label: 'تصدير السجل إلى Excel',
+          preset: 'export_excel',
+          onClick: () => EtaExcelEngine.exportAllInvoicesToExcel(filteredInvoices),
+        },
+      ]}
+      actionsSlot={
+        pendingInvoices.length > 0 ? (
           <button
-            onClick={() => setIsEtaSettingsOpen(true)}
-            title="إعدادات مفاتيح الربط مع مصلحة الضرائب (Client ID / Secret / Token PIN)"
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-xs border border-slate-200 transition-all cursor-pointer shadow-2xs"
+            onClick={handleBatchSubmit}
+            disabled={isBatchSubmitting}
+            title="إرسال كافة الفواتير والإيصالات المعلقة لمنظومة الضرائب"
+            className="flex items-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer"
           >
-            <Settings className="w-4 h-4 text-slate-600" />
-            <span>إعدادات الربط (ETA)</span>
+            {isBatchSubmitting ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+            <span>إرسال ({pendingInvoices.length})</span>
           </button>
-
-          <ScreenActionToolbar
-            modelType="INVOICES"
-            title="سجل الفواتير والإيصالات الإلكترونية"
-            count={filteredInvoices.length}
-          />
-
-          <button
-            onClick={() => {
+        ) : null
+      }
+    >
+      <div className="space-y-3.5">
+        {/* Draft Recovery Alert Banner when main table is visible */}
+        {hasUnsavedDraft && !isNewModalOpen && (
+          <DraftRecoveryBanner
+            documentType={isReceipt ? 'إيصال إلكتروني (B2C)' : 'فاتورة ضريبية (B2B)'}
+            savedAt={lastAutoSaveTime || 'مسودة محفوظة في الذاكرة المحلية'}
+            descriptionSummary={
+              partnerName
+                ? `الطرف المستلم: ${partnerName}${items[0]?.description ? ` • ${items[0].description}` : ''}`
+                : items[0]?.description || 'مستند بدون بيان'
+            }
+            linesCount={items.filter((it) => it.description.trim() || Number(it.unitPrice) > 0).length}
+            onResume={() => {
               setEditingInvoiceId(null);
               setIsNewModalOpen(true);
             }}
-            id="btn-create-invoice"
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إصدار فاتورة / إيصال جديد</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 text-[11px]">
-            <span>إجمالي المبيعات والأتعاب</span>
-            <Receipt className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="font-bold font-mono text-base text-slate-900 mt-1">
-            {formatEgyptianCurrency(totalSalesRevenue)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">شامل الضرائب والخصومات</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-emerald-700 text-[11px]">
-            <span>ضريبة القيمة المضافة 14% (T1)</span>
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="font-bold font-mono text-base text-emerald-800 mt-1">
-            +{formatEgyptianCurrency(totalVatCollected)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">محصلة لإقرار نموذج 10</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-red-700 text-[11px]">
-            <span>خصم وتحصيل 1% (T4 WHT)</span>
-            <Lock className="w-4 h-4 text-red-600" />
-          </div>
-          <div className="font-bold font-mono text-base text-red-800 mt-1">
-            -{formatEgyptianCurrency(totalWhtWithheld)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">توريد لنموذج 41 ضرائب</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-blue-700 text-[11px]">
-            <span>الفواتير المعتمدة بـ ETA</span>
-            <FileCheck className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="font-bold font-mono text-base text-blue-900 mt-1">
-            {totalEtaValidCount} من {state.invoices.length} مستند
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">تمت مطابقتها بالختم الإلكتروني</div>
-        </div>
-      </div>
-
-      {/* Filter and Search */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-96">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث برقم الفاتورة، اسم العميل، الرقم الضريبي، أو ETA UUID..."
-            className="w-full pl-3 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            onDiscard={handleClearDraft}
           />
+        )}
+
+        {/* KPI Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div className="bg-slate-50/70 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 text-[11px]">
+              <span>إجمالي المبيعات والأتعاب</span>
+              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
+            <div className="font-bold font-mono text-sm sm:text-base text-slate-900 dark:text-slate-100 mt-0.5">
+              {formatEgyptianCurrency(totalSalesRevenue)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">شامل الضرائب والخصومات</div>
+          </div>
+
+          <div className="bg-slate-50/70 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
+            <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 text-[11px]">
+              <span>ضريبة القيمة المضافة 14% (T1)</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
+            <div className="font-bold font-mono text-sm sm:text-base text-emerald-800 dark:text-emerald-300 mt-0.5">
+              +{formatEgyptianCurrency(totalVatCollected)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">محصلة لإقرار نموذج 10</div>
+          </div>
+
+          <div className="bg-slate-50/70 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
+            <div className="flex items-center justify-between text-red-700 dark:text-red-400 text-[11px]">
+              <span>خصم وتحصيل 1% (T4 WHT)</span>
+              <Lock className="w-3.5 h-3.5 text-red-600" />
+            </div>
+            <div className="font-bold font-mono text-sm sm:text-base text-red-800 dark:text-red-300 mt-0.5">
+              -{formatEgyptianCurrency(totalWhtWithheld)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">توريد لنموذج 41 ضرائب</div>
+          </div>
+
+          <div className="bg-slate-50/70 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
+            <div className="flex items-center justify-between text-blue-700 dark:text-blue-400 text-[11px]">
+              <span>المعتمد بـ ETA</span>
+              <FileCheck className="w-3.5 h-3.5 text-blue-600" />
+            </div>
+            <div className="font-bold font-mono text-sm sm:text-base text-blue-900 dark:text-blue-300 mt-0.5">
+              {totalEtaValidCount} من {state.invoices.length} مستند
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">تمت مطابقتها بالختم الإلكتروني</div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setFilterType('ALL')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-              filterType === 'ALL' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            جميع المستندات ({state.invoices.length})
-          </button>
-          <button
-            onClick={() => setFilterType('SALES')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-              filterType === 'SALES'
-                ? 'bg-emerald-800 text-white'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-            }`}
-          >
-            فواتير B2B ({state.invoices.filter((i) => i.invoiceType === 'SALES' && !i.isReceipt).length})
-          </button>
-          <button
-            onClick={() => setFilterType('RECEIPT')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-              filterType === 'RECEIPT'
-                ? 'bg-purple-800 text-white'
-                : 'bg-purple-50 text-purple-800 hover:bg-purple-100'
-            }`}
-          >
-            إيصالات B2C ({state.invoices.filter((i) => i.isReceipt).length})
-          </button>
-          <button
-            onClick={() => setFilterType('PURCHASE')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-              filterType === 'PURCHASE' ? 'bg-amber-800 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-            }`}
-          >
-            فواتير المشتريات
-          </button>
+        {/* Filter and Search */}
+        <div className="bg-slate-50/50 dark:bg-slate-800/40 rounded-xl p-2.5 border border-slate-200/80 dark:border-slate-700/60 flex flex-col md:flex-row items-center justify-between gap-2.5">
+          <div className="relative w-full md:w-80">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="بحث برقم الفاتورة، العميل، الرقم الضريبي، أو UUID..."
+              className="w-full pl-3 pr-8 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto justify-end">
+            <button
+              onClick={() => setFilterType('ALL')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                filterType === 'ALL'
+                  ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              الكل ({state.invoices.length})
+            </button>
+            <button
+              onClick={() => setFilterType('SALES')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                filterType === 'SALES'
+                  ? 'bg-emerald-800 text-white shadow-2xs'
+                  : 'bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50'
+              }`}
+            >
+              فواتير B2B ({state.invoices.filter((i) => i.invoiceType === 'SALES' && !i.isReceipt).length})
+            </button>
+            <button
+              onClick={() => setFilterType('RECEIPT')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                filterType === 'RECEIPT'
+                  ? 'bg-purple-800 text-white shadow-2xs'
+                  : 'bg-white dark:bg-slate-800 text-purple-800 dark:text-purple-300 border border-slate-200 dark:border-slate-700 hover:bg-purple-50'
+              }`}
+            >
+              إيصالات B2C ({state.invoices.filter((i) => i.isReceipt).length})
+            </button>
+            <button
+              onClick={() => setFilterType('PURCHASE')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                filterType === 'PURCHASE'
+                  ? 'bg-amber-800 text-white shadow-2xs'
+                  : 'bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-slate-200 dark:border-slate-700 hover:bg-amber-50'
+              }`}
+            >
+              مشتريات
+            </button>
+
+            <button
+              onClick={handleBatchPostInvoices}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1 transition-colors cursor-pointer mr-auto shadow-2xs"
+              title="ترحيل الفواتير المعتمدة تلقائياً لدفتر اليومية العامة"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+              <span>ترحيل اليومية</span>
+              {(() => {
+                const unpostedCount = state.invoices.filter(
+                  (inv) => !PostingEngineService.isInvoicePosted(inv.invoiceNumber).isPosted
+                ).length;
+                if (unpostedCount > 0) {
+                  return (
+                    <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-mono">
+                      {unpostedCount}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Invoices Table */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                <th className="py-3.5 px-4">رقم المستند</th>
-                <th className="py-3.5 px-4">التاريخ</th>
-                <th className="py-3.5 px-4">نوع المستند</th>
-                <th className="py-3.5 px-4">اسم الطرف (العميل / المشتري)</th>
-                <th className="py-3.5 px-4 text-left">قيمة البضاعة</th>
-                <th className="py-3.5 px-4 text-left">ض.ق.م 14%</th>
-                <th className="py-3.5 px-4 text-left">خصم 1%</th>
-                <th className="py-3.5 px-4 text-left">صافي الفاتورة</th>
-                <th className="py-3.5 px-4 text-center">حالة الضرائب ETA</th>
-                <th className="py-3.5 px-4 text-center">الإجراءات والتصدير</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredInvoices.map((inv) => {
-                const isValid = inv.etaStatus === 'VALID';
-                const isSubmitted = inv.etaStatus === 'SUBMITTED';
+        {/* Invoices Table - Compact Mode & Zebra Striping */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs accounting-table">
+              <thead>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-800">
+                  <th className="py-1.5 px-2.5">رقم المستند</th>
+                  <th className="py-1.5 px-2.5">التاريخ</th>
+                  <th className="py-1.5 px-2.5">نوع المستند</th>
+                  <th className="py-1.5 px-2.5">اسم الطرف (العميل / المشتري)</th>
+                  <th className="py-1.5 px-2.5 text-left">قيمة البضاعة</th>
+                  <th className="py-1.5 px-2.5 text-left">ض.ق.م 14%</th>
+                  <th className="py-1.5 px-2.5 text-left">خصم 1%</th>
+                  <th className="py-1.5 px-2.5 text-left">صافي الفاتورة</th>
+                  <th className="py-1.5 px-2.5 text-center">حالة ETA</th>
+                  <th className="py-1.5 px-2.5 text-center">اليومية</th>
+                  <th className="py-1.5 px-2.5 text-center">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredInvoices.map((inv, idx) => {
+                  const isValid = inv.etaStatus === 'VALID';
+                  const isSubmitted = inv.etaStatus === 'SUBMITTED';
 
-                return (
-                  <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-900">
-                      <div>{inv.invoiceNumber}</div>
-                      {inv.etaUuid && (
-                        <div className="text-[9px] font-mono text-slate-400 truncate max-w-[110px]" title={inv.etaUuid}>
-                          UUID: {inv.etaUuid.slice(0, 8)}...
+                  return (
+                    <tr
+                      key={inv.id}
+                      className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${
+                        idx % 2 === 1 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'
+                      }`}
+                    >
+                      <td className="py-1.5 px-2.5 font-mono font-bold text-emerald-900 dark:text-emerald-400">
+                        <div>{inv.invoiceNumber}</div>
+                        {inv.etaUuid && (
+                          <div className="text-[9px] font-mono text-slate-400 truncate max-w-[110px]" title={inv.etaUuid}>
+                            UUID: {inv.etaUuid.slice(0, 8)}...
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2.5 font-mono text-slate-600 dark:text-slate-400">{inv.date}</td>
+                      <td className="py-1.5 px-2.5">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            inv.isReceipt
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
+                              : inv.invoiceType === 'SALES'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                          }`}
+                        >
+                          {inv.isReceipt ? 'إيصال B2C' : inv.invoiceType === 'SALES' ? 'فاتورة B2B' : 'مشتريات'}
+                        </span>
+                      </td>
+                      <td className="py-1.5 px-2.5 font-semibold text-slate-900 dark:text-slate-100">
+                        <div>{inv.partnerName}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          {inv.partnerTaxNo ? `ضريبي: ${inv.partnerTaxNo}` : inv.partnerNationalId ? `قومي: ${inv.partnerNationalId}` : 'بدون رقم ضريبي'}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{inv.date}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          inv.isReceipt
-                            ? 'bg-purple-100 text-purple-800'
-                            : inv.invoiceType === 'SALES'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {inv.isReceipt ? 'إيصال إلكتروني B2C' : inv.invoiceType === 'SALES' ? 'فاتورة ضريبية B2B' : 'فاتورة شراء'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-slate-900">
-                      <div>{inv.partnerName}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">
-                        {inv.partnerTaxNo ? `ضريبي: ${inv.partnerTaxNo}` : inv.partnerNationalId ? `قومي: ${inv.partnerNationalId}` : 'بدون رقم ضريبي'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-left text-slate-700">{formatEgyptianCurrency(inv.subtotal)}</td>
-                    <td className="py-3 px-4 font-mono text-left text-emerald-700">+{formatEgyptianCurrency(inv.totalVat)}</td>
-                    <td className="py-3 px-4 font-mono text-left text-red-700">-{formatEgyptianCurrency(inv.totalWht)}</td>
-                    <td className="py-3 px-4 font-mono font-black text-left text-slate-900 text-sm">
-                      {formatEgyptianCurrency(inv.grandTotal)}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {isValid ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-300">
-                          <CheckCircle className="w-3 h-3 text-emerald-600" />
-                          <span>معتمدة (Valid)</span>
-                        </span>
-                      ) : isSubmitted ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-300">
-                          <Send className="w-3 h-3 text-blue-600" />
-                          <span>مرسلة (Submitted)</span>
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => setEtaSubmissionInvoice(inv)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10px] font-bold border border-amber-300 cursor-pointer transition-colors"
-                        >
-                          <Send className="w-2.5 h-2.5 text-amber-700" />
-                          <span>إرسال لـ ETA</span>
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => setSelectedInvoice(inv)}
-                          title="عرض بيانات الفاتورة والطباعة المعتمدة"
-                          className="flex items-center gap-1 px-2 py-1 text-slate-700 hover:text-emerald-800 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer text-[11px]"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>عرض</span>
-                        </button>
-
-                        <button
-                          onClick={() => setEtaSubmissionInvoice(inv)}
-                          title="إرسال ومعاينة تشفير مصلحة الضرائب المصرية"
-                          className="flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 transition-colors cursor-pointer text-[11px] font-bold"
-                        >
-                          <Send className="w-3 h-3 text-emerald-700" />
-                          <span>ETA</span>
-                        </button>
-
-                        {/* Multi-Format Export dropdown */}
-                        <div className="relative inline-block text-right">
+                      </td>
+                      <td className="py-1.5 px-2.5 font-mono text-left text-slate-700 dark:text-slate-300">{formatEgyptianCurrency(inv.subtotal)}</td>
+                      <td className="py-1.5 px-2.5 font-mono text-left text-emerald-700 dark:text-emerald-400">+{formatEgyptianCurrency(inv.totalVat)}</td>
+                      <td className="py-1.5 px-2.5 font-mono text-left text-red-700 dark:text-red-400">-{formatEgyptianCurrency(inv.totalWht)}</td>
+                      <td className="py-1.5 px-2.5 font-mono font-bold text-left text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                        {formatEgyptianCurrency(inv.grandTotal)}
+                      </td>
+                      <td className="py-1.5 px-2.5 text-center">
+                        {isValid ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 text-[10px] font-bold border border-emerald-300 dark:border-emerald-800">
+                            <CheckCircle className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>معتمدة</span>
+                          </span>
+                        ) : isSubmitted ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 text-[10px] font-bold border border-blue-300 dark:border-blue-800">
+                            <Send className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" />
+                            <span>مرسلة</span>
+                          </span>
+                        ) : (
                           <button
-                            onClick={() =>
-                              setActiveExportDropdownId(activeExportDropdownId === inv.id ? null : inv.id)
-                            }
-                            className="flex items-center gap-1 px-2 py-1 text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 text-[11px] cursor-pointer"
+                            onClick={() => setEtaSubmissionInvoice(inv)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300 text-[10px] font-bold border border-amber-300 dark:border-amber-800 cursor-pointer transition-colors"
                           >
-                            <Download className="w-3 h-3 text-slate-600" />
-                            <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
+                            <Send className="w-2.5 h-2.5 text-amber-700" />
+                            <span>إرسال ETA</span>
                           </button>
-
-                          {activeExportDropdownId === inv.id && (
-                            <div className="absolute left-0 mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-30 text-right text-[11px]">
-                              <button
-                                onClick={() => {
-                                  EtaExcelEngine.exportInvoiceToEtaJson(inv);
-                                  setActiveExportDropdownId(null);
-                                }}
-                                className="w-full px-3 py-1.5 hover:bg-emerald-50 flex items-center gap-2 text-slate-800 cursor-pointer"
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2.5 text-center">
+                        {(() => {
+                          const postInfo = PostingEngineService.isInvoicePosted(inv.invoiceNumber);
+                          if (postInfo.isPosted) {
+                            return (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 font-mono"
+                                title={`مرحل بالقيد رقم ${postInfo.serialNumber}`}
                               >
-                                <FileCode className="w-3.5 h-3.5 text-emerald-700" />
-                                <span>تصدير ETA JSON (v1.0)</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  EtaExcelEngine.exportInvoiceToEtaXml(inv);
-                                  setActiveExportDropdownId(null);
-                                }}
-                                className="w-full px-3 py-1.5 hover:bg-emerald-50 flex items-center gap-2 text-slate-800 cursor-pointer"
-                              >
-                                <FileText className="w-3.5 h-3.5 text-blue-700" />
-                                <span>تصدير ETA XML (UBL)</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  EtaExcelEngine.exportInvoiceToExcel(inv);
-                                  setActiveExportDropdownId(null);
-                                }}
-                                className="w-full px-3 py-1.5 hover:bg-emerald-50 flex items-center gap-2 text-slate-800 cursor-pointer"
-                              >
-                                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-                                <span>تصدير شيت Excel (.xlsx)</span>
-                              </button>
-                              {inv.isReceipt && (
-                                <button
-                                  onClick={() => {
-                                    EtaExcelEngine.exportReceiptToEtaJson(inv);
-                                    setActiveExportDropdownId(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 hover:bg-purple-50 flex items-center gap-2 text-purple-900 cursor-pointer"
-                                >
-                                  <Receipt className="w-3.5 h-3.5 text-purple-700" />
-                                  <span>تصدير e-Receipt JSON</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => handleRequestEdit(inv)}
-                          title="تعديل الفاتورة (يتطلب الرقم السري Mg120)"
-                          className="flex items-center gap-1 px-2 py-1 text-amber-800 hover:text-amber-900 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors cursor-pointer text-[11px] font-bold"
-                        >
-                          <Lock className="w-3 h-3 text-amber-700" />
-                          <span>تعديل</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                                <CheckCircle className="w-2.5 h-2.5 text-indigo-600 dark:text-indigo-400" />
+                                <span>{postInfo.serialNumber}</span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={() => handlePostInvoice(inv.id)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
+                              title="توليد وترحيل قيد اليومية العامة آلياً"
+                            >
+                              <Sparkles className="w-2.5 h-2.5 text-indigo-200" />
+                              <span>ترحيل</span>
+                            </button>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-1.5 px-2.5 text-center">
+                        <ActionMenu
+                          title={`إجراءات ${inv.invoiceNumber}`}
+                          triggerType="three_dots_vertical"
+                          size="xs"
+                          menuWidth="w-56"
+                          items={[
+                            {
+                              label: 'معاينة وطباعة الفاتورة',
+                              preset: 'print',
+                              variant: 'primary',
+                              onClick: () => setSelectedInvoice(inv),
+                            },
+                            {
+                              label: 'إرسال لمصلحة الضرائب (ETA)',
+                              preset: 'send',
+                              variant: 'success',
+                              onClick: () => setEtaSubmissionInvoice(inv),
+                            },
+                            {
+                              label: 'تعديل الفاتورة المحمية',
+                              preset: 'edit',
+                              variant: 'warning',
+                              onClick: () => handleRequestEdit(inv),
+                            },
+                            {
+                              label: '',
+                              isDivider: true,
+                              onClick: () => {},
+                            },
+                            {
+                              label: 'تصدير شيت Excel (.xlsx)',
+                              preset: 'export_excel',
+                              onClick: () => EtaExcelEngine.exportInvoiceToExcel(inv),
+                            },
+                            {
+                              label: 'تصدير ETA JSON (v1.0)',
+                              icon: FileCode,
+                              onClick: () => EtaExcelEngine.exportInvoiceToEtaJson(inv),
+                            },
+                            {
+                              label: 'تصدير ETA XML (UBL)',
+                              icon: FileText,
+                              onClick: () => EtaExcelEngine.exportInvoiceToEtaXml(inv),
+                            },
+                            ...(inv.isReceipt
+                              ? [
+                                  {
+                                    label: 'تصدير e-Receipt JSON',
+                                    icon: Receipt,
+                                    onClick: () => EtaExcelEngine.exportReceiptToEtaJson(inv),
+                                  },
+                                ]
+                              : []),
+                          ]}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -854,11 +1088,11 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                 className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span>تعديل (Mg120)</span>
+                <span>تعديل الفاتورة</span>
               </button>
             </div>
 
-            <div className="space-y-4 mt-4">
+            <div id="official-invoice-document" className="space-y-4 mt-4">
               <div className="flex justify-between bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                 <div>
                   <div className="text-slate-400">الطرف المستلم:</div>
@@ -951,7 +1185,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
+            <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 no-print">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleRequestEdit(selectedInvoice)}
@@ -971,7 +1205,43 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    const styleId = 'invoice-direct-print-style';
+                    let styleEl = document.getElementById(styleId) as HTMLStyleElement;
+                    if (!styleEl) {
+                      styleEl = document.createElement('style');
+                      styleEl.id = styleId;
+                      document.head.appendChild(styleEl);
+                    }
+                    styleEl.innerHTML = `
+                      @page {
+                        size: A4 portrait;
+                        margin: 10mm 12mm;
+                      }
+                      @media print {
+                        body * {
+                          visibility: hidden !important;
+                        }
+                        #official-invoice-document, #official-invoice-document * {
+                          visibility: visible !important;
+                        }
+                        #official-invoice-document {
+                          position: absolute !important;
+                          left: 0 !important;
+                          top: 0 !important;
+                          width: 100% !important;
+                          margin: 0 !important;
+                          padding: 20px !important;
+                          background: white !important;
+                          box-shadow: none !important;
+                          border: none !important;
+                        }
+                      }
+                    `;
+                    setTimeout(() => {
+                      window.print();
+                    }, 120);
+                  }}
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Printer className="w-4 h-4" />
@@ -993,29 +1263,42 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       {isNewModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 text-xs my-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-emerald-700" />
-                <h3 className="text-base font-bold text-slate-900">
-                  {editingInvoiceId
-                    ? 'تعديل الفاتورة (وضع التعديل المصرح به)'
-                    : isReceipt
-                    ? 'إصدار إيصال إلكتروني جديد (B2C)'
-                    : 'إصدار فاتورة ضريبية جديدة (B2B)'}
-                </h3>
-                {!editingInvoiceId && lastAutoSaveTime && (
-                  <span className="text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs">
-                    <Save className="w-3 h-3 text-emerald-600 animate-pulse" />
-                    <span>حفظ تلقائي للمسودة: {lastAutoSaveTime}</span>
-                  </span>
-                )}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-slate-200 gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CreditCard className="w-5 h-5 text-emerald-700 shrink-0" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingInvoiceId
+                      ? 'تعديل الفاتورة (وضع التعديل المصرح به)'
+                      : isReceipt
+                      ? 'إصدار إيصال إلكتروني جديد (B2C)'
+                      : 'إصدار فاتورة ضريبية جديدة (B2B)'}
+                  </h3>
+                  <div className="mt-1">
+                    {!editingInvoiceId ? (
+                      <AutoSaveStatusBadge
+                        lastSavedTime={lastAutoSaveTime}
+                        isSaving={isAutoSaving}
+                        isOffline={!isOnline}
+                        onManualSave={handleManualSaveDraft}
+                        onClearDraft={handleClearDraft}
+                        documentLabel={isReceipt ? 'الإيصال' : 'الفاتورة'}
+                      />
+                    ) : (
+                      <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <KeyRound className="w-3 h-3 text-amber-700" />
+                        <span>تعديل مستند ضريبي معتمد</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
               <button
                 onClick={() => {
                   setIsNewModalOpen(false);
                   setEditingInvoiceId(null);
                 }}
-                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer self-end sm:self-center p-1 rounded-lg hover:bg-slate-100"
               >
                 ✕
               </button>
@@ -1047,10 +1330,27 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
               </div>
             )}
 
+            {/* Manual Save Success Toast */}
+            {manualSaveToast && (
+              <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl flex items-center justify-between gap-2 text-xs font-medium animate-in fade-in duration-150">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{manualSaveToast}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualSaveToast(null)}
+                  className="text-emerald-700 hover:text-emerald-900 p-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {editingInvoiceId && (
               <div className="mt-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
-                <span>تم إثبات صلاحية التعديل بنجاح بالرقم السري (Mg120). يمكنك الآن تعديل البنود والحفظ.</span>
+                <span>تم إثبات صلاحية التعديل بنجاح بالرقم السري المصرح به. يمكنك الآن تعديل البنود والحفظ.</span>
               </div>
             )}
 
@@ -1327,15 +1627,28 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
 
                 {/* Calculation Footer */}
                 <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-bold">
-                  <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={applyWht}
-                      onChange={(e) => setApplyWht(e.target.checked)}
-                      className="rounded text-emerald-600"
-                    />
-                    <span>تطبيق خصم وتحصيل 1% أ.ت.ص (مصلحة الضرائب المصرية)</span>
-                  </label>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={applyWht}
+                        onChange={(e) => setApplyWht(e.target.checked)}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>تطبيق خصم وتحصيل 1% أ.ت.ص</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/70 border border-indigo-200 px-2.5 py-1 rounded-lg cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoPostOnIssue}
+                        onChange={(e) => setAutoPostOnIssue(e.target.checked)}
+                        className="rounded text-indigo-600"
+                      />
+                      <Sparkles className="w-3 h-3 text-indigo-600" />
+                      <span>توليد قيد يومية تلقائي فور الإصدار</span>
+                    </label>
+                  </div>
                   <div className="text-slate-900 font-mono text-sm">
                     صافي الفاتورة الإجمالي:{' '}
                     <strong className="text-emerald-900">{formatEgyptianCurrency(grandTotal)}</strong>
@@ -1417,6 +1730,6 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         description={`يرجى إدخال الرقم السري لتعديل الفاتورة رقم [${invoiceToEdit?.invoiceNumber || ''}]`}
         actionType="EDIT_RECORD"
       />
-    </div>
+    </UnifiedScreenCard>
   );
 };

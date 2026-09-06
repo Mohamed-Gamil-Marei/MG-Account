@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { ClientArchiveRecord, ClientProcedureTask, TaxDeclarationRecord } from '../types';
+import { db } from '../db/localDatabase';
 
 export type ClientNotifyType =
   | 'PROCEDURE_UPDATE'     // إشعار بمستجدات أو إنجاز إجراء
@@ -159,8 +160,51 @@ export const ClientNotificationModal: React.FC<ClientNotificationModalProps> = (
       alert('يرجى إدخال رقم هاتف العميل أولاً.');
       return;
     }
+
+    // Save to communications log for audit trail
+    db.sendWhatsAppMessage({
+      clientId: client.id,
+      clientName: client.name,
+      phone: phoneNumber,
+      direction: 'OUTGOING',
+      sender: 'AUDITOR',
+      text: messageData.text,
+      category:
+        notifyType === 'TAX_DECLARATION'
+          ? 'TAX_DECLARATION'
+          : notifyType === 'TAX_REMINDER'
+          ? 'TAX_DEADLINE_REMINDER'
+          : notifyType === 'PROCEDURE_UPDATE'
+          ? 'PROCEDURE_UPDATE'
+          : notifyType === 'FEES_INVOICE'
+          ? 'INVOICE'
+          : 'GENERAL',
+      mediaPayload: {
+        title: messageData.subject,
+      },
+    });
+
+    const botSettings = db.getWhatsAppBotSettings();
+    const baseUrl = botSettings.customApiBaseUrl || 'https://api.whatsapp.com/send';
+    const countryCode = botSettings.defaultCountryCode || '20';
+
+    const clean = phoneNumber.replace(/[^0-9]/g, '');
+    const targetPhone = clean.startsWith('0')
+      ? countryCode + clean.slice(1)
+      : clean.startsWith(countryCode)
+      ? clean
+      : clean || (countryCode + '1003335360');
+
     const encodedText = encodeURIComponent(messageData.text);
-    const waUrl = `https://wa.me/${waPhone}?text=${encodedText}`;
+    let waUrl = '';
+    if (baseUrl.includes('wa.me')) {
+      waUrl = `https://wa.me/${targetPhone}?text=${encodedText}`;
+    } else if (baseUrl.includes('web.whatsapp.com')) {
+      waUrl = `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodedText}`;
+    } else {
+      waUrl = `${baseUrl}?phone=${targetPhone}&text=${encodedText}`;
+    }
+
     window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
 

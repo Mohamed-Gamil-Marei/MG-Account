@@ -21,6 +21,8 @@ import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
 
 interface OfficeTreasuryViewProps {
   state: DatabaseState;
@@ -64,14 +66,14 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
 
   const netCashBalance = totalIncome - totalGovFeesPaid - totalOfficeExpenses - totalPartnerDrawings;
 
-  const filteredTransactions = state.treasuryTransactions.filter((tx) => {
+  const filteredTransactions = (state.treasuryTransactions || []).filter((tx) => {
     const matchesType = filterType === 'ALL' || tx.type === filterType;
     const matchesSearch =
-      tx.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tx.category || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tx.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tx.clientName && tx.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (tx.procedureTitle && tx.procedureTitle.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      tx.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      (tx.voucherNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
     return matchesType && matchesSearch;
   });
 
@@ -154,21 +156,12 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
   };
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-amber-700" />
-            <h2 className="text-lg font-bold text-slate-900">
-              خزنة أعمال وحسابات المكتب المستقلة (Office Treasury)
-            </h2>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            إدارة النقدية والسيولة، تحصيل أتعاب العمليات وإجراءات الأرشيف، سداد الرسوم والمصروفات الحكومية لحساب العملاء، ومصروفات تشغيل المكتب.
-          </p>
-        </div>
-
+    <>
+      <UnifiedScreenCard
+      title="خزنة أعمال وحسابات المكتب"
+      description="إدارة النقدية والسيولة، تحصيل الأتعاب، وسداد الرسوم الحكومية"
+      icon={Wallet}
+      headerActions={
         <div className="flex items-center gap-2 flex-wrap">
           <ScreenActionToolbar
             modelType="TREASURY"
@@ -178,244 +171,186 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
           <button
             onClick={() => setIsAddModalOpen(true)}
             id="btn-add-treasury-tx"
-            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل حركة خزنة جديدة</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>حركة خزنة جديدة</span>
           </button>
         </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 font-bold block">إجمالي أتعاب المكتب</span>
-            <div className="text-lg font-black text-emerald-800 font-mono mt-1">
-              {formatEgyptianCurrency(totalIncome)}
+      }
+      searchTerm={searchTerm}
+      onSearchChange={setSearchTerm}
+      searchPlaceholder="بحث برقم السند، اسم العميل، الإجراء، أو البيان..."
+      filterTabs={[
+        { id: 'ALL', label: `كافة الحركات (${state.treasuryTransactions.length})` },
+        { id: 'INCOME_FEES', label: 'مقبوضات أتعاب' },
+        { id: 'EXPENSE_CLIENT_GOV_FEE', label: 'رسوم عملاء حكومية' },
+        { id: 'EXPENSE_OFFICE', label: 'مصروفات المكتب' },
+        { id: 'PARTNER_DRAWINGS', label: 'مسحوبات الشركاء' },
+      ]}
+      activeFilterTab={filterType}
+      onFilterTabChange={setFilterType}
+    >
+      <div className="space-y-4">
+        {/* KPI Row Compact */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+          <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 flex items-center justify-between">
+            <div>
+              <span className="text-emerald-700 text-[11px] block">إجمالي المقبوضات</span>
+              <span className="text-base font-black text-emerald-900 font-mono mt-0.5 block">
+                {formatEgyptianCurrency(totalIncome)}
+              </span>
             </div>
-            <span className="text-[10px] text-emerald-600">إيرادات أتعاب محصلة</span>
+            <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <ArrowDownLeft className="w-5 h-5" />
-          </div>
-        </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 font-bold block">رسوم حكومية للعملاء</span>
-            <div className="text-lg font-black text-rose-800 font-mono mt-1">
-              {formatEgyptianCurrency(totalGovFeesPaid)}
+          <div className="bg-rose-50/70 p-3 rounded-xl border border-rose-200 flex items-center justify-between">
+            <div>
+              <span className="text-rose-700 text-[11px] block">رسوم حكومية</span>
+              <span className="text-base font-black text-rose-900 font-mono mt-0.5 block">
+                {formatEgyptianCurrency(totalGovFeesPaid)}
+              </span>
             </div>
-            <span className="text-[10px] text-rose-600">سداد رسوم ودمغات وسجلات</span>
+            <ArrowUpRight className="w-4 h-4 text-rose-600" />
           </div>
-          <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-            <ArrowUpRight className="w-5 h-5" />
-          </div>
-        </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 font-bold block">مصروفات تشغيل المكتب</span>
-            <div className="text-lg font-black text-slate-800 font-mono mt-1">
-              {formatEgyptianCurrency(totalOfficeExpenses)}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div>
+              <span className="text-slate-600 text-[11px] block">مصروفات التشغيل</span>
+              <span className="text-base font-black text-slate-900 font-mono mt-0.5 block">
+                {formatEgyptianCurrency(totalOfficeExpenses)}
+              </span>
             </div>
-            <span className="text-[10px] text-slate-500">إيجار، مرتبات، خدمات</span>
+            <Building2 className="w-4 h-4 text-slate-500" />
           </div>
-          <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold">
-            <Building2 className="w-5 h-5" />
-          </div>
-        </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 font-bold block">مسحوبات الشركاء</span>
-            <div className="text-lg font-black text-purple-800 font-mono mt-1">
-              {formatEgyptianCurrency(totalPartnerDrawings)}
+          <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 flex items-center justify-between">
+            <div>
+              <span className="text-purple-700 text-[11px] block">مسحوبات الشركاء</span>
+              <span className="text-base font-black text-purple-900 font-mono mt-0.5 block">
+                {formatEgyptianCurrency(totalPartnerDrawings)}
+              </span>
             </div>
-            <span className="text-[10px] text-slate-500">توزيعات نقدية خاصة</span>
+            <Coins className="w-4 h-4 text-purple-600" />
           </div>
-          <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-            <Coins className="w-5 h-5" />
-          </div>
-        </div>
 
-        <div className="bg-gradient-to-br from-amber-600 to-amber-700 text-white p-4 rounded-2xl shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-amber-100 font-bold block text-xs">صافي رصيد الخزنة الفعلي</span>
-            <div className="text-lg font-black font-mono mt-1">
-              {formatEgyptianCurrency(netCashBalance)}
+          <div className="col-span-2 lg:col-span-1 bg-gradient-to-r from-amber-600 to-amber-700 text-white p-3 rounded-xl shadow-xs flex items-center justify-between">
+            <div>
+              <span className="text-amber-100 text-[11px] block">صافي رصيد الخزنة</span>
+              <span className="text-base font-black font-mono mt-0.5 block">
+                {formatEgyptianCurrency(netCashBalance)}
+              </span>
             </div>
-            <span className="text-[10px] text-amber-200">السيولة المتاحة بالمكتب</span>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center font-bold">
-            <Wallet className="w-5 h-5" />
+            <Wallet className="w-4 h-4 text-amber-200" />
           </div>
         </div>
-      </div>
 
-      {/* Filter and Search */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-96">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث برقم السند، اسم العميل، الإجراء، أو البيان..."
-            className="w-full pl-3 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-          />
-        </div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 text-xs">
-          <button
-            onClick={() => setFilterType('ALL')}
-            className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 cursor-pointer ${
-              filterType === 'ALL'
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            كافة الحركات ({state.treasuryTransactions.length})
-          </button>
-          <button
-            onClick={() => setFilterType('INCOME_FEES')}
-            className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 cursor-pointer ${
-              filterType === 'INCOME_FEES'
-                ? 'bg-emerald-800 text-white'
-                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-            }`}
-          >
-            مقبوضات أتعاب
-          </button>
-          <button
-            onClick={() => setFilterType('EXPENSE_CLIENT_GOV_FEE')}
-            className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 cursor-pointer ${
-              filterType === 'EXPENSE_CLIENT_GOV_FEE'
-                ? 'bg-rose-800 text-white'
-                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-            }`}
-          >
-            رسوم عملاء حكومية
-          </button>
-          <button
-            onClick={() => setFilterType('EXPENSE_OFFICE')}
-            className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 cursor-pointer ${
-              filterType === 'EXPENSE_OFFICE'
-                ? 'bg-slate-800 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            مصروفات المكتب
-          </button>
-          <button
-            onClick={() => setFilterType('PARTNER_DRAWINGS')}
-            className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 cursor-pointer ${
-              filterType === 'PARTNER_DRAWINGS'
-                ? 'bg-purple-800 text-white'
-                : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
-            }`}
-          >
-            مسحوبات الشركاء
-          </button>
-        </div>
-      </div>
-
-      {/* Transactions Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                <th className="py-3 px-4">رقم السند</th>
-                <th className="py-3 px-4">التاريخ</th>
-                <th className="py-3 px-4">نوع الحركة</th>
-                <th className="py-3 px-4">العميل / الإجراء المرتبط</th>
-                <th className="py-3 px-4">بند الخزنة / التصنيف</th>
-                <th className="py-3 px-4">طريقة الدفع</th>
-                <th className="py-3 px-4 text-left">المبلغ (ج.م)</th>
-                <th className="py-3 px-4">البيان والشرح</th>
-                <th className="py-3 px-4 text-center">طباعة</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredTransactions.map((tx) => (
-                <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-2.5 px-4 font-mono font-bold text-amber-900">
-                    {tx.voucherNumber}
-                  </td>
-                  <td className="py-2.5 px-4 font-mono text-slate-600">{tx.date}</td>
-                  <td className="py-2.5 px-4">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        tx.type === 'INCOME_FEES'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : tx.type === 'EXPENSE_CLIENT_GOV_FEE'
-                          ? 'bg-rose-100 text-rose-800'
-                          : tx.type === 'EXPENSE_OFFICE'
-                          ? 'bg-slate-100 text-slate-800'
-                          : 'bg-purple-100 text-purple-800'
-                      }`}
-                    >
-                      {tx.type === 'INCOME_FEES'
-                        ? '📥 مقبوضات أتعاب'
-                        : tx.type === 'EXPENSE_CLIENT_GOV_FEE'
-                        ? '📤 رسوم حكومية لحساب عميل'
-                        : tx.type === 'EXPENSE_OFFICE'
-                        ? '🏢 مصروف تشغيل مكتب'
-                        : '💼 مسحوبات شركاء'}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    {tx.clientName ? (
-                      <div>
-                        <span className="font-bold text-slate-900 block">{tx.clientName}</span>
-                        {tx.procedureTitle && (
-                          <span className="text-[10px] text-blue-700 flex items-center gap-1 mt-0.5">
-                            <Layers className="w-3 h-3" />
-                            {tx.procedureTitle}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-slate-400 text-[11px]">عام (بدون عميل)</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-4 font-semibold text-slate-900">{tx.category}</td>
-                  <td className="py-2.5 px-4 text-slate-500">
-                    {tx.paymentMethod === 'CASH'
-                      ? 'نقدي (خزينة)'
-                      : tx.paymentMethod === 'BANK_TRANSFER'
-                      ? 'تحويل بنكي'
-                      : tx.paymentMethod === 'INSTAPAY'
-                      ? 'إنستاباي (InstaPay)'
-                      : 'شيك'}
-                  </td>
-                  <td
-                    className={`py-2.5 px-4 font-mono font-bold text-left text-sm ${
-                      tx.type === 'INCOME_FEES' ? 'text-emerald-700' : 'text-rose-700'
+        {/* Transactions Table - Compact Mode & Zebra Striping */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs accounting-table">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-800">
+                  <th className="py-1.5 px-2.5">رقم السند</th>
+                  <th className="py-1.5 px-2.5">التاريخ</th>
+                  <th className="py-1.5 px-2.5">نوع الحركة</th>
+                  <th className="py-1.5 px-2.5">العميل / الإجراء</th>
+                  <th className="py-1.5 px-2.5">التصنيف</th>
+                  <th className="py-1.5 px-2.5">طريقة الدفع</th>
+                  <th className="py-1.5 px-2.5 text-left">المبلغ</th>
+                  <th className="py-1.5 px-2.5">البيان</th>
+                  <th className="py-1.5 px-2.5 text-center">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredTransactions.map((tx, idx) => (
+                  <tr
+                    key={tx.id}
+                    className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${
+                      idx % 2 === 1 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'
                     }`}
                   >
-                    {tx.type === 'INCOME_FEES' ? '+' : '-'} {formatEgyptianCurrency(tx.amount)}
-                  </td>
-                  <td className="py-2.5 px-4 text-slate-500 text-[11px] max-w-[200px] truncate">
-                    {tx.description || '-'}
-                  </td>
-                  <td className="py-2.5 px-4 text-center">
-                    <button
-                      onClick={() => setSelectedTxForPrint(tx)}
-                      className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                      title="طباعة سند الخزنة"
+                    <td className="py-1.5 px-2.5 font-mono font-bold text-amber-900 dark:text-amber-400">
+                      {tx.voucherNumber}
+                    </td>
+                    <td className="py-1.5 px-2.5 font-mono text-slate-600 dark:text-slate-400">{tx.date}</td>
+                    <td className="py-1.5 px-2.5">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          tx.type === 'INCOME_FEES'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                            : tx.type === 'EXPENSE_CLIENT_GOV_FEE'
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                            : tx.type === 'EXPENSE_OFFICE'
+                            ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                            : 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
+                        }`}
+                      >
+                        {tx.type === 'INCOME_FEES'
+                          ? '📥 أتعاب'
+                          : tx.type === 'EXPENSE_CLIENT_GOV_FEE'
+                          ? '📤 رسوم عميل'
+                          : tx.type === 'EXPENSE_OFFICE'
+                          ? '🏢 تشغيل'
+                          : '💼 مسحوبات'}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2.5">
+                      {tx.clientName ? (
+                        <div>
+                          <span className="font-bold text-slate-900 dark:text-slate-100 block">{tx.clientName}</span>
+                          {tx.procedureTitle && (
+                            <span className="text-[10px] text-blue-700 dark:text-blue-400 flex items-center gap-1 mt-0.5">
+                              <Layers className="w-3 h-3" />
+                              {tx.procedureTitle}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">عام (بدون عميل)</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-2.5 font-semibold text-slate-900 dark:text-slate-100">{tx.category}</td>
+                    <td className="py-1.5 px-2.5 text-slate-500 dark:text-slate-400">
+                      {tx.paymentMethod === 'CASH'
+                        ? 'نقدي'
+                        : tx.paymentMethod === 'BANK_TRANSFER'
+                        ? 'تحويل بنكي'
+                        : tx.paymentMethod === 'INSTAPAY'
+                        ? 'إنستاباي'
+                        : 'شيك'}
+                    </td>
+                    <td
+                      className={`py-1.5 px-2.5 font-mono font-bold text-left text-xs ${
+                        tx.type === 'INCOME_FEES' ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                      }`}
                     >
-                      <Printer className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      {tx.type === 'INCOME_FEES' ? '+' : '-'} {formatEgyptianCurrency(tx.amount)}
+                    </td>
+                    <td className="py-1.5 px-2.5 text-slate-500 dark:text-slate-400 text-[11px] max-w-[180px] truncate">
+                      {tx.description || '-'}
+                    </td>
+                    <td className="py-1.5 px-2.5 text-center">
+                      <QuickRowActionDropdown
+                        title="خيارات السند"
+                        actions={[
+                          {
+                            label: 'طباعة سند الخزنة',
+                            icon: Printer,
+                            variant: 'primary',
+                            onClick: () => setSelectedTxForPrint(tx),
+                          },
+                        ]}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+    </UnifiedScreenCard>
 
       {/* Voucher Print Modal */}
       {selectedTxForPrint && (
@@ -435,7 +370,7 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
             </div>
 
             {/* Printable Voucher Content */}
-            <div className="space-y-4 my-4 p-5 bg-slate-50 border border-slate-300 rounded-xl">
+            <div id="office-treasury-voucher-print" className="space-y-4 my-4 p-5 bg-slate-50 border border-slate-300 rounded-xl">
               <div className="text-center border-b border-slate-200 pb-3">
                 <h4 className="font-bold text-sm text-slate-900">{state.officeProfile.name}</h4>
                 <p className="text-[11px] text-slate-600">محاسب قانوني ومراجع حسابات • {state.officeProfile.auditorName}</p>
@@ -498,7 +433,7 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 no-print">
               <button
                 onClick={() => setSelectedTxForPrint(null)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer"
@@ -507,7 +442,43 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
               </button>
               <button
                 onClick={() => {
-                  window.print();
+                  const styleId = 'voucher-print-style';
+                  let styleEl = document.getElementById(styleId) as HTMLStyleElement;
+                  if (!styleEl) {
+                    styleEl = document.createElement('style');
+                    styleEl.id = styleId;
+                    document.head.appendChild(styleEl);
+                  }
+                  styleEl.innerHTML = `
+                    @page {
+                      size: A4 portrait;
+                      margin: 10mm 12mm;
+                    }
+                    @media print {
+                      body * {
+                        visibility: hidden !important;
+                      }
+                      #office-treasury-voucher-print, #office-treasury-voucher-print * {
+                        visibility: visible !important;
+                      }
+                      #office-treasury-voucher-print {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        max-width: 650px !important;
+                        margin: 0 auto !important;
+                        padding: 24px !important;
+                        background: white !important;
+                        box-shadow: none !important;
+                        border: 2px solid #334155 !important;
+                        border-radius: 8px !important;
+                      }
+                    }
+                  `;
+                  setTimeout(() => {
+                    window.print();
+                  }, 120);
                 }}
                 className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
@@ -689,6 +660,6 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };

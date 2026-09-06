@@ -95,7 +95,7 @@ export const DeviceLockModal: React.FC<DeviceLockModalProps> = ({
   };
 
   const handleRemoveDevice = (deviceId: string) => {
-    const enteredPass = window.prompt('يرجى إدخال الماستر كود (Mg120) لتأكيد إلغاء ترخيص هذا الجهاز:');
+    const enteredPass = window.prompt('يرجى إدخال الماستر كود لتأكيد إلغاء ترخيص هذا الجهاز:');
     if (!enteredPass) return;
 
     const res = SecurityAuthService.removeAuthorizedDevice(deviceId, enteredPass);
@@ -216,7 +216,7 @@ export const DeviceLockModal: React.FC<DeviceLockModalProps> = ({
                 <span>تم اكتشاف تشغيل قاعدة البيانات على جهاز غير مقترن!</span>
               </div>
               <p className="text-[11px] text-red-700 dark:text-red-300">
-                لحماية وسرية البيانات، يرجى إدخال الماستر كود (Mg120) لإضافة هذا الجهاز لقائمة الأجهزة المعتمدة لديك.
+                لحماية وسرية البيانات، يرجى إدخال الماستر كود لإضافة هذا الجهاز لقائمة الأجهزة المعتمدة لديك.
               </p>
             </div>
           ) : (
@@ -288,9 +288,11 @@ export const DeviceLockModal: React.FC<DeviceLockModalProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-800 dark:text-slate-200 block text-[11px]">
-                      الماستر كود للترخيص (Mg120):
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-800 dark:text-slate-200 block text-[11px]">
+                        الماستر كود للترخيص:
+                      </label>
+                    </div>
                     <input
                       type="password"
                       value={passcode}
@@ -298,7 +300,7 @@ export const DeviceLockModal: React.FC<DeviceLockModalProps> = ({
                         setPasscode(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      placeholder="أدخل Mg120..."
+                      placeholder="أدخل كود الترخيص المعتمد..."
                       required
                       className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-center text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
@@ -435,7 +437,7 @@ export const DeviceLockModal: React.FC<DeviceLockModalProps> = ({
 
         {/* Footer Note */}
         <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-          <span>نظام حماية وترخيص الأجهزة المعتمدة • كود الإدارة: Mg120</span>
+          <span>نظام حماية وترخيص الأجهزة المعتمدة</span>
           {!isEnforced && (
             <button
               type="button"

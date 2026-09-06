@@ -22,8 +22,20 @@ import {
   ThemeMode,
   FixedAsset,
   DepreciationHistoryRecord,
+  WhatsAppMessage,
+  WhatsAppBotSettings,
+  ActiveClientContext,
+  ClientRelationshipType,
+  DailyExchangeRateRecord,
+  CurrencyCode,
+  FiscalPeriodLock,
+  FeeQuotationEstimate,
+  CustomsShipment,
 } from '../types';
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
+import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
+import { SecurityAuthService } from '../services/securityAuth';
+import { CloudSync } from '../services/cloudSyncService';
 import {
   DEFAULT_OFFICE_PROFILE,
   DEFAULT_CLIENT_FOLDERS,
@@ -38,7 +50,11 @@ import {
   SAMPLE_CREDIT_SIMULATION,
   SAMPLE_SYSTEM_USERS,
   SAMPLE_FIXED_ASSETS,
+  SAMPLE_WHATSAPP_MESSAGES,
+  DEFAULT_WHATSAPP_BOT_SETTINGS,
+  SAMPLE_FEE_ESTIMATES,
 } from '../data/sampleData';
+import { SAMPLE_CUSTOMS_SHIPMENTS } from '../data/sampleCustomsData';
 
 const STORAGE_KEYS = {
   ACCOUNTS: 'egy_acc_accounts_v1',
@@ -57,11 +73,21 @@ const STORAGE_KEYS = {
   CURRENT_USER_ID: 'egy_acc_current_user_id_v1',
   USER_PREFERENCES: 'egy_acc_user_preferences_v1',
   FIXED_ASSETS: 'egy_acc_fixed_assets_v1',
+  WHATSAPP_MESSAGES: 'egy_acc_whatsapp_messages_v1',
+  WHATSAPP_SETTINGS: 'egy_acc_whatsapp_settings_v1',
+  ACTIVE_CLIENT_CONTEXT: 'egy_acc_active_client_context_v1',
+  EXCHANGE_RATES: 'egy_acc_exchange_rates_v1',
+  PERIOD_LOCKS: 'egy_acc_period_locks_v1',
+  FEE_ESTIMATES: 'egy_acc_fee_estimates_v1',
+  CUSTOMS_SHIPMENTS: 'egy_acc_customs_shipments_v1',
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   themeMode: 'light',
   brandColor: 'blue',
+  language: 'ar',
+  reportingCurrency: 'EGP',
+  baseCurrency: 'EGP',
   compactView: false,
   securityAuthEnabled: false,
   customEditPassword: 'Mg120',
@@ -79,11 +105,21 @@ export interface DatabaseState {
   feasibilityStudies: FeasibilityStudy[];
   creditSimulations: CreditModelSimulation[];
   fixedAssets: FixedAsset[];
+  feeEstimates: FeeQuotationEstimate[];
   officeProfile: OfficeProfile;
   auditLogs: AuditRecord[];
   users: SystemUser[];
   currentUserId: string;
   preferences: UserPreferences;
+  whatsappMessages: WhatsAppMessage[];
+  whatsappBotSettings: WhatsAppBotSettings;
+  exchangeRates: DailyExchangeRateRecord[];
+  fiscalPeriodLocks: FiscalPeriodLock[];
+  customsShipments: CustomsShipment[];
+  activeClientContext?: ActiveClientContext;
+  clientArchives?: ClientArchiveRecord[];
+  activeClientId?: string;
+  activeClientName?: string;
 }
 
 export class LocalDatabase {
@@ -92,6 +128,120 @@ export class LocalDatabase {
 
   constructor() {
     this.state = this.loadInitialState();
+    this.initCloudSync();
+  }
+
+  private initCloudSync() {
+    // Start real-time remote listener
+    CloudSync.startRealTimeListener();
+
+    // Listen for changes pushed from mobile or other computers
+    CloudSync.onRemoteUpdate((remoteState) => {
+      this.applyCloudState(remoteState);
+    });
+
+    // Check if cloud has newer data on first load
+    setTimeout(async () => {
+      try {
+        const cloudData = await CloudSync.pullFromCloud();
+        if (cloudData) {
+          this.applyCloudState(cloudData);
+        } else {
+          // If cloud is empty, seed it with current local state
+          const currentUser = this.getCurrentUser();
+          CloudSync.pushToCloud(this.state, currentUser?.name);
+        }
+      } catch (err) {
+        console.warn('Initial cloud sync check:', err);
+      }
+    }, 1000);
+  }
+
+  public applyCloudState(cloudState: Partial<DatabaseState>) {
+    let hasChanged = false;
+    if (cloudState.accounts && Array.isArray(cloudState.accounts) && cloudState.accounts.length > 0) {
+      this.state.accounts = cloudState.accounts;
+      hasChanged = true;
+    }
+    if (cloudState.journalEntries && Array.isArray(cloudState.journalEntries)) {
+      this.state.journalEntries = cloudState.journalEntries;
+      hasChanged = true;
+    }
+    if (cloudState.clients && Array.isArray(cloudState.clients)) {
+      this.state.clients = cloudState.clients;
+      hasChanged = true;
+    }
+    if (cloudState.treasuryTransactions && Array.isArray(cloudState.treasuryTransactions)) {
+      this.state.treasuryTransactions = cloudState.treasuryTransactions;
+      hasChanged = true;
+    }
+    if (cloudState.taxDeclarations && Array.isArray(cloudState.taxDeclarations)) {
+      this.state.taxDeclarations = cloudState.taxDeclarations;
+      hasChanged = true;
+    }
+    if (cloudState.invoices && Array.isArray(cloudState.invoices)) {
+      this.state.invoices = cloudState.invoices;
+      hasChanged = true;
+    }
+    if (cloudState.certificates && Array.isArray(cloudState.certificates)) {
+      this.state.certificates = cloudState.certificates;
+      hasChanged = true;
+    }
+    if (cloudState.feasibilityStudies && Array.isArray(cloudState.feasibilityStudies)) {
+      this.state.feasibilityStudies = cloudState.feasibilityStudies;
+      hasChanged = true;
+    }
+    if (cloudState.creditSimulations && Array.isArray(cloudState.creditSimulations)) {
+      this.state.creditSimulations = cloudState.creditSimulations;
+      hasChanged = true;
+    }
+    if (cloudState.fixedAssets && Array.isArray(cloudState.fixedAssets)) {
+      this.state.fixedAssets = cloudState.fixedAssets;
+      hasChanged = true;
+    }
+    if (cloudState.feeEstimates && Array.isArray(cloudState.feeEstimates)) {
+      this.state.feeEstimates = cloudState.feeEstimates;
+      hasChanged = true;
+    }
+    if (cloudState.officeProfile) {
+      this.state.officeProfile = cloudState.officeProfile;
+      hasChanged = true;
+    }
+    if (cloudState.users && Array.isArray(cloudState.users) && cloudState.users.length > 0) {
+      this.state.users = cloudState.users;
+      hasChanged = true;
+    }
+    if (cloudState.taxMandates && Array.isArray(cloudState.taxMandates)) {
+      this.state.taxMandates = cloudState.taxMandates;
+      hasChanged = true;
+    }
+    if (cloudState.exchangeRates && Array.isArray(cloudState.exchangeRates)) {
+      this.state.exchangeRates = cloudState.exchangeRates;
+      hasChanged = true;
+    }
+    if (cloudState.fiscalPeriodLocks && Array.isArray(cloudState.fiscalPeriodLocks)) {
+      this.state.fiscalPeriodLocks = cloudState.fiscalPeriodLocks;
+      hasChanged = true;
+    }
+
+    if (hasChanged) {
+      this.flushDirtyStorage(false);
+      this.notify();
+    }
+  }
+
+  public async syncToCloudNow(): Promise<boolean> {
+    const currentUser = this.getCurrentUser();
+    return await CloudSync.pushToCloud(this.state, currentUser?.name);
+  }
+
+  public async pullFromCloudNow(): Promise<boolean> {
+    const data = await CloudSync.pullFromCloud();
+    if (data) {
+      this.applyCloudState(data);
+      return true;
+    }
+    return false;
   }
 
   private loadInitialState(): DatabaseState {
@@ -112,10 +262,20 @@ export class LocalDatabase {
       const usersJson = localStorage.getItem(STORAGE_KEYS.SYSTEM_USERS);
       const currentUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'user-admin';
       const preferencesJson = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
+      const whatsappMessagesJson = localStorage.getItem(STORAGE_KEYS.WHATSAPP_MESSAGES);
+      const whatsappSettingsJson = localStorage.getItem(STORAGE_KEYS.WHATSAPP_SETTINGS);
+      const activeClientContextJson = localStorage.getItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
+      const exchangeRatesJson = localStorage.getItem(STORAGE_KEYS.EXCHANGE_RATES);
+      const periodLocksJson = localStorage.getItem(STORAGE_KEYS.PERIOD_LOCKS);
+      const feeEstimatesJson = localStorage.getItem(STORAGE_KEYS.FEE_ESTIMATES);
+      const customsJson = localStorage.getItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS);
 
       let loadedClients: ClientArchiveRecord[] = clientsJson ? JSON.parse(clientsJson) : SAMPLE_CLIENTS;
-      // Ensure each client has default folders if missing
+      // Ensure each client has default folders if missing and relationshipType
       loadedClients = loadedClients.map((cl) => {
+        if (!cl.relationshipType) {
+          cl.relationshipType = cl.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY';
+        }
         if (!cl.folders || cl.folders.length === 0) {
           cl.folders = DEFAULT_CLIENT_FOLDERS.map((f, idx) => ({
             ...f,
@@ -135,6 +295,42 @@ export class LocalDatabase {
         if (loadedOfficeProfile.licenseNumber && loadedOfficeProfile.licenseNumber.includes('18492')) {
           loadedOfficeProfile.licenseNumber = loadedOfficeProfile.licenseNumber.replace('18492', '43122');
         }
+        if (!loadedOfficeProfile.mainOfficeAddress || loadedOfficeProfile.address?.includes('ميدان التحرير')) {
+          loadedOfficeProfile.mainOfficeAddress = 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية';
+          loadedOfficeProfile.showMainOfficeAddress = loadedOfficeProfile.showMainOfficeAddress ?? true;
+        }
+        if (!loadedOfficeProfile.branchOfficeAddress) {
+          loadedOfficeProfile.branchOfficeAddress = 'المباركية مول - مدينة العاشر من رمضان - الشرقية';
+          loadedOfficeProfile.showBranchOfficeAddress = loadedOfficeProfile.showBranchOfficeAddress ?? true;
+        }
+        if (loadedOfficeProfile.showMainOfficeAddress === undefined) {
+          loadedOfficeProfile.showMainOfficeAddress = true;
+        }
+        if (loadedOfficeProfile.showBranchOfficeAddress === undefined) {
+          loadedOfficeProfile.showBranchOfficeAddress = true;
+        }
+        if (!loadedOfficeProfile.address || loadedOfficeProfile.address.includes('ميدان التحرير')) {
+          loadedOfficeProfile.address = 'المكتب الرئيسي: ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية | الفرع: المباركية مول - مدينة العاشر من رمضان - الشرقية';
+        }
+      }
+
+      let loadedActiveClientContext: ActiveClientContext | undefined = undefined;
+      if (activeClientContextJson) {
+        try {
+          loadedActiveClientContext = JSON.parse(activeClientContextJson);
+        } catch {}
+      }
+      if (!loadedActiveClientContext && loadedClients.length > 0) {
+        const defaultClient = loadedClients[0];
+        loadedActiveClientContext = {
+          clientId: defaultClient.id,
+          clientName: defaultClient.name,
+          clientCode: defaultClient.clientCode,
+          relationshipType: defaultClient.relationshipType || 'PERMANENT',
+          selectedFiscalYear: 2026,
+          autoFilterAccountingData: false,
+          lastUpdated: new Date().toISOString(),
+        };
       }
 
       return {
@@ -153,6 +349,13 @@ export class LocalDatabase {
         users: usersJson ? JSON.parse(usersJson) : SAMPLE_SYSTEM_USERS,
         currentUserId: currentUserId,
         preferences: preferencesJson ? JSON.parse(preferencesJson) : DEFAULT_USER_PREFERENCES,
+        whatsappMessages: whatsappMessagesJson ? JSON.parse(whatsappMessagesJson) : SAMPLE_WHATSAPP_MESSAGES,
+        whatsappBotSettings: whatsappSettingsJson ? JSON.parse(whatsappSettingsJson) : DEFAULT_WHATSAPP_BOT_SETTINGS,
+        exchangeRates: exchangeRatesJson ? JSON.parse(exchangeRatesJson) : DEFAULT_SAMPLE_EXCHANGE_RATES,
+        fiscalPeriodLocks: periodLocksJson ? JSON.parse(periodLocksJson) : [],
+        feeEstimates: feeEstimatesJson ? JSON.parse(feeEstimatesJson) : SAMPLE_FEE_ESTIMATES,
+        customsShipments: customsJson ? JSON.parse(customsJson) : SAMPLE_CUSTOMS_SHIPMENTS,
+        activeClientContext: loadedActiveClientContext,
         auditLogs: auditLogsJson ? JSON.parse(auditLogsJson) : [
           {
             timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -176,10 +379,16 @@ export class LocalDatabase {
         feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
         creditSimulations: [SAMPLE_CREDIT_SIMULATION],
         fixedAssets: SAMPLE_FIXED_ASSETS,
+        feeEstimates: SAMPLE_FEE_ESTIMATES,
+        customsShipments: SAMPLE_CUSTOMS_SHIPMENTS,
         officeProfile: DEFAULT_OFFICE_PROFILE,
         users: SAMPLE_SYSTEM_USERS,
         currentUserId: 'user-admin',
         preferences: DEFAULT_USER_PREFERENCES,
+        whatsappMessages: SAMPLE_WHATSAPP_MESSAGES,
+        whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
+        exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
+        fiscalPeriodLocks: [],
         auditLogs: [],
       };
     }
@@ -208,7 +417,7 @@ export class LocalDatabase {
     }, 50);
   }
 
-  public flushDirtyStorage() {
+  public flushDirtyStorage(pushToCloud: boolean = true) {
     try {
       if (this.dirtyKeys.has(STORAGE_KEYS.ACCOUNTS)) {
         localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(this.state.accounts));
@@ -258,7 +467,28 @@ export class LocalDatabase {
       if (this.dirtyKeys.has(STORAGE_KEYS.FIXED_ASSETS)) {
         localStorage.setItem(STORAGE_KEYS.FIXED_ASSETS, JSON.stringify(this.state.fixedAssets));
       }
+      if (this.dirtyKeys.has(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT)) {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT, JSON.stringify(this.state.activeClientContext || null));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.EXCHANGE_RATES)) {
+        localStorage.setItem(STORAGE_KEYS.EXCHANGE_RATES, JSON.stringify(this.state.exchangeRates || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.PERIOD_LOCKS)) {
+        localStorage.setItem(STORAGE_KEYS.PERIOD_LOCKS, JSON.stringify(this.state.fiscalPeriodLocks || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.FEE_ESTIMATES)) {
+        localStorage.setItem(STORAGE_KEYS.FEE_ESTIMATES, JSON.stringify(this.state.feeEstimates || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CUSTOMS_SHIPMENTS)) {
+        localStorage.setItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS, JSON.stringify(this.state.customsShipments || []));
+      }
       this.dirtyKeys.clear();
+
+      // Trigger debounced cloud synchronization
+      if (pushToCloud) {
+        const currentUser = this.getCurrentUser();
+        CloudSync.queueAutoSync(this.state, currentUser?.name);
+      }
     } catch (e: any) {
       // Handle storage quota exceeded gracefully
       console.warn('Storage write warning (handling high-volume data safely):', e);
@@ -284,6 +514,10 @@ export class LocalDatabase {
       ...(this.state.preferences || DEFAULT_USER_PREFERENCES),
       ...updates,
     };
+    if (updates.customFirebaseConfig !== undefined) {
+      CloudSync.initFirebase(this.state.preferences.customFirebaseConfig);
+      CloudSync.startRealTimeListener();
+    }
     this.saveState();
   }
 
@@ -293,6 +527,10 @@ export class LocalDatabase {
 
   public setBrandColor(color: BrandColor) {
     this.updatePreferences({ brandColor: color });
+  }
+
+  public setLanguage(lang: 'ar' | 'en') {
+    this.updatePreferences({ language: lang });
   }
 
   public subscribe(listener: () => void): () => void {
@@ -322,7 +560,12 @@ export class LocalDatabase {
   }
 
   public getState(): DatabaseState {
-    return this.state;
+    return {
+      ...this.state,
+      clientArchives: this.state.clients,
+      activeClientId: this.state.activeClientContext?.clientId,
+      activeClientName: this.state.activeClientContext?.clientName,
+    };
   }
 
   // --- Accounts CRUD ---
@@ -478,9 +721,87 @@ export class LocalDatabase {
     if (index === -1) return false;
     const cl = this.state.clients[index];
     this.state.clients.splice(index, 1);
+    
+    // If the active client was deleted, reset or select next
+    if (this.state.activeClientContext?.clientId === id) {
+      if (this.state.clients.length > 0) {
+        this.setActiveClient(this.state.clients[0].id);
+      } else {
+        this.clearActiveClient();
+      }
+    }
+    
     this.logAudit('DELETE', `حذف ملف العميل: ${cl.name}`);
     this.saveState();
     return true;
+  }
+
+  // --- Active Client Context Management (العميل النشط وربط الشاشات المركزية) ---
+  public getActiveClientContext(): ActiveClientContext | null {
+    if (!this.state.activeClientContext?.clientId) return null;
+    return this.state.activeClientContext;
+  }
+
+  public getActiveClientRecord(): ClientArchiveRecord | null {
+    const activeCtx = this.getActiveClientContext();
+    if (!activeCtx?.clientId) return null;
+    return this.state.clients.find((c) => c.id === activeCtx.clientId) || null;
+  }
+
+  public setActiveClient(clientId: string | null, options?: { autoFilter?: boolean; fiscalYear?: number }): ActiveClientContext | null {
+    if (!clientId) {
+      return this.clearActiveClient();
+    }
+
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return null;
+
+    const newContext: ActiveClientContext = {
+      clientId: client.id,
+      clientName: client.name,
+      clientCode: client.clientCode,
+      relationshipType: client.relationshipType || (client.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY'),
+      selectedFiscalYear: options?.fiscalYear || this.state.activeClientContext?.selectedFiscalYear || 2026,
+      autoFilterAccountingData: options?.autoFilter ?? this.state.activeClientContext?.autoFilterAccountingData ?? false,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    this.state.activeClientContext = newContext;
+    this.logAudit('UPDATE', `تحديد العميل النشط في بيئة العمل: ${client.name} (${client.clientCode}) [${newContext.relationshipType === 'PERMANENT' ? 'عميل دائم' : 'عميل مؤقت'}]`);
+    this.saveState('ACTIVE_CLIENT_CONTEXT');
+    return newContext;
+  }
+
+  public clearActiveClient(): ActiveClientContext {
+    const cleared: ActiveClientContext = {
+      clientId: null,
+      clientName: undefined,
+      clientCode: undefined,
+      relationshipType: undefined,
+      autoFilterAccountingData: false,
+      lastUpdated: new Date().toISOString(),
+    };
+    this.state.activeClientContext = cleared;
+    this.logAudit('UPDATE', `إلغاء تحديد العميل النشط (عرض شامل لكافة السجلات)`);
+    this.saveState('ACTIVE_CLIENT_CONTEXT');
+    return cleared;
+  }
+
+  public updateActiveClientFiscalYear(year: number) {
+    if (this.state.activeClientContext) {
+      this.state.activeClientContext.selectedFiscalYear = year;
+      this.state.activeClientContext.lastUpdated = new Date().toISOString();
+      this.saveState('ACTIVE_CLIENT_CONTEXT');
+    }
+  }
+
+  public toggleActiveClientAutoFilter(enabled?: boolean) {
+    if (this.state.activeClientContext) {
+      const nextVal = enabled !== undefined ? enabled : !this.state.activeClientContext.autoFilterAccountingData;
+      this.state.activeClientContext.autoFilterAccountingData = nextVal;
+      this.state.activeClientContext.lastUpdated = new Date().toISOString();
+      this.saveState('ACTIVE_CLIENT_CONTEXT');
+    }
   }
 
   // --- Client Procedures & Treasury Integration ---
@@ -993,56 +1314,6 @@ export class LocalDatabase {
     return addedCount;
   }
 
-  // --- Multi-User Access Control (RBAC) ---
-  public getCurrentUser(): SystemUser {
-    const user = this.state.users.find((u) => u.id === this.state.currentUserId);
-    return user || this.state.users[0] || SAMPLE_SYSTEM_USERS[0];
-  }
-
-  public switchCurrentUser(userId: string): SystemUser | null {
-    const user = this.state.users.find((u) => u.id === userId);
-    if (!user) return null;
-    this.state.currentUserId = user.id;
-    this.logAudit('UPDATE', `تبديل المستخدم الحالي إلى: [${user.name}] بصلاحية (${user.roleTitleArabic})`);
-    this.saveState();
-    return user;
-  }
-
-  public addUser(user: Omit<SystemUser, 'id' | 'createdAt'>): SystemUser {
-    const newUser: SystemUser = {
-      ...user,
-      id: `user-${Date.now()}`,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    this.state.users.push(newUser);
-    this.logAudit('CREATE', `إضافة مستخدم جديد للنظام: [${user.name}] بدور (${user.roleTitleArabic})`);
-    this.saveState();
-    return newUser;
-  }
-
-  public updateUser(userId: string, updates: Partial<SystemUser>): boolean {
-    const user = this.state.users.find((u) => u.id === userId);
-    if (!user) return false;
-    Object.assign(user, updates);
-    this.logAudit('UPDATE', `تعديل صلاحيات وبيانات المستخدم: [${user.name}]`);
-    this.saveState();
-    return true;
-  }
-
-  public deleteUser(userId: string): boolean {
-    if (this.state.users.length <= 1) return false; // Prevent deleting all users
-    const index = this.state.users.findIndex((u) => u.id === userId);
-    if (index === -1) return false;
-    const deleted = this.state.users[index];
-    this.state.users.splice(index, 1);
-    if (this.state.currentUserId === userId) {
-      this.state.currentUserId = this.state.users[0].id;
-    }
-    this.logAudit('DELETE', `حذف المستخدم: [${deleted.name}] من النظام`);
-    this.saveState();
-    return true;
-  }
-
   // --- Professional Certificates CRUD ---
   public addCertificate(cert: Omit<ProfessionalCertificate, 'id' | 'certificateNumber' | 'createdAt'>): ProfessionalCertificate {
     const count = this.state.certificates.length + 1;
@@ -1195,10 +1466,16 @@ export class LocalDatabase {
       feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
       creditSimulations: [SAMPLE_CREDIT_SIMULATION],
       fixedAssets: SAMPLE_FIXED_ASSETS,
+      feeEstimates: SAMPLE_FEE_ESTIMATES,
+      customsShipments: SAMPLE_CUSTOMS_SHIPMENTS,
       users: SAMPLE_SYSTEM_USERS,
       currentUserId: 'user-admin',
       preferences: DEFAULT_USER_PREFERENCES,
       officeProfile: DEFAULT_OFFICE_PROFILE,
+      whatsappMessages: SAMPLE_WHATSAPP_MESSAGES,
+      whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
+      exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
+      fiscalPeriodLocks: [],
       auditLogs: [
         {
           timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -1209,6 +1486,72 @@ export class LocalDatabase {
       ],
     };
     this.saveState();
+  }
+
+  // --- Fiscal Period Locks & Year-End Closing ---
+  public getPeriodLocks(): FiscalPeriodLock[] {
+    return this.state.fiscalPeriodLocks || [];
+  }
+
+  public isPeriodLocked(dateOrYear: string | number): boolean {
+    if (!this.state.fiscalPeriodLocks || this.state.fiscalPeriodLocks.length === 0) return false;
+    let year: number;
+    let month: string | null = null;
+    if (typeof dateOrYear === 'number') {
+      year = dateOrYear;
+    } else {
+      const parts = dateOrYear.split('-');
+      year = parseInt(parts[0], 10);
+      if (parts.length > 1) {
+        month = parts[1];
+      }
+    }
+    return this.state.fiscalPeriodLocks.some((lock) => {
+      if (!lock.isLocked) return false;
+      if (lock.fiscalYear !== year) return false;
+      if (lock.period === 'ANNUAL') return true;
+      if (month && (lock.period === month || lock.period === `M${month}`)) return true;
+      return false;
+    });
+  }
+
+  public lockFiscalPeriod(fiscalYear: number, period: string, notes?: string, closingEntryId?: string): FiscalPeriodLock {
+    const locks = [...(this.state.fiscalPeriodLocks || [])];
+    const existingIndex = locks.findIndex((l) => l.fiscalYear === fiscalYear && l.period === period);
+    const lockRecord: FiscalPeriodLock = {
+      id: existingIndex >= 0 ? locks[existingIndex].id : `lock-${fiscalYear}-${period}-${Date.now()}`,
+      fiscalYear,
+      period,
+      isLocked: true,
+      lockedAt: new Date().toISOString(),
+      lockedBy: this.state.officeProfile?.auditorName || 'محمد جميل مرعي',
+      notes,
+      closingEntryId,
+    };
+    if (existingIndex >= 0) {
+      locks[existingIndex] = lockRecord;
+    } else {
+      locks.push(lockRecord);
+    }
+    this.state.fiscalPeriodLocks = locks;
+    this.logAudit('POST', `إقفال واعتماد الفترة المالية: سنة ${fiscalYear} - فترة ${period}`);
+    this.saveState('PERIOD_LOCKS' as any);
+    return lockRecord;
+  }
+
+  public unlockFiscalPeriod(fiscalYear: number, period: string, reason?: string): boolean {
+    const locks = [...(this.state.fiscalPeriodLocks || [])];
+    const index = locks.findIndex((l) => l.fiscalYear === fiscalYear && l.period === period);
+    if (index === -1) return false;
+    locks[index] = {
+      ...locks[index],
+      isLocked: false,
+      notes: reason ? `تم فك القفل: ${reason}` : 'تم فك القفل يدويًا',
+    };
+    this.state.fiscalPeriodLocks = locks;
+    this.logAudit('UNPOST', `فك إقفال الفترة المالية: سنة ${fiscalYear} - فترة ${period} (${reason || 'يدوي'})`);
+    this.saveState('PERIOD_LOCKS' as any);
+    return true;
   }
 
   // --- Complete Database Purge / Factory Reset with Passcode (Mgacc120) ---
@@ -1241,10 +1584,16 @@ export class LocalDatabase {
       feasibilityStudies: [],
       creditSimulations: [],
       fixedAssets: [],
+      feeEstimates: [],
+      customsShipments: [],
       users: SAMPLE_SYSTEM_USERS,
       currentUserId: 'user-admin',
       preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
       officeProfile: this.state.officeProfile || DEFAULT_OFFICE_PROFILE,
+      whatsappMessages: [],
+      whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
+      exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
+      fiscalPeriodLocks: [],
       auditLogs: [
         {
           timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -1314,10 +1663,16 @@ export class LocalDatabase {
           feasibilityStudies: dataToImport.feasibilityStudies || [],
           creditSimulations: dataToImport.creditSimulations || [],
           fixedAssets: dataToImport.fixedAssets || SAMPLE_FIXED_ASSETS,
+          feeEstimates: dataToImport.feeEstimates || SAMPLE_FEE_ESTIMATES,
+          customsShipments: dataToImport.customsShipments || SAMPLE_CUSTOMS_SHIPMENTS,
+          officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
           users: dataToImport.users || SAMPLE_SYSTEM_USERS,
           currentUserId: dataToImport.currentUserId || 'user-admin',
           preferences: dataToImport.preferences || DEFAULT_USER_PREFERENCES,
-          officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
+          whatsappMessages: dataToImport.whatsappMessages || SAMPLE_WHATSAPP_MESSAGES,
+          whatsappBotSettings: dataToImport.whatsappBotSettings || DEFAULT_WHATSAPP_BOT_SETTINGS,
+          exchangeRates: dataToImport.exchangeRates || DEFAULT_SAMPLE_EXCHANGE_RATES,
+          fiscalPeriodLocks: dataToImport.fiscalPeriodLocks || [],
           auditLogs: [
             {
               timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -1328,6 +1683,7 @@ export class LocalDatabase {
             ...(dataToImport.auditLogs || []),
           ],
         };
+
         this.saveState();
         return true;
       }
@@ -1650,6 +2006,695 @@ export class LocalDatabase {
     );
 
     return journalEntry;
+  }
+
+  // ==========================================
+  // USERS & AUTHENTICATION METHODS (إدارة الموظفين والصلاحيات)
+  // ==========================================
+  public getUsers(): SystemUser[] {
+    return this.state.users || SAMPLE_SYSTEM_USERS;
+  }
+
+  public getCurrentUser(): SystemUser {
+    const users = this.getUsers();
+    const user = users.find((u) => u.id === this.state.currentUserId);
+    return user || users[0] || SAMPLE_SYSTEM_USERS[0];
+  }
+
+  public setCurrentUserId(userId: string) {
+    this.state.currentUserId = userId;
+    this.saveState('CURRENT_USER_ID');
+    this.notify();
+  }
+
+  public authenticateByPin(userId: string, enteredPin: string): { success: boolean; user?: SystemUser; message?: string } {
+    const user = this.getUsers().find((u) => u.id === userId);
+    if (!user) {
+      return { success: false, message: 'المستخدم غير موجود بالنظام' };
+    }
+
+    const normEntered = SecurityAuthService.normalizeInput(enteredPin);
+    const normUserPin = SecurityAuthService.normalizeInput(user.pinCode || '');
+
+    // Allow empty PIN if user has none configured
+    if (!user.pinCode || user.pinCode.trim() === '') {
+      this.state.currentUserId = user.id;
+      this.saveState('CURRENT_USER_ID');
+      this.logAudit('UPDATE', `تسجيل دخول ناجح للمستخدم: ${user.name} (${user.roleTitleArabic})`);
+      this.notify();
+      return { success: true, user };
+    }
+
+    // 1. Direct match (case-insensitive & handles Arabic-Indic digits ٠١٢٣٤٥٦٧٨٩)
+    const isDirectMatch = normEntered === normUserPin;
+
+    // 2. Sovereign Master password match (Mg120 / 120 / mg120 / Mgacc120 / custom master password)
+    const isMasterMatch = SecurityAuthService.verifyPassword(enteredPin);
+
+    // 3. Numeric-only match (e.g. user enters "120" for "Mg120", "2026" for "Aud2026", "123" for "Acc123")
+    const numericOnlyUserPin = (user.pinCode || '').replace(/\D/g, '');
+    const isNumericSuffixMatch = numericOnlyUserPin.length > 0 && normEntered === numericOnlyUserPin;
+
+    if (isDirectMatch || isMasterMatch || isNumericSuffixMatch) {
+      this.state.currentUserId = user.id;
+      this.saveState('CURRENT_USER_ID');
+      this.logAudit('UPDATE', `تسجيل دخول ناجح للمستخدم: ${user.name} (${user.roleTitleArabic})`);
+      this.notify();
+      return { success: true, user };
+    }
+
+    return { success: false, message: 'الرمز السري غير صحيح! يرجى إعادة المحاولة.' };
+  }
+
+  public addUser(userData: Omit<SystemUser, 'id' | 'createdAt'>): SystemUser {
+    const id = `user-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const now = new Date().toISOString();
+    const newUser: SystemUser = {
+      ...userData,
+      id,
+      createdAt: now,
+    };
+
+    if (!this.state.users) {
+      this.state.users = [...SAMPLE_SYSTEM_USERS];
+    }
+    this.state.users.push(newUser);
+    this.logAudit('CREATE', `إضافة موظف/مستخدم جديد للنظام: ${newUser.name} بصلاحية: ${newUser.roleTitleArabic}`);
+    this.saveState('SYSTEM_USERS');
+    return newUser;
+  }
+
+  public updateUser(id: string, updates: Partial<SystemUser>): SystemUser | null {
+    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
+    const index = this.state.users.findIndex((u) => u.id === id);
+    if (index === -1) return null;
+
+    const old = this.state.users[index];
+    this.state.users[index] = {
+      ...old,
+      ...updates,
+    };
+
+    this.logAudit('UPDATE', `تعديل بيانات وصلاحيات الموظف: ${old.name}`);
+    this.saveState('SYSTEM_USERS');
+    return this.state.users[index];
+  }
+
+  public deleteUser(id: string): boolean {
+    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
+    // Protect main admin from deletion
+    if (id === 'user-admin') return false;
+
+    const index = this.state.users.findIndex((u) => u.id === id);
+    if (index === -1) return false;
+
+    const user = this.state.users[index];
+    this.state.users.splice(index, 1);
+    
+    // If deleted user was active, switch to admin
+    if (this.state.currentUserId === id) {
+      this.state.currentUserId = 'user-admin';
+      this.saveState('CURRENT_USER_ID');
+    }
+
+    this.logAudit('DELETE', `حذف حساب الموظف: ${user.name}`);
+    this.saveState('SYSTEM_USERS');
+    return true;
+  }
+
+  // ==========================================
+  // WHATSAPP BOT & NOTIFICATION ENGINE METHODS
+  // ==========================================
+
+  public getWhatsAppMessages(clientId?: string): WhatsAppMessage[] {
+    if (!this.state.whatsappMessages) {
+      this.state.whatsappMessages = [...SAMPLE_WHATSAPP_MESSAGES];
+    }
+    if (clientId) {
+      return this.state.whatsappMessages.filter((m) => m.clientId === clientId);
+    }
+    return this.state.whatsappMessages;
+  }
+
+  public sendWhatsAppMessage(
+    msg: Omit<WhatsAppMessage, 'id' | 'timestamp' | 'status'> & {
+      id?: string;
+      timestamp?: string;
+      status?: import('../types').WhatsAppMessageStatus;
+    }
+  ): WhatsAppMessage {
+    if (!this.state.whatsappMessages) {
+      this.state.whatsappMessages = [...SAMPLE_WHATSAPP_MESSAGES];
+    }
+
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const newMessage: WhatsAppMessage = {
+      id: msg.id || `wa-msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      clientId: msg.clientId,
+      clientName: msg.clientName,
+      phone: msg.phone,
+      direction: msg.direction,
+      sender: msg.sender,
+      text: msg.text,
+      timestamp: msg.timestamp || nowStr,
+      status: msg.status || 'READ',
+      category: msg.category || 'GENERAL',
+      mediaPayload: msg.mediaPayload,
+    };
+
+    this.state.whatsappMessages.push(newMessage);
+    this.saveState('WHATSAPP_MESSAGES');
+    return newMessage;
+  }
+
+  public deleteWhatsAppMessage(id: string): boolean {
+    if (!this.state.whatsappMessages) return false;
+    const idx = this.state.whatsappMessages.findIndex((m) => m.id === id);
+    if (idx === -1) return false;
+    this.state.whatsappMessages.splice(idx, 1);
+    this.saveState('WHATSAPP_MESSAGES');
+    return true;
+  }
+
+  public clearWhatsAppChat(clientId: string): void {
+    if (!this.state.whatsappMessages) return;
+    this.state.whatsappMessages = this.state.whatsappMessages.filter((m) => m.clientId !== clientId);
+    this.saveState('WHATSAPP_MESSAGES');
+  }
+
+  public getWhatsAppBotSettings(): WhatsAppBotSettings {
+    if (!this.state.whatsappBotSettings) {
+      this.state.whatsappBotSettings = { ...DEFAULT_WHATSAPP_BOT_SETTINGS };
+    }
+    if (!this.state.whatsappBotSettings.templates || this.state.whatsappBotSettings.templates.length === 0) {
+      this.state.whatsappBotSettings.templates = [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])];
+    }
+    if (!this.state.whatsappBotSettings.customApiBaseUrl) {
+      this.state.whatsappBotSettings.customApiBaseUrl = 'https://api.whatsapp.com/send';
+    }
+    if (!this.state.whatsappBotSettings.apiDispatchMode) {
+      this.state.whatsappBotSettings.apiDispatchMode = 'DIRECT_WEB_API';
+    }
+    if (!this.state.whatsappBotSettings.defaultCountryCode) {
+      this.state.whatsappBotSettings.defaultCountryCode = '20';
+    }
+    return this.state.whatsappBotSettings;
+  }
+
+  public updateWhatsAppBotSettings(settings: Partial<WhatsAppBotSettings>): WhatsAppBotSettings {
+    this.state.whatsappBotSettings = {
+      ...this.getWhatsAppBotSettings(),
+      ...settings,
+    };
+    this.logAudit('UPDATE', 'تحديث إعدادات ربط واتساب API وقوالب الرسائل الجاهزة');
+    this.saveState('WHATSAPP_SETTINGS');
+    return this.state.whatsappBotSettings;
+  }
+
+  public getWhatsAppTemplates(): import('../types').WhatsAppMessageTemplate[] {
+    const settings = this.getWhatsAppBotSettings();
+    return settings.templates || [];
+  }
+
+  public saveWhatsAppTemplate(tmpl: import('../types').WhatsAppMessageTemplate): void {
+    const current = this.getWhatsAppBotSettings();
+    const templates = [...(current.templates || [])];
+    const idx = templates.findIndex((t) => t.id === tmpl.id);
+
+    if (idx >= 0) {
+      templates[idx] = {
+        ...tmpl,
+        updatedAt: new Date().toISOString().slice(0, 16),
+      };
+    } else {
+      templates.push({
+        ...tmpl,
+        id: tmpl.id || `tmpl-${Date.now()}`,
+        updatedAt: new Date().toISOString().slice(0, 16),
+      });
+    }
+
+    this.updateWhatsAppBotSettings({ templates });
+    this.logAudit('UPDATE', `حفظ قالب رسائل واتساب: ${tmpl.title}`);
+  }
+
+  public deleteWhatsAppTemplate(id: string): boolean {
+    const current = this.getWhatsAppBotSettings();
+    const templates = (current.templates || []).filter((t) => t.id !== id);
+    this.updateWhatsAppBotSettings({ templates });
+    this.logAudit('DELETE', `حذف قالب رسائل واتساب برقم: ${id}`);
+    return true;
+  }
+
+  public resetWhatsAppTemplatesToDefault(): void {
+    this.updateWhatsAppBotSettings({
+      templates: [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])],
+    });
+    this.logAudit('UPDATE', 'استعادة قوالب رسائل واتساب الافتراضية');
+  }
+
+  public batchUpdateClientPhones(updates: { clientId: string; phone: string; contactPerson?: string }[]): number {
+    let count = 0;
+    updates.forEach((u) => {
+      const client = this.state.clients.find((c) => c.id === u.clientId);
+      if (client) {
+        client.phone = u.phone;
+        if (u.contactPerson !== undefined) {
+          client.contactPerson = u.contactPerson;
+        }
+        client.updatedAt = new Date().toISOString().slice(0, 10);
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      this.logAudit('UPDATE', `تحديث وتثبيت أرقام هواتف واتساب لـ ${count} عميل`);
+      this.saveState('CLIENTS');
+    }
+    return count;
+  }
+
+  // --- Multi-Currency & Daily Exchange Rates (EAS 13) ---
+  public getExchangeRates(currency?: CurrencyCode, date?: string): DailyExchangeRateRecord[] {
+    let rates = [...(this.state.exchangeRates || [])];
+    if (currency) {
+      rates = rates.filter((r) => r.currency === currency);
+    }
+    if (date) {
+      rates = rates.filter((r) => r.date === date);
+    }
+    return rates.sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  public getDailyExchangeRate(currency: CurrencyCode, date?: string): DailyExchangeRateRecord | undefined {
+    if (currency === 'EGP') return undefined;
+    const all = this.state.exchangeRates || [];
+    if (date) {
+      const match = all.find((r) => r.currency === currency && r.date === date);
+      if (match) return match;
+    }
+    // Fallback to latest available rate for this currency
+    const currencyRates = all.filter((r) => r.currency === currency).sort((a, b) => b.date.localeCompare(a.date));
+    return currencyRates[0];
+  }
+
+  public getExchangeRateValue(currency: CurrencyCode, date?: string): number {
+    if (currency === 'EGP') return 1;
+    const rateRecord = this.getDailyExchangeRate(currency, date);
+    return rateRecord ? rateRecord.officialRate || rateRecord.sellRate || 1 : 1;
+  }
+
+  public saveExchangeRate(record: Omit<DailyExchangeRateRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): DailyExchangeRateRecord {
+    if (!this.state.exchangeRates) {
+      this.state.exchangeRates = [];
+    }
+    const existingIndex = record.id 
+      ? this.state.exchangeRates.findIndex((r) => r.id === record.id)
+      : this.state.exchangeRates.findIndex((r) => r.currency === record.currency && r.date === record.date);
+
+    const now = new Date().toISOString();
+    let saved: DailyExchangeRateRecord;
+
+    if (existingIndex >= 0) {
+      saved = {
+        ...this.state.exchangeRates[existingIndex],
+        ...record,
+        updatedAt: now,
+      };
+      this.state.exchangeRates[existingIndex] = saved;
+      this.logAudit('UPDATE', `تحديث سعر صرف يومي: [${saved.currency}] ليوم ${saved.date} بقيمة ${saved.officialRate} ج.م`);
+    } else {
+      saved = {
+        ...record,
+        id: record.id || `fx-rate-${record.date}-${record.currency.toLowerCase()}-${Date.now()}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.state.exchangeRates.push(saved);
+      this.logAudit('CREATE', `إضافة سعر صرف يومي جديد: [${saved.currency}] ليوم ${saved.date} بقيمة ${saved.officialRate} ج.م`);
+    }
+
+    this.saveState('EXCHANGE_RATES');
+    return saved;
+  }
+
+  public saveBulkExchangeRates(records: Array<Omit<DailyExchangeRateRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }>): void {
+    records.forEach((r) => {
+      if (!this.state.exchangeRates) {
+        this.state.exchangeRates = [];
+      }
+      const existingIndex = r.id 
+        ? this.state.exchangeRates.findIndex((item) => item.id === r.id)
+        : this.state.exchangeRates.findIndex((item) => item.currency === r.currency && item.date === r.date);
+
+      const now = new Date().toISOString();
+      if (existingIndex >= 0) {
+        this.state.exchangeRates[existingIndex] = {
+          ...this.state.exchangeRates[existingIndex],
+          ...r,
+          updatedAt: now,
+        };
+      } else {
+        this.state.exchangeRates.push({
+          ...r,
+          id: r.id || `fx-rate-${r.date}-${r.currency.toLowerCase()}-${Date.now()}`,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+
+    this.logAudit('UPDATE', `تحديث دفعة أسعار صرف لـ ${records.length} عملة بنجاح`);
+    this.saveState('EXCHANGE_RATES');
+  }
+
+  public deleteExchangeRate(id: string): boolean {
+    if (!this.state.exchangeRates) return false;
+    const initialLen = this.state.exchangeRates.length;
+    this.state.exchangeRates = this.state.exchangeRates.filter((r) => r.id !== id);
+    if (this.state.exchangeRates.length < initialLen) {
+      this.logAudit('DELETE', `حذف سجل سعر صرف برقم: ${id}`);
+      this.saveState('EXCHANGE_RATES');
+      return true;
+    }
+    return false;
+  }
+
+  public setReportingCurrency(currency: CurrencyCode): void {
+    this.updatePreferences({ reportingCurrency: currency });
+    this.logAudit('UPDATE', `تغيير عملة التقرير والعرض المعتمدة إلى: [${currency}]`);
+  }
+
+  // ==========================================
+  // FEE ESTIMATOR & QUOTATION MANAGEMENT METHODS
+  // ==========================================
+  public getFeeEstimates(): FeeQuotationEstimate[] {
+    return this.state.feeEstimates || [];
+  }
+
+  public saveFeeEstimate(estimate: FeeQuotationEstimate): FeeQuotationEstimate {
+    if (!this.state.feeEstimates) {
+      this.state.feeEstimates = [];
+    }
+    const existingIndex = this.state.feeEstimates.findIndex((q) => q.id === estimate.id);
+    if (existingIndex >= 0) {
+      this.state.feeEstimates[existingIndex] = { ...estimate };
+      this.logAudit('UPDATE', `تحديث عرض السعر وتقدير الأتعاب رقم: ${estimate.quotationNumber} للعميل: ${estimate.clientName}`);
+    } else {
+      this.state.feeEstimates.unshift(estimate);
+      this.logAudit('CREATE', `إنشاء تقدير أتعاب وعرض سعر جديد: ${estimate.quotationNumber} بمبلغ ${estimate.totalQuotationAmount.toLocaleString()} ج.م`);
+    }
+    this.saveState('FEE_ESTIMATES');
+    return estimate;
+  }
+
+  public deleteFeeEstimate(id: string): boolean {
+    if (!this.state.feeEstimates) return false;
+    const initialLen = this.state.feeEstimates.length;
+    const quote = this.state.feeEstimates.find((q) => q.id === id);
+    this.state.feeEstimates = this.state.feeEstimates.filter((q) => q.id !== id);
+    if (this.state.feeEstimates.length < initialLen) {
+      this.logAudit('DELETE', `حذف تقدير الأتعاب وعرض السعر رقم: ${quote?.quotationNumber || id}`);
+      this.saveState('FEE_ESTIMATES');
+      return true;
+    }
+    return false;
+  }
+
+  public updateFeeEstimateStatus(id: string, status: FeeQuotationEstimate['status']): boolean {
+    if (!this.state.feeEstimates) return false;
+    const item = this.state.feeEstimates.find((q) => q.id === id);
+    if (item) {
+      item.status = status;
+      this.logAudit('UPDATE', `تحديث حالة عرض السعر رقم: ${item.quotationNumber} إلى: ${status}`);
+      this.saveState('FEE_ESTIMATES');
+      return true;
+    }
+    return false;
+  }
+
+  // --- Customs, Global Trade & Landed Cost Module (منظومة الجمارك والتجارة الخارجية) ---
+  public getCustomsShipments(): CustomsShipment[] {
+    return this.state.customsShipments || [];
+  }
+
+  public getCustomsShipmentById(id: string): CustomsShipment | undefined {
+    return (this.state.customsShipments || []).find((s) => s.id === id);
+  }
+
+  public saveCustomsShipment(shipment: CustomsShipment): CustomsShipment {
+    if (!this.state.customsShipments) {
+      this.state.customsShipments = [];
+    }
+    const idx = this.state.customsShipments.findIndex((s) => s.id === shipment.id);
+    const now = new Date().toISOString();
+    const updatedShipment: CustomsShipment = {
+      ...shipment,
+      updatedAt: now,
+    };
+
+    if (idx >= 0) {
+      this.state.customsShipments[idx] = updatedShipment;
+      this.logAudit('UPDATE', `تحديث بيانات الشحنة الجمركية رقم [${shipment.shipmentCode}] (${shipment.title})`);
+    } else {
+      updatedShipment.createdAt = updatedShipment.createdAt || now;
+      this.state.customsShipments.unshift(updatedShipment);
+      this.logAudit('CREATE', `تسجيل شحنة جمركية جديدة رقم [${shipment.shipmentCode}]: ${shipment.title} للعميل: ${shipment.clientName}`);
+    }
+    this.saveState('CUSTOMS_SHIPMENTS');
+    return updatedShipment;
+  }
+
+  public deleteCustomsShipment(id: string): boolean {
+    if (!this.state.customsShipments) return false;
+    const target = this.state.customsShipments.find((s) => s.id === id);
+    if (!target) return false;
+    this.state.customsShipments = this.state.customsShipments.filter((s) => s.id !== id);
+    this.logAudit('DELETE', `حذف ملف الشحنة الجمركية رقم [${target.shipmentCode}] - ${target.title}`);
+    this.saveState('CUSTOMS_SHIPMENTS');
+    return true;
+  }
+
+  public generateCustomsJournalEntries(shipmentId: string): { entryGoodsInTransit: JournalEntry; entryDuties?: JournalEntry; entryClosing?: JournalEntry } | null {
+    const shipment = this.getCustomsShipmentById(shipmentId);
+    if (!shipment) return null;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 1. Entry 1: إثبات بضاعة بالطريق واعتماد مستندي خارجي (CIF Value)
+    const entryGoodsInTransit = this.addJournalEntry({
+      date: today,
+      description: `إثبات فتح اعتماد مستندي وبضاعة مشحونة بالطريق - شحنة رقم ${shipment.shipmentCode} (${shipment.title})`,
+      referenceNumber: shipment.shipmentCode,
+      entryType: 'PURCHASE',
+      lines: [
+        {
+          id: `line-${Date.now()}-1`,
+          accountId: 'acc-123',
+          accountCode: '123',
+          accountName: 'اعتمادات مستندية لشراء بضائع ومهمات بالطريق',
+          debit: shipment.cifValueEgp,
+          credit: 0,
+          description: `قيمة البضاعة سيف بالعملة الأجنبية (${shipment.cifValueForeign.toLocaleString()} ${shipment.invoiceCurrency}) بسعر صرف ${shipment.customsExchangeRate}`,
+        },
+        {
+          id: `line-${Date.now()}-2`,
+          accountId: 'acc-211',
+          accountCode: '2112',
+          accountName: 'موردون خارجيون - التزامات اعتمادات مستندية',
+          debit: 0,
+          credit: shipment.cifValueEgp,
+          description: `استحقاق المورد الأجنبي: ${shipment.foreignExporterName} - اعتماد ${shipment.bankForm4Number || ''}`,
+        },
+      ],
+      totalDebit: shipment.cifValueEgp,
+      totalCredit: shipment.cifValueEgp,
+      isPosted: true,
+      clientId: shipment.clientId,
+      clientName: shipment.clientName,
+    });
+
+    // 2. Entry 2: إثبات الرسوم الجمركية والضرائب والمصاريف الإنزالية
+    const totalCustomsAndExpenses = (shipment.customsDutyAmount || 0) + (shipment.developmentFeeAmount || 0) + (shipment.totalAdditionalExpenses || 0);
+    const vatInput = shipment.vatAmount || 0;
+    const whtInput = shipment.withholdingTaxAmount || 0;
+
+    let entryDuties: JournalEntry | undefined = undefined;
+    if (totalCustomsAndExpenses > 0 || vatInput > 0) {
+      entryDuties = this.addJournalEntry({
+        date: today,
+        description: `إثبات سداد الرسوم الجمركية وضريبة القيمة المضافة ومصاريف التخليص - شحنة ${shipment.shipmentCode}`,
+        referenceNumber: shipment.customsDeclarationNumber || shipment.shipmentCode,
+        entryType: 'PURCHASE',
+        lines: [
+          {
+            id: `line-${Date.now()}-3`,
+            accountId: 'acc-123',
+            accountCode: '123',
+            accountName: 'اعتمادات مستندية لشراء بضائع ومهمات بالطريق (رسملة جمارك ومصاريف)',
+            debit: totalCustomsAndExpenses,
+            credit: 0,
+            description: `ضريبة جمركية (${shipment.customsDutyAmount.toLocaleString()}) + رسم تنمية (${shipment.developmentFeeAmount.toLocaleString()}) + مصاريف موانئ ونقل وتخليص (${shipment.totalAdditionalExpenses.toLocaleString()})`,
+          },
+          ...(vatInput > 0 ? [{
+            id: `line-${Date.now()}-4`,
+            accountId: 'acc-128',
+            accountCode: '1281',
+            accountName: 'مصلحة الضرائب - ضريبة القيمة المضافة مدخلات قابلة للخصم (14%)',
+            debit: vatInput,
+            credit: 0,
+            description: `ضريبة ق.م جمركية مسددة بموجب إفراج جمركي 13 لمصلحة الجمارك`,
+          }] : []),
+          ...(whtInput > 0 ? [{
+            id: `line-${Date.now()}-5`,
+            accountId: 'acc-1282',
+            accountCode: '1282',
+            accountName: 'مصلحة الضرائب - مبالغ مسددة تحت حساب الضريبة (خصم جمركي 1%)',
+            debit: whtInput,
+            credit: 0,
+            description: `خصم وتحصيل جمركي تحت حساب ضريبة أرباح الشركات`,
+          }] : []),
+          {
+            id: `line-${Date.now()}-6`,
+            accountId: 'acc-191',
+            accountCode: '191',
+            accountName: 'النقدية وما في حكمها / البنك وسداد منظومة نافذة',
+            debit: 0,
+            credit: totalCustomsAndExpenses + vatInput + (whtInput > 0 ? whtInput : 0),
+            description: `سداد إلكتروني عبر منظومة التحصيل المالي الموحدة لمنظومة نافذة والجمارك`,
+          },
+        ],
+        totalDebit: totalCustomsAndExpenses + vatInput + (whtInput > 0 ? whtInput : 0),
+        totalCredit: totalCustomsAndExpenses + vatInput + (whtInput > 0 ? whtInput : 0),
+        isPosted: true,
+        clientId: shipment.clientId,
+        clientName: shipment.clientName,
+      });
+    }
+
+    // 3. Entry 3: إقفال الاعتماد المستندي ورسملة التكلفة الإنزالية الكلية في المخزن
+    let entryClosing: JournalEntry | undefined = undefined;
+    if (shipment.status === 'RECEIVED_WAREHOUSE' || shipment.status === 'RELEASED') {
+      entryClosing = this.addJournalEntry({
+        date: today,
+        description: `إقفال حساب الاعتمادات المستندية وإثبات استلام البضاعة بالمخازن بالتكلفة الإنزالية النهائية - شحنة ${shipment.shipmentCode}`,
+        referenceNumber: `INV-STORE-${shipment.shipmentCode}`,
+        entryType: 'ADJUSTING',
+        lines: [
+          {
+            id: `line-${Date.now()}-7`,
+            accountId: 'acc-121',
+            accountCode: '121',
+            accountName: 'مخزون بضائع ومهمات وخامات مشتراة',
+            debit: shipment.totalLandedCostEgp,
+            credit: 0,
+            description: `التكلفة الإنزالية الكلية للبضاعة الواردة بعد تحميل كافة الرسوم والمصاريف الجمركية للمخزن`,
+          },
+          {
+            id: `line-${Date.now()}-8`,
+            accountId: 'acc-123',
+            accountCode: '123',
+            accountName: 'اعتمادات مستندية لشراء بضائع ومهمات بالطريق',
+            debit: 0,
+            credit: shipment.totalLandedCostEgp,
+            description: `إقفال رصيد الاعتماد المستندي واستلام البضاعة بالمستودع`,
+          },
+        ],
+        totalDebit: shipment.totalLandedCostEgp,
+        totalCredit: shipment.totalLandedCostEgp,
+        isPosted: true,
+        clientId: shipment.clientId,
+        clientName: shipment.clientName,
+      });
+    }
+
+    // Link created entry IDs to shipment
+    const linkedIds = [entryGoodsInTransit.id, ...(entryDuties ? [entryDuties.id] : []), ...(entryClosing ? [entryClosing.id] : [])];
+    shipment.linkedJournalEntryIds = Array.from(new Set([...(shipment.linkedJournalEntryIds || []), ...linkedIds]));
+    this.saveCustomsShipment(shipment);
+
+    return {
+      entryGoodsInTransit,
+      entryDuties,
+      entryClosing,
+    };
+  }
+
+  public payCustomsFromOfficeTreasury(
+    shipmentId: string,
+    payload: {
+      amount: number;
+      category: string;
+      description: string;
+      paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE';
+      treasuryType: 'OFFICE_MAIN_VAULT' | 'BANK_CURRENT_ACCOUNT' | 'PETTY_CASH';
+      paidBy?: string;
+    }
+  ): OfficeTreasuryTransaction | null {
+    const shipment = this.getCustomsShipmentById(shipmentId);
+    if (!shipment) return null;
+
+    const tx = this.addTreasuryTransaction({
+      date: new Date().toISOString().slice(0, 10),
+      type: 'EXPENSE_CLIENT_GOV_FEE',
+      category: payload.category || 'رسوم ومصروفات جمركية ونافذة',
+      amount: payload.amount,
+      clientId: shipment.clientId,
+      clientName: shipment.clientName,
+      paymentMethod: payload.paymentMethod === 'CHEQUE' ? 'CHEQUE' : payload.paymentMethod === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'CASH',
+      description: `${payload.description || `سداد رسوم جمركية ومصروفات تخليص عن شحنة [${shipment.shipmentCode}]`} (ACID: ${shipment.acidNumber} - بوليصة: ${shipment.blNumber})`,
+      recordedBy: payload.paidBy || this.state.officeProfile.auditorName || 'محمد جميل مرعي',
+    });
+
+    if (!shipment.linkedTreasuryTransactionIds) shipment.linkedTreasuryTransactionIds = [];
+    shipment.linkedTreasuryTransactionIds.push(tx.id);
+    this.saveCustomsShipment(shipment);
+
+    return tx;
+  }
+
+  public saveCustomsDocToClientArchive(
+    shipmentId: string,
+    clientId: string,
+    payload: {
+      title: string;
+      docType: 'CONTRACT' | 'TAX_CARD' | 'COMMERCIAL_REG' | 'FINANCIAL_STATEMENT' | 'POWER_OF_ATTORNEY' | 'MEMO' | 'OTHER';
+      fileDataUrl?: string;
+      fileName?: string;
+      remarks?: string;
+    }
+  ): ClientDocument | null {
+    const shipment = this.getCustomsShipmentById(shipmentId);
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return null;
+
+    let customsFolder = client.folders?.find((f) => f.name.includes('جمارك') || f.name.includes('استيراد') || f.name.includes('شحن'));
+    if (!customsFolder) {
+      customsFolder = this.addClientFolder(clientId, {
+        name: 'مستندات الجمارك والتجارة الخارجية',
+        icon: 'archive',
+        color: 'indigo',
+        description: 'بوالص الشحن، الفواتير التجارية، شهادات المنشأ وإفراجات نافذة',
+      });
+    }
+
+    const doc = this.addClientDocument(clientId, {
+      title: payload.title,
+      documentType: 'OTHER',
+      fileName: payload.fileName || `${payload.title}.pdf`,
+      fileSize: '1.2 MB',
+      fileDataUrl: payload.fileDataUrl || 'data:application/pdf;base64,JVBERi0xLjQKJ...',
+      folderId: customsFolder?.id,
+      folderName: customsFolder?.name,
+      notes: payload.remarks || `مرتبط بالشحنة الجمركية: ${shipment?.shipmentCode || ''}`,
+    });
+
+    if (doc && shipment) {
+      if (!shipment.archiveDocumentIds) shipment.archiveDocumentIds = [];
+      shipment.archiveDocumentIds.push(doc.id);
+      this.saveCustomsShipment(shipment);
+    }
+
+    return doc;
   }
 }
 

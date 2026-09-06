@@ -23,6 +23,7 @@ import {
   Laptop,
   ArrowRight,
   Sparkles,
+  Ship,
 } from 'lucide-react';
 
 export interface ShortcutItem {
@@ -173,6 +174,19 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
         targetTabId: 'OFFICE_TREASURY',
         action: () => {
           onNavigate('OFFICE_TREASURY');
+          onClose();
+        },
+      },
+      {
+        id: 'nav-customs',
+        keyCombo: ['Ctrl', 'Shift', 'C'],
+        label: 'الجمارك والتجارة والتكلفة الإنزالية',
+        category: 'NAVIGATION',
+        description: 'شحنات الاستيراد والتصدير، نظام نافذة ACI، واحتساب التكلفة الرأسمالية EAS 2',
+        icon: Ship,
+        targetTabId: 'CUSTOMS_HUB',
+        action: () => {
+          onNavigate('CUSTOMS_HUB');
           onClose();
         },
       },

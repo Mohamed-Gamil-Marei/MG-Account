@@ -84,21 +84,22 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
     const results: SearchResultItem[] = [];
 
     // 1. Journal Entries
-    state.journalEntries.forEach((entry) => {
-      const matchDocNo = entry.documentNumber.toLowerCase().includes(q);
-      const matchDesc = entry.description.toLowerCase().includes(q);
-      const matchAccounts = entry.lines.some(
-        (l) => l.accountName.toLowerCase().includes(q) || l.accountCode.toLowerCase().includes(q)
+    (state.journalEntries || []).forEach((entry) => {
+      const matchDocNo = (entry.serialNumber || '').toLowerCase().includes(q) || (entry.referenceNumber || '').toLowerCase().includes(q);
+      const matchDesc = (entry.description || '').toLowerCase().includes(q);
+      const matchClient = (entry.clientName || '').toLowerCase().includes(q);
+      const matchAccounts = (entry.lines || []).some(
+        (l) => (l.accountName || '').toLowerCase().includes(q) || (l.accountCode || '').toLowerCase().includes(q)
       );
 
-      if (matchDocNo || matchDesc || matchAccounts) {
+      if (matchDocNo || matchDesc || matchClient || matchAccounts) {
         results.push({
           id: `je-${entry.id}`,
           category: 'JOURNAL',
           categoryLabel: 'قيد يومية',
-          title: `قيد رقم [${entry.documentNumber}] - ${entry.description}`,
-          subtitle: `بتاريخ ${entry.date} • إجمالي ${formatEgyptianCurrency(entry.totalDebit)} • ${entry.status === 'POSTED' ? 'مرحل' : 'مسودة'}`,
-          badge: entry.documentNumber,
+          title: `قيد رقم [${entry.serialNumber || entry.entryNumber || '-'}] - ${entry.description || ''}`,
+          subtitle: `بتاريخ ${entry.date || '-'} • إجمالي ${formatEgyptianCurrency(entry.totalDebit || 0)} • ${entry.isPosted ? 'مرحل' : 'مسودة'} ${entry.clientName ? `• ${entry.clientName}` : ''}`,
+          badge: entry.serialNumber || `قيد #${entry.entryNumber || ''}`,
           targetTab: 'JOURNAL_ENTRIES',
           recordId: entry.id,
           icon: BookOpen,
@@ -107,22 +108,22 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
     });
 
     // 2. Clients Archive
-    state.clients.forEach((client) => {
-      const matchName = client.name.toLowerCase().includes(q);
-      const matchCode = client.clientCode.toLowerCase().includes(q);
-      const matchTaxCard = client.taxCardNo.toLowerCase().includes(q);
-      const matchCR = client.commercialRegisterNo?.toLowerCase().includes(q);
-      const matchPhone = client.phone?.toLowerCase().includes(q);
-      const matchActivity = client.businessActivity?.toLowerCase().includes(q);
+    (state.clients || []).forEach((client) => {
+      const matchName = (client.name || '').toLowerCase().includes(q);
+      const matchCode = (client.clientCode || '').toLowerCase().includes(q);
+      const matchTaxCard = (client.taxCardNo || '').toLowerCase().includes(q);
+      const matchCR = (client.commercialRegistrationNo || '').toLowerCase().includes(q);
+      const matchPhone = (client.phone || '').toLowerCase().includes(q);
+      const matchActivity = (client.activity || '').toLowerCase().includes(q);
 
       if (matchName || matchCode || matchTaxCard || matchCR || matchPhone || matchActivity) {
         results.push({
           id: `cl-${client.id}`,
           category: 'CLIENT',
           categoryLabel: 'ملف عميل وموكل',
-          title: `[${client.clientCode}] ${client.name}`,
-          subtitle: `بطاقة ضريبية: ${client.taxCardNo} • ${client.legalFormArabic || ''} • هاتف: ${client.phone || '-'}`,
-          badge: client.legalFormArabic || 'عميل',
+          title: `[${client.clientCode || '-'}] ${client.name || ''}`,
+          subtitle: `بطاقة ضريبية: ${client.taxCardNo || '-'} • مأمورية: ${client.taxOffice || '-'} • هاتف: ${client.phone || '-'}`,
+          badge: client.companyType === 'JOINT_STOCK' ? 'ش.م.م' : client.companyType === 'LLC' ? 'ش.ذ.م.م' : 'عميل',
           targetTab: 'CLIENTS_ARCHIVE',
           recordId: client.id,
           icon: Users,
@@ -131,20 +132,20 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
     });
 
     // 3. Invoices
-    state.invoices.forEach((inv) => {
-      const matchInvNo = inv.invoiceNumber.toLowerCase().includes(q);
-      const matchClient = inv.clientName.toLowerCase().includes(q);
-      const matchQR = inv.qrPayload?.toLowerCase().includes(q);
-      const matchItems = inv.items.some((item) => item.description.toLowerCase().includes(q));
+    (state.invoices || []).forEach((inv) => {
+      const matchInvNo = (inv.invoiceNumber || '').toLowerCase().includes(q);
+      const matchClient = (inv.partnerName || '').toLowerCase().includes(q);
+      const matchQR = (inv.qrPayload || '').toLowerCase().includes(q);
+      const matchItems = (inv.items || []).some((item) => (item.description || '').toLowerCase().includes(q));
 
       if (matchInvNo || matchClient || matchQR || matchItems) {
         results.push({
           id: `inv-${inv.id}`,
           category: 'INVOICE',
           categoryLabel: 'فاتورة مهنية / ضريبية',
-          title: `فاتورة رقم [${inv.invoiceNumber}] - ${inv.clientName}`,
-          subtitle: `تاريخ الإصدار: ${inv.date} • الإجمالي: ${formatEgyptianCurrency(inv.totalAmount)} • ${inv.paymentStatus === 'PAID' ? 'مدفوعة' : 'مستحقة'}`,
-          badge: inv.invoiceNumber,
+          title: `فاتورة رقم [${inv.invoiceNumber || '-'}] - ${inv.partnerName || ''}`,
+          subtitle: `تاريخ الإصدار: ${inv.date || '-'} • الإجمالي: ${formatEgyptianCurrency(inv.grandTotal || 0)} • ${inv.status === 'PAID' ? 'مدفوعة' : 'مستحقة'}`,
+          badge: inv.invoiceNumber || 'فاتورة',
           targetTab: 'INVOICING',
           recordId: inv.id,
           icon: FileText,
@@ -154,19 +155,19 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
 
     // 4. Tax Mandates & Declarations
     (state.taxMandates || []).forEach((mandate) => {
-      const matchCode = mandate.mandateCode.toLowerCase().includes(q);
-      const matchTitle = mandate.mandateTitle.toLowerCase().includes(q);
-      const matchClient = mandate.clientName.toLowerCase().includes(q);
-      const matchPeriod = mandate.periodName.toLowerCase().includes(q);
+      const matchCode = (mandate.mandateCode || '').toLowerCase().includes(q);
+      const matchTitle = (mandate.mandateTitle || '').toLowerCase().includes(q);
+      const matchClient = (mandate.clientName || '').toLowerCase().includes(q);
+      const matchPeriod = (mandate.periodName || '').toLowerCase().includes(q);
 
       if (matchCode || matchTitle || matchClient || matchPeriod) {
         results.push({
           id: `mand-${mandate.id}`,
           category: 'TAX',
           categoryLabel: 'تكليف ضريبي وجدولة',
-          title: `[${mandate.mandateCode}] ${mandate.mandateTitle}`,
-          subtitle: `العميل: ${mandate.clientName} • استحقاق: ${mandate.deadlineDate} • ${mandate.status}`,
-          badge: mandate.periodName,
+          title: `[${mandate.mandateCode || '-'}] ${mandate.mandateTitle || ''}`,
+          subtitle: `العميل: ${mandate.clientName || '-'} • استحقاق: ${mandate.deadlineDate || '-'} • ${mandate.status || ''}`,
+          badge: mandate.periodName || 'تكليف',
           targetTab: 'TAX_TRACKER',
           recordId: mandate.id,
           icon: Clock,
@@ -174,19 +175,19 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
       }
     });
 
-    state.taxDeclarations.forEach((tax) => {
-      const matchClient = tax.clientName.toLowerCase().includes(q);
-      const matchPeriod = tax.period.toLowerCase().includes(q);
-      const matchNotes = tax.notes?.toLowerCase().includes(q);
+    (state.taxDeclarations || []).forEach((tax) => {
+      const matchClient = (tax.clientName || '').toLowerCase().includes(q);
+      const matchPeriod = (tax.period || '').toLowerCase().includes(q);
+      const matchNotes = (tax.notes || '').toLowerCase().includes(q);
 
       if (matchClient || matchPeriod || matchNotes) {
         results.push({
           id: `tax-${tax.id}`,
           category: 'TAX',
           categoryLabel: 'إقرار ضريبي',
-          title: `إقرار ${tax.declarationType} - ${tax.period} للعميل: ${tax.clientName}`,
-          subtitle: `استحقاق: ${tax.dueDate} • ضريبة: ${formatEgyptianCurrency(tax.netTaxPayable)} • ${tax.status}`,
-          badge: tax.period,
+          title: `إقرار ${tax.declarationType || ''} - ${tax.period || ''} للعميل: ${tax.clientName || ''}`,
+          subtitle: `استحقاق: ${tax.dueDate || '-'} • ضريبة: ${formatEgyptianCurrency(tax.netTaxPayable || 0)} • ${tax.status || ''}`,
+          badge: tax.period || 'إقرار',
           targetTab: 'TAX_TRACKER',
           recordId: tax.id,
           icon: Percent,
@@ -195,20 +196,20 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
     });
 
     // 5. Office Treasury Transactions
-    state.treasuryTransactions.forEach((tx) => {
-      const matchVoucher = tx.voucherNumber.toLowerCase().includes(q);
-      const matchCat = tx.category.toLowerCase().includes(q);
-      const matchDesc = tx.description.toLowerCase().includes(q);
-      const matchClient = tx.clientName?.toLowerCase().includes(q);
+    (state.treasuryTransactions || []).forEach((tx) => {
+      const matchVoucher = (tx.voucherNumber || '').toLowerCase().includes(q);
+      const matchCat = (tx.category || '').toLowerCase().includes(q);
+      const matchDesc = (tx.description || '').toLowerCase().includes(q);
+      const matchClient = (tx.clientName || '').toLowerCase().includes(q);
 
       if (matchVoucher || matchCat || matchDesc || matchClient) {
         results.push({
           id: `tx-${tx.id}`,
           category: 'TREASURY',
           categoryLabel: 'سند خزنة المكتب',
-          title: `سند [${tx.voucherNumber}] - ${tx.category}`,
-          subtitle: `تاريخ: ${tx.date} • المبلغ: ${formatEgyptianCurrency(tx.amount)} • ${tx.description}`,
-          badge: tx.voucherNumber,
+          title: `سند [${tx.voucherNumber || '-'}] - ${tx.category || ''}`,
+          subtitle: `تاريخ: ${tx.date || '-'} • المبلغ: ${formatEgyptianCurrency(tx.amount || 0)} • ${tx.description || ''}`,
+          badge: tx.voucherNumber || 'سند',
           targetTab: 'OFFICE_TREASURY',
           recordId: tx.id,
           icon: Wallet,
@@ -217,19 +218,19 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
     });
 
     // 6. Professional Certificates
-    state.certificates.forEach((cert) => {
-      const matchCertNo = cert.certificateNumber.toLowerCase().includes(q);
-      const matchClient = cert.clientName.toLowerCase().includes(q);
-      const matchAuditor = cert.auditorName.toLowerCase().includes(q);
+    (state.certificates || []).forEach((cert) => {
+      const matchCertNo = (cert.certificateNumber || '').toLowerCase().includes(q);
+      const matchClient = (cert.clientName || '').toLowerCase().includes(q);
+      const matchRecipient = (cert.recipientEntity || '').toLowerCase().includes(q);
 
-      if (matchCertNo || matchClient || matchAuditor) {
+      if (matchCertNo || matchClient || matchRecipient) {
         results.push({
           id: `cert-${cert.id}`,
           category: 'CERTIFICATE',
           categoryLabel: 'شهادة محاسب قانوني',
-          title: `شهادة [${cert.certificateNumber}] - ${cert.clientName}`,
-          subtitle: `النوع: ${cert.certificateType} • المحاسب: ${cert.auditorName} • تاريخ: ${cert.issueDate}`,
-          badge: cert.certificateNumber,
+          title: `شهادة [${cert.certificateNumber || '-'}] - ${cert.clientName || ''}`,
+          subtitle: `الجهة: ${cert.recipientEntity || '-'} • المبلغ: ${formatEgyptianCurrency(cert.certifiedAmount || 0)} • تاريخ: ${cert.issueDate || '-'}`,
+          badge: cert.certificateNumber || 'شهادة',
           targetTab: 'CERTIFICATES',
           recordId: cert.id,
           icon: FileCheck,
@@ -238,19 +239,19 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
     });
 
     // 7. Chart of Accounts
-    state.accounts.forEach((acc) => {
-      const matchCode = acc.code.toLowerCase().includes(q);
-      const matchName = acc.nameArabic.toLowerCase().includes(q);
-      const matchNameEn = acc.nameEnglish.toLowerCase().includes(q);
+    (state.accounts || []).forEach((acc) => {
+      const matchCode = (acc.code || '').toLowerCase().includes(q);
+      const matchName = (acc.name || '').toLowerCase().includes(q);
+      const matchDesc = (acc.description || '').toLowerCase().includes(q);
 
-      if (matchCode || matchName || matchNameEn) {
+      if (matchCode || matchName || matchDesc) {
         results.push({
           id: `acc-${acc.id}`,
           category: 'ACCOUNT',
           categoryLabel: 'دليل الحسابات',
-          title: `حساب [${acc.code}] - ${acc.nameArabic}`,
-          subtitle: `الاسم بالإنجليزية: ${acc.nameEnglish} • طبيعة الحساب: ${acc.nature === 'DEBIT' ? 'مدين' : 'دائن'} • المستوى: ${acc.level}`,
-          badge: acc.code,
+          title: `حساب [${acc.code || '-'}] - ${acc.name || ''}`,
+          subtitle: `طبيعة الحساب: ${acc.nature === 'DEBIT' ? 'مدين' : 'دائن'} • المستوى: ${acc.level || 1} • ${acc.category || ''}`,
+          badge: acc.code || '',
           targetTab: 'CHART_OF_ACCOUNTS',
           recordId: acc.id,
           icon: Layers,
@@ -260,19 +261,19 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
 
     // 8. Fixed Assets & Depreciation
     (state.fixedAssets || []).forEach((ast) => {
-      const matchCode = ast.assetCode.toLowerCase().includes(q);
-      const matchName = ast.name.toLowerCase().includes(q);
-      const matchCust = ast.custodian?.toLowerCase().includes(q);
-      const matchLoc = ast.location?.toLowerCase().includes(q);
+      const matchCode = (ast.assetCode || '').toLowerCase().includes(q);
+      const matchName = (ast.name || '').toLowerCase().includes(q);
+      const matchCust = (ast.custodian || '').toLowerCase().includes(q);
+      const matchLoc = (ast.location || '').toLowerCase().includes(q);
 
       if (matchCode || matchName || matchCust || matchLoc) {
         results.push({
           id: `ast-${ast.id}`,
           category: 'FIXED_ASSET',
           categoryLabel: 'أصل ثابت وإهلاك (معيار 10)',
-          title: `[${ast.assetCode}] ${ast.name}`,
-          subtitle: `تكلفة الاقتناء: ${formatEgyptianCurrency(ast.acquisitionCost)} • صافي الدفتري: ${formatEgyptianCurrency(ast.currentBookValue)} • إهلاك: ${ast.accountingDepreciationRate}%`,
-          badge: ast.assetCode,
+          title: `[${ast.assetCode || '-'}] ${ast.name || ''}`,
+          subtitle: `تكلفة الاقتناء: ${formatEgyptianCurrency(ast.acquisitionCost || 0)} • صافي الدفتري: ${formatEgyptianCurrency(ast.currentBookValue || 0)} • إهلاك: ${ast.accountingDepreciationRate || 0}%`,
+          badge: ast.assetCode || '',
           targetTab: 'FIXED_ASSETS',
           recordId: ast.id,
           icon: BookOpen,
@@ -331,7 +332,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
   };
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-xs md:max-w-md lg:max-w-lg">
+    <div ref={containerRef} className="relative w-full">
       {/* Search Input Bar */}
       <div className="relative">
         <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
@@ -347,10 +348,10 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
           }}
           onKeyDown={handleKeyDownInInput}
           placeholder="بحث شامل (قيود، عملاء، فواتير، ضرائب، خزنة)..."
-          className="w-full pl-16 pr-10 py-2 bg-slate-800/80 hover:bg-slate-800 focus:bg-slate-900 text-white placeholder-slate-400 text-xs rounded-xl border border-slate-700 focus:border-indigo-500 focus:outline-none transition-all"
+          className="w-full pl-16 pr-10 py-1.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 text-xs rounded-xl border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:outline-none transition-all shadow-2xs"
         />
         <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-400 bg-slate-700/60 rounded border border-slate-600">
+          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-400 bg-white dark:bg-slate-700/60 rounded border border-slate-200 dark:border-slate-600">
             Ctrl + /
           </kbd>
         </div>

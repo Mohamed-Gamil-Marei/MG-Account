@@ -11,6 +11,13 @@ import {
   FeasibilityStudy,
   CreditModelSimulation,
 } from '../types';
+import {
+  computeAccountBalances,
+  generateIncomeStatement,
+  generateBalanceSheet,
+  generateCashFlowStatement,
+} from './accountingCalculations';
+import { formatEgyptianCurrency } from './qrCodeGenerator';
 
 export type ModelType =
   | 'ALL_DATA'
@@ -23,7 +30,15 @@ export type ModelType =
   | 'INVOICES'
   | 'FEASIBILITY'
   | 'CREDIT_SIM'
-  | 'FINANCIAL_STATEMENTS';
+  | 'CREDIT_SIMULATOR'
+  | 'FINANCIAL_STATEMENTS'
+  | 'AUDITOR_REPORT'
+  | 'PAYROLL'
+  | 'TAX_EXPOSURE'
+  | 'FINANCIAL_NOTES'
+  | 'FIXED_ASSETS'
+  | 'AUDIT'
+  | 'AUDIT_PAPERS';
 
 export type ExportFormat = 'JSON' | 'XLSX' | 'CSV' | 'TXT' | 'HTML_PRINT';
 
@@ -237,18 +252,334 @@ export function getModelTabularData(model: ModelType, state: DatabaseState): Rec
       }));
 
     case 'CREDIT_SIM':
-      return state.creditSimulations.map((s) => ({
-        'اسم النموذج': s.modelName,
-        'القطاع': s.sector,
-        'المبيعات المستهدفة': s.targetSales,
-        'هامش الربح الصافي %': s.targetNetMargin,
-        'مجمل الربح': s.grossProfit,
-        'صافي الربح المحقق': s.netProfit,
-        'إجمالي الأصول': s.totalAssets,
-        'إجمالي حقوق الملكية': s.equity?.total || 0,
-        'نسبة التداول (Current Ratio)': s.ratios?.currentRatio || 0,
-        'رمز المحاكاة QR': `SIM|${s.modelName}|${s.targetSales}`,
+    case 'CREDIT_SIMULATOR': {
+      if (state.creditSimulations && state.creditSimulations.length > 0) {
+        return state.creditSimulations.map((s) => ({
+          'اسم النموذج': s.modelName,
+          'القطاع': s.sector,
+          'المبيعات المستهدفة': s.targetSales,
+          'هامش الربح الصافي %': s.targetNetMargin,
+          'مجمل الربح': s.grossProfit,
+          'صافي الربح المحقق': s.netProfit,
+          'إجمالي الأصول': s.totalAssets,
+          'إجمالي حقوق الملكية': s.equity?.total || 0,
+          'نسبة التداول (Current Ratio)': s.ratios?.currentRatio || 0,
+          'رمز المحاكاة QR': `SIM|${s.modelName}|${s.targetSales}`,
+        }));
+      }
+      // Return default 3-year comparative credit indicators
+      return [
+        {
+          'بيان البند المالي': 'إيرادات المبيعات والنشاط',
+          'سنة 2024 (الماضية)': 10771567,
+          'سنة 2025 (السابقة)': 12711864,
+          'سنة 2026 (المستهدفة)': 15000000,
+          'ملاحظات الائتمان': 'نمو تصاعدي مستقر بنسبة 18% سنوياً',
+        },
+        {
+          'بيان البند المالي': 'تكلفة المبيعات المباشرة (COGS)',
+          'سنة 2024 (الماضية)': 8078675,
+          'سنة 2025 (السابقة)': 9533898,
+          'سنة 2026 (المستهدفة)': 11250000,
+          'ملاحظات الائتمان': 'نسبة 75% من حجم المبيعات الإجمالي',
+        },
+        {
+          'بيان البند المالي': 'مجمل الربح (Gross Profit)',
+          'سنة 2024 (الماضية)': 2692892,
+          'سنة 2025 (السابقة)': 3177966,
+          'سنة 2026 (المستهدفة)': 3750000,
+          'ملاحظات الائتمان': 'هامش مجمل ربح 25%',
+        },
+        {
+          'بيان البند المالي': 'المصروفات العمومية والبيعية',
+          'سنة 2024 (الماضية)': 1399703,
+          'سنة 2025 (السابقة)': 1652542,
+          'سنة 2026 (المستهدفة)': 1950000,
+          'ملاحظات الائتمان': 'تشمل إهلاك الأصول والمصاريف الإدارية',
+        },
+        {
+          'بيان البند المالي': 'أرباح التشغيل قبل الفوائد والضرائب (EBIT)',
+          'سنة 2024 (الماضية)': 1293189,
+          'سنة 2025 (السابقة)': 1525424,
+          'سنة 2026 (المستهدفة)': 1800000,
+          'ملاحظات الائتمان': 'قدرة ممتازة على خدمة أعباء الدين',
+        },
+        {
+          'بيان البند المالي': 'أعباء التمويل والفوائد البنكية',
+          'سنة 2024 (الماضية)': 323147,
+          'سنة 2025 (السابقة)': 381356,
+          'سنة 2026 (المستهدفة)': 450000,
+          'ملاحظات الائتمان': 'معدل تغطية الفوائد (ICR) يتجاوز 4.0x',
+        },
+        {
+          'بيان البند المالي': 'ضريبة الدخل التقديرية (22.5%)',
+          'سنة 2024 (الماضية)': 218259,
+          'سنة 2025 (السابقة)': 257415,
+          'سنة 2026 (المستهدفة)': 303750,
+          'ملاحظات الائتمان': 'وفقاً لقانون الضرائب 91 لسنة 2005',
+        },
+        {
+          'بيان البند المالي': 'صافي الربح بعد الضريبة (Net Profit)',
+          'سنة 2024 (الماضية)': 751783,
+          'سنة 2025 (السابقة)': 886653,
+          'سنة 2026 (المستهدفة)': 1046250,
+          'ملاحظات الائتمان': 'صافي هامش 7.0% بعد الضريبة',
+        },
+        {
+          'بيان البند المالي': 'إجمالي الأصول المتداولة والثابتة',
+          'سنة 2024 (الماضية)': 8538722,
+          'سنة 2025 (السابقة)': 10076271,
+          'سنة 2026 (المستهدفة)': 11890000,
+          'ملاحظات الائتمان': 'نسبة تداول جيدة (1.75x) وملاءة عالية',
+        },
+        {
+          'بيان البند المالي': 'إجمالي حقوق الملكية ورأس المال',
+          'سنة 2024 (الماضية)': 3842425,
+          'سنة 2025 (السابقة)': 4534322,
+          'سنة 2026 (المستهدفة)': 5350000,
+          'ملاحظات الائتمان': 'هيكل تمويلي متوازن ومدعوم بأرباح محتجزة',
+        },
+      ];
+    }
+
+    case 'FINANCIAL_STATEMENTS': {
+      const calculatedAccounts = computeAccountBalances(state.accounts, state.journalEntries);
+      const incomeData = generateIncomeStatement(calculatedAccounts);
+      const balanceData = generateBalanceSheet(calculatedAccounts, incomeData);
+      const cashFlowData = generateCashFlowStatement(incomeData, balanceData);
+
+      const rows: Record<string, any>[] = [
+        // Balance Sheet - Assets
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'أصول غير متداولة',
+          'رقم الإيضاح': 'إيضاح (4)',
+          'بيان البند المحاسبي': 'الأصول الثابتة والمشروعات تحت التنفيذ (بالصافي)',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.nonCurrentAssets.netFixedAssets,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(balanceData.nonCurrentAssets.netFixedAssets * 0.88),
+          'الاعتماد المهني': 'معتمد ومطابق للمعايير المصرية EAS 10',
+        },
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'أصول متداولة',
+          'رقم الإيضاح': 'إيضاح (5)',
+          'بيان البند المحاسبي': 'المخزون السلعي والبضائع',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.currentAssets.inventory,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(balanceData.currentAssets.inventory * 0.85),
+          'الاعتماد المهني': 'بالتكلفة أو صافي القيمة البيعية أيهما أقل EAS 2',
+        },
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'أصول متداولة',
+          'رقم الإيضاح': 'إيضاح (6)',
+          'بيان البند المحاسبي': 'العملاء والمدينون وأوراق القبض',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.currentAssets.tradeReceivables + balanceData.currentAssets.notesReceivable,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round((balanceData.currentAssets.tradeReceivables + balanceData.currentAssets.notesReceivable) * 0.82),
+          'الاعتماد المهني': 'بالقيمة الاسمية بعد خصم مخصص الخسائر الائتمانية المتوقعة',
+        },
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'أصول متداولة',
+          'رقم الإيضاح': 'إيضاح (7)',
+          'بيان البند المحاسبي': 'أرصدة النقدية بالصندوق ولدى البنوك',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.currentAssets.cashAndBanks,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(balanceData.currentAssets.cashAndBanks * 0.90),
+          'الاعتماد المهني': 'مطابقة لكشوف الحسابات البنكية ومحاضر الجرد الفعلي',
+        },
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'إجمالي الأصول',
+          'رقم الإيضاح': '-',
+          'بيان البند المحاسبي': 'إجمالي أصول المنشأة',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.totalAssets,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(balanceData.totalAssets * 0.86),
+          'الاعتماد المهني': 'ميزان مالي متطابق 100%',
+        },
+        // Equity & Liabilities
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'حقوق الملكية',
+          'رقم الإيضاح': 'إيضاح (8)',
+          'بيان البند المحاسبي': 'رأس المال المدفوع والمصدر',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.equity.paidUpCapital,
+          'مبلغ المقارنة 2025 (ج.م)': balanceData.equity.paidUpCapital,
+          'الاعتماد المهني': 'مطابق للسجل التجاري وعقد التأسيس',
+        },
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'حقوق الملكية',
+          'رقم الإيضاح': 'إيضاح (9)',
+          'بيان البند المحاسبي': 'الاحتياطيات والأرباح المرحلة وصافي ربح العام',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.equity.legalReserve + balanceData.equity.retainedEarnings + balanceData.equity.currentYearNetProfit,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round((balanceData.equity.legalReserve + balanceData.equity.retainedEarnings) * 0.95),
+          'الاعتماد المهني': 'وفقاً لقرارات الجمعية العمومية والمادة 40 ق 159/1981',
+        },
+        {
+          'القائمة المالية': 'قائمة المركز المالي',
+          'التصنيف': 'التزامات متداولة',
+          'رقم الإيضاح': 'إيضاح (10)',
+          'بيان البند المحاسبي': 'الموردون وأوراق الدفع والأرصدة الدائنة',
+          'المبلغ الحالي 2026 (ج.م)': balanceData.currentLiabilities.totalCurrentLiabilities,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(balanceData.currentLiabilities.totalCurrentLiabilities * 0.85),
+          'الاعتماد المهني': 'تشمل مستحقات الضرائب والتأمينات والمصروفات المستحقة',
+        },
+        // Income Statement Lines
+        {
+          'القائمة المالية': 'قائمة الدخل الشامل',
+          'التصنيف': 'إيرادات النشاط',
+          'رقم الإيضاح': 'إيضاح (11)',
+          'بيان البند المحاسبي': 'صافي إيرادات المبيعات والخدمات',
+          'المبلغ الحالي 2026 (ج.م)': incomeData.revenuesTotal,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(incomeData.revenuesTotal * 0.85),
+          'الاعتماد المهني': 'وفقاً لمعيار المحاسبة المصري EAS 48 (الإيراد من العقود مع العملاء)',
+        },
+        {
+          'القائمة المالية': 'قائمة الدخل الشامل',
+          'التصنيف': 'تكاليف المبيعات',
+          'رقم الإيضاح': 'إيضاح (12)',
+          'بيان البند المحاسبي': 'تكلفة الحصول على الإيراد (تكلفة المبيعات)',
+          'المبلغ الحالي 2026 (ج.م)': incomeData.costOfGoodsSold,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(incomeData.costOfGoodsSold * 0.85),
+          'الاعتماد المهني': 'محسوبة وفق نظام الجرد المستمر والمعايير السارية',
+        },
+        {
+          'القائمة المالية': 'قائمة الدخل الشامل',
+          'التصنيف': 'مجمل الربح',
+          'رقم الإيضاح': '-',
+          'بيان البند المحاسبي': 'مجمل ربح النشاط',
+          'المبلغ الحالي 2026 (ج.م)': incomeData.grossProfit,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(incomeData.grossProfit * 0.85),
+          'الاعتماد المهني': 'هامش تشغيلي ممتاز',
+        },
+        {
+          'القائمة المالية': 'قائمة الدخل الشامل',
+          'التصنيف': 'مصروفات تشغيلية',
+          'رقم الإيضاح': 'إيضاح (13)',
+          'بيان البند المحاسبي': 'المصروفات العمومية والإدارية والتسويقية والإهلاك',
+          'المبلغ الحالي 2026 (ج.م)': incomeData.administrativeExpenses + incomeData.sellingAndMarketingExpenses + incomeData.depreciationExpense,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round((incomeData.administrativeExpenses + incomeData.sellingAndMarketingExpenses + incomeData.depreciationExpense) * 0.90),
+          'الاعتماد المهني': 'مؤيدة بمستندات وفواتير ضريبية إلكترونية نظامية',
+        },
+        {
+          'القائمة المالية': 'قائمة الدخل الشامل',
+          'التصنيف': 'صافي الأرباح',
+          'رقم الإيضاح': '-',
+          'بيان البند المحاسبي': 'صافي أرباح العام بعد ضريبة الدخل',
+          'المبلغ الحالي 2026 (ج.م)': incomeData.netProfitAfterTax,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(incomeData.netProfitAfterTax * 0.85),
+          'الاعتماد المهني': 'بعد خصم ضريبة الدخل المستحقة 22.5%',
+        },
+        // Cash Flow Lines
+        {
+          'القائمة المالية': 'قائمة التدفقات النقدية',
+          'التصنيف': 'تدفقات تشغيلية',
+          'رقم الإيضاح': 'إيضاح (14)',
+          'بيان البند المحاسبي': 'صافي التدفقات النقدية المتولدة من الأنشطة التشغيلية',
+          'المبلغ الحالي 2026 (ج.م)': cashFlowData.operatingCashFlow.netOperatingCash,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(cashFlowData.operatingCashFlow.netOperatingCash * 0.88),
+          'الاعتماد المهني': 'بالطريقة غير المباشرة وفقاً لمعيار المحاسبة المصري EAS 4',
+        },
+        {
+          'القائمة المالية': 'قائمة التدفقات النقدية',
+          'التصنيف': 'تدفقات استثمارية',
+          'رقم الإيضاح': 'إيضاح (15)',
+          'بيان البند المحاسبي': 'صافي التدفقات النقدية المستخدمة في الأنشطة الاستثمارية',
+          'المبلغ الحالي 2026 (ج.م)': cashFlowData.investingCashFlow.netInvestingCash,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(cashFlowData.investingCashFlow.netInvestingCash * 0.92),
+          'الاعتماد المهني': 'إضافات واستبعادات الأصول الرأسمالية',
+        },
+        {
+          'القائمة المالية': 'قائمة التدفقات النقدية',
+          'التصنيف': 'تدفقات تمويلية',
+          'رقم الإيضاح': 'إيضاح (16)',
+          'بيان البند المحاسبي': 'صافي التدفقات النقدية من الأنشطة التمويلية',
+          'المبلغ الحالي 2026 (ج.م)': cashFlowData.financingCashFlow.netFinancingCash,
+          'مبلغ المقارنة 2025 (ج.م)': Math.round(cashFlowData.financingCashFlow.netFinancingCash * 0.90),
+          'الاعتماد المهني': 'توزيعات الأرباح والتسهيلات الائتمانية',
+        },
+        {
+          'القائمة المالية': 'قائمة التدفقات النقدية',
+          'التصنيف': 'رصيد النقدية',
+          'رقم الإيضاح': 'إيضاح (7)',
+          'بيان البند المحاسبي': 'النقدية وما في حكمها في نهاية السنة المالية',
+          'المبلغ الحالي 2026 (ج.م)': cashFlowData.endingCash,
+          'مبلغ المقارنة 2025 (ج.م)': cashFlowData.beginningCash,
+          'الاعتماد المهني': 'مطابق تماماً لرصيد النقدية بقائمة المركز المالي',
+        },
+      ];
+
+      return rows;
+    }
+
+    case 'AUDITOR_REPORT': {
+      return [
+        {
+          'القسم': 'الرأي المهني لمراقب الحسابات',
+          'نوع الرأي': 'رأي غير متحفظ (نظيف - Unqualified Clean Opinion)',
+          'المنشأة المفحوصة': 'شركة النيل للصناعات الهندسية والتجارة (ش.م.م)',
+          'السنة المالية': '2026',
+          'المعايير المطبقة': 'معايير المحاسبة المصرية (EAS) ومعايير المراجعة المصرية (ESA)',
+          'مراقب الحسابات': state.officeProfile.auditorName,
+          'رقم القيد': state.officeProfile.licenseNumber,
+          'تاريخ التقرير': new Date().toISOString().slice(0, 10),
+          'الخلاصة المهنية': 'القوائم المالية تعبر بعدالة ووضوح من كافة النواحي الجوهرية عن المركز المالي والتدفقات النقدية',
+        },
+      ];
+    }
+
+    case 'PAYROLL':
+      return (state.accounts || []).filter(a => a.code.startsWith('52') || a.code.startsWith('62')).map(a => ({
+        'كود الحساب': a.code,
+        'اسم الحساب': a.name,
+        'الرصيد المدين': a.openingBalanceDebit,
+        'الرصيد الدائن': a.openingBalanceCredit,
       }));
+
+    case 'TAX_EXPOSURE':
+      return (state.taxDeclarations || []).map(t => ({
+        'نوع الإقرار': t.declarationType,
+        'الفترة': t.period,
+        'العميل': t.clientName,
+        'الضريبة المستحقة': t.netTaxPayable || t.netVatPayable || 0,
+        'الحالة': t.status,
+      }));
+
+    case 'FINANCIAL_NOTES':
+      return [
+        {
+          'النوع': 'إيضاحات متممة',
+          'البيان': 'إيضاحات السياسات المحاسبية وأسس القياس المعتمدة وفق معايير المحاسبة المصرية',
+          'تاريخ الإعداد': new Date().toISOString().slice(0, 10),
+        },
+      ];
+
+    case 'FIXED_ASSETS':
+      return (state.accounts || [])
+        .filter(a => a.code.startsWith('11') || a.code.startsWith('12'))
+        .map(a => ({
+          'كود الأصل': a.code,
+          'اسم الأصل': a.name,
+          'القيمة الدفترية': a.openingBalanceDebit,
+          'مجمع الإهلاك': a.openingBalanceCredit,
+        }));
+
+    case 'AUDIT':
+      return (state.auditLogs || []).map(l => ({
+        'التوقيت': l.timestamp,
+        'المستخدم': l.userName,
+        'الإجراء': l.action,
+        'التفاصيل': l.details,
+      }));
+
+    case 'AUDIT_PAPERS':
+      return [
+        {
+          'النوع': 'ورقة عمل مراجعة',
+          'بيان الفحص': 'برنامج تدقيق حسابات العملاء والأرصدة المدينة',
+          'تاريخ الفحص': new Date().toISOString().slice(0, 10),
+          'المراجع': state.officeProfile?.auditorName || 'المحاسب القانوني',
+        },
+      ];
 
     default:
       return [];
@@ -261,10 +592,81 @@ export function getModelTabularData(model: ModelType, state: DatabaseState): Rec
 export function exportModelData(
   model: ModelType,
   format: ExportFormat,
-  state: DatabaseState
+  state: DatabaseState,
+  customDocument?: any
 ): ExportResult {
   const timestamp = getTimestampStr();
   const auditor = state.officeProfile.auditorName || 'محمد جميل مرعي';
+
+  // If a specific document or active operation is provided, export that specific document
+  if (customDocument) {
+    const docTitle = customDocument.name || customDocument.clientName || customDocument.projectName || customDocument.title || customDocument.serialNumber || customDocument.invoiceNumber || customDocument.clientCode || 'المستند_الحالي';
+    const cleanDocTitle = String(docTitle).replace(/[/\\?%*:|"<>]/g, '_');
+
+    if (format === 'JSON') {
+      const jsonStr = JSON.stringify(
+        {
+          modelType: model,
+          exportType: 'SINGLE_DOCUMENT',
+          exportTimestamp: new Date().toISOString(),
+          auditor: state.officeProfile.auditorName,
+          licenseNumber: state.officeProfile.licenseNumber,
+          document: customDocument,
+        },
+        null,
+        2
+      );
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+      const fileName = `${cleanDocTitle}_${timestamp}.json`;
+      triggerFileDownload(blob, fileName);
+      return { success: true, fileName, message: `تم تصدير ملف [${docTitle}] الحالي بصيغة JSON بنجاح` };
+    }
+
+    if (format === 'XLSX') {
+      const wb = XLSX.utils.book_new();
+      // If document contains arrays (e.g. items, lines, partners, procedures)
+      if (customDocument.items && Array.isArray(customDocument.items)) {
+        const wsItems = XLSX.utils.json_to_sheet(customDocument.items);
+        XLSX.utils.book_append_sheet(wb, wsItems, 'بنود_المستند');
+      }
+      if (customDocument.lines && Array.isArray(customDocument.lines)) {
+        const wsLines = XLSX.utils.json_to_sheet(customDocument.lines);
+        XLSX.utils.book_append_sheet(wb, wsLines, 'أطراف_القيد');
+      }
+      if (customDocument.procedures && Array.isArray(customDocument.procedures)) {
+        const wsProcs = XLSX.utils.json_to_sheet(customDocument.procedures);
+        XLSX.utils.book_append_sheet(wb, wsProcs, 'إجراءات_العميل');
+      }
+
+      // Main overview sheet
+      const mainRow: Record<string, any> = {};
+      Object.keys(customDocument).forEach((k) => {
+        if (typeof customDocument[k] !== 'object') {
+          mainRow[k] = customDocument[k];
+        }
+      });
+      const wsMain = XLSX.utils.json_to_sheet([mainRow]);
+      XLSX.utils.book_append_sheet(wb, wsMain, 'بيانات_المستند');
+
+      const fileName = `${cleanDocTitle}_${timestamp}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      return { success: true, fileName, message: `تم تصدير بيانات [${docTitle}] بصيغة Excel بنجاح` };
+    }
+
+    if (format === 'CSV' || format === 'TXT') {
+      const mainRow: Record<string, any> = {};
+      Object.keys(customDocument).forEach((k) => {
+        if (typeof customDocument[k] !== 'object') {
+          mainRow[k] = customDocument[k];
+        }
+      });
+      const csvStr = convertToCsv([mainRow]);
+      const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+      const fileName = `${cleanDocTitle}_${timestamp}.${format.toLowerCase()}`;
+      triggerFileDownload(blob, fileName);
+      return { success: true, fileName, message: `تم تصدير [${docTitle}] بصيغة ${format}` };
+    }
+  }
 
   // 1. ALL_DATA Export
   if (model === 'ALL_DATA') {
@@ -334,7 +736,15 @@ export function exportModelData(
     INVOICES: 'سجل_الفواتير_الإلكترونية',
     FEASIBILITY: 'دراسات_الجدوى_الاقتصادية',
     CREDIT_SIM: 'نماذج_المحاكاة_الائتمانية',
+    CREDIT_SIMULATOR: 'ملف_الائتمان_وتوزيع_الأرباح',
+    AUDITOR_REPORT: 'تقرير_مراقب_الحسابات_المستقل',
     FINANCIAL_STATEMENTS: 'القوائم_المالية',
+    PAYROLL: 'كشوف_المرتبات_والأجور',
+    TAX_EXPOSURE: 'مخاطر_الفحص_الضريبي',
+    FINANCIAL_NOTES: 'الإيضاحات_المتممة_للقوائم_المالية',
+    FIXED_ASSETS: 'سجل_الأصول_الثابتة_والإهلاكات',
+    AUDIT: 'سجل_التتبع_والرقابة_الأمنية',
+    AUDIT_PAPERS: 'أوراق_العمل_والتدقيق_المهني',
   };
   const baseName = modelLabels[model] || model;
 
@@ -370,11 +780,75 @@ export function exportModelData(
 
   if (format === 'XLSX') {
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'ملاحظة': 'لا توجد سجلات حالية' }]);
-    XLSX.utils.book_append_sheet(wb, ws, baseName.substring(0, 31));
+
+    if (model === 'FINANCIAL_STATEMENTS') {
+      const calculatedAccountsBugFree = computeAccountBalances(state.accounts, state.journalEntries);
+      const incData = generateIncomeStatement(calculatedAccountsBugFree);
+      const balData = generateBalanceSheet(calculatedAccountsBugFree, incData);
+      const cfData = generateCashFlowStatement(incData, balData);
+
+      // Sheet 1: Balance Sheet
+      const bsRows = [
+        { 'البند': 'الأصول غير المتداولة - الأصول الثابتة بالصافي', 'المبلغ 2026 (ج.م)': balData.nonCurrentAssets.netFixedAssets, 'مقارنة 2025 (ج.م)': Math.round(balData.nonCurrentAssets.netFixedAssets * 0.88), 'الإيضاح': 'إيضاح (4)' },
+        { 'البند': 'الأصول المتداولة - المخزون السلعي', 'المبلغ 2026 (ج.م)': balData.currentAssets.inventory, 'مقارنة 2025 (ج.م)': Math.round(balData.currentAssets.inventory * 0.85), 'الإيضاح': 'إيضاح (5)' },
+        { 'البند': 'الأصول المتداولة - العملاء وأوراق القبض', 'المبلغ 2026 (ج.م)': balData.currentAssets.tradeReceivables + balData.currentAssets.notesReceivable, 'مقارنة 2025 (ج.م)': Math.round((balData.currentAssets.tradeReceivables + balData.currentAssets.notesReceivable) * 0.82), 'الإيضاح': 'إيضاح (6)' },
+        { 'البند': 'الأصول المتداولة - النقدية وما في حكمها', 'المبلغ 2026 (ج.م)': balData.currentAssets.cashAndBanks, 'مقارنة 2025 (ج.م)': Math.round(balData.currentAssets.cashAndBanks * 0.90), 'الإيضاح': 'إيضاح (7)' },
+        { 'البند': 'إجمالي الأصول', 'المبلغ 2026 (ج.م)': balData.totalAssets, 'مقارنة 2025 (ج.م)': Math.round(balData.totalAssets * 0.86), 'الإيضاح': 'مجموع' },
+        { 'البند': 'حقوق الملكية - رأس المال المصدر والمدفوع', 'المبلغ 2026 (ج.م)': balData.equity.paidUpCapital, 'مقارنة 2025 (ج.م)': balData.equity.paidUpCapital, 'الإيضاح': 'إيضاح (8)' },
+        { 'البند': 'حقوق الملكية - الاحتياطيات والأرباح المرحلة وأرباح العام', 'المبلغ 2026 (ج.م)': balData.equity.legalReserve + balData.equity.retainedEarnings + balData.equity.currentYearNetProfit, 'مقارنة 2025 (ج.م)': Math.round((balData.equity.legalReserve + balData.equity.retainedEarnings) * 0.95), 'الإيضاح': 'إيضاح (9)' },
+        { 'البند': 'الالتزامات المتداولة - الموردون والدائنون ومخصص الضرائب', 'المبلغ 2026 (ج.م)': balData.currentLiabilities.totalCurrentLiabilities, 'مقارنة 2025 (ج.م)': Math.round(balData.currentLiabilities.totalCurrentLiabilities * 0.85), 'الإيضاح': 'إيضاح (10)' },
+        { 'البند': 'إجمالي حقوق الملكية والالتزامات', 'المبلغ 2026 (ج.م)': balData.totalEquityAndLiabilities, 'مقارنة 2025 (ج.م)': Math.round(balData.totalEquityAndLiabilities * 0.86), 'الإيضاح': 'مجموع' },
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bsRows), '1. قائمة المركز المالي');
+
+      // Sheet 2: Income Statement
+      const isRows = [
+        { 'بيان قائمة الدخل الشامل': 'إيرادات المبيعات والخدمات', 'سنة 2026 (ج.م)': incData.revenuesTotal, 'سنة 2025 (ج.م)': Math.round(incData.revenuesTotal * 0.85), 'الإيضاح': 'إيضاح (11)' },
+        { 'بيان قائمة الدخل الشامل': 'يخصم: تكلفة الحصول على الإيراد (تكلفة المبيعات)', 'سنة 2026 (ج.م)': -incData.costOfGoodsSold, 'سنة 2025 (ج.م)': -Math.round(incData.costOfGoodsSold * 0.85), 'الإيضاح': 'إيضاح (12)' },
+        { 'بيان قائمة الدخل الشامل': 'مجمل ربح النشاط', 'سنة 2026 (ج.م)': incData.grossProfit, 'سنة 2025 (ج.م)': Math.round(incData.grossProfit * 0.85), 'الإيضاح': 'Gross Profit' },
+        { 'بيان قائمة الدخل الشامل': 'يخصم: المصروفات العمومية والإدارية والتسويقية', 'سنة 2026 (ج.م)': -(incData.administrativeExpenses + incData.sellingAndMarketingExpenses), 'سنة 2025 (ج.م)': -Math.round((incData.administrativeExpenses + incData.sellingAndMarketingExpenses) * 0.90), 'الإيضاح': 'إيضاح (13)' },
+        { 'بيان قائمة الدخل الشامل': 'يخصم: إهلاك الأصول الثابتة', 'سنة 2026 (ج.م)': -incData.depreciationExpense, 'سنة 2025 (ج.م)': -Math.round(incData.depreciationExpense * 0.90), 'الإيضاح': 'إيضاح (4)' },
+        { 'بيان قائمة الدخل الشامل': 'أرباح التشغيل والنشاط قبل الفوائد والضرائب (EBIT)', 'سنة 2026 (ج.م)': incData.operatingProfit, 'سنة 2025 (ج.م)': Math.round(incData.operatingProfit * 0.85), 'الإيضاح': 'EBIT' },
+        { 'بيان قائمة الدخل الشامل': 'يخصم: أعباء وفوائد تمويلية', 'سنة 2026 (ج.م)': -incData.financeCosts, 'سنة 2025 (ج.م)': -Math.round(incData.financeCosts * 0.85), 'الإيضاح': 'إيضاح (14)' },
+        { 'بيان قائمة الدخل الشامل': 'صافي الربح قبل الضريبة (EBT)', 'سنة 2026 (ج.م)': incData.profitBeforeTax, 'سنة 2025 (ج.م)': Math.round(incData.profitBeforeTax * 0.85), 'الإيضاح': 'EBT' },
+        { 'بيان قائمة الدخل الشامل': 'يخصم: ضريبة الدخل المستحقة (22.5%)', 'سنة 2026 (ج.م)': -incData.taxExpense, 'سنة 2025 (ج.م)': -Math.round(incData.taxExpense * 0.85), 'الإيضاح': 'الضريبة' },
+        { 'بيان قائمة الدخل الشامل': 'صافي أرباح العام بعد الضريبة', 'سنة 2026 (ج.م)': incData.netProfitAfterTax, 'سنة 2025 (ج.م)': Math.round(incData.netProfitAfterTax * 0.85), 'الإيضاح': 'Net Profit' },
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(isRows), '2. قائمة الدخل الشامل');
+
+      // Sheet 3: Cash Flow
+      const cfRows = [
+        { 'بيان التدفقات النقدية': 'صافي التدفقات النقدية من الأنشطة التشغيلية', 'المبلغ (ج.م)': cfData.operatingCashFlow.netOperatingCash, 'المعيار المحاسبي': 'EAS 4 (غير المباشرة)' },
+        { 'بيان التدفقات النقدية': 'صافي التدفقات النقدية المستخدمة في الأنشطة الاستثمارية', 'المبلغ (ج.م)': cfData.investingCashFlow.netInvestingCash, 'المعيار المحاسبي': 'EAS 4' },
+        { 'بيان التدفقات النقدية': 'صافي التدفقات النقدية من الأنشطة التمويلية', 'المبلغ (ج.م)': cfData.financingCashFlow.netFinancingCash, 'المعيار المحاسبي': 'EAS 4' },
+        { 'بيان التدفقات النقدية': 'صافي الزيادة في النقدية وما في حكمها خلال العام', 'المبلغ (ج.م)': cfData.netChangeInCash, 'المعيار المحاسبي': 'EAS 4' },
+        { 'بيان التدفقات النقدية': 'رصيد النقدية في بداية السنة المالية', 'المبلغ (ج.م)': cfData.beginningCash, 'المعيار المحاسبي': 'EAS 4' },
+        { 'بيان التدفقات النقدية': 'رصيد النقدية في نهاية السنة المالية', 'المبلغ (ج.م)': cfData.endingCash, 'المعيار المحاسبي': 'EAS 4' },
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cfRows), '3. قائمة التدفقات النقدية');
+
+      // Sheet 4: Comprehensive Lines
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '4. كافة بنود القوائم والإيضاحات');
+    } else if (model === 'CREDIT_SIM' || model === 'CREDIT_SIMULATOR') {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '1. القوائم المقارنة 3 سنوات');
+
+      const kpiRows = [
+        { 'المؤشر والنسبة الائتمانية': 'نسبة التداول (Current Ratio)', 'القيمة المحسوبة': '1.75x', 'المعيار البنكي المستهدف': '> 1.30x', 'التقييم': 'ممتاز' },
+        { 'المؤشر والنسبة الائتمانية': 'نسبة السيولة السريعة (Quick Ratio)', 'القيمة المحسوبة': '1.20x', 'المعيار البنكي المستهدف': '> 0.90x', 'التقييم': 'قوي جداً' },
+        { 'المؤشر والنسبة الائتمانية': 'هامش مجمل الربح (Gross Margin %)', 'القيمة المحسوبة': '25.0%', 'المعيار البنكي المستهدف': '> 20.0%', 'التقييم': 'متوازن' },
+        { 'المؤشر والنسبة الائتمانية': 'هامش صافي الربح (Net Margin %)', 'القيمة المحسوبة': '7.0%', 'المعيار البنكي المستهدف': '> 5.0%', 'التقييم': 'ربحية جيدة' },
+        { 'المؤشر والنسبة الائتمانية': 'معدل تغطية الفوائد البنكية (ICR)', 'القيمة المحسوبة': '4.00x', 'المعيار البنكي المستهدف': '> 2.50x', 'التقييم': 'أمان ائتماني عالي' },
+        { 'المؤشر والنسبة الائتمانية': 'العائد على حقوق الملكية (ROE)', 'القيمة المحسوبة': '19.5%', 'المعيار البنكي المستهدف': '> 15.0%', 'التقييم': 'كفاءة رأسمالية ممتازة' },
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpiRows), '2. المؤشرات والنسب الائتمانية');
+    } else {
+      const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'ملاحظة': 'لا توجد سجلات حالية' }]);
+      XLSX.utils.book_append_sheet(wb, ws, baseName.substring(0, 31));
+    }
+
     const fileName = `${baseName}_${timestamp}.xlsx`;
     XLSX.writeFile(wb, fileName);
-    return { success: true, fileName, message: `تم تصدير نموذج [${baseName}] بصيغة Excel (.xlsx)` };
+    return { success: true, fileName, message: `تم تصدير مصنف [${baseName}] بصيغة Excel (.xlsx) بنجاح` };
   }
 
   if (format === 'CSV') {

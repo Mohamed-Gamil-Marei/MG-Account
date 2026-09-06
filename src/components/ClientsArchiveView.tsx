@@ -32,23 +32,43 @@ import {
   KeyRound,
   MessageSquare,
   Send,
+  Bell,
+  Eye,
+  EyeOff,
+  Copy,
+  Globe2,
+  ShieldAlert,
+  Calculator,
+  Tag,
+  Scissors,
 } from 'lucide-react';
 import {
   ClientArchiveRecord,
+  ClientRelationshipType,
   ClientProcedureTask,
   ClientDocument,
   ProcedureStatus,
   ProcedureCategory,
   OfficeTreasuryTransaction,
+  PortalCredentials,
 } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { ActionMenu } from './common/ActionMenu';
+import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
+import { validateEgyptianTaxNumber } from '../utils/taxValidationEngine';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { SecurityAuthService } from '../services/securityAuth';
+import { PrintService } from '../services/PrintService';
 import { ClientDocumentManager } from './ClientDocumentManager';
 import { ClientNotificationModal } from './ClientNotificationModal';
+import { ClientCommunicationsLogView } from './archive/ClientCommunicationsLogView';
+import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
+import { SmartProcedureFeeEstimatorModal } from './SmartProcedureFeeEstimatorModal';
+import { CompanyDossierAndTokenLabelModal } from './archive/CompanyDossierAndTokenLabelModal';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
@@ -58,11 +78,17 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [selectedClient, setSelectedClient] = useState<ClientArchiveRecord | null>(null);
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS'>('PROCEDURES');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PORTALS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS' | 'COMMUNICATION_LOG'>('PROCEDURES');
   const [procedureFilterStatus, setProcedureFilterStatus] = useState<string>('ALL');
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+
+  // Company Master Dossier & Token Keyring Label Modal State
+  const [isTokenDossierModalOpen, setIsTokenDossierModalOpen] = useState(false);
+  const [tokenDossierTargetClient, setTokenDossierTargetClient] = useState<ClientArchiveRecord | null>(null);
 
   // Security Auth for Edit Mode (Mg120)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isExportAuthModalOpen, setIsExportAuthModalOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<ClientArchiveRecord | null>(null);
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
 
@@ -83,11 +109,20 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
   const [notifyTargetClient, setNotifyTargetClient] = useState<ClientArchiveRecord | null>(null);
   const [notifyTargetProcedure, setNotifyTargetProcedure] = useState<ClientProcedureTask | null>(null);
 
+  // WhatsApp Document Share Modal State
+  const [isDocShareModalOpen, setIsDocShareModalOpen] = useState(false);
+  const [docShareTargetClient, setDocShareTargetClient] = useState<ClientArchiveRecord | null>(null);
+
+  // Smart Procedure Fee Estimator Modal State
+  const [isSmartEstimatorOpen, setIsSmartEstimatorOpen] = useState(false);
+  const [estimatorTargetClient, setEstimatorTargetClient] = useState<ClientArchiveRecord | null>(null);
+
   // New Client Form State
   const [clientFormData, setClientFormData] = useState({
     name: '',
     clientCode: `CL-${String(state.clients.length + 1).padStart(3, '0')}`,
     clientType: 'PRIMARY' as ClientArchiveRecord['clientType'],
+    relationshipType: 'PERMANENT' as ClientRelationshipType,
     companyType: 'JOINT_STOCK' as ClientArchiveRecord['companyType'],
     commercialRegistrationNo: '',
     taxCardNo: '',
@@ -102,7 +137,59 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
     email: '',
     address: '',
     notes: '',
+    portalCredentials: {
+      etaEInvoicing: { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' },
+      sapPortal: { username: '', password: '', expiryDate: '', portalUrl: '' },
+      etaGeneralTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://eservices.incometax.gov.eg' },
+      etaPayrollTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://payroll.incometax.gov.eg' },
+      nafeza: { username: '', password: '', expiryDate: '', portalUrl: 'https://www.nafeza.gov.eg' },
+    } as PortalCredentials,
   });
+
+  // Automatic 3-Day Expiration Reminder Scanner for Portals & Passwords
+  const expiringCredentials = useMemo(() => {
+    const alerts: Array<{
+      client: ClientArchiveRecord;
+      portalName: string;
+      portalKey: string;
+      expiryDate: string;
+      daysRemaining: number;
+      username?: string;
+    }> = [];
+
+    const now = new Date();
+
+    for (const client of state.clients) {
+      if (!client.portalCredentials) continue;
+      const portals = [
+        { key: 'etaEInvoicing', name: 'الفاتورة والإيصال الإلكتروني (ETA)' },
+        { key: 'sapPortal', name: 'منظومة ساب (SAP)' },
+        { key: 'etaGeneralTax', name: 'بوابة الضرائب العامة' },
+        { key: 'etaPayrollTax', name: 'بوابة كسب العمل' },
+        { key: 'nafeza', name: 'نافذة الجمارك والتجارة' },
+      ];
+
+      for (const p of portals) {
+        const cred = (client.portalCredentials as any)[p.key];
+        if (cred && cred.expiryDate) {
+          const exp = new Date(cred.expiryDate);
+          const diffMs = exp.getTime() - now.getTime();
+          const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+          if (diffDays <= 3) {
+            alerts.push({
+              client,
+              portalName: p.name,
+              portalKey: p.key,
+              expiryDate: cred.expiryDate,
+              daysRemaining: diffDays,
+              username: cred.username,
+            });
+          }
+        }
+      }
+    }
+    return alerts;
+  }, [state.clients]);
 
   // New Procedure Form State
   const [procedureFormData, setProcedureFormData] = useState({
@@ -141,6 +228,8 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
 
       const matchesType =
         filterType === 'ALL' ||
+        (filterType === 'PERMANENT' && (c.relationshipType === 'PERMANENT' || (!c.relationshipType && c.clientType === 'PRIMARY'))) ||
+        (filterType === 'TEMPORARY' && (c.relationshipType === 'TEMPORARY' || (!c.relationshipType && c.clientType === 'CASUAL'))) ||
         (filterType === 'PRIMARY' && c.clientType === 'PRIMARY') ||
         (filterType === 'CASUAL' && c.clientType === 'CASUAL') ||
         (filterType === c.companyType);
@@ -185,6 +274,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         name: client.name,
         clientCode: client.clientCode,
         clientType: client.clientType,
+        relationshipType: client.relationshipType || (client.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY'),
         companyType: client.companyType,
         commercialRegistrationNo: client.commercialRegistrationNo || '',
         taxCardNo: client.taxCardNo || '',
@@ -199,11 +289,31 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         email: client.email || '',
         address: client.address || '',
         notes: client.notes || '',
+        portalCredentials: client.portalCredentials || {
+          etaEInvoicing: { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' },
+          sapPortal: { username: '', password: '', expiryDate: '', portalUrl: '' },
+          etaGeneralTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://eservices.incometax.gov.eg' },
+          etaPayrollTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://payroll.incometax.gov.eg' },
+          nafeza: { username: '', password: '', expiryDate: '', portalUrl: 'https://www.nafeza.gov.eg' },
+        },
       });
       setIsAddClientModalOpen(true);
       return;
     }
     setIsAuthModalOpen(true);
+  };
+
+  const handleDeleteClient = (client: ClientArchiveRecord) => {
+    if (
+      window.confirm(
+        `هل أنت متأكد من حذف ملف العميل "${client.name}" (${client.clientCode}) وجميع معاملاته ومستنداته وسجلاته من الأرشيف نهائياً؟`
+      )
+    ) {
+      db.deleteClient(client.id);
+      if (selectedClient?.id === client.id) {
+        setSelectedClient(null);
+      }
+    }
   };
 
   const handleAuthSuccessClient = () => {
@@ -213,6 +323,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
       name: clientToEdit.name,
       clientCode: clientToEdit.clientCode,
       clientType: clientToEdit.clientType,
+      relationshipType: clientToEdit.relationshipType || (clientToEdit.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY'),
       companyType: clientToEdit.companyType,
       commercialRegistrationNo: clientToEdit.commercialRegistrationNo || '',
       taxCardNo: clientToEdit.taxCardNo || '',
@@ -227,6 +338,13 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
       email: clientToEdit.email || '',
       address: clientToEdit.address || '',
       notes: clientToEdit.notes || '',
+      portalCredentials: clientToEdit.portalCredentials || {
+        etaEInvoicing: { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' },
+        sapPortal: { username: '', password: '', expiryDate: '', portalUrl: '' },
+        etaGeneralTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://eservices.incometax.gov.eg' },
+        etaPayrollTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://payroll.incometax.gov.eg' },
+        nafeza: { username: '', password: '', expiryDate: '', portalUrl: 'https://www.nafeza.gov.eg' },
+      },
     });
     setIsAuthModalOpen(false);
     setIsAddClientModalOpen(true);
@@ -244,6 +362,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         clientCode: clientFormData.clientCode,
         name: clientFormData.name,
         clientType: clientFormData.clientType,
+        relationshipType: clientFormData.relationshipType,
         companyType: clientFormData.companyType,
         commercialRegistrationNo: clientFormData.commercialRegistrationNo,
         taxCardNo: clientFormData.taxCardNo,
@@ -258,9 +377,10 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         email: clientFormData.email,
         address: clientFormData.address,
         notes: clientFormData.notes,
+        portalCredentials: clientFormData.portalCredentials,
       });
 
-      alert('تم حفظ وتحديث بيانات العميل والملف الضريبي بنجاح بعد التحقق من الرقم السري (Mg120).');
+      alert('تم حفظ وتحديث بيانات العميل والملف الضريبي وكلمات مرور البوابات بنجاح.');
       setIsAddClientModalOpen(false);
       setEditingClientId(null);
       setClientToEdit(null);
@@ -269,6 +389,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         clientCode: clientFormData.clientCode || `CL-${Date.now().toString().slice(-4)}`,
         name: clientFormData.name,
         clientType: clientFormData.clientType,
+        relationshipType: clientFormData.relationshipType,
         companyType: clientFormData.companyType,
         commercialRegistrationNo: clientFormData.commercialRegistrationNo,
         taxCardNo: clientFormData.taxCardNo,
@@ -287,12 +408,190 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         procedures: [],
         tasksHistory: [],
         notes: clientFormData.notes,
+        portalCredentials: clientFormData.portalCredentials,
       });
 
       setIsAddClientModalOpen(false);
       setSelectedClient(created);
       setActiveTab('PROCEDURES');
     }
+  };
+
+  const handleSendDirectWhatsApp = (client: ClientArchiveRecord, proc?: ClientProcedureTask | null) => {
+    if (!client) return;
+    const phone = (client.phone || '').replace(/[^0-9]/g, '');
+    const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
+    const auditorName = state.officeProfile.auditorName || 'محمد جميل مرعي';
+    const firmName = state.officeProfile.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+    const officePhone = state.officeProfile.phone || '01003335360';
+
+    let text = '';
+    if (proc) {
+      const statusText =
+        proc.status === 'COMPLETED'
+          ? 'تم الانتهاء منه واعتماده رسمياً ✅'
+          : proc.status === 'AT_AUTHORITY'
+          ? 'مقدم ومقيد لدى الجهة المختصة 🏛️'
+          : proc.status === 'PENDING_CLIENT_DOCS'
+          ? 'بانتظار موافاتنا بالمستندات المطلوبة 📄'
+          : 'جاري العمل والتنفيذ ⏳';
+
+      const remainingFee = Math.max(0, proc.agreedFees - (proc.collectedFees || 0));
+
+      text = `السادة / *${client.name}*\nعناية: ${client.contactPerson || 'الإدارة المحترمة'}\nتحية طيبة وبعد،،\n\nنود إحاطة سيادتكم علماً بآخر مستجدات المعاملة رقم (${proc.procedureCode}):\n📌 *${proc.title}*\n🔹 الحالة: *${statusText}*\n🔹 نسبة الإنجاز: *${proc.progressPercent}%*\n🔹 الأتعاب المتفق عليها: *${proc.agreedFees.toLocaleString('ar-EG')} ج.م*\n🔹 المسدد: *${(proc.collectedFees || 0).toLocaleString('ar-EG')} ج.م*\n🔹 المتبقي: *${remainingFee.toLocaleString('ar-EG')} ج.م*\n${proc.notes ? `📝 ملاحظات: ${proc.notes}\n` : ''}\nمع تحيات:\n*${firmName}*\nالمحاسب القانوني: *${auditorName}*\nهاتف التواصل: ${officePhone}`;
+    } else {
+      const summary = db.getClientTreasurySummary(client.id);
+      text = `السادة / *${client.name}*\nعناية: ${client.contactPerson || 'الإدارة المالية'}\nتحية طيبة وبعد،،\n\nنحيط سيادتكم علماً بملخص الحساب والتعاملات لدى مكتبنا:\n🏢 كود العميل: *${client.clientCode}*\n📄 السجل التجاري: *${client.commercialRegistrationNo || '—'}*\n📊 البطاقة الضريبية: *${client.taxCardNo || '—'}*\n🏛️ مأمورية الضرائب: *${client.taxOffice || '—'}*\n\n💰 إجمالي الأتعاب المحصلة: *${summary.totalCollectedFees.toLocaleString('ar-EG')} ج.م*\n🧾 رسوم حكومية مسددة: *${summary.totalGovFeesPaid.toLocaleString('ar-EG')} ج.م*\n⚠️ المتبقي المستحق: *${summary.remainingFeesDue.toLocaleString('ar-EG')} ج.م*\n\nشاكرين ومقدرين حسن تعاونكم الدائم.\n*${firmName}*\nالمحاسب القانوني: *${auditorName}*\nهاتف المكتب: ${officePhone}`;
+    }
+
+    const encoded = encodeURIComponent(text);
+    const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`;
+    
+    // Log to local WhatsApp message archive for continuity in WhatsApp Bot
+    db.sendWhatsAppMessage({
+      clientId: client.id,
+      clientName: client.name,
+      phone: client.phone || '',
+      direction: 'OUTGOING',
+      sender: 'AUDITOR',
+      text,
+      category: proc ? 'PROCEDURE_UPDATE' : 'GENERAL',
+    });
+
+    window.open(waUrl, '_blank');
+  };
+
+  // Direct WhatsApp Expiry Reminder Alert
+  const handleSendPortalExpiryWhatsApp = (
+    client: ClientArchiveRecord,
+    portalName: string,
+    expiryDate: string,
+    username?: string
+  ) => {
+    if (!client) return;
+    const phone = (client.phone || '').replace(/[^0-9]/g, '');
+    const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
+    const auditorName = state.officeProfile.auditorName || 'محمد جميل مرعي';
+    const firmName = state.officeProfile.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+    const officePhone = state.officeProfile.phone || '01003335360';
+
+    const text = `عناية السادة / *${client.name}*\nتحية طيبة وبعد،،\n\nنلفت انتباهكم الكريم إلى أن صلاحية كلمة المرور الخاصة بالمنظومة:\n🔐 *${portalName}*\n👤 اسم المستخدم / التسجيل: *${username || client.taxCardNo || '—'}*\n📅 تاريخ انتهاء الصلاحية: *${expiryDate || 'قريباً'}*\n\n⚠️ يرجى التكرم بتجديد كلمة المرور وتزويدنا بالبيانات المحدثة أو التنسيق مع فريق العمل بالمكتب لتفادي توقف إصدار الفواتير أو تعطل الإقرارات الضريبية.\n\nمع وافر الشكر والتقدير،،\n*${firmName}*\nالمحاسب القانوني: *${auditorName}*\nهاتف التواصل: ${officePhone}`;
+
+    const encoded = encodeURIComponent(text);
+    const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`;
+
+    db.sendWhatsAppMessage({
+      clientId: client.id,
+      clientName: client.name,
+      phone: client.phone || '',
+      direction: 'OUTGOING',
+      sender: 'AUDITOR',
+      text,
+      category: 'GENERAL',
+    });
+
+    window.open(waUrl, '_blank');
+  };
+
+  // Encrypted Portal & Password Audit Sheet Export (Unlocked with Mg120)
+  const handleExecuteExportAllPortals = () => {
+    setIsExportAuthModalOpen(false);
+    const office = state.officeProfile;
+    const auditor = office.auditorName || 'محمد جميل مرعي';
+    const firm = office.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+    const printDate = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    let rowsHtml = '';
+    let counter = 1;
+
+    state.clients.forEach((c) => {
+      const creds = c.portalCredentials;
+      if (!creds) return;
+
+      const portalList = [
+        { name: 'الفاتورة والإيصال (ETA)', data: creds.etaEInvoicing },
+        { name: 'منظومة ساب (SAP)', data: creds.sapPortal },
+        { name: 'الضرائب العامة', data: creds.etaGeneralTax },
+        { name: 'كسب العمل والأجور', data: creds.etaPayrollTax },
+        { name: 'نافذة الجمارك (Nafeza)', data: creds.nafeza },
+      ];
+
+      portalList.forEach((p) => {
+        if (p.data && (p.data.username || p.data.password)) {
+          rowsHtml += `
+            <tr>
+              <td class="text-center font-mono">${counter++}</td>
+              <td class="font-bold">${c.name}</td>
+              <td class="font-mono text-center">${c.taxCardNo || c.commercialRegistrationNo || '—'}</td>
+              <td><strong>${p.name}</strong></td>
+              <td class="font-mono">${p.data.username || '—'}</td>
+              <td class="font-mono" style="background: #f8fafc; font-weight: bold; letter-spacing: 1px;">${p.data.password || '—'}</td>
+              <td class="text-center font-mono">${p.data.expiryDate || 'ساري دائم'}</td>
+              <td>${p.data.notes || '—'}</td>
+            </tr>
+          `;
+        }
+      });
+    });
+
+    if (!rowsHtml) {
+      alert('لا توجد بيانات بوابات مسجلة للعملاء حتى الآن.');
+      return;
+    }
+
+    const html = `
+      <div style="padding: 10px; direction: rtl;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px;">
+          <div>
+            <h2 style="margin: 0; color: #0f172a; font-size: 18px; font-weight: 900;">${firm}</h2>
+            <div style="font-size: 12px; color: #475569; margin-top: 4px;">المحاسب القانوني ومراقب الحسابات: ${auditor}</div>
+            <div style="font-size: 11px; color: #64748b;">هاتف: ${office.phone || '01003335360'} | العنوان: ${office.address || 'القاهرة، جمهورية مصر العربية'}</div>
+          </div>
+          <div style="text-align: left;">
+            <div style="background: #f1f5f9; padding: 6px 12px; border-radius: 8px; font-size: 11px; border: 1px solid #cbd5e1;">
+              <strong>تاريخ الاستخراج:</strong> ${printDate}
+            </div>
+            <div style="color: #b91c1c; font-weight: bold; font-size: 10px; margin-top: 5px;">
+              [ وثيقة سرية ومحمية برمز المرور Mg120 ]
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 15px 0;">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #1e293b;">
+            كشف حصر وتدقيق بوابات المنظومات وكلمات المرور المشفرة للعملاء
+          </h3>
+          <p style="font-size: 11px; color: #64748b; margin-top: 4px;">
+            ETA e-Invoicing, SAP ERP, General Tax, Payroll Tax & Nafeza Credentials Register
+          </p>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>اسم المنشأة / العميل</th>
+              <th style="width: 110px;">الرقم الضريبي/السجل</th>
+              <th>المنظومة / البوابة</th>
+              <th>اسم المستخدم</th>
+              <th>كلمة المرور</th>
+              <th style="width: 90px;">تاريخ الصلاحية</th>
+              <th>ملاحظات</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div style="margin-top: 25px; border-top: 1px dashed #cbd5e1; padding-top: 10px; display: flex; justify-content: space-between; font-size: 11px; color: #475569;">
+          <div>حرر بمعرفة قسم تكنولوجيا المعلومات والضرائب الإلكترونية بالمكتب</div>
+          <div>اعتماد ومصادقة مراقب الحسابات: <strong>${auditor}</strong> (توقيع وخاتم)</div>
+        </div>
+      </div>
+    `;
+
+    PrintService.printHtmlContent(html, 'كشف_بوابات_العملاء_المشفر_Mg120');
   };
 
   const handleAddProcedureSubmit = (e: React.FormEvent) => {
@@ -531,266 +830,300 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
   const clientSummary = liveSelectedClient ? db.getClientTreasurySummary(liveSelectedClient.id) : null;
 
   return (
-    <div className="space-y-5">
-      {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Users className="w-6 h-6 text-emerald-700" />
-            <h2 className="text-lg font-bold text-slate-900">
-              أرشيف العملاء وسجل الإجراءات والربط المالي بالخزنة
-            </h2>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            إدارة متكاملة لملفات الشركات والعملاء، متابعة الإجراءات والمهام الفنية والإدارية، والربط التلقائي لتحصيل الأتعاب وسداد الرسوم الحكومية بخزنة المكتب.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <ScreenActionToolbar
-            modelType="CLIENTS"
-            title="أرشيف ملفات العملاء والشركات"
-            count={filteredClients.length}
-          />
-          <button
-            onClick={() => setIsAddClientModalOpen(true)}
-            id="btn-add-client"
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إضافة شركة / عميل جديد</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Top Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 block">إجمالي الشركات والملفات</span>
-            <span className="text-xl font-bold text-slate-900 mt-1 block">
-              {totalClientsCount} عميل
-            </span>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-            <Building className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 block">إجراءات جارية وقيد التنفيذ</span>
-            <span className="text-xl font-bold text-blue-700 mt-1 block">
-              {activeProceduresCount} إجراء
-            </span>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 block">إجراءات مكتملة ومعتمدة</span>
-            <span className="text-xl font-bold text-emerald-700 mt-1 block">
-              {completedProceduresCount} إجراء
-            </span>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-            <CheckCircle className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-slate-500 block">سندات خزنة مرتبطة بالعملاء</span>
-            <span className="text-xl font-bold text-amber-700 mt-1 block">
-              {state.treasuryTransactions.filter((t) => t.clientId).length} سند
-            </span>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-            <Wallet className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Search & Filter Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-96">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث باسم الشركة، السجل التجاري، أو البطاقة الضريبية..."
-            className="w-full pl-3 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 text-xs">
-          <span className="text-slate-400 flex items-center gap-1 shrink-0">
-            <Filter className="w-3.5 h-3.5" /> تصفية:
-          </span>
-          {[
-            { id: 'ALL', label: 'كافة العملاء' },
-            { id: 'PRIMARY', label: 'عملاء رئيسيون' },
-            { id: 'JOINT_STOCK', label: 'شركات مساهمة' },
-            { id: 'LLC', label: 'شركات مسؤولة محدودة' },
-            { id: 'CASUAL', label: 'مهن حرة وعابر' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setFilterType(tab.id)}
-              className={`px-3 py-1.5 rounded-xl font-medium shrink-0 transition-all cursor-pointer ${
-                filterType === tab.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Clients Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredClients.map((client) => {
-          const procedures = client.procedures || [];
-          const activeProcs = procedures.filter(
-            (p) => p.status === 'IN_PROGRESS' || p.status === 'AT_AUTHORITY' || p.status === 'PENDING_CLIENT_DOCS'
-          );
-          const completedProcs = procedures.filter((p) => p.status === 'COMPLETED');
-          const summary = db.getClientTreasurySummary(client.id);
-
-          return (
-            <div
-              key={client.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4 hover:border-emerald-400 hover:shadow-md transition-all flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                {/* Card Header */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {client.companyType === 'JOINT_STOCK'
-                          ? 'شركة مساهمة (ش.م.م)'
-                          : client.companyType === 'LLC'
-                          ? 'مسؤولية محدودة (ش.ذ.م.م)'
-                          : client.companyType === 'SOLE_PROPRIETORSHIP'
-                          ? 'منشأة فردية'
-                          : client.companyType === 'PARTNERSHIP'
-                          ? 'شركة أشخاص / تضامن'
-                          : 'مهن حرة'}
-                      </span>
-                      <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                        {client.clientCode}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-bold text-slate-900 mt-2 line-clamp-1">{client.name}</h3>
-                  </div>
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                    <Building className="w-4 h-4 text-emerald-800" />
-                  </div>
+    <>
+      <UnifiedScreenCard
+        id="clients-archive-unified-card"
+        title="أرشيف ملفات العملاء والشركات"
+        badge={`${filteredClients.length} ملف`}
+        badgeVariant="blue"
+        primaryAction={{
+          id: 'btn-add-client',
+          label: 'عميل جديد',
+          icon: Plus,
+          variant: 'primary',
+          onClick: () => setIsAddClientModalOpen(true),
+        }}
+        actionMenuItems={[
+          {
+            id: 'smart-fee-estimator',
+            label: 'تقدير الرسوم والأتعاب الذكي',
+            icon: Calculator,
+            onClick: () => {
+              setEstimatorTargetClient(null);
+              setIsSmartEstimatorOpen(true);
+            },
+          },
+          {
+            id: 'export-portals',
+            label: 'طباعة كشف البوابات (مشفر)',
+            icon: KeyRound,
+            onClick: () => setIsExportAuthModalOpen(true),
+          },
+        ]}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="بحث باسم الشركة، السجل التجاري، أو البطاقة الضريبية..."
+        filterTabs={[
+          { id: 'ALL', label: 'كافة المنشآت' },
+          { id: 'PERMANENT', label: 'دائمين' },
+          { id: 'TEMPORARY', label: 'مؤقتين' },
+          { id: 'PRIMARY', label: 'رئيسيون' },
+          { id: 'JOINT_STOCK', label: 'مساهمة' },
+          { id: 'LLC', label: 'محدودة' },
+        ]}
+        activeFilterTab={filterType}
+        onFilterTabChange={setFilterType}
+      >
+      <div className="space-y-4">
+        {/* Automatic 3-Day Portal Password Expiration Reminder Alert Banner */}
+        {expiringCredentials.length > 0 && (
+          <div className="bg-gradient-to-r from-amber-950 via-rose-950 to-slate-900 text-white rounded-2xl p-3.5 sm:p-4 border border-amber-500/50 shadow-md">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-400/40">
+                  <Bell className="w-4 h-4 text-amber-300 animate-bounce" />
                 </div>
-
-                {/* Company Info */}
-                <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">سجل تجاري:</span>
-                    <span className="font-mono font-bold text-slate-800">{client.commercialRegistrationNo || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">بطاقة ضريبية:</span>
-                    <span className="font-mono font-bold text-slate-800">{client.taxCardNo || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">مأمورية الضرائب:</span>
-                    <span className="text-slate-800 text-[11px] truncate max-w-[160px]">{client.taxOffice || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">المسؤول:</span>
-                    <span className="text-slate-800 font-medium">{client.contactPerson || '-'}</span>
-                  </div>
-                </div>
-
-                {/* Procedures & Treasury Summary Pills */}
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="bg-blue-50/80 border border-blue-100 p-2 rounded-xl text-blue-900">
-                    <div className="flex items-center justify-between">
-                      <span className="text-blue-600 font-medium">الإجراءات:</span>
-                      <span className="font-bold">{procedures.length}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-blue-700">
-                      <span>⏳ {activeProcs.length} جارية</span>
-                      <span>•</span>
-                      <span>✅ {completedProcs.length} تمت</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-50/80 border border-amber-100 p-2 rounded-xl text-amber-900">
-                    <div className="flex items-center justify-between">
-                      <span className="text-amber-700 font-medium">أتعاب محصلة:</span>
-                      <span className="font-bold">{formatEgyptianCurrency(summary.totalCollectedFees)}</span>
-                    </div>
-                    <div className="text-[10px] text-amber-700 mt-1 flex justify-between">
-                      <span>متبقي:</span>
-                      <span className="font-bold">{formatEgyptianCurrency(summary.remainingFeesDue)}</span>
-                    </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-white">
+                      تنبيه انتهاء كلمات مرور البوابات
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
+                      {expiringCredentials.length} تنبيهات
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Bottom Actions */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-1 text-[11px] text-slate-500">
-                  <Paperclip className="w-3.5 h-3.5" />
-                  <span>{client.documents?.length || 0} مستندات</span>
+              <button
+                type="button"
+                onClick={() => setIsExportAuthModalOpen(true)}
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>طباعة الكشف</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* KPI Compact Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div>
+              <span className="text-slate-500 text-[11px] block">إجمالي الشركات</span>
+              <span className="text-base font-black text-slate-900 font-mono mt-0.5 block">
+                {totalClientsCount}
+              </span>
+            </div>
+            <Building className="w-4 h-4 text-slate-400" />
+          </div>
+
+          <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
+            <div>
+              <span className="text-blue-600 text-[11px] block">إجراءات جارية</span>
+              <span className="text-base font-black text-blue-800 font-mono mt-0.5 block">
+                {activeProceduresCount}
+              </span>
+            </div>
+            <Clock className="w-4 h-4 text-blue-500" />
+          </div>
+
+          <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-100 flex items-center justify-between">
+            <div>
+              <span className="text-emerald-600 text-[11px] block">إجراءات مكتملة</span>
+              <span className="text-base font-black text-emerald-800 font-mono mt-0.5 block">
+                {completedProceduresCount}
+              </span>
+            </div>
+            <CheckCircle className="w-4 h-4 text-emerald-500" />
+          </div>
+
+          <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100 flex items-center justify-between">
+            <div>
+              <span className="text-amber-700 text-[11px] block">سندات الخزنة</span>
+              <span className="text-base font-black text-amber-900 font-mono mt-0.5 block">
+                {state.treasuryTransactions.filter((t) => t.clientId).length}
+              </span>
+            </div>
+            <Wallet className="w-4 h-4 text-amber-600" />
+          </div>
+        </div>
+
+        {/* Clients Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {filteredClients.map((client) => {
+            const procedures = client.procedures || [];
+            const activeProcs = procedures.filter(
+              (p) => p.status === 'IN_PROGRESS' || p.status === 'AT_AUTHORITY' || p.status === 'PENDING_CLIENT_DOCS'
+            );
+            const completedProcs = procedures.filter((p) => p.status === 'COMPLETED');
+            const summary = db.getClientTreasurySummary(client.id);
+            const isActive = state.activeClientContext?.clientId === client.id;
+
+            return (
+              <div
+                key={client.id}
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-4 space-y-3 hover:border-emerald-500/60 dark:hover:border-emerald-500/50 hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-2.5">
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {client.companyType === 'JOINT_STOCK'
+                            ? 'ش.م.م'
+                            : client.companyType === 'LLC'
+                            ? 'ش.ذ.م.م'
+                            : client.companyType === 'SOLE_PROPRIETORSHIP'
+                            ? 'فردية'
+                            : 'أشخاص'}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                          client.relationshipType === 'TEMPORARY'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                        }`}>
+                          {client.relationshipType === 'TEMPORARY' ? 'مؤقت' : 'دائم'}
+                        </span>
+                        {isActive && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-600 text-white">
+                            ★ نشط
+                          </span>
+                        )}
+                        <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {client.clientCode}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900 mt-1.5 line-clamp-1">{client.name}</h3>
+                    </div>
+                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                      <Building className="w-4 h-4 text-emerald-800" />
+                    </div>
+                  </div>
+
+                  {/* Company Info Condensed */}
+                  <div className="space-y-1 text-xs text-slate-600 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 text-[11px]">سجل تجاري:</span>
+                      <span className="font-mono font-bold text-slate-800 text-[11px]">{client.commercialRegistrationNo || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 text-[11px]">بطاقة ضريبية:</span>
+                      <span className="font-mono font-bold text-slate-800 text-[11px]">{client.taxCardNo || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 text-[11px]">المسؤول:</span>
+                      <span className="text-slate-800 font-medium text-[11px]">{client.contactPerson || '-'}</span>
+                    </div>
+                  </div>
+
+                  {/* Condensed Summary */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-blue-50/60 border border-blue-100 p-1.5 rounded-lg text-blue-900 flex justify-between items-center">
+                      <span className="text-blue-600">الإجراءات:</span>
+                      <span className="font-bold">{procedures.length} ({activeProcs.length} جاري)</span>
+                    </div>
+                    <div className="bg-amber-50/60 border border-amber-100 p-1.5 rounded-lg text-amber-900 flex justify-between items-center">
+                      <span className="text-amber-700">المحصل:</span>
+                      <span className="font-mono font-bold">{formatEgyptianCurrency(summary.totalCollectedFees)}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                {/* Bottom Actions Consolidated */}
+                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
                   <button
-                    onClick={() => {
-                      setNotifyTargetClient(client);
-                      setNotifyTargetProcedure(null);
-                      setIsNotifyModalOpen(true);
-                    }}
-                    className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                    title="إرسال إشعار / رسالة للعميل (واتساب - بريد)"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="hidden sm:inline">إشعار</span>
-                  </button>
-                  <button
-                    onClick={() => handleRequestEditClient(client)}
-                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                    title="تعديل بيانات الشركة والملف الضريبي (يتطلب الرقم السري Mg120)"
-                  >
-                    <Lock className="w-3 h-3 text-amber-700" />
-                    <span>تعديل</span>
-                  </button>
-                  <button
+                    type="button"
                     onClick={() => {
                       setSelectedClient(client);
                       setActiveTab('PROCEDURES');
                     }}
-                    className="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                    className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
                   >
-                    <span>فتح ملف العمليات</span>
+                    <span>فتح الملف</span>
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Consolidated Row Action Dropdown */}
+                    <QuickRowActionDropdown
+                      title="خيارات العميل"
+                      actions={[
+                        {
+                          label: 'بطاقة المنشأة وليبل التوكن (A4)',
+                          icon: Tag,
+                          variant: 'primary',
+                          onClick: () => {
+                            setTokenDossierTargetClient(client);
+                            setIsTokenDossierModalOpen(true);
+                          },
+                        },
+                        {
+                          label: isActive ? 'إلغاء التفعيل كنشط' : 'تعيين كعميل نشط',
+                          icon: Building2,
+                          variant: isActive ? 'warning' : 'primary',
+                          onClick: () => {
+                            if (isActive) {
+                              db.clearActiveClient();
+                            } else {
+                              db.setActiveClient(client.id);
+                            }
+                          },
+                        },
+                        {
+                          label: 'تقدير أتعاب ورسوم ذكي',
+                          icon: Calculator,
+                          variant: 'warning',
+                          onClick: () => {
+                            setEstimatorTargetClient(client);
+                            setIsSmartEstimatorOpen(true);
+                          },
+                        },
+                        {
+                          label: 'إرسال ملخص واتساب',
+                          icon: Send,
+                          variant: 'success',
+                          onClick: () => handleSendDirectWhatsApp(client),
+                        },
+                        {
+                          label: 'إرسال إشعار / رسالة',
+                          icon: MessageSquare,
+                          variant: 'default',
+                          onClick: () => {
+                            setNotifyTargetClient(client);
+                            setNotifyTargetProcedure(null);
+                            setIsNotifyModalOpen(true);
+                          },
+                        },
+                        {
+                          label: 'تعديل بيانات الملف',
+                          icon: Edit2,
+                          variant: 'warning',
+                          onClick: () => handleRequestEditClient(client),
+                        },
+                        {
+                          label: 'حذف العميل من الأرشيف',
+                          icon: Trash2,
+                          variant: 'danger',
+                          onClick: () => handleDeleteClient(client),
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+    </UnifiedScreenCard>
 
       {/* Selected Client Dossier Modal */}
       {liveSelectedClient && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-5xl w-full p-6 shadow-2xl border border-slate-200 text-xs my-4 max-h-[92vh] flex flex-col">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-5xl w-full p-6 shadow-xl border border-slate-200/80 dark:border-slate-800 text-xs my-4 max-h-[92vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3">
@@ -810,7 +1143,64 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Central Active Client Context Toggle */}
+                <button
+                  onClick={() => {
+                    const isActive = state.activeClientContext?.clientId === liveSelectedClient.id;
+                    if (isActive) {
+                      db.clearActiveClient();
+                    } else {
+                      db.setActiveClient(liveSelectedClient.id);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black shadow-xs cursor-pointer transition-all ${
+                    state.activeClientContext?.clientId === liveSelectedClient.id
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-400'
+                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300'
+                  }`}
+                  title="تعيين هذا العميل كعميل نشط في مركز الدورة المحاسبية وكافة المراكز"
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>
+                    {state.activeClientContext?.clientId === liveSelectedClient.id
+                      ? '✓ العميل النشط بالدورة المحاسبية'
+                      : 'تعيين كعميل نشط بالدورة المحاسبية'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setTokenDossierTargetClient(liveSelectedClient);
+                    setIsTokenDossierModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-xl text-xs font-black shadow-sm cursor-pointer"
+                  title="طباعة بطاقة المنشأة الشاملة وحافظة الباسوردات مع ليبل ميدالية التوكن A4"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>بطاقة المنشأة وليبل التوكن (A4)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setDocShareTargetClient(liveSelectedClient);
+                    setIsDocShareModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  title="إرسال إشعار أو مستند مالي للعميل عبر نموذج جاهز (WhatsApp API)"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>إرسال مستند عبر واتساب</span>
+                </button>
+
+                <button
+                  onClick={() => handleSendDirectWhatsApp(liveSelectedClient)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  title="إرسال ملخص الحساب والإجراءات مباشرة عبر واتساب"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>ملخص واتساب</span>
+                </button>
                 <button
                   onClick={() => {
                     setNotifyTargetClient(liveSelectedClient);
@@ -826,10 +1216,18 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                 <button
                   onClick={() => handleRequestEditClient(liveSelectedClient)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
-                  title="تعديل بيانات الشركة والملف الضريبي (يتطلب الرقم السري Mg120)"
+                  title="تعديل بيانات الشركة والملف الضريبي والشركاء"
                 >
-                  <Lock className="w-3.5 h-3.5 text-amber-700" />
-                  <span>تعديل (Mg120)</span>
+                  <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                  <span>تعديل بيانات العميل</span>
+                </button>
+                <button
+                  onClick={() => handleDeleteClient(liveSelectedClient)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  title="حذف هذا العميل نهائياً من الأرشيف"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-700" />
+                  <span>حذف العميل</span>
                 </button>
                 <button
                   onClick={() => setIsAddProcedureModalOpen(true)}
@@ -859,6 +1257,18 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
               >
                 <Layers className="w-4 h-4" />
                 <span>سجل الإجراءات والمهام والتنفيذ ({liveSelectedClient.procedures?.length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('PORTALS')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                  activeTab === 'PORTALS'
+                    ? 'bg-blue-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Globe2 className="w-4 h-4" />
+                <span>بوابات المنظومات والربط الإلكتروني (الفاتورة / ساب / كسب عمل / نافذة)</span>
               </button>
 
               <button
@@ -895,6 +1305,18 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
               >
                 <Paperclip className="w-4 h-4" />
                 <span>المستندات والأرشيف الإلكتروني ({liveSelectedClient.documents?.length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('COMMUNICATION_LOG')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                  activeTab === 'COMMUNICATION_LOG'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>سجل التواصل والرقابة المهنية (واتساب)</span>
               </button>
             </div>
 
@@ -1011,6 +1433,14 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                                 </div>
 
                                 <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                                  <button
+                                    onClick={() => handleSendDirectWhatsApp(liveSelectedClient, proc)}
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                                    title="إرسال تفاصيل ومستجدات الإجراء للعميل فوراً عبر واتساب"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>واتساب</span>
+                                  </button>
                                   <button
                                     onClick={() => {
                                       setNotifyTargetClient(liveSelectedClient);
@@ -1176,6 +1606,245 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                 </div>
               )}
 
+              {/* TAB 1.5: PORTAL CREDENTIALS & AUTOMATIC REMINDERS */}
+              {activeTab === 'PORTALS' && (
+                <div className="space-y-4">
+                  {/* Top Header for Portals */}
+                  <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-blue-950">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shrink-0">
+                        <Globe2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-blue-950">
+                          بوابات المنظومات والربط الإلكتروني وكلمات المرور
+                        </h4>
+                        <p className="text-xs text-blue-800 mt-0.5">
+                          حفظ وتشفير حسابات الفاتورة الإلكترونية، ساب (SAP)، الضرائب العامة، كسب العمل، ونافذة مع التذكير التلقائي قبل 3 أيام من انتهاء الصلاحية.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRequestEditClient(liveSelectedClient)}
+                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>تحديث كلمات المرور</span>
+                    </button>
+                  </div>
+
+                  {/* 5 Portals Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      {
+                        key: 'etaEInvoicing',
+                        title: '1. منظومة الفاتورة والإيصال الإلكتروني (ETA)',
+                        subtitle: 'البوابة الرسمية لمنظومة الفواتير والإيصالات الضريبية',
+                        defaultUrl: 'https://invoicing.eta.gov.eg',
+                        data: liveSelectedClient.portalCredentials?.etaEInvoicing,
+                        badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                      },
+                      {
+                        key: 'sapPortal',
+                        title: '2. منظومة ساب (SAP ERP Portal)',
+                        subtitle: 'بوابة تخطيط الموارد وإدارة المنظومة المحاسبية والربط',
+                        defaultUrl: 'https://my-sap-instance.corp',
+                        data: liveSelectedClient.portalCredentials?.sapPortal,
+                        badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
+                      },
+                      {
+                        key: 'etaGeneralTax',
+                        title: '3. بوابة مصلحة الضرائب العامة المصرية',
+                        subtitle: 'الإقرارات السنوية للدخل والقيمة المضافة والخصم والتحصيل',
+                        defaultUrl: 'https://eservices.incometax.gov.eg',
+                        data: liveSelectedClient.portalCredentials?.etaGeneralTax,
+                        badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+                      },
+                      {
+                        key: 'etaPayrollTax',
+                        title: '4. بوابة ضريبة كسب العمل والأجور',
+                        subtitle: 'منظومة توحيد أسس ومعايير احتساب ضريبة الأجور والمرتبات',
+                        defaultUrl: 'https://payroll.incometax.gov.eg',
+                        data: liveSelectedClient.portalCredentials?.etaPayrollTax,
+                        badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
+                      },
+                      {
+                        key: 'nafeza',
+                        title: '5. نافذة للتجارة القومية والجمارك (Nafeza)',
+                        subtitle: 'منظومة النافذة الواحدة والإفراج الجمركي المسبق (ACI)',
+                        defaultUrl: 'https://www.nafeza.gov.eg',
+                        data: liveSelectedClient.portalCredentials?.nafeza,
+                        badgeColor: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+                      },
+                    ].map((portal) => {
+                      const cred = portal.data;
+                      const hasUsername = Boolean(cred?.username);
+                      const hasPassword = Boolean(cred?.password);
+                      const isRevealed = showPasswordMap[portal.key] || false;
+
+                      // Expiry calculation
+                      let expiryBadge = null;
+                      if (cred?.expiryDate) {
+                        const exp = new Date(cred.expiryDate);
+                        const diffDays = Math.ceil((exp.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                        if (diffDays <= 0) {
+                          expiryBadge = (
+                            <span className="px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">
+                              منتهي الصلاحية!
+                            </span>
+                          );
+                        } else if (diffDays <= 3) {
+                          expiryBadge = (
+                            <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black animate-pulse">
+                              ينتهي خلال {diffDays} {diffDays === 1 ? 'يوم' : 'أيام'}!
+                            </span>
+                          );
+                        } else {
+                          expiryBadge = (
+                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                              ساري (متبقي {diffDays} يوم)
+                            </span>
+                          );
+                        }
+                      }
+
+                      return (
+                        <div
+                          key={portal.key}
+                          className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h5 className="font-bold text-slate-900 text-xs">{portal.title}</h5>
+                                <p className="text-[11px] text-slate-500">{portal.subtitle}</p>
+                              </div>
+                              {expiryBadge}
+                            </div>
+
+                            <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                              {/* Username */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-500 text-[11px]">اسم المستخدم / الرقم الضريبي:</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-mono font-bold text-slate-900 select-all">
+                                    {hasUsername ? cred?.username : 'غير مسجل'}
+                                  </span>
+                                  {hasUsername && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(cred?.username || '');
+                                        alert('تم نسخ اسم المستخدم بنجاح');
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
+                                      title="نسخ اسم المستخدم"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Password */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-500 text-[11px]">كلمة المرور / الباسورد:</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-mono font-bold text-slate-900">
+                                    {hasPassword
+                                      ? isRevealed
+                                        ? cred?.password
+                                        : '••••••••••••'
+                                      : 'غير مسجل'}
+                                  </span>
+                                  {hasPassword && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setShowPasswordMap((prev) => ({
+                                            ...prev,
+                                            [portal.key]: !prev[portal.key],
+                                          }))
+                                        }
+                                        className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
+                                        title={isRevealed ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                                      >
+                                        {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(cred?.password || '');
+                                          alert('تم نسخ كلمة المرور بنجاح');
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
+                                        title="نسخ كلمة المرور"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Expiry Date */}
+                              <div className="flex items-center justify-between gap-2 text-[11px]">
+                                <span className="text-slate-500">تاريخ انتهاء الصلاحية:</span>
+                                <span className="font-mono font-medium text-slate-800">
+                                  {cred?.expiryDate || 'غير محدد (غير مؤقت)'}
+                                </span>
+                              </div>
+
+                              {/* Notes if any */}
+                              {cred?.notes && (
+                                <div className="text-[11px] text-slate-600 pt-1 border-t border-slate-200">
+                                  <span className="text-slate-400">ملاحظات:</span> {cred.notes}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Footer Actions */}
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                            <a
+                              href={cred?.portalUrl || portal.defaultUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                              <span>دخول المنظومة</span>
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const phone = (liveSelectedClient.phone || '').replace(/[^0-9]/g, '');
+                                const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
+                                const msg = `السادة المحترمون / ${liveSelectedClient.name}
+تحية طيبة وبعد،،
+نحيطكم علماً بأنه تم مراجعة حسابكم على [${portal.title}]، ونرجو التكرم بمتابعة تحديث أو تأكيد كلمة المرور الخاصة بكم لضمان استمرارية تقديم الخدمات الضريبية والمحاسبية دون توقف.
+شاكرين ومقدرين حسن تعاونكم.
+مكتب المحاسب القانوني ومراقب الحسابات.`;
+                                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                              }}
+                              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs flex items-center gap-1.5 border border-emerald-200 cursor-pointer"
+                              title="إرسال تذكير للعميل بكلمة المرور عبر واتساب"
+                            >
+                              <Send className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>تذكير واتساب</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* TAB 2: TREASURY & FEE STATEMENT */}
               {activeTab === 'TREASURY' && clientSummary && (
                 <div className="space-y-4">
@@ -1330,7 +1999,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                       className="px-3.5 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
                     >
                       <KeyRound className="w-3.5 h-3.5" />
-                      <span>تعديل البيانات (Mg120)</span>
+                      <span>تعديل البيانات</span>
                     </button>
                   </div>
 
@@ -1405,6 +2074,22 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
               {activeTab === 'DOCUMENTS' && (
                 <ClientDocumentManager client={liveSelectedClient} />
               )}
+
+              {/* TAB 5: WHATSAPP COMMUNICATIONS & AUDIT LOG */}
+              {activeTab === 'COMMUNICATION_LOG' && (
+                <ClientCommunicationsLogView
+                  client={liveSelectedClient}
+                  onOpenNotifyModal={() => {
+                    setNotifyTargetClient(liveSelectedClient);
+                    setNotifyTargetProcedure(null);
+                    setIsNotifyModalOpen(true);
+                  }}
+                  onOpenDocShareModal={() => {
+                    setDocShareTargetClient(liveSelectedClient);
+                    setIsDocShareModalOpen(true);
+                  }}
+                />
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -1442,7 +2127,21 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
 
             <form onSubmit={handleAddProcedureSubmit} className="space-y-3.5 mt-4">
               <div>
-                <label className="block text-slate-700 font-bold mb-1">عنوان الإجراء / المعاملة المطلوبة *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-700 font-bold">عنوان الإجراء / المعاملة المطلوبة *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstimatorTargetClient(liveSelectedClient);
+                      setIsSmartEstimatorOpen(true);
+                    }}
+                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                    title="استدعاء حاسبة التقدير الذكي لملء البيانات والرسوم والأتعاب تلقائياً"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    <span>⚡ تقدير ذكي للرسوم والأتعاب</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
@@ -1778,7 +2477,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
             {editingClientId && (
               <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-xs font-medium">
                 <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>تم التحقق من الرقم السري (Mg120) بنجاح. يمكنك الآن تعديل بيانات ملف العميل وحفظها.</span>
+                <span>تم التحقق من الرقم السري بنجاح. يمكنك الآن تعديل بيانات ملف العميل وحفظها.</span>
               </div>
             )}
 
@@ -1793,6 +2492,32 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                   placeholder="مثال: شركة النيل للتجارة الهندسية (ش.م.م)"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">تصنيف العلاقة والتعاقد</label>
+                  <select
+                    value={clientFormData.relationshipType}
+                    onChange={(e) => setClientFormData({ ...clientFormData, relationshipType: e.target.value as ClientRelationshipType })}
+                    className="w-full px-3 py-2 bg-emerald-50/70 border border-emerald-300 rounded-xl font-bold text-emerald-950"
+                  >
+                    <option value="PERMANENT">عميل دائم (مسك دفاتر وضرائب سنوي)</option>
+                    <option value="TEMPORARY">عميل مؤقت / عابر (معاملة محددة / تأسيس)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">أهمية العميل</label>
+                  <select
+                    value={clientFormData.clientType}
+                    onChange={(e) => setClientFormData({ ...clientFormData, clientType: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                  >
+                    <option value="PRIMARY">عميل استراتيجي / رئيسي</option>
+                    <option value="SECONDARY">عميل فرعي / اعتيادي</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1825,13 +2550,24 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">رقم التسجيل الضريبي (البطاقة)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-700 font-bold">رقم التسجيل الضريبي (البطاقة)</label>
+                    {clientFormData.taxCardNo && (
+                      <span className={`text-[10px] font-bold ${validateEgyptianTaxNumber(clientFormData.taxCardNo).isValid ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {validateEgyptianTaxNumber(clientFormData.taxCardNo).isValid ? '✓ رقم ضريبي مصري صالح (9 أرقام)' : '⚠️ يجب 9 أرقام'}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={clientFormData.taxCardNo}
                     onChange={(e) => setClientFormData({ ...clientFormData, taxCardNo: e.target.value })}
                     placeholder="مثال: 489-201-987"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
+                    className={`w-full px-3 py-2 bg-slate-50 border rounded-xl font-mono ${
+                      clientFormData.taxCardNo && !validateEgyptianTaxNumber(clientFormData.taxCardNo).isValid
+                        ? 'border-amber-300 focus:border-amber-500'
+                        : 'border-slate-300'
+                    }`}
                   />
                 </div>
 
@@ -1906,6 +2642,361 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                 />
               </div>
 
+              {/* Portal Credentials Section */}
+              <div className="pt-3 border-t border-slate-200 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Globe2 className="w-4 h-4 text-blue-700" />
+                  <h4 className="font-bold text-slate-900 text-xs">
+                    بيانات وحسابات الدخول للمنظومات والبوابات الحكومية و SAP
+                  </h4>
+                </div>
+
+                {/* 1. ETA e-Invoicing */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-emerald-800 text-xs block">1. منظومة الفاتورة والإيصال الإلكتروني (ETA)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">اسم المستخدم / الرقم الضريبي</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.etaEInvoicing?.username || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaEInvoicing: {
+                                ...clientFormData.portalCredentials?.etaEInvoicing,
+                                username: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="الرقم الضريبي أو الإيميل"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">كلمة المرور / الباسورد</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.etaEInvoicing?.password || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaEInvoicing: {
+                                ...clientFormData.portalCredentials?.etaEInvoicing,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="••••••••"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ انتهاء الصلاحية</label>
+                      <input
+                        type="date"
+                        value={clientFormData.portalCredentials?.etaEInvoicing?.expiryDate || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaEInvoicing: {
+                                ...clientFormData.portalCredentials?.etaEInvoicing,
+                                expiryDate: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. SAP Portal */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-blue-800 text-xs block">2. منظومة ساب (SAP ERP Portal)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">اسم مستخدم SAP</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.sapPortal?.username || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              sapPortal: {
+                                ...clientFormData.portalCredentials?.sapPortal,
+                                username: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="SAP_USER_ID"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">كلمة مرور SAP</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.sapPortal?.password || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              sapPortal: {
+                                ...clientFormData.portalCredentials?.sapPortal,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="••••••••"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ انتهاء كلمة المرور</label>
+                      <input
+                        type="date"
+                        value={clientFormData.portalCredentials?.sapPortal?.expiryDate || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              sapPortal: {
+                                ...clientFormData.portalCredentials?.sapPortal,
+                                expiryDate: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. ETA General Tax */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-amber-800 text-xs block">3. بوابة الضرائب العامة (الدخل والقيمة المضافة)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">اسم المستخدم / البريد</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.etaGeneralTax?.username || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaGeneralTax: {
+                                ...clientFormData.portalCredentials?.etaGeneralTax,
+                                username: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="Tax_Portal_User"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">كلمة المرور</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.etaGeneralTax?.password || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaGeneralTax: {
+                                ...clientFormData.portalCredentials?.etaGeneralTax,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="••••••••"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ التجديد / الانتهاء</label>
+                      <input
+                        type="date"
+                        value={clientFormData.portalCredentials?.etaGeneralTax?.expiryDate || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaGeneralTax: {
+                                ...clientFormData.portalCredentials?.etaGeneralTax,
+                                expiryDate: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. ETA Payroll Tax */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-purple-800 text-xs block">4. بوابة ضريبة كسب العمل والأجور</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">اسم مستخدم كسب العمل</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.etaPayrollTax?.username || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaPayrollTax: {
+                                ...clientFormData.portalCredentials?.etaPayrollTax,
+                                username: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="Payroll_User"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">كلمة المرور</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.etaPayrollTax?.password || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaPayrollTax: {
+                                ...clientFormData.portalCredentials?.etaPayrollTax,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="••••••••"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ التجديد</label>
+                      <input
+                        type="date"
+                        value={clientFormData.portalCredentials?.etaPayrollTax?.expiryDate || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              etaPayrollTax: {
+                                ...clientFormData.portalCredentials?.etaPayrollTax,
+                                expiryDate: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Nafeza */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-cyan-800 text-xs block">5. نافذة للتجارة القومية والجمارك (Nafeza)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">اسم مستخدم نافذة</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.nafeza?.username || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              nafeza: {
+                                ...clientFormData.portalCredentials?.nafeza,
+                                username: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="Nafeza_Username"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">كلمة مرور نافذة</label>
+                      <input
+                        type="text"
+                        value={clientFormData.portalCredentials?.nafeza?.password || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              nafeza: {
+                                ...clientFormData.portalCredentials?.nafeza,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        placeholder="••••••••"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ التجديد</label>
+                      <input
+                        type="date"
+                        value={clientFormData.portalCredentials?.nafeza?.expiryDate || ''}
+                        onChange={(e) =>
+                          setClientFormData({
+                            ...clientFormData,
+                            portalCredentials: {
+                              ...clientFormData.portalCredentials,
+                              nafeza: {
+                                ...clientFormData.portalCredentials?.nafeza,
+                                expiryDate: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-700 font-bold mb-1">ملاحظات وتفاصيل ملف العميل</label>
                 <textarea
@@ -1954,6 +3045,16 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         actionType="EDIT_RECORD"
       />
 
+      {/* Security Auth Modal for Exporting All Portals & Passwords */}
+      <SecurityAuthModal
+        isOpen={isExportAuthModalOpen}
+        onClose={() => setIsExportAuthModalOpen(false)}
+        onSuccess={handleExecuteExportAllPortals}
+        title="التحقق الأمني لطباعة وتصدير كشف البوابات المشفر"
+        description="يرجى إدخال الرقم السري المعتمد لفك تشفير وتصدير كشف حسابات البوابات الحكومية وكلمات المرور لجميع العملاء"
+        actionType="SECURITY_CHECK"
+      />
+
       {/* Client Notification & WhatsApp Modal */}
       <ClientNotificationModal
         isOpen={isNotifyModalOpen}
@@ -1967,6 +3068,59 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         officeName={state.officeProfile.officeName}
         auditorName={state.officeProfile.auditorName}
       />
-    </div>
+
+      {/* WhatsApp Document Share & Invoice Claim Modal */}
+      {isDocShareModalOpen && docShareTargetClient && (
+        <WhatsAppDocumentShareModal
+          isOpen={isDocShareModalOpen}
+          onClose={() => {
+            setIsDocShareModalOpen(false);
+            setDocShareTargetClient(null);
+          }}
+          client={docShareTargetClient}
+          state={state}
+        />
+      )}
+
+      {/* Smart Procedure Fee Estimator Modal */}
+      {isSmartEstimatorOpen && (
+        <SmartProcedureFeeEstimatorModal
+          isOpen={isSmartEstimatorOpen}
+          onClose={() => {
+            setIsSmartEstimatorOpen(false);
+            setEstimatorTargetClient(null);
+          }}
+          client={estimatorTargetClient || liveSelectedClient}
+          onApplyEstimate={(estimate) => {
+            setProcedureFormData((prev) => ({
+              ...prev,
+              title: estimate.title,
+              category: estimate.category,
+              agreedFees: estimate.agreedFees,
+              governmentFeesNow: estimate.governmentFees,
+              notes: prev.notes ? `${prev.notes}\n${estimate.notes}` : estimate.notes,
+            }));
+            const target = estimatorTargetClient || liveSelectedClient;
+            if (target && !liveSelectedClient) {
+              setSelectedClient(target);
+            }
+            setIsAddProcedureModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Company Master Dossier & Token Keyring Label Modal (A4 Master Sheet) */}
+      {isTokenDossierModalOpen && (tokenDossierTargetClient || liveSelectedClient) && (
+        <CompanyDossierAndTokenLabelModal
+          isOpen={isTokenDossierModalOpen}
+          onClose={() => {
+            setIsTokenDossierModalOpen(false);
+            setTokenDossierTargetClient(null);
+          }}
+          client={tokenDossierTargetClient || liveSelectedClient!}
+          officeProfile={state.officeProfile}
+        />
+      )}
+    </>
   );
 };

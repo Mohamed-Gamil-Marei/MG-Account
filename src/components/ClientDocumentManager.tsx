@@ -22,9 +22,23 @@ import {
   AlertCircle,
   ArrowRight,
   Filter,
+  Send,
+  ShieldCheck,
+  Clock,
+  Sparkles,
+  RotateCcw,
+  Printer,
+  ChevronDown,
+  Award,
+  CheckCircle2,
+  Check,
 } from 'lucide-react';
 import { ClientArchiveRecord, ClientDocument, ClientDocumentFolder } from '../types';
 import { db } from '../db/localDatabase';
+import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
+import { AutoArchiverService, HeaderVerificationResult } from '../services/AutoArchiver';
+import { ArchivedSnapshotModal } from './archive/ArchivedSnapshotModal';
+import { FinalFinancialReportViewerModal } from './archive/FinalFinancialReportViewerModal';
 
 interface ClientDocumentManagerProps {
   client: ClientArchiveRecord;
@@ -38,6 +52,30 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
   const [isMoveDocModalOpen, setIsMoveDocModalOpen] = useState(false);
   const [targetDocToMove, setTargetDocToMove] = useState<ClientDocument | null>(null);
   const [destinationFolderId, setDestinationFolderId] = useState<string>('');
+
+  // WhatsApp Document Share Modal
+  const [isDocShareModalOpen, setIsDocShareModalOpen] = useState(false);
+  const [targetDocToShare, setTargetDocToShare] = useState<ClientDocument | null>(null);
+
+  // AutoArchiver Snapshot Modal & Background Trigger
+  const [selectedArchivedDoc, setSelectedArchivedDoc] = useState<ClientDocument | null>(null);
+  const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
+  const [isAutoArchivingNow, setIsAutoArchivingNow] = useState(false);
+  const [autoArchiveNotice, setAutoArchiveNotice] = useState<string | null>(null);
+
+  // Final Financial Report Viewer Modal & Header Verification state
+  const [selectedDocForFinalReport, setSelectedDocForFinalReport] = useState<ClientDocument | null>(null);
+  const [isFinalReportModalOpen, setIsFinalReportModalOpen] = useState(false);
+  const [openDropdownDocId, setOpenDropdownDocId] = useState<string | null>(null);
+  const [verifiedHeaderToast, setVerifiedHeaderToast] = useState<{ title: string; result: HeaderVerificationResult } | null>(null);
+
+  const handleVerifyHeader = (doc: ClientDocument) => {
+    const result = AutoArchiverService.verifyDocumentHeaderPresence(doc, client);
+    setVerifiedHeaderToast({ title: doc.title, result });
+    setTimeout(() => {
+      setVerifiedHeaderToast(null);
+    }, 7000);
+  };
 
   // Editing Folder
   const [editingFolder, setEditingFolder] = useState<ClientDocumentFolder | null>(null);
@@ -248,8 +286,45 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
 
   const activeFolderObject = folders.find((f) => f.id === selectedFolderId);
 
+  const handleTriggerAutoArchive = () => {
+    setIsAutoArchivingNow(true);
+    try {
+      const res = AutoArchiverService.archiveCurrentActiveFinancials(
+        undefined,
+        undefined,
+        `أرشفة آلية مباشرة من واجهة أرشيف العميل: ${client.name}`
+      );
+      if (res.success && res.timestampCode) {
+        setAutoArchiveNotice(`تمت الأرشفة الآلية للمستند المالي بنجاح بكود توثيق معتمد: ${res.timestampCode}`);
+        setTimeout(() => setAutoArchiveNotice(null), 6000);
+      } else {
+        alert('تعذر إتمام الأرشفة: ' + (res.error || 'خطأ غير معروف'));
+      }
+    } catch (err: any) {
+      alert('خطأ: ' + err?.message);
+    } finally {
+      setIsAutoArchivingNow(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* AutoArchive Success Notice */}
+      {autoArchiveNotice && (
+        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between text-emerald-900 font-bold text-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{autoArchiveNotice}</span>
+          </div>
+          <button
+            onClick={() => setAutoArchiveNotice(null)}
+            className="text-emerald-700 hover:text-emerald-950 font-bold px-2 py-0.5 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Action Bar */}
       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -265,6 +340,17 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleTriggerAutoArchive}
+            disabled={isAutoArchivingNow}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-all"
+            title="أرشفة القوائم والتقارير المالية المعتمدة للعميل تلقائياً في الخلفية بترميز زمني"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-300" />
+            <span>{isAutoArchivingNow ? 'جاري الأرشفة...' : 'أرشفة آلية فورية (AutoArchiver)'}</span>
+          </button>
+
           <button
             onClick={() => {
               setEditingFolder(null);
@@ -435,20 +521,64 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
           <div className="space-y-2 pt-2">
             {filteredDocs.map((doc) => {
               const matchedFolder = folders.find((f) => f.id === doc.folderId);
+              const isAutoArchived = AutoArchiverService.isAutoArchived(doc);
+              const timestampCode = AutoArchiverService.extractTimestampCode(doc);
+              const isHeaderVerified = AutoArchiverService.isHeaderVerified(doc);
+
               return (
                 <div
                   key={doc.id}
-                  className="p-3.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-xs transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-3"
+                  className={`p-3.5 rounded-xl bg-white border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${
+                    isAutoArchived
+                      ? 'border-emerald-300 hover:border-emerald-500 bg-emerald-50/20 shadow-2xs'
+                      : 'border-slate-200 hover:border-indigo-300 hover:shadow-xs'
+                  }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 border border-indigo-200 mt-0.5">
-                      <FileText className="w-5 h-5" />
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border mt-0.5 ${
+                        isAutoArchived
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                      }`}
+                    >
+                      {isAutoArchived ? <ShieldCheck className="w-5 h-5 text-emerald-700" /> : <FileText className="w-5 h-5" />}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-xs">{doc.title}</span>
-                        {doc.tag && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                        {isAutoArchived && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold border border-emerald-300 flex items-center gap-1 font-mono">
+                            <Clock className="w-3 h-3 text-emerald-700" />
+                            <span>ترميز زمني: {timestampCode || 'معتمد'}</span>
+                          </span>
+                        )}
+
+                        {/* خاصية التحقق من وجود الترويسة في كل مستند مالي */}
+                        {isHeaderVerified ? (
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyHeader(doc)}
+                            className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold border border-emerald-300 flex items-center gap-1 font-mono cursor-pointer hover:bg-emerald-200 transition-colors"
+                            title="الترويسة الرسمية معتمدة ومحققة نظامياً (انقر لفحص تفاصيل الترويسة)"
+                          >
+                            <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                            <span>ترويسة معتمدة ومحققة ✓</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyHeader(doc)}
+                            className="text-[10px] px-2 py-0.5 rounded bg-amber-50 text-amber-900 font-bold border border-amber-300 flex items-center gap-1 font-mono cursor-pointer hover:bg-amber-100 transition-colors"
+                            title="انقر لفحص والتحقق من الترويسة"
+                          >
+                            <AlertCircle className="w-3 h-3 text-amber-700" />
+                            <span>فحص الترويسة</span>
+                          </button>
+                        )}
+
+                        {doc.tag && !isAutoArchived && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold border border-slate-200">
                             {doc.tag}
                           </span>
                         )}
@@ -460,37 +590,196 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1 font-mono">
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1 font-mono flex-wrap">
                         <span>اسم الملف: {doc.fileName}</span>
                         <span>• الحجم: {doc.fileSize || '2 MB'}</span>
-                        <span>• تاريخ الرفع: {doc.uploadedAt}</span>
+                        <span>• تاريخ الأرشفة: {doc.uploadedAt}</span>
                       </div>
 
                       {doc.notes && (
-                        <p className="text-[11px] text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded border border-slate-200 inline-block">
-                          ملاحظات: {doc.notes}
+                        <p className="text-[11px] text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded border border-slate-200 inline-block font-mono">
+                          {doc.notes}
                         </p>
                       )}
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 self-end md:self-center shrink-0">
+                  {/* Actions & Quick Dropdown */}
+                  <div className="flex items-center gap-1.5 self-end md:self-center shrink-0 flex-wrap relative">
+                    {/* قائمة إجراءات سريعة (Dropdown) فوق كل مستند */}
+                    <div className="relative inline-block text-right">
+                      <button
+                        type="button"
+                        onClick={() => setOpenDropdownDocId(openDropdownDocId === doc.id ? null : doc.id)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
+                        title="فتح قائمة الإجراءات السريعة للمستند"
+                      >
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownDocId === doc.id ? 'rotate-180' : ''}`} />
+                        <span>إجراءات سريعة</span>
+                      </button>
+
+                      {openDropdownDocId === doc.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-30"
+                            onClick={() => setOpenDropdownDocId(null)}
+                          />
+                          <div className="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-40 animate-in fade-in zoom-in-95 duration-150">
+                            {/* الخيار المطلوب: طباعة التقرير بالترويسة الرسمية */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownDocId(null);
+                                setSelectedDocForFinalReport(doc);
+                                setIsFinalReportModalOpen(true);
+                              }}
+                              className="w-full px-3.5 py-2.5 text-right text-xs font-bold text-emerald-950 bg-emerald-50/80 hover:bg-emerald-100 flex items-center gap-2.5 cursor-pointer transition-colors border-b border-emerald-100"
+                            >
+                              <Printer className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <div className="text-right">
+                                <span className="block font-extrabold text-emerald-900">طباعة التقرير بالترويسة الرسمية</span>
+                                <span className="block text-[10px] text-emerald-700 font-normal">تنسيق معتمد A4 مع بيانات المكتب والختم</span>
+                              </div>
+                            </button>
+
+                            {/* عرض نموذج التقرير المالي الختامي المعتمد المخصص */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownDocId(null);
+                                setSelectedDocForFinalReport(doc);
+                                setIsFinalReportModalOpen(true);
+                              }}
+                              className="w-full px-3.5 py-2 text-right text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              <Award className="w-4 h-4 text-indigo-600 shrink-0" />
+                              <span>عرض التقرير المالي الختامي المعتمد</span>
+                            </button>
+
+                            {/* فحص والتحقق من وجود الترويسة */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownDocId(null);
+                                handleVerifyHeader(doc);
+                              }}
+                              className="w-full px-3.5 py-2 text-right text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>فحص والتحقق من الترويسة والاعتماد</span>
+                            </button>
+
+                            {isAutoArchived && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdownDocId(null);
+                                  setSelectedArchivedDoc(doc);
+                                  setIsSnapshotModalOpen(true);
+                                }}
+                                className="w-full px-3.5 py-2 text-right text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                              >
+                                <RotateCcw className="w-4 h-4 text-indigo-600 shrink-0" />
+                                <span>استرجاع لقطة الأرشيف المحاسبية</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownDocId(null);
+                                setTargetDocToShare(doc);
+                                setIsDocShareModalOpen(true);
+                              }}
+                              className="w-full px-3.5 py-2 text-right text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              <Send className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>إرسال عبر WhatsApp للعميل</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownDocId(null);
+                                handleOpenMoveModal(doc);
+                              }}
+                              className="w-full px-3.5 py-2 text-right text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              <MoveRight className="w-4 h-4 text-slate-500 shrink-0" />
+                              <span>نقل إلى مجلد آخر</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownDocId(null);
+                                handleDeleteDoc(doc.id, doc.title);
+                              }}
+                              className="w-full px-3.5 py-2 text-right text-xs font-medium text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer transition-colors border-t border-slate-100"
+                            >
+                              <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
+                              <span>حذف المستند من الأرشيف</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* زر مباشر وسريع لطباعة التقرير بالترويسة الرسمية */}
                     <button
-                      onClick={() => handleOpenMoveModal(doc)}
-                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-                      title="نقل المستند إلى مجلد آخر"
+                      type="button"
+                      onClick={() => {
+                        setSelectedDocForFinalReport(doc);
+                        setIsFinalReportModalOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                      title="طباعة التقرير بالترويسة الرسمية"
                     >
-                      <MoveRight className="w-3.5 h-3.5" />
-                      <span>نقل</span>
+                      <Printer className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">طباعة بالترويسة</span>
+                    </button>
+
+                    {isAutoArchived && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedArchivedDoc(doc);
+                          setIsSnapshotModalOpen(true);
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        title="استرجاع وفحص لقطة البيانات المالية المؤرشفة"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
+                        <span className="hidden sm:inline">استرجاع</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setTargetDocToShare(doc);
+                        setIsDocShareModalOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      title="إرسال المستند المالي للعميل عبر WhatsApp API"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">واتساب</span>
                     </button>
 
                     <button
-                      onClick={() => alert(`جاري تنزيل / معاينة المستند المرفق: [${doc.title}] (${doc.fileName})`)}
-                      className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      onClick={() => {
+                        if (isAutoArchived) {
+                          setSelectedArchivedDoc(doc);
+                          setIsSnapshotModalOpen(true);
+                        } else {
+                          alert(`جاري تنزيل / معاينة المستند المرفق: [${doc.title}] (${doc.fileName})`);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      title="تنزيل / معاينة"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>تنزيل / معاينة</span>
+                      <span className="hidden sm:inline">تنزيل</span>
                     </button>
 
                     <button
@@ -821,6 +1110,108 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Document Share Modal */}
+      {isDocShareModalOpen && (
+        <WhatsAppDocumentShareModal
+          isOpen={isDocShareModalOpen}
+          onClose={() => {
+            setIsDocShareModalOpen(false);
+            setTargetDocToShare(null);
+          }}
+          client={client}
+          state={db.getState()}
+          initialDoc={targetDocToShare}
+        />
+      )}
+
+      {/* Archived Snapshot Inspect & Restore Modal */}
+      {isSnapshotModalOpen && selectedArchivedDoc && (
+        <ArchivedSnapshotModal
+          isOpen={isSnapshotModalOpen}
+          onClose={() => {
+            setIsSnapshotModalOpen(false);
+            setSelectedArchivedDoc(null);
+          }}
+          document={selectedArchivedDoc}
+          onRestoreSuccess={(msg) => {
+            setAutoArchiveNotice(msg);
+            setTimeout(() => setAutoArchiveNotice(null), 7000);
+          }}
+        />
+      )}
+
+      {/* Final Financial Report Dedicated Certified View Modal */}
+      {isFinalReportModalOpen && selectedDocForFinalReport && (
+        <FinalFinancialReportViewerModal
+          isOpen={isFinalReportModalOpen}
+          onClose={() => {
+            setIsFinalReportModalOpen(false);
+            setSelectedDocForFinalReport(null);
+          }}
+          document={selectedDocForFinalReport}
+          client={client}
+          onRestoreSuccess={(msg) => {
+            setAutoArchiveNotice(msg);
+            setTimeout(() => setAutoArchiveNotice(null), 7000);
+          }}
+        />
+      )}
+
+      {/* Official Header Verification Toast / Dialog */}
+      {verifiedHeaderToast && (
+        <div className="fixed bottom-6 left-6 z-50 max-w-md bg-white border-2 border-emerald-500 rounded-2xl shadow-2xl p-4 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldCheck className="w-5 h-5 text-emerald-700" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <h5 className="font-extrabold text-xs text-slate-900">
+                  نتيجة التحقق من الترويسة والاعتماد المهني
+                </h5>
+                <button
+                  type="button"
+                  onClick={() => setVerifiedHeaderToast(null)}
+                  className="text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-1">
+                المستند: <strong className="text-slate-900">{verifiedHeaderToast.title}</strong>
+              </p>
+              <div className="mt-2 p-2 bg-emerald-50/80 rounded-lg border border-emerald-200 text-[11px] space-y-1 text-emerald-950 font-mono">
+                <div>• حالة الترويسة: <span className="font-bold text-emerald-800">{verifiedHeaderToast.result.statusText}</span></div>
+                <div>• مراقب الحسابات: {verifiedHeaderToast.result.auditorName}</div>
+                <div>• رقم القيد: {verifiedHeaderToast.result.licenseNumber}</div>
+                <div>• منشأة العميل: {verifiedHeaderToast.result.clientLegalName}</div>
+                <div>• البطاقة الضريبية: {verifiedHeaderToast.result.taxRegistrationNumber}</div>
+                {verifiedHeaderToast.result.timestampCode && (
+                  <div>• كود التوثيق: {verifiedHeaderToast.result.timestampCode}</div>
+                )}
+              </div>
+              <div className="mt-2.5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const doc = documents.find((d) => d.title === verifiedHeaderToast.title) || selectedDocForFinalReport;
+                    setVerifiedHeaderToast(null);
+                    if (doc) {
+                      setSelectedDocForFinalReport(doc);
+                      setIsFinalReportModalOpen(true);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3 h-3" />
+                  <span>طباعة بالترويسة الرسمية</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

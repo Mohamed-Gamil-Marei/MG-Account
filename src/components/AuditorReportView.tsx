@@ -10,19 +10,47 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { DatabaseState } from '../db/localDatabase';
-import { generateQrCodeSvg } from '../utils/qrCodeGenerator';
+import { generateQrCodeSvg, buildAuditorReportQrText } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface AuditorReportViewProps {
   state: DatabaseState;
+  fiscalYear?: number;
 }
 
-export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) => {
+export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fiscalYear: initialFiscalYear }) => {
   const profile = state.officeProfile;
+  const activeClient = state.clients.find((c) => c.id === state.activeClientContext?.clientId);
+
   const [reportType, setReportType] = useState<'UNQUALIFIED' | 'QUALIFIED' | 'DISCLAIMER'>('UNQUALIFIED');
-  const [clientCompanyName, setClientCompanyName] = useState('شركة النيل للصناعات الهندسية والتجارة (ش.م.م)');
-  const [fiscalYear, setFiscalYear] = useState('2026');
+  const [clientCompanyName, setClientCompanyName] = useState(
+    activeClient?.name || 'شركة النيل للصناعات الهندسية والتجارة (ش.م.م)'
+  );
+  const [fiscalYear, setFiscalYear] = useState(String(initialFiscalYear || '2026'));
   const [governanceDate, setGovernanceDate] = useState('2026-03-15');
+
+  // Auto-sync client company name if activeClient changes
+  React.useEffect(() => {
+    if (activeClient?.name) {
+      setClientCompanyName(activeClient.name);
+    }
+  }, [activeClient?.name]);
+
+  const opinionText =
+    reportType === 'UNQUALIFIED'
+      ? 'رأي غير متحفظ (نظيف)'
+      : reportType === 'QUALIFIED'
+      ? 'رأي متحفظ (مع لفت انتباه)'
+      : 'تقرير خاص بزيادة رأس المال والاندماج';
+
+  const qrPayload = buildAuditorReportQrText({
+    auditorName: profile.auditorName,
+    licenseNumber: profile.licenseNumber,
+    companyName: clientCompanyName,
+    fiscalYear,
+    opinion: opinionText,
+    refNumber: `AUD-EGY-${fiscalYear}-8821`,
+  });
 
   return (
     <div className="space-y-5">
@@ -36,7 +64,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            صياغة مهنية وفقاً لمعايير المراجعة المصرية والقانون 159 لسنة 1981 باعتماد المحاسب والمراجع القانوني محمد جميل مرعي.
+            صياغة مهنية وفقاً لمعايير المراجعة المصرية والقانون 159 لسنة 1981 باعتماد المحاسب والمراجع القانوني {profile.auditorName}.
           </p>
         </div>
 
@@ -44,13 +72,14 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
           <ScreenActionToolbar
             modelType="AUDITOR_REPORT"
             title="تقرير مراقب الحسابات المستقل"
+            targetElementId="auditor-report-paper"
             showImport={false}
           />
         </div>
       </div>
 
       {/* Report Controls */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs no-print">
         <div className="flex items-center gap-2">
           <span className="font-bold text-slate-700">نوع رأي المراجع:</span>
           <select
@@ -76,7 +105,13 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
       </div>
 
       {/* Official Certificate Paper Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-12 space-y-6 text-slate-800 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-none print:p-0">
+      <div
+        id="auditor-report-paper"
+        data-printable="true"
+        dir="rtl"
+        className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-12 space-y-6 text-slate-800 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 font-['Cairo',sans-serif]"
+        style={{ letterSpacing: 'normal' }}
+      >
         {/* Auditor Official Top Letterhead */}
         <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
           <div className="space-y-0.5">
@@ -107,10 +142,10 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
           <h3 className="font-black text-sm text-slate-900 border-r-4 border-emerald-700 pr-2">
             أولاً: الرأي المهني (Opinion)
           </h3>
-          <p className="text-justify text-slate-700 leading-6">
+          <p className="text-right text-slate-700 leading-6">
             راجعنا القوائم المالية المرفقة لـ <strong>{clientCompanyName}</strong>، والمتمثلة في قائمة المركز المالي كما في 31 ديسمبر {fiscalYear}، وكذا قوائم الدخل الشامل، والتغير في حقوق الملكية، والتدفقات النقدية عن السنة المالية المنتهية في ذلك التاريخ، وملخصاً لأهم السياسات المحاسبية والإيضاحات المتممة الأخرى.
           </p>
-          <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 font-medium leading-6">
+          <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 font-medium leading-6 text-right">
             وفي رأينا، فإن القوائم المالية المشار إليها أعلاه تعبر بوضوح وعدالة، من كافة النواحي الجوهرية، عن المركز المالي للشركة كما في 31 ديسمبر {fiscalYear}، وعن أدائها المالي وتدفقاتها النقدية عن السنة المنتهية في ذلك التاريخ، وذلك وفقاً <strong>لمعايير المحاسبة المصرية (EAS)</strong> وفي ضوء القوانين واللوائح المصرية ذات الصلة المنظمة لعمل الشركات.
           </div>
         </div>
@@ -120,7 +155,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
           <h3 className="font-black text-sm text-slate-900 border-r-4 border-emerald-700 pr-2">
             ثانياً: أساس الرأي (Basis for Opinion)
           </h3>
-          <p className="text-justify text-slate-700 leading-6">
+          <p className="text-right text-slate-700 leading-6">
             تمت مراجعتنا وفقاً لـ <strong>معايير المراجعة المصرية</strong>، ومسؤولياتنا محددة تفصيلاً في قسم "مسؤوليات مراقب الحسابات". ونحن مستقلون تماماً عن الشركة وفقاً لقواعد وآداب وسلوكيات المهنة الصادرة عن جمعية المحاسبين والمراجعين المصرية وميثاق الشرف المهني، ونعتقد أن أدلة المراجعة التي حصلنا عليها كافية ومناسبة لتوفير أساس متين لإبداء رأينا المهني.
           </p>
         </div>
@@ -130,7 +165,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
           <h3 className="font-black text-sm text-slate-900 border-r-4 border-emerald-700 pr-2">
             ثالثاً: مسؤولية الإدارة عن القوائم المالية
           </h3>
-          <p className="text-justify text-slate-700 leading-6">
+          <p className="text-right text-slate-700 leading-6">
             إن إدارة الشركة مسؤولة عن إعداد هذه القوائم المالية وعرضها بوضوح وعدالة وفقاً لمعايير المحاسبة المصرية، وعن نظام الرقابة الداخلية الذي تراه ضرورياً لإعداد قوائم مالية خالية من أي تحريف هام ومؤثر، سواء كان ناتجاً عن غش أو خطأ.
           </p>
         </div>
@@ -140,7 +175,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
           <h3 className="font-black text-sm text-slate-900 border-r-4 border-emerald-700 pr-2">
             رابعاً: تقرير عن المتطلبات القانونية والتنظيمية الأخرى
           </h3>
-          <ul className="list-disc pr-6 space-y-1 text-slate-700 leading-6">
+          <ul className="list-disc pr-6 space-y-1 text-slate-700 leading-6 text-right">
             <li>تمسك الشركة حسابات مالية منتظمة تتضمن كل ما نص عليه القانون ونظام الشركة الأساسي، وتتفق القوائم المالية مع ما هو وارد بتلك الحسابات.</li>
             <li>قام مجلس إدارة الشركة بجرد المخزون وفقاً للأصول المرعية وحضرنا عملية الجرد أو تحققنا من وجوده الفعلي.</li>
             <li>البيانات المالية الواردة بتقرير مجلس إدارة الشركة تتفق مع ما هو وارد بدفاتر الشركة في الحدود المنصوص عليها بقانون الشركات رقم 159 لسنة 1981.</li>
@@ -174,7 +209,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state }) =
 
             <div
               dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(`AUDITOR_REPORT|${clientCompanyName}|${fiscalYear}|MOHAMED_GAMIL_MAREI|LIC_${profile.licenseNumber}`, 96),
+                __html: generateQrCodeSvg(qrPayload, 96),
               }}
             />
           </div>

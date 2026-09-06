@@ -68,11 +68,13 @@ export interface IncomeStatementData {
   grossProfit: number;
   sellingAndMarketingExpenses: number;
   administrativeExpenses: number;
+  operatingExpenses: number;
   operatingProfit: number; // EBITDA approx
   depreciationExpense: number;
   financeCosts: number;
   otherIncomes: number;
   profitBeforeTax: number;
+  netProfitBeforeTax: number;
   taxExpense: number;
   netProfitAfterTax: number;
 }
@@ -131,11 +133,13 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
     grossProfit,
     sellingAndMarketingExpenses,
     administrativeExpenses,
+    operatingExpenses,
     operatingProfit,
     depreciationExpense,
     financeCosts,
     otherIncomes,
     profitBeforeTax,
+    netProfitBeforeTax: profitBeforeTax,
     taxExpense: effectiveTax,
     netProfitAfterTax,
   };
@@ -185,6 +189,11 @@ export interface BalanceSheetData {
   };
   totalLiabilities: number;
   totalEquityAndLiabilities: number;
+  currentAssetsTotal: number;
+  nonCurrentAssetsTotal: number;
+  equityTotal: number;
+  currentLiabilitiesTotal: number;
+  nonCurrentLiabilitiesTotal: number;
   isBalanced: boolean;
   variance: number;
 }
@@ -337,6 +346,11 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     },
     totalLiabilities,
     totalEquityAndLiabilities,
+    currentAssetsTotal: totalCurrentAssets,
+    nonCurrentAssetsTotal: totalNonCurrentAssets,
+    equityTotal: totalEquity,
+    currentLiabilitiesTotal: totalCurrentLiabilities,
+    nonCurrentLiabilitiesTotal: totalNonCurrentLiabilities,
     isBalanced,
     variance,
   };

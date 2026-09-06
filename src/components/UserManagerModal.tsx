@@ -146,7 +146,7 @@ export const UserManagerModal: React.FC<UserManagerModalProps> = ({
   };
 
   const handleSwitchUser = (userId: string) => {
-    db.switchCurrentUser(userId);
+    db.setCurrentUserId(userId);
   };
 
   const handleDeleteUser = (u: SystemUser) => {

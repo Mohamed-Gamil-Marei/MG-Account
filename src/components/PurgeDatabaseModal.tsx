@@ -116,7 +116,6 @@ export const PurgeDatabaseModal: React.FC<PurgeDatabaseModalProps> = ({
                 <KeyRound className="w-3.5 h-3.5 text-red-600" />
                 <span>الرقم السري لتأكيد التفريغ:</span>
               </span>
-              <span className="text-[10px] font-mono text-slate-400">Mgacc120</span>
             </label>
             <div className="relative">
               <input
@@ -127,7 +126,7 @@ export const PurgeDatabaseModal: React.FC<PurgeDatabaseModalProps> = ({
                   setPasscode(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                placeholder="أدخل الرقم السري (Mgacc120)..."
+                placeholder="أدخل الرقم السري المصرح به..."
                 className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-center text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:outline-none"
               />
             </div>

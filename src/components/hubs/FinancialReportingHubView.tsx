@@ -6,15 +6,28 @@ import {
   TrendingUp,
   Award,
   Sparkles,
+  Sliders,
+  Calendar,
+  Calculator,
+  DollarSign,
 } from 'lucide-react';
 import { DatabaseState } from '../../db/localDatabase';
 import { FinancialStatementsView } from '../FinancialStatementsView';
 import { FinancialNotesBuilderView } from '../FinancialNotesBuilderView';
 import { AuditorReportView } from '../AuditorReportView';
 import { CreditFinancialsSimulator } from '../CreditFinancialsSimulator';
+import { FinancialSimulatorView } from '../FinancialSimulatorView';
+import { CashFlowPredictorView } from '../financial/CashFlowPredictorView';
+import { BudgetPlannerView } from '../financial/BudgetPlannerView';
+import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
+import { ClientSelector } from '../common/ClientSelector';
 
 export type FinancialReportingSubTab =
   | 'FINANCIAL_STATEMENTS'
+  | 'CURRENCY_RATES'
+  | 'BUDGET_PLANNER'
+  | 'CASH_FLOW_PREDICTOR'
+  | 'FINANCIAL_SIMULATOR'
   | 'FINANCIAL_NOTES'
   | 'AUDITOR_REPORT'
   | 'CREDIT_SIMULATOR';
@@ -41,77 +54,90 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
   const tabs: {
     id: FinancialReportingSubTab;
     label: string;
-    description: string;
     icon: any;
     badge?: string;
     badgeColor?: string;
   }[] = [
     {
       id: 'FINANCIAL_STATEMENTS',
-      label: 'القوائم المالية المعتمدة',
-      description: 'المركز المالي، الدخل، التدفقات النقدية، وحقوق الملكية',
+      label: 'القوائم المالية',
       icon: FileSpreadsheet,
-      badge: 'EAS',
-      badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    },
+    {
+      id: 'CURRENCY_RATES',
+      label: 'أسعار الصرف والعملات (EAS 13)',
+      icon: DollarSign,
+      badge: 'متعدد العملات',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+    },
+    {
+      id: 'BUDGET_PLANNER',
+      label: 'الموازنة التقديرية',
+      icon: Calculator,
+    },
+    {
+      id: 'CASH_FLOW_PREDICTOR',
+      label: 'التدفقات النقدية التقديرية',
+      icon: Calendar,
+    },
+    {
+      id: 'FINANCIAL_SIMULATOR',
+      label: 'محاكي القوائم والنسب',
+      icon: Sliders,
     },
     {
       id: 'FINANCIAL_NOTES',
-      label: 'الإيضاحات المتممة للقوائم',
-      description: 'السياسات المحاسبية والتفاصيل الإيضاحية (معيار 1)',
+      label: 'الإيضاحات المتممة',
       icon: FileText,
-      badge: 'EAS 1',
-      badgeColor: 'bg-teal-100 text-teal-800 border-teal-200',
+      badge: 'معيار 1',
+      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
     },
     {
       id: 'AUDITOR_REPORT',
       label: 'تقرير مراقب الحسابات',
-      description: 'نموذج التقرير المستقل وتأكيد الرأي المهني المعتمد',
       icon: FileCheck2,
-      badge: 'ESA',
-      badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
     },
     {
       id: 'CREDIT_SIMULATOR',
-      label: 'ملف الائتمان وتوزيع الأرباح',
-      description: 'محاكاة التقييم الائتماني البنكي ومصفوفة التوزيع القانوني',
+      label: 'الائتمان وتوزيع الأرباح',
       icon: TrendingUp,
-      badge: 'توزيع ذكي',
-      badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
     },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
+      {/* Central Active Client Context Selector */}
+      <ClientSelector state={state} />
+
       {/* Hub Top Navigation Header */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-xs">
-              <FileSpreadsheet className="w-6 h-6" />
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-200/60 dark:border-blue-900/50">
+              <FileSpreadsheet className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900">مركز القوائم والتقارير المالية والختامية</h2>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                  الحزمة الختامية الكاملة
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">القوائم والتقارير المالية</h2>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  EAS
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                توليد واعتماد القوائم المالية، الإيضاحات المتممة، تقرير مراقب الحسابات، وتحليل الملف الائتماني للسنة المالية {fiscalYear}.
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                المركز المالي، الدخل، التدفقات النقدية، الإيضاحات المتممة وتقرير مراقب الحسابات
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <div className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 font-bold flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-blue-700" />
-              <span>مراقب الحسابات: أ/ {state.officeProfile.auditorName}</span>
-            </div>
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 self-end sm:self-auto">
+            <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 font-semibold text-[11px]">
+              السنة المالية: {fiscalYear}
+            </span>
           </div>
         </div>
 
         {/* Sub-Tabs Selector */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 pt-4">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
@@ -119,34 +145,25 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
               <button
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
                   isActive
-                    ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-500 text-blue-950 shadow-xs ring-1 ring-blue-500/30'
-                    : 'bg-slate-50/70 hover:bg-slate-100/80 border-slate-200/80 text-slate-700 hover:border-slate-300'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                        isActive ? 'bg-blue-600 text-white' : 'bg-slate-200/80 text-slate-600'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <span className="font-bold text-xs">{tab.label}</span>
-                  </div>
-                  {tab.badge && (
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        tab.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-500 line-clamp-1">{tab.description}</p>
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
+                <span className="whitespace-nowrap">{tab.label}</span>
+                {tab.badge && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -156,7 +173,26 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       {/* Render Active Sub-View */}
       <div>
         {activeSubTab === 'FINANCIAL_STATEMENTS' && (
-          <FinancialStatementsView state={state} fiscalYear={fiscalYear} />
+          <FinancialStatementsView
+            state={state}
+            fiscalYear={fiscalYear}
+            onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
+          />
+        )}
+        {activeSubTab === 'CURRENCY_RATES' && (
+          <ExchangeRatesManagerView
+            state={state}
+            onNavigateToFinancialStatements={() => setActiveSubTab('FINANCIAL_STATEMENTS')}
+          />
+        )}
+        {activeSubTab === 'BUDGET_PLANNER' && (
+          <BudgetPlannerView state={state} fiscalYear={fiscalYear} />
+        )}
+        {activeSubTab === 'CASH_FLOW_PREDICTOR' && (
+          <CashFlowPredictorView state={state} />
+        )}
+        {activeSubTab === 'FINANCIAL_SIMULATOR' && (
+          <FinancialSimulatorView state={state} fiscalYear={fiscalYear} />
         )}
         {activeSubTab === 'FINANCIAL_NOTES' && (
           <FinancialNotesBuilderView state={state} />

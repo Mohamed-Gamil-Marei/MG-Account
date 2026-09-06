@@ -193,6 +193,35 @@ class CurrencyService {
     return SUPPORTED_CURRENCIES.some((c) => c.code === currency);
   }
 
+  public getCurrencyInfo(code: CurrencyCode): CurrencyRateInfo {
+    return SUPPORTED_CURRENCIES.find((c) => c.code === code) || SUPPORTED_CURRENCIES[0];
+  }
+
+  public getCurrencySymbol(code: CurrencyCode): string {
+    return this.getCurrencyInfo(code).symbol;
+  }
+
+  public convertBetween(
+    amount: number,
+    from: CurrencyCode,
+    to: CurrencyCode,
+    fromRateToEgp?: number,
+    toRateToEgp?: number
+  ): number {
+    if (!amount || isNaN(amount)) return 0;
+    if (from === to) return amount;
+
+    // Convert 'from' -> EGP
+    const fromRate = fromRateToEgp !== undefined && fromRateToEgp > 0 ? fromRateToEgp : this.getRate(from);
+    const amountInEgp = from === 'EGP' ? amount : amount * fromRate;
+
+    // Convert EGP -> 'to'
+    const toRate = toRateToEgp !== undefined && toRateToEgp > 0 ? toRateToEgp : this.getRate(to);
+    if (to === 'EGP') return Math.round(amountInEgp * 100) / 100;
+    if (toRate <= 0) return 0;
+    return Math.round((amountInEgp / toRate) * 100) / 100;
+  }
+
   private getRatesObject(): Record<CurrencyCode, number> {
     const obj: any = {};
     SUPPORTED_CURRENCIES.forEach((c) => {
@@ -203,3 +232,38 @@ class CurrencyService {
 }
 
 export const currencyService = new CurrencyService();
+
+/**
+ * Universal Financial Currency Formatter
+ * Supports Egyptian Pound and all foreign reporting currencies (USD, EUR, SAR, AED, GBP, KWD, QAR, CNY)
+ * Supports accounting parentheses for negative figures: (15,000.00) $ instead of -15,000.00 $
+ */
+export function formatFinancialCurrency(
+  amount: number | undefined | null,
+  currency: CurrencyCode = 'EGP',
+  useAccountingParentheses: boolean = false
+): string {
+  if (amount === undefined || amount === null || isNaN(amount)) {
+    const sym = currencyService.getCurrencySymbol(currency);
+    return `0.00 ${sym}`;
+  }
+
+  const isNegative = amount < 0;
+  const absAmount = Math.abs(amount);
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(absAmount);
+
+  const sym = currencyService.getCurrencySymbol(currency);
+
+  if (isNegative) {
+    if (useAccountingParentheses) {
+      return `(${formatted}) ${sym}`;
+    }
+    return `-${formatted} ${sym}`;
+  }
+
+  return `${formatted} ${sym}`;
+}
+

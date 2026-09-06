@@ -1,53 +1,323 @@
 @import "tailwindcss";
 
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Custom sleek scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.7);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(71, 85, 105, 0.5);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8);
+  }
+
+  /* Injected print letterhead is completely hidden during screen view */
+  #injected-print-header-root,
+  .injected-official-print-header {
+    display: none;
+  }
+}
+
 @layer utilities {
   @media print {
-    /* Hide non-printable UI elements */
-    header,
+    /* Page Configuration for A4 Official Documents */
+    @page {
+      size: A4 portrait;
+      margin: 8mm 8mm 10mm 8mm;
+    }
+
+    /* Absolute Color Fidelity and Background Printing */
+    *,
+    *::before,
+    *::after {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+      text-shadow: none !important;
+      box-shadow: none !important;
+      letter-spacing: normal !important;
+      word-spacing: normal !important;
+    }
+
+    p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, a {
+      letter-spacing: normal !important;
+    }
+
+    .text-justify {
+      text-align: right !important;
+    }
+
+    [class*="tracking-"] {
+      letter-spacing: normal !important;
+    }
+
+    /* Completely Exclude UI chrome, sidebars, navigation, modals backdrop, and control buttons (NEVER exclude official headers) */
+    header:not(.official-header):not(.injected-official-print-header):not([data-official-header="true"]),
     nav,
     aside,
-    .no-print,
     #sidebar-navigation,
+    .no-print,
+    [data-no-print="true"],
+    .action-toolbar,
+    .screen-action-toolbar,
     button:not(.allow-print),
-    input[type="file"] {
+    input:not([type="checkbox"]),
+    select,
+    textarea,
+    .modal-backdrop,
+    [role="tablist"],
+    .toast-container,
+    .app-header,
+    .screen-header-banner {
       display: none !important;
-    }
-
-    body {
-      background-color: white !important;
-      color: black !important;
-      font-size: 12pt;
-      margin: 0;
-      padding: 0;
-    }
-
-    /* Keep layout clean and full width on print */
-    main {
-      width: 100% !important;
-      max-width: 100% !important;
+      visibility: hidden !important;
+      height: 0 !important;
+      width: 0 !important;
       margin: 0 !important;
       padding: 0 !important;
     }
 
-    /* Ensure tables break cleanly */
-    table {
-      page-break-inside: auto;
+    /* Reset HTML, Body and Container Canvas to full A4 page width with unrestricted overflow */
+    html,
+    body {
+      background-color: #ffffff !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      font-family: 'Cairo', 'IBM Plex Sans Arabic', system-ui, -apple-system, sans-serif !important;
+      font-size: 10pt;
+      line-height: 1.4;
+      margin: 0 !important;
+      padding: 0 !important;
       width: 100% !important;
-    }
-    tr {
-      page-break-inside: avoid;
-      page-break-after: auto;
-    }
-    thead {
-      display: table-header-group;
-    }
-    tfoot {
-      display: table-footer-group;
+      min-width: 100% !important;
+      height: auto !important;
+      min-height: 100% !important;
+      overflow: visible !important;
+      letter-spacing: normal !important;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision !important;
     }
 
-    /* Borders for printed tables */
-    .print-border {
-      border: 1px solid #cbd5e1 !important;
+    main,
+    #root,
+    #root > div,
+    .app-container,
+    div[class*="overflow-y-auto"],
+    div[class*="overflow-x-auto"],
+    div[class*="overflow-hidden"],
+    div[class*="h-screen"],
+    div[class*="min-h-screen"] {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      min-height: auto !important;
+      max-height: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      overflow: visible !important;
+      position: static !important;
+      float: none !important;
     }
+
+    /* Multi-Page Financial Tables Handling (Balance Sheet, Income Statement, Ledgers, Assets) */
+    table {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+      width: 100% !important;
+      min-width: 100% !important;
+      border-collapse: collapse !important;
+      margin-bottom: 0.75rem !important;
+      table-layout: auto !important;
+    }
+
+    .overflow-x-auto,
+    .overflow-y-auto {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+
+    thead {
+      display: table-header-group !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+
+    tfoot {
+      display: table-footer-group !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+
+    tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+
+    th,
+    td {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      padding: 4px 6px !important;
+      word-break: normal !important;
+    }
+
+    /* Print Page Break Rules */
+    .page-break-always,
+    .print-page-break,
+    .page-break,
+    [data-page-break="always"] {
+      page-break-after: always !important;
+      break-after: page !important;
+      break-before: auto !important;
+      display: block !important;
+      clear: both !important;
+      min-height: auto !important;
+    }
+
+    .page-break-before {
+      page-break-before: always !important;
+      break-before: page !important;
+    }
+
+    .avoid-page-break,
+    .break-inside-avoid,
+    .official-seal,
+    .official-footer {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    /* Official Report Letterhead A4 Full-Width and Multi-Page Persistence */
+    .official-header,
+    .injected-official-print-header,
+    [data-official-header="true"] {
+      display: block !important;
+      visibility: visible !important;
+      width: 100% !important;
+      min-width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      page-break-before: auto !important;
+      position: relative !important;
+    }
+
+    /* Injected print header is strictly hidden on screen, visible only when printing */
+    #injected-print-header-root,
+    .injected-official-print-header {
+      width: 100% !important;
+      display: block !important;
+      visibility: visible !important;
+    }
+
+    /* Official Printable Document Containers */
+    #printable-preview-canvas,
+    #printable-document-root,
+    #auditor-report-paper,
+    #financial-statements-container,
+    #credit-financials-container,
+    #credit-printable-dossier,
+    #official-certificate-document,
+    #egyptian-official-tax-form,
+    #office-treasury-voucher-print,
+    #official-invoice-document,
+    #feasibility-study-document,
+    #audit-working-papers-container,
+    #payroll-payslip-canvas,
+    #financial-notes-canvas,
+    #bank-reconciliation-print,
+    #fraud-sentinel-print,
+    #cash-flow-predictor-print,
+    #practice-engagement-print,
+    #tax-audit-defense-print,
+    .printable-canvas,
+    .printable-content {
+      position: static !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: white !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+
+    /* Ensure text contrast for high-resolution printing */
+    .text-slate-400,
+    .text-slate-500 {
+      color: #334155 !important;
+    }
+
+    .border-double-accounting {
+      border-bottom: 3px double #0f172a !important;
+    }
+    .border-single-accounting {
+      border-bottom: 1px solid #0f172a !important;
+    }
+  }
+
+  /* Compact Accounting Table & Zebra Striping */
+  .accounting-table {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  .accounting-table th {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .accounting-table td {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+  }
+  .accounting-table tbody tr:nth-child(even) {
+    background-color: rgba(248, 250, 252, 0.75);
+  }
+  .dark .accounting-table tbody tr:nth-child(even) {
+    background-color: rgba(30, 41, 59, 0.4);
+  }
+  .accounting-table tbody tr:hover {
+    background-color: rgba(241, 245, 249, 0.9);
+  }
+  .dark .accounting-table tbody tr:hover {
+    background-color: rgba(51, 65, 85, 0.5);
   }
 }

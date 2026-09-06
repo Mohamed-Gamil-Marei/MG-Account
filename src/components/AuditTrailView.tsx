@@ -32,12 +32,12 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
 
   const filteredLogs = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
-    return state.auditLogs.filter((log) => {
+    return (state.auditLogs || []).filter((log) => {
       return (
         !term ||
-        log.user.toLowerCase().includes(term) ||
-        log.details.toLowerCase().includes(term) ||
-        log.action.toLowerCase().includes(term)
+        (log.user || '').toLowerCase().includes(term) ||
+        (log.details || '').toLowerCase().includes(term) ||
+        (log.action || '').toLowerCase().includes(term)
       );
     });
   }, [state.auditLogs, searchTerm]);
@@ -205,35 +205,40 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
         </div>
       </div>
 
-      {/* Audit Logs Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {/* Audit Logs Table - Compact Mode & Zebra Striping */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs accounting-table">
             <thead>
-              <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                <th className="py-3 px-4">التوقيت والتاريخ</th>
-                <th className="py-3 px-4">المستخدم والمدقق</th>
-                <th className="py-3 px-4">نوع الإجراء</th>
-                <th className="py-3 px-4">تفاصيل وبيان الحركة الرقابية</th>
+              <tr className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-800">
+                <th className="py-2 px-3">التوقيت والتاريخ</th>
+                <th className="py-2 px-3">المستخدم والمدقق</th>
+                <th className="py-2 px-3">نوع الإجراء</th>
+                <th className="py-2 px-3">تفاصيل وبيان الحركة الرقابية</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredLogs.slice().map((log, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/70">
-                  <td className="py-2.5 px-4 font-mono text-slate-500 text-[11px]">{log.timestamp}</td>
-                  <td className="py-2.5 px-4 font-bold text-slate-900">{log.user}</td>
-                  <td className="py-2.5 px-4">
+                <tr
+                  key={idx}
+                  className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${
+                    idx % 2 === 1 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'
+                  }`}
+                >
+                  <td className="py-1.5 px-3 font-mono text-slate-500 dark:text-slate-400 text-[11px]">{log.timestamp}</td>
+                  <td className="py-1.5 px-3 font-bold text-slate-900 dark:text-slate-100">{log.user}</td>
+                  <td className="py-1.5 px-3">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         log.action === 'CREATE'
-                          ? 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                           : log.action === 'UPDATE'
-                          ? 'bg-blue-100 text-blue-800'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
                           : log.action === 'DELETE'
-                          ? 'bg-red-100 text-red-800'
+                          ? 'bg-red-100 text-red-800 dark:bg-rose-950/50 dark:text-rose-300'
                           : log.action === 'POST'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-slate-100 text-slate-800'
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
+                          : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
                       }`}
                     >
                       {log.action === 'CREATE'
@@ -247,7 +252,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
                         : 'إلغاء ترحيل'}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4 text-slate-800">{log.details}</td>
+                  <td className="py-1.5 px-3 text-slate-800 dark:text-slate-200">{log.details}</td>
                 </tr>
               ))}
             </tbody>

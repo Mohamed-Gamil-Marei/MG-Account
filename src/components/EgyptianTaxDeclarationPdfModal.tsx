@@ -76,7 +76,41 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
   const printableRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
-    window.print();
+    const styleId = 'tax-declaration-print-style';
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      document.head.appendChild(styleEl);
+    }
+    styleEl.innerHTML = `
+      @page {
+        size: A4 portrait;
+        margin: 8mm 8mm 10mm 8mm;
+      }
+      @media print {
+        body * {
+          visibility: hidden !important;
+        }
+        #egyptian-official-tax-form, #egyptian-official-tax-form * {
+          visibility: visible !important;
+        }
+        #egyptian-official-tax-form {
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 12px 16px !important;
+          background: white !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+      }
+    `;
+    setTimeout(() => {
+      window.print();
+    }, 120);
   };
 
   const handleDownloadHtmlPdf = () => {
@@ -233,7 +267,7 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
 
                 {/* Center: Title / Form Emblem */}
                 <div className="text-center space-y-1">
-                  <div className="inline-block px-4 py-1 bg-slate-900 text-white rounded-lg font-black text-sm tracking-wide">
+                  <div className="inline-block px-4 py-1 bg-slate-900 text-white rounded-lg font-black text-sm">
                     {declarationType === 'VAT_10'
                       ? 'نموذج رقم (10) ض.ق.م'
                       : declarationType === 'INCOME_27_CORP'
@@ -458,7 +492,7 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
                 <span>إقرار واعتماد المحاسب القانوني ومراقب الحسابات (Auditor Attestation)</span>
               </div>
 
-              <p className="text-justify text-slate-700 leading-relaxed text-[11px]">
+              <p className="text-right text-slate-700 leading-relaxed text-[11px]">
                 أقر أنا المحاسب القانوني المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم ({(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}), بصفتي مراقب حسابات الممول الموضح بياناته أعلاه، بأن البيانات والمبالغ والضرائب المدرجة بهذا الإقرار مطابقة تماماً لقيود الدفاتر المحاسبية المنتظمة والفواتير والإشعارات الإلكترونية الصادرة والواردة والموثقة بمنظومة الفاتورة والإيصال الإلكتروني بمصلحة الضرائب المصرية، وقد تم إعداد هذا الإقرار وفقاً لمعايير المحاسبة المصرية (EAS) والقوانين واللوائح التنفيذية السارية.
               </p>
 

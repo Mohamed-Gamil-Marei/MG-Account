@@ -161,10 +161,10 @@ export const EtaReconciliationView: React.FC<EtaReconciliationProps> = ({ state 
     return etaRecords.filter((r) => {
       // Search
       const matchesSearch =
-        r.counterpartyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.counterpartyTaxId.includes(searchTerm) ||
-        r.uuid.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.internalCode.toLowerCase().includes(searchTerm.toLowerCase());
+        (r.counterpartyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.counterpartyTaxId && r.counterpartyTaxId.includes(searchTerm)) ||
+        (r.uuid || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.internalCode || '').toLowerCase().includes(searchTerm.toLowerCase());
 
       if (!matchesSearch) return false;
 

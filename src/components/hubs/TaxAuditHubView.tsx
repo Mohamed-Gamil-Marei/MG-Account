@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Percent,
   ShieldAlert,
@@ -7,20 +7,31 @@ import {
   ShieldCheck,
   Sparkles,
   AlertTriangle,
+  FileCheck2,
+  Clock,
+  Activity,
 } from 'lucide-react';
 import { DatabaseState } from '../../db/localDatabase';
 import { TaxTrackerView } from '../TaxTrackerView';
 import { TaxExposureSimulatorView } from '../TaxExposureSimulatorView';
+import { TaxPenaltySimulatorView } from '../TaxPenaltySimulatorView';
 import { EtaReconciliationView } from '../EtaReconciliationView';
 import { PayrollInsuranceEngineView } from '../PayrollInsuranceEngineView';
 import { AuditWorkingPapersView } from '../AuditWorkingPapersView';
+import { JournalAuditScannerView } from '../audit/JournalAuditScannerView';
+import { FraudAuditSentinelView } from '../audit/FraudAuditSentinelView';
+import { ClientSelector } from '../common/ClientSelector';
+import { runAutomatedJournalAudit } from '../../services/journalAuditEngine';
 
 export type TaxAuditSubTab =
   | 'TAX_TRACKER'
+  | 'TAX_PENALTY_SIMULATOR'
+  | 'JOURNAL_AUDIT_SCANNER'
+  | 'FRAUD_AUDIT_SENTINEL'
+  | 'AUDIT_WORKING_PAPERS'
   | 'TAX_EXPOSURE_SIMULATOR'
   | 'ETA_RECONCILIATION'
-  | 'PAYROLL_INSURANCE'
-  | 'AUDIT_WORKING_PAPERS';
+  | 'PAYROLL_INSURANCE';
 
 interface TaxAuditHubViewProps {
   state: DatabaseState;
@@ -43,90 +54,110 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
     (t) => t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT'
   ).length;
 
+  const auditScanResults = useMemo(() => {
+    return runAutomatedJournalAudit(state.journalEntries, {
+      clientId: state.activeClientContext?.clientId,
+      fiscalYear: state.activeClientContext?.selectedFiscalYear,
+    });
+  }, [state.journalEntries, state.activeClientContext]);
+
+  const anomaliesCount = auditScanResults.findings.length;
+
   const tabs: {
     id: TaxAuditSubTab;
     label: string;
-    description: string;
     icon: any;
     badge?: string;
     badgeColor?: string;
   }[] = [
     {
       id: 'TAX_TRACKER',
-      label: 'إقرارات الضرائب والقيمة المضافة',
-      description: 'متابعة المواعيد القانونية، السدادات، ونموذج 10 ضرائب',
+      label: 'الإقرارات الضريبية',
       icon: Percent,
-      badge: pendingTaxesCount > 0 ? `${pendingTaxesCount} مستحق` : 'مكتمل',
-      badgeColor: pendingTaxesCount > 0 ? 'bg-red-100 text-red-800 border-red-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      badge: pendingTaxesCount > 0 ? `${pendingTaxesCount} مستحق` : undefined,
+      badgeColor: 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800',
     },
     {
-      id: 'TAX_EXPOSURE_SIMULATOR',
-      label: 'محاكي الفحص والمخاطر',
-      description: 'كشف نقاط الضعف ونسب الأرباح التقديرية والفروق الضريبية',
+      id: 'TAX_PENALTY_SIMULATOR',
+      label: 'غرامات التأخير',
+      icon: Clock,
+    },
+    {
+      id: 'FRAUD_AUDIT_SENTINEL',
+      label: 'التحليل المالي والرقابي',
+      icon: Activity,
+    },
+    {
+      id: 'JOURNAL_AUDIT_SCANNER',
+      label: 'فحص القيود والدفاتر',
       icon: ShieldAlert,
-      badge: 'فحص مسبق',
-      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
-    },
-    {
-      id: 'ETA_RECONCILIATION',
-      label: 'مطابقة الفواتير الإلكترونية',
-      description: 'المطابقة الثلاثية ومحاذاة إقرارات القيمة المضافة مع ETA',
-      icon: FileCode2,
-      badge: 'SDK v1.0',
-      badgeColor: 'bg-teal-100 text-teal-800 border-teal-200',
-    },
-    {
-      id: 'PAYROLL_INSURANCE',
-      label: 'كسب العمل والتأمينات',
-      description: 'حساب ضريبة الأجور والتأمينات الاجتماعية قانون 148 / 206',
-      icon: Calculator,
-      badge: 'ق 148',
-      badgeColor: 'bg-sky-100 text-sky-800 border-sky-200',
+      badge: anomaliesCount > 0 ? `${anomaliesCount}` : undefined,
+      badgeColor: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
     },
     {
       id: 'AUDIT_WORKING_PAPERS',
-      label: 'أوراق عمل المراجعة (ESA 320)',
-      description: 'مصفوفة تقييم الأهمية النسبية وملف توثيق المراجعة',
+      label: 'أوراق عمل المراجعة',
       icon: ShieldCheck,
-      badge: 'ملف المراجعة',
-      badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      badge: 'معيار 320',
+      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+    },
+    {
+      id: 'TAX_EXPOSURE_SIMULATOR',
+      label: 'المخاطر والفحص الضريبي',
+      icon: AlertTriangle,
+    },
+    {
+      id: 'ETA_RECONCILIATION',
+      label: 'مطابقة منظومة الفاتورة',
+      icon: FileCode2,
+    },
+    {
+      id: 'PAYROLL_INSURANCE',
+      label: 'الأجور والتأمينات',
+      icon: Calculator,
     },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
+      {/* Central Active Client Context Selector */}
+      <ClientSelector state={state} />
+
       {/* Hub Top Navigation Header */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-600 to-red-700 text-white flex items-center justify-center shadow-xs">
-              <Percent className="w-6 h-6" />
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-200/60 dark:border-blue-900/50">
+              <Percent className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900">مركز الضرائب والمراجعة والامتثال المهني</h2>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
-                  ETA & ESA Framework
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">الضرائب والمراجعة والامتثال</h2>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  ETA & ESA
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                إدارة الإقرارات الضريبية، محاكاة الفحص، مطابقة الفواتير الإلكترونية، كسب العمل، وأوراق عمل المراجعة.
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                الإقرارات الضريبية، الفحص المالي، أوراق العمل ومطابقة الفاتورة الإلكترونية
               </p>
             </div>
           </div>
 
-          {pendingTaxesCount > 0 && (
-            <div className="flex items-center gap-2 text-xs">
-              <div className="px-3.5 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-900 font-bold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" />
-                <span>يوجد {pendingTaxesCount} إقرار ضريبي بانتظار الاعتماد والسداد</span>
-              </div>
+          {anomaliesCount > 0 && (
+            <div className="flex items-center gap-2 text-xs shrink-0 self-end sm:self-auto">
+              <button
+                onClick={() => setActiveSubTab('JOURNAL_AUDIT_SCANNER')}
+                className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200/80 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 font-medium flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
+              >
+                <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                <span>{anomaliesCount} ملاحظات قيود</span>
+              </button>
             </div>
           )}
         </div>
 
         {/* Sub-Tabs Selector */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 pt-4">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
@@ -134,34 +165,25 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
                   isActive
-                    ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-500 text-amber-950 shadow-xs ring-1 ring-amber-500/30'
-                    : 'bg-slate-50/70 hover:bg-slate-100/80 border-slate-200/80 text-slate-700 hover:border-slate-300'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                        isActive ? 'bg-amber-600 text-white' : 'bg-slate-200/80 text-slate-600'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <span className="font-bold text-xs">{tab.label}</span>
-                  </div>
-                  {tab.badge && (
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        tab.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-500 line-clamp-1">{tab.description}</p>
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
+                <span className="whitespace-nowrap">{tab.label}</span>
+                {tab.badge && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -171,10 +193,13 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
       {/* Render Active Sub-View */}
       <div>
         {activeSubTab === 'TAX_TRACKER' && <TaxTrackerView state={state} />}
+        {activeSubTab === 'TAX_PENALTY_SIMULATOR' && <TaxPenaltySimulatorView state={state} />}
+        {activeSubTab === 'FRAUD_AUDIT_SENTINEL' && <FraudAuditSentinelView state={state} />}
+        {activeSubTab === 'JOURNAL_AUDIT_SCANNER' && <JournalAuditScannerView state={state} />}
+        {activeSubTab === 'AUDIT_WORKING_PAPERS' && <AuditWorkingPapersView state={state} />}
         {activeSubTab === 'TAX_EXPOSURE_SIMULATOR' && <TaxExposureSimulatorView state={state} />}
         {activeSubTab === 'ETA_RECONCILIATION' && <EtaReconciliationView state={state} />}
         {activeSubTab === 'PAYROLL_INSURANCE' && <PayrollInsuranceEngineView state={state} />}
-        {activeSubTab === 'AUDIT_WORKING_PAPERS' && <AuditWorkingPapersView state={state} />}
       </div>
     </div>
   );

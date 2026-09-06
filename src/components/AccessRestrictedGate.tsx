@@ -5,18 +5,27 @@ import { SecurityAuthModal } from './SecurityAuthModal';
 
 interface AccessRestrictedGateProps {
   currentUser: SystemUser;
-  targetTabName: string;
-  onOverrideSuccess: () => void;
-  onNavigateHome: () => void;
+  targetTabName?: string;
+  tabTitle?: string;
+  onOverrideSuccess?: () => void;
+  onUnlock?: () => void;
+  onNavigateHome?: () => void;
+  onGoBack?: () => void;
 }
 
 export const AccessRestrictedGate: React.FC<AccessRestrictedGateProps> = ({
   currentUser,
   targetTabName,
+  tabTitle,
   onOverrideSuccess,
+  onUnlock,
   onNavigateHome,
+  onGoBack,
 }) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const effectiveTabName = targetTabName || tabTitle || '';
+  const handleSuccess = onOverrideSuccess || onUnlock || (() => {});
+  const handleHome = onNavigateHome || onGoBack || (() => {});
 
   return (
     <div className="min-h-[500px] flex items-center justify-center p-6">
@@ -30,7 +39,7 @@ export const AccessRestrictedGate: React.FC<AccessRestrictedGateProps> = ({
             صلاحيات الوصول مقيدة (RBAC Protected)
           </span>
           <h3 className="text-lg font-bold text-slate-900">
-            غير مصرح لك بفتح قسم [{targetTabName}]
+            غير مصرح لك بفتح قسم [{effectiveTabName}]
           </h3>
           <p className="text-xs text-slate-500 leading-relaxed">
             المستخدم الحالي: <strong>{currentUser.name}</strong> بصلاحية (<strong>{currentUser.roleTitleArabic}</strong>).
@@ -59,7 +68,7 @@ export const AccessRestrictedGate: React.FC<AccessRestrictedGateProps> = ({
 
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
           <button
-            onClick={onNavigateHome}
+            onClick={handleHome}
             className="w-full sm:flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
           >
             العودة للوحة التحكم
@@ -77,10 +86,10 @@ export const AccessRestrictedGate: React.FC<AccessRestrictedGateProps> = ({
         {/* Override Modal */}
         <SecurityAuthModal
           isOpen={isAuthModalOpen}
-          actionTitle={`فتح وتخويل الوصول إلى قسم [${targetTabName}]`}
+          actionTitle={`فتح وتخويل الوصول إلى قسم [${effectiveTabName}]`}
           onSuccess={() => {
             setIsAuthModalOpen(false);
-            onOverrideSuccess();
+            handleSuccess();
           }}
           onClose={() => setIsAuthModalOpen(false)}
         />

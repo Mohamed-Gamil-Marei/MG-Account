@@ -51,7 +51,7 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
         onSuccess();
       }, 300);
     } else {
-      setErrorMessage('الرقم السري غير مطابق! (الرقم السري الافتراضي: Mg120)');
+      setErrorMessage('الرقم السري غير مطابق! يرجى إعادة المحاولة.');
     }
   };
 
@@ -88,7 +88,7 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
               <p className="font-semibold text-slate-900 mb-0.5">وضع الحماية وعرض البيانات</p>
               <p>{displayDescription}</p>
               <p className="mt-1 text-[11px] text-amber-900 font-bold">
-                أدخل الرقم السري المصرح به (<span className="font-mono text-emerald-800 font-bold">Mg120</span>) لتأكيد العملية.
+                أدخل الرقم السري المصرح به لتأكيد العملية.
               </p>
             </div>
           </div>
@@ -99,7 +99,6 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
                 <KeyRound className="w-3.5 h-3.5 text-slate-500" />
                 <span>الرقم السري للتأكيد:</span>
               </span>
-              <span className="text-[11px] font-mono text-slate-400">Mg120</span>
             </label>
             <div className="relative">
               <input
@@ -111,7 +110,7 @@ export const SecurityAuthModal: React.FC<SecurityAuthModalProps> = ({
                   setPassword(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                placeholder="أدخل الرقم السري (Mg120)..."
+                placeholder="أدخل الرقم السري المصرح به..."
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 pl-10 text-right"
                 dir="ltr"
               />

@@ -12,6 +12,7 @@ import {
   SystemUser,
   ClientDocumentFolder,
   FixedAsset,
+  FeeQuotationEstimate,
 } from '../types';
 
 export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
@@ -23,7 +24,11 @@ export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   phone: '01003335360',
   mobile: '01003335360',
   email: 'cpa.mohamed.marei@egyptcpa.com',
-  address: 'ميدان التحرير / شارع قصر العيني - القاهرة - جمهورية مصر العربية',
+  address: 'المكتب الرئيسي: ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية | الفرع: المباركية مول - مدينة العاشر من رمضان - الشرقية',
+  mainOfficeAddress: 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية',
+  showMainOfficeAddress: true,
+  branchOfficeAddress: 'المباركية مول - مدينة العاشر من رمضان - الشرقية',
+  showBranchOfficeAddress: true,
   notes: 'مكتب معتمد لدى مصلحة الضرائب المصرية، الهيئة العامة للرقابة المالية، والبنك المركزي المصري',
 };
 
@@ -1477,4 +1482,373 @@ export const SAMPLE_FIXED_ASSETS: FixedAsset[] = [
     updatedAt: '2026-01-10',
   },
 ];
+
+export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTemplate[] = [
+  {
+    id: 'tmpl-1',
+    code: 'INVOICE_CLAIM',
+    title: 'مطالبة أتعاب وفاتورة مهنية',
+    category: 'INVOICE',
+    subject: 'مطالبة بأتعاب الخدمات المحاسبية والضريبية',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+نرفق لسيادتكم بيان مطالبة بأتعاب الخدمات المحاسبية والمراجعة الدورية لشركتكم:
+
+🏢 *الشركة:* {CLIENT_NAME}
+📋 *البيان:* {DOC_TITLE}
+🔢 *رقم المطالبة:* {REF_CODE}
+📅 *الفترة المالية:* {PERIOD}
+💰 *المبلغ المطلوب:* *{AMOUNT} ج.م*
+🔹 *المبلغ بالحروف:* فقط {AMOUNT_WORDS} لا غير
+
+يرجى التكرم بالاطلاع واتخاذ اللازم وموافاتنا بصورة إشعار التحويل البنكي.`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-2',
+    code: 'ACCOUNT_STATEMENT',
+    title: 'كشف حساب وأرصدة العميل المتبقية',
+    category: 'GENERAL',
+    subject: 'كشف حساب ومطابقة أرصدة الأتعاب المهنية',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+نحيط سيادتكم علماً بالموقف المالي وكشف حساب الأتعاب حتى تاريخه:
+
+🏢 *الشركة:* {CLIENT_NAME}
+📅 *تاريخ المطابقة:* {DATE}
+💰 *إجمالي الأتعاب المستحقة:* {AMOUNT} ج.م
+💵 *الرصيد المتبقي للسداد:* *{BALANCE_DUE} ج.م*
+📋 *ملاحظات الفحص:* {DOC_TITLE}
+
+شاكرين لسيادتكم حسن تعاونكم الدائم معنا.`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-3',
+    code: 'TREASURY_RECEIPT',
+    title: 'إشعار وسند قبض خزينة معتمد',
+    category: 'TREASURY_RECEIPT',
+    subject: 'إشعار توريد واستلام أتعاب في الخزينة',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+نحيط سيادتكم علماً بأنه تم استلام وتوريد المبلغ المالي الموضح أدناه إلى خزينة المكتب وإصدار سند القبض المعتمد:
+
+🏢 *اسم الشركة:* {CLIENT_NAME}
+🧾 *رقم سند القبض:* {REF_CODE}
+💵 *المبلغ المحصل:* *{AMOUNT} ج.م*
+🔹 *المبلغ بالحروف:* فقط {AMOUNT_WORDS} لا غير
+📋 *البيان:* {DOC_TITLE}
+📅 *تاريخ السند:* {DATE}`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-4',
+    code: 'TAX_DEADLINE',
+    title: 'تذكير بالموعد النهائي للإقرار الضريبي',
+    category: 'TAX_DEADLINE_REMINDER',
+    subject: 'تذكير هام بموعد تقديم الإقرار الضريبي القانوني',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+تذكير من مكتب المحاسب القانوني بالموعد النهائي القانوني لتقديم الإقرار وسداد الضريبة لتجنب غرامات التأخير:
+
+🏢 *الشركة:* {CLIENT_NAME}
+📋 *نوع الإقرار:* {DOC_TITLE}
+⏳ *الموعد النهائي القانوني:* {DATE}
+📅 *الفترة الضريبية:* {PERIOD}
+
+يرجى سرعة موافاتنا بالفواتير ومستندات الشهر لاستكمال الربط واعتماد الإقرار.`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-5',
+    code: 'TAX_DECLARATION',
+    title: 'إشعار اعتماد وتقديم الإقرار الضريبي',
+    category: 'TAX_DECLARATION',
+    subject: 'إشعار نجاح تقديم الإقرار على بوابة مصلحة الضرائب',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+يسعدنا إفادتكم بأنه تم إعداد واعتماد وتقديم الإقرار الضريبي بنجاح عبر المنظومة الإلكترونية لمصلحة الضرائب المصرية:
+
+🏢 *الشركة:* {CLIENT_NAME}
+📋 *نوع الإقرار:* {DOC_TITLE}
+🔢 *رقم الإشعار المرجعي:* {REF_CODE}
+📅 *الفترة الضريبية:* {PERIOD}
+💰 *الضريبة المستحقة المسددة:* *{AMOUNT} ج.م*
+
+الإشعار الضريبي المعتمد مؤرشف بملفكم طرفنا.`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-6',
+    code: 'FINANCIAL_STATEMENT',
+    title: 'إشعار جهوزية مسودة القوائم المالية وتقرير المراجع',
+    category: 'GENERAL',
+    subject: 'انتهاء أعمال المراجعة وجهوزية مسودة القوائم المالية',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+يسعدنا إفادتكم بانتهاء أعمال المراجعة والتدقيق المحاسبي عن السنة المالية المنتهية:
+
+🏢 *الشركة:* {CLIENT_NAME}
+📊 *القوائم المالية عن:* {PERIOD}
+🔢 *الرقم المرجعي:* {REF_CODE}
+📋 *البيان:* مسودة القوائم المالية المستقلة وتقرير مراقب الحسابات
+
+يرجى التنسيق معنا لتحديد موعد توقيع واعتماد القوائم رسمياً.`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-7',
+    code: 'CERTIFICATE',
+    title: 'إشعار إصدار شهادة مهنية معتمدة بالـ QR',
+    category: 'CERTIFICATE',
+    subject: 'إصدار شهادة محاسبية موثقة بالباركود الذكي',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+تم بحمد الله إصدار واعتماد الشهادة المحاسبية بالرمز التشفيري QR Code للتحقق الرقمي:
+
+🏢 *الجهة / العميل:* {CLIENT_NAME}
+📜 *نوع الشهادة:* {DOC_TITLE}
+🔢 *كود التحقق والاعتماد:* {REF_CODE}
+📅 *تاريخ الإصدار:* {DATE}
+
+الشهادة جاهزة للاستلام والتسليم للجهة المعنية.`,
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tmpl-8',
+    code: 'DOC_READY',
+    title: 'إشعار جهوزية مستندات من الأرشيف الإلكتروني',
+    category: 'GENERAL',
+    subject: 'مستندات جاهزة من الأرشيف الإلكتروني للمكتب',
+    templateBody: `السادة / *{CLIENT_NAME}*
+عناية: {CONTACT_PERSON} المحترمين
+تحية طيبة وبعد،،
+
+نحيط سيادتكم علماً بجهوزية وتحديث المستندات التالية في الأرشيف الإلكتروني لشركتكم:
+
+🏢 *الشركة:* {CLIENT_NAME}
+📄 *المستند:* {DOC_TITLE}
+🔢 *الكود المرجعي:* {REF_CODE}
+📅 *تاريخ الأرشفة:* {DATE}
+
+المستند متاح للاطلاع والتحميل بصيغة PDF معتمدة.`,
+    isDefault: true,
+    isActive: true,
+  },
+];
+
+export const DEFAULT_WHATSAPP_BOT_SETTINGS: import('../types').WhatsAppBotSettings = {
+  isAutoReplyEnabled: true,
+  officeWorkingHours: 'الأحد - الخميس (9:00 ص إلى 6:00 م)',
+  welcomeGreeting: 'أهلاً بكم في الخدمة الذاتية الذكية لمكتب المحاسب القانوني أ/ محمد جميل مرعي 🤖',
+  botName: 'المساعد المحاسبي الذكي',
+  includeQrVerification: true,
+  apiDispatchMode: 'DIRECT_WEB_API',
+  customApiBaseUrl: 'https://api.whatsapp.com/send',
+  defaultCountryCode: '20',
+  autoFormatEgyptianNumbers: true,
+  autoAppendOfficeSignature: true,
+  metaCloudApiConfig: {
+    phoneNumberId: '10982347589234',
+    wabaId: '29834710928374',
+    accessToken: '',
+    webhookVerifyToken: 'egy_acc_office_secure_token',
+  },
+  customGatewayConfig: {
+    endpointUrl: 'https://api.ultramsg.com/instance001/messages/chat',
+    apiKey: '',
+    instanceId: 'instance001',
+  },
+  templates: DEFAULT_WHATSAPP_TEMPLATES,
+};
+
+export const SAMPLE_WHATSAPP_MESSAGES: import('../types').WhatsAppMessage[] = [
+  {
+    id: 'wa-msg-101',
+    clientId: 'cl-1',
+    clientName: 'شركة النيل للصناعات الهندسية والتجارة (ش.م.م)',
+    phone: '01001234567',
+    direction: 'OUTGOING',
+    sender: 'AUDITOR',
+    text: `🏢 *شركة النيل للصناعات الهندسية والتجارة (ش.م.م)*\nعناية: المهندس / أحمد محمود الشناوي\nتحية طيبة وبعد،،\n\n🧾 *إشعار إصدار فاتورة أتعاب مهنية معتمدة*\n\nنحيط سيادتكم علماً بأنه تم إصدار فاتورة ضريبية رسمية للخدمات المحاسبية والاستشارية المقدمة لشركتكم:\n\n🔹 *رقم الفاتورة:* INV-2026-001\n🔹 *تاريخ الإصدار:* 2026-01-15\n🔹 *إجمالي القيمة:* *45,600 ج.م*\n🔹 *ضريبة القيمة المضافة (14%):* 5,600 ج.م\n🔹 *حالة الفاتورة:* ✅ مسددة بالكامل\n\n━━━━━━━━━━━━━━━━━━━━\n📌 *مكتب المحاسب القانوني ومراقب الحسابات*\nالمحاسب القانوني: *أ/ محمد جميل مرعي*`,
+    timestamp: '2026-01-15 11:30',
+    status: 'READ',
+    category: 'INVOICE',
+  },
+  {
+    id: 'wa-msg-102',
+    clientId: 'cl-1',
+    clientName: 'شركة النيل للصناعات الهندسية والتجارة (ش.م.م)',
+    phone: '01001234567',
+    direction: 'INCOMING',
+    sender: 'CLIENT',
+    text: 'السلام عليكم يا فندم، هل تم تقديم إقرار القيمة المضافة لشهر يناير بنجاح؟',
+    timestamp: '2026-02-10 14:15',
+    status: 'READ',
+    category: 'GENERAL',
+  },
+  {
+    id: 'wa-msg-103',
+    clientId: 'cl-1',
+    clientName: 'شركة النيل للصناعات الهندسية والتجارة (ش.م.م)',
+    phone: '01001234567',
+    direction: 'OUTGOING',
+    sender: 'OFFICE_BOT',
+    text: `📋 *موقف الإقرارات الضريبية لمصلحة الضرائب المصرية*\nالمأمورية المختصة: *مأمورية ضرائب كبار الممولين / شركات الأموال*\n\n🔹 *آخر الإقرارات الضريبية المسجلة:*\n▫️ VAT_10 (شهر يناير 2026): *✅ تم التقديم لمصلحة الضرائب*\n\nرقم إشعار البوابة الرسمية: ETA-VAT-2026-0892\nتم سداد الضريبة المستحقة وإرفاق الإشعار المعتمد بأرشيف ملفكم.`,
+    timestamp: '2026-02-10 14:15',
+    status: 'READ',
+    category: 'BOT_AUTO_REPLY',
+  },
+  {
+    id: 'wa-msg-104',
+    clientId: 'cl-2',
+    clientName: 'مجموعة الأهرام للخدمات والتوريدات العمومية (ش.ذ.م.م)',
+    phone: '01119876543',
+    direction: 'OUTGOING',
+    sender: 'AUDITOR',
+    text: `🏢 *مجموعة الأهرام للخدمات والتوريدات العمومية (ش.ذ.م.م)*\nعناية: الأستاذ / محمود رفعت السعيد\nتحية طيبة وبعد،،\n\n💰 *إشعار سند قبض مالي رسمي (إيصال استلام أتعاب)*\n\nتم بحمد الله استلام وتسجيل دفعة أتعاب في خزينة المكتب وقيدها في حسابكم:\n\n🔹 *رقم سند القبض:* TR-2026-0012\n🔹 *تاريخ الاستلام:* 2026-01-20\n🔹 *المبلغ المحصل:* *25,000 ج.م*\n🔹 *طريقة السداد:* تحويل بنكي رسمي\n🔹 *البيان والتفاصيل:* دفعة من أتعاب فحص ضريبي ومراجعة دورية\n\n━━━━━━━━━━━━━━━━━━━━\n📌 *مكتب المحاسب القانوني ومراقب الحسابات*`,
+    timestamp: '2026-01-20 16:40',
+    status: 'READ',
+    category: 'TREASURY_RECEIPT',
+  },
+];
+
+export const SAMPLE_FEE_ESTIMATES: FeeQuotationEstimate[] = [
+  {
+    id: 'quo-001',
+    quotationNumber: 'QUO-2026-1045',
+    date: '2026-02-01',
+    validUntil: '2026-02-28',
+    clientId: 'cl-1',
+    clientName: 'شركة النيل للصناعات الهندسية والتجارة (ش.م.م)',
+    contactPerson: 'م. أحمد عبد الفتاح',
+    phone: '01001234567',
+    email: 'info@nile-engineering.eg',
+    procedureType: 'ANNUAL_AUDIT',
+    procedureTitle: 'مراجعة وتدقيق القوائم المالية السنوية وإصدار تقرير مراقب الحسابات المستقل',
+    legalType: 'JOINT_STOCK',
+    complexityLevel: 'HIGH',
+    accountingQuality: 'REGULAR_ERP',
+    annualTurnoverBracket: '50M - 100M EGP',
+    branchesCount: 3,
+    hourlyBreakdown: {
+      partnerHours: 15,
+      partnerHourlyRate: 2000,
+      managerHours: 35,
+      managerHourlyRate: 1000,
+      seniorAuditorHours: 60,
+      seniorAuditorHourlyRate: 500,
+    },
+    totalEstimatedHours: 110,
+    baseLaborCost: 95000,
+    complexityMultiplier: 1.6,
+    qualityMultiplier: 1.0,
+    calculatedProfessionalFee: 152000,
+    discountPercentage: 10,
+    netProfessionalFee: 136800,
+    estimatedGovFees: 5000,
+    taxVatFee: 19152,
+    totalQuotationAmount: 160952,
+    scopeItems: [
+      'فحص واختبار نظام الرقابة الداخلية وإجراءات مطابقة الأرصدة البنكية',
+      'حضور جرد الأصول الثابتة والمخزون السلعي بنهاية السنة المالية',
+      'فحص واختبار قيود اليومية ومطابقة إقرارات ضريبة القيمة المضافة والمرتبات مع الدفاتر',
+      'إعداد مسودة القوائم المالية المستقلة وفقاً لمعايير المحاسبة المصرية (EAS)',
+      'إصدار تقرير مراقب الحسابات المستقل واعتماده والتوقيع للجمعية العمومية',
+    ],
+    clientDeliverables: [
+      'نسخ أصلية معتمدة من القوائم المالية المدققة وموقعة بخاتم مراقب الحسابات',
+      'تقرير مراقب الحسابات المستقل الموجه للجمعية العامة العادية للمساهمين',
+      'خطاب الإدارة (Management Letter) متضمناً توصيات الرقابة الداخلية والنقاط الجوهرية',
+    ],
+    paymentTerms: [
+      { milestoneName: 'دفعة التعاقد وبدء خطة المراجعة التمهيدية', percentage: 35, amount: 56333 },
+      { milestoneName: 'دفعة استكمال الاختبارات التفصيلية ومطابقة الجرد', percentage: 35, amount: 56333 },
+      { milestoneName: 'دفعة تسليم القوائم المالية المعتمدة وتقرير المراجع', percentage: 30, amount: 48286 },
+    ],
+    executionDurationDays: 25,
+    notes: 'العرض يشمل حضور الجمعية العامة للمساهمين والرد على استفسارات الهيئة العامة للاستثمار ومصلحة الضرائب.',
+    verificationCode: 'VER-QUO-2026-1045',
+    status: 'SENT_WHATSAPP',
+    createdAt: '2026-02-01T10:00:00.000Z',
+  },
+  {
+    id: 'quo-002',
+    quotationNumber: 'QUO-2026-1046',
+    date: '2026-02-15',
+    validUntil: '2026-03-15',
+    clientId: 'cl-2',
+    clientName: 'مجموعة الأهرام للخدمات والتوريدات العمومية (ش.ذ.م.م)',
+    contactPerson: 'أ. محمود رفعت السعيد',
+    phone: '01119876543',
+    email: 'm.refaat@ahram-supply.com',
+    procedureType: 'TAX_INSPECTION_DEFENSE',
+    procedureTitle: 'إعداد ملف الدفاع الضريبي وحضور جلسات الفحص واللجنة الداخلية لضرائب الدخل والقيمة المضافة',
+    legalType: 'LLC',
+    complexityLevel: 'MEDIUM',
+    accountingQuality: 'MANUAL_BOOKS',
+    annualTurnoverBracket: '10M - 50M EGP',
+    branchesCount: 1,
+    hourlyBreakdown: {
+      partnerHours: 10,
+      partnerHourlyRate: 2000,
+      managerHours: 20,
+      managerHourlyRate: 1000,
+      seniorAuditorHours: 30,
+      seniorAuditorHourlyRate: 500,
+    },
+    totalEstimatedHours: 60,
+    baseLaborCost: 55000,
+    complexityMultiplier: 1.25,
+    qualityMultiplier: 1.3,
+    calculatedProfessionalFee: 89375,
+    discountPercentage: 5,
+    netProfessionalFee: 84906,
+    estimatedGovFees: 2000,
+    taxVatFee: 11887,
+    totalQuotationAmount: 98793,
+    scopeItems: [
+      'فحص ومراجعة الإقرارات الضريبية السابقة ونماذج (19 ضريبة دخل) و(15 قيمة مضافة)',
+      'إعداد المذكرات القانونية والضريبية للطعن وتقديم أوجه الدفاع المستندي',
+      'حضور جلسات المأمورية واللجنة الداخلية لإنهاء الخلاف الضريبي بأقل وعاء خاضع',
+      'استخراج النماذج والشهادات المعتمدة بالمخالصة وبراءة الذمة الضريبية',
+    ],
+    clientDeliverables: [
+      'مذكرة الدفاع الضريبية المعتمدة المؤيدة بالمستندات',
+      'محضر اتفاق اللجنة الداخلية ونموذج الربط الضريبي النهائي المعتمد',
+    ],
+    paymentTerms: [
+      { milestoneName: 'دفعة مقدمة عند إعداد المذكرة ودراسة الملف', percentage: 50, amount: 49396 },
+      { milestoneName: 'دفعة مؤخرة عند التوقيع على الاتفاق النهائي', percentage: 50, amount: 49397 },
+    ],
+    executionDurationDays: 45,
+    notes: 'يتم احتساب أتعاب نجاح متفق عليها بنسبة من الوفورات الضريبية المحققة في حال تخفيض الفروق بما يتجاوز 40%.',
+    verificationCode: 'VER-QUO-2026-1046',
+    status: 'DRAFT',
+    createdAt: '2026-02-15T11:30:00.000Z',
+  },
+];
+
+
 

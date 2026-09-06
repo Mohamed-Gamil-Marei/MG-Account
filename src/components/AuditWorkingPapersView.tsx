@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/egyptianTaxCalculations';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { JournalAuditScannerView } from './audit/JournalAuditScannerView';
+import { AuditSamplingTool } from './audit/AuditSamplingTool';
+import { AuditConfirmationsGenerator } from './audit/AuditConfirmationsGenerator';
+import { InternalControlRiskMatrix } from './audit/InternalControlRiskMatrix';
 import {
   FileCheck2,
   Scale,
@@ -23,6 +27,8 @@ import {
   CheckSquare,
   Square,
   Layers,
+  Sparkles,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface AuditWorkingPapersProps {
@@ -260,7 +266,7 @@ export const AuditWorkingPapersView: React.FC<AuditWorkingPapersProps> = ({ stat
         </div>
 
         {/* Tab switcher */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 flex-wrap">
           <button
             onClick={() => setActiveSection('MATERIALITY')}
             className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
@@ -279,10 +285,73 @@ export const AuditWorkingPapersView: React.FC<AuditWorkingPapersProps> = ({ stat
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            برامج وأوراق العمل الميدانية ({auditProcedures.length})
+            أوراق العمل الميدانية ({auditProcedures.length})
+          </button>
+          <button
+            onClick={() => setActiveSection('SAMPLING')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              activeSection === 'SAMPLING'
+                ? 'bg-white text-indigo-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            عينات المراجعة (ESA 530)
+          </button>
+          <button
+            onClick={() => setActiveSection('CONFIRMATIONS')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              activeSection === 'CONFIRMATIONS'
+                ? 'bg-white text-blue-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            المصادقات الخارجية (ESA 505)
+          </button>
+          <button
+            onClick={() => setActiveSection('INTERNAL_CONTROL')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              activeSection === 'INTERNAL_CONTROL'
+                ? 'bg-white text-amber-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            الرقابة الداخلية والمخاطر (ESA 315)
+          </button>
+          <button
+            onClick={() => setActiveSection('JOURNAL_SCAN')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeSection === 'JOURNAL_SCAN'
+                ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-xs'
+                : 'text-amber-900 hover:text-amber-950 bg-amber-50/60'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>فحص القيود (ESA 240)</span>
           </button>
         </div>
       </div>
+
+      {/* View: Audit Sampling Tool (ESA 530) */}
+      {activeSection === 'SAMPLING' && (
+        <AuditSamplingTool state={state} selectedYear={selectedYear} />
+      )}
+
+      {/* View: External Confirmations Generator (ESA 505) */}
+      {activeSection === 'CONFIRMATIONS' && (
+        <AuditConfirmationsGenerator state={state} selectedYear={selectedYear} />
+      )}
+
+      {/* View: Internal Control & Risk Matrix (ESA 315) */}
+      {activeSection === 'INTERNAL_CONTROL' && (
+        <InternalControlRiskMatrix state={state} selectedYear={selectedYear} />
+      )}
+
+      {/* View 0: Automated Journal Inspection Scanner */}
+      {activeSection === 'JOURNAL_SCAN' && (
+        <div className="space-y-6">
+          <JournalAuditScannerView state={state} />
+        </div>
+      )}
 
       {/* View 1: Materiality Matrix Section */}
       {activeSection === 'MATERIALITY' && (

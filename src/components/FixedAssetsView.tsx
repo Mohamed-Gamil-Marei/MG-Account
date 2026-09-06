@@ -30,6 +30,7 @@ import {
 import { db, DatabaseState } from '../db/localDatabase';
 import { FixedAsset, FixedAssetCategory, DepreciationMethod } from '../types';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
 
 interface FixedAssetsViewProps {
   state: DatabaseState;
@@ -150,8 +151,8 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
   const filteredAssets = useMemo(() => {
     return assets.filter((asset) => {
       const matchesSearch =
-        asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        asset.assetCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (asset.assetCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (asset.custodian && asset.custodian.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (asset.location && asset.location.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -599,32 +600,32 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
 
         {/* Tab 1: Fixed Assets Detailed Register */}
         {activeTab === 'REGISTER' && (
-          <div className="overflow-x-auto mt-4">
-            <table className="w-full text-right text-xs border-collapse">
+          <div className="overflow-x-auto mt-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <table className="w-full text-right text-xs border-collapse accounting-table">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold">
-                  <th className="p-3">كود الأصل</th>
-                  <th className="p-3">اسم الأصل والتوصيف</th>
-                  <th className="p-3">الفئة والتصنيف</th>
-                  <th className="p-3">تاريخ الشراء / التشغيل</th>
-                  <th className="p-3">تكلفة الاقتناء</th>
-                  <th className="p-3">مجمع الإهلاك</th>
-                  <th className="p-3">صافي القيمة الدفترية</th>
-                  <th className="p-3">طريقة ونسبة الإهلاك</th>
-                  <th className="p-3">الموقع / العهدة</th>
-                  <th className="p-3">الحالة</th>
-                  <th className="p-3 text-center">الإجراءات</th>
+                <tr className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 font-bold">
+                  <th className="py-1.5 px-2.5">كود الأصل</th>
+                  <th className="py-1.5 px-2.5">اسم الأصل والتوصيف</th>
+                  <th className="py-1.5 px-2.5">الفئة والتصنيف</th>
+                  <th className="py-1.5 px-2.5">تاريخ الشراء / التشغيل</th>
+                  <th className="py-1.5 px-2.5">تكلفة الاقتناء</th>
+                  <th className="py-1.5 px-2.5">مجمع الإهلاك</th>
+                  <th className="py-1.5 px-2.5">صافي القيمة الدفترية</th>
+                  <th className="py-1.5 px-2.5">طريقة ونسبة الإهلاك</th>
+                  <th className="py-1.5 px-2.5">الموقع / العهدة</th>
+                  <th className="py-1.5 px-2.5">الحالة</th>
+                  <th className="py-1.5 px-2.5 text-center w-16">الإجراءات</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-slate-400">
+                    <td colSpan={11} className="py-8 text-center text-slate-400">
                       لا توجد أصول ثابتة مطابقة لمعايير البحث الحالية
                     </td>
                   </tr>
                 ) : (
-                  filteredAssets.map((asset) => {
+                  filteredAssets.map((asset, idx) => {
                     const catInfo = CATEGORY_NAMES[asset.category] || {
                       label: asset.category,
                       color: 'bg-slate-100 text-slate-800 border-slate-200',
@@ -632,53 +633,58 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
                     const isFullyDepreciated = asset.currentBookValue <= (asset.scrapValue || 0) && asset.currentAccumulatedDepreciation > 0;
 
                     return (
-                      <tr key={asset.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-mono font-bold text-blue-700">
+                      <tr
+                        key={asset.id}
+                        className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${
+                          idx % 2 === 1 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'
+                        }`}
+                      >
+                        <td className="py-1.5 px-2.5 font-mono font-bold text-blue-700 dark:text-blue-400">
                           {asset.assetCode}
                         </td>
-                        <td className="p-3">
-                          <div className="font-bold text-slate-900">{asset.name}</div>
+                        <td className="py-1.5 px-2.5">
+                          <div className="font-bold text-slate-900 dark:text-slate-100">{asset.name}</div>
                           {asset.serialNumber && (
                             <div className="text-[10px] text-slate-400 font-mono">
                               S/N: {asset.serialNumber}
                             </div>
                           )}
                         </td>
-                        <td className="p-3">
+                        <td className="py-1.5 px-2.5">
                           <span
                             className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${catInfo.color}`}
                           >
                             {catInfo.label}
                           </span>
                         </td>
-                        <td className="p-3 font-mono text-slate-600">
+                        <td className="py-1.5 px-2.5 font-mono text-slate-600 dark:text-slate-400">
                           <div>{asset.purchaseDate}</div>
                           <div className="text-[10px] text-slate-400">تشغيل: {asset.operationDate}</div>
                         </td>
-                        <td className="p-3 font-mono font-bold text-slate-900">
+                        <td className="py-1.5 px-2.5 font-mono font-bold text-slate-900 dark:text-slate-100">
                           {asset.acquisitionCost.toLocaleString()} ج.م
                         </td>
-                        <td className="p-3 font-mono text-amber-700 font-semibold">
+                        <td className="py-1.5 px-2.5 font-mono text-amber-700 dark:text-amber-400 font-semibold">
                           {asset.currentAccumulatedDepreciation.toLocaleString()} ج.م
                         </td>
-                        <td className="p-3 font-mono font-black text-emerald-700">
+                        <td className="py-1.5 px-2.5 font-mono font-black text-emerald-700 dark:text-emerald-400">
                           {asset.currentBookValue.toLocaleString()} ج.م
                         </td>
-                        <td className="p-3">
-                          <div className="font-semibold text-slate-800">
+                        <td className="py-1.5 px-2.5">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">
                             {asset.accountingDepreciationRate}% سنوي
                           </div>
-                          <div className="text-[10px] text-slate-500">
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
                             {METHOD_NAMES[asset.depreciationMethod]}
                           </div>
                         </td>
-                        <td className="p-3 text-slate-600 text-[11px]">
+                        <td className="py-1.5 px-2.5 text-slate-600 dark:text-slate-300 text-[11px]">
                           <div>{asset.location || '—'}</div>
                           {asset.custodian && (
                             <div className="text-slate-400 text-[10px]">عهدة: {asset.custodian}</div>
                           )}
                         </td>
-                        <td className="p-3">
+                        <td className="py-1.5 px-2.5">
                           {asset.status === 'DISPOSED' ? (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
                               مستبعد / تم البيع
@@ -693,32 +699,34 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
                             </span>
                           )}
                         </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleOpenAddModal(asset)}
-                              className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
-                              title="تعديل بيانات الأصل"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            {asset.status !== 'DISPOSED' && (
-                              <button
-                                onClick={() => handleOpenDisposalModal(asset)}
-                                className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"
-                                title="استبعاد / بيع الأصل وتكهينه"
-                              >
-                                <TrendingDown className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteAsset(asset.id, asset.name)}
-                              className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors"
-                              title="حذف الأصل من السجل"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                        <td className="py-1.5 px-2.5 text-center">
+                          <QuickRowActionDropdown
+                            title="خيارات الأصل"
+                            actions={[
+                              {
+                                label: 'تعديل بيانات الأصل',
+                                icon: Edit,
+                                variant: 'primary',
+                                onClick: () => handleOpenAddModal(asset),
+                              },
+                              ...(asset.status !== 'DISPOSED'
+                                ? [
+                                    {
+                                      label: 'استبعاد وتكهين الأصل',
+                                      icon: TrendingDown,
+                                      variant: 'warning' as const,
+                                      onClick: () => handleOpenDisposalModal(asset),
+                                    },
+                                  ]
+                                : []),
+                              {
+                                label: 'حذف من السجل',
+                                icon: Trash2,
+                                variant: 'danger',
+                                onClick: () => handleDeleteAsset(asset.id, asset.name),
+                              },
+                            ]}
+                          />
                         </td>
                       </tr>
                     );
@@ -732,7 +740,7 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
         {/* Tab 2: Depreciation Schedule */}
         {activeTab === 'SCHEDULE' && (
           <div className="space-y-4 mt-4">
-            <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-blue-900 text-xs flex items-center justify-between">
+            <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-300 text-xs flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-blue-600" />
                 <span>
@@ -742,22 +750,22 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
               <span className="font-bold">السنة المالية: {fiscalYear}</span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs border-collapse">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <table className="w-full text-right text-xs border-collapse accounting-table">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                    <th className="p-3">كود الأصل</th>
-                    <th className="p-3">اسم الأصل</th>
-                    <th className="p-3">رصيد أول المدة (التكلفة)</th>
-                    <th className="p-3">مجمع إهلاك أول المدة</th>
-                    <th className="p-3">إهلاك السنة المالية ({fiscalYear})</th>
-                    <th className="p-3">مجمع إهلاك آخر المدة</th>
-                    <th className="p-3">صافي القيمة الدفترية آخر المدة</th>
-                    <th className="p-3">الحساب المدين / الدائن</th>
+                  <tr className="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 font-bold">
+                    <th className="py-1.5 px-2.5">كود الأصل</th>
+                    <th className="py-1.5 px-2.5">اسم الأصل</th>
+                    <th className="py-1.5 px-2.5">رصيد أول المدة (التكلفة)</th>
+                    <th className="py-1.5 px-2.5">مجمع إهلاك أول المدة</th>
+                    <th className="py-1.5 px-2.5">إهلاك السنة المالية ({fiscalYear})</th>
+                    <th className="py-1.5 px-2.5">مجمع إهلاك آخر المدة</th>
+                    <th className="py-1.5 px-2.5">صافي القيمة الدفترية آخر المدة</th>
+                    <th className="py-1.5 px-2.5">الحساب المدين / الدائن</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredAssets.map((asset) => {
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredAssets.map((asset, idx) => {
                     const depreciableAmount = Math.max(0, asset.acquisitionCost - (asset.scrapValue || 0));
                     const annualRate = (asset.accountingDepreciationRate || 10) / 100;
                     const annualDep =
@@ -769,23 +777,28 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
                     const closingBook = asset.currentBookValue;
 
                     return (
-                      <tr key={asset.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-mono font-bold text-slate-800">{asset.assetCode}</td>
-                        <td className="p-3 font-bold text-slate-900">{asset.name}</td>
-                        <td className="p-3 font-mono">{asset.acquisitionCost.toLocaleString()} ج.م</td>
-                        <td className="p-3 font-mono text-amber-700">
+                      <tr
+                        key={asset.id}
+                        className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${
+                          idx % 2 === 1 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'
+                        }`}
+                      >
+                        <td className="py-1.5 px-2.5 font-mono font-bold text-slate-800 dark:text-slate-200">{asset.assetCode}</td>
+                        <td className="py-1.5 px-2.5 font-bold text-slate-900 dark:text-slate-100">{asset.name}</td>
+                        <td className="py-1.5 px-2.5 font-mono">{asset.acquisitionCost.toLocaleString()} ج.م</td>
+                        <td className="py-1.5 px-2.5 font-mono text-amber-700 dark:text-amber-400">
                           {Math.max(0, closingAccum - annualDep).toLocaleString()} ج.م
                         </td>
-                        <td className="p-3 font-mono font-black text-rose-700 bg-rose-50/40">
+                        <td className="py-1.5 px-2.5 font-mono font-black text-rose-700 dark:text-rose-400 bg-rose-50/40 dark:bg-rose-950/20">
                           {annualDep.toLocaleString()} ج.م
                         </td>
-                        <td className="p-3 font-mono font-bold text-amber-800">
+                        <td className="py-1.5 px-2.5 font-mono font-bold text-amber-800 dark:text-amber-300">
                           {closingAccum.toLocaleString()} ج.م
                         </td>
-                        <td className="p-3 font-mono font-black text-emerald-800 bg-emerald-50/40">
+                        <td className="py-1.5 px-2.5 font-mono font-black text-emerald-800 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/20">
                           {closingBook.toLocaleString()} ج.م
                         </td>
-                        <td className="p-3 text-[10px] text-slate-500 font-mono">
+                        <td className="py-1.5 px-2.5 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                           من حـ/{asset.depreciationExpenseAccountId || '334'} إلى حـ/{asset.accumulatedDepreciationAccountId || '231'}
                         </td>
                       </tr>

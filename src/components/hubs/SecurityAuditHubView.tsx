@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Check,
   Sliders,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { AuditTrailView } from '../AuditTrailView';
@@ -28,11 +30,15 @@ export type SecurityAuditSubTab = 'AUDIT_TRAIL' | 'BACKUP_EXPORT' | 'USERS_DEVIC
 interface SecurityAuditHubViewProps {
   state: DatabaseState;
   initialSubTab?: SecurityAuditSubTab;
+  onOpenPurgeModal?: () => void;
+  onOpenDeviceModal?: () => void;
 }
 
 export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
   state,
   initialSubTab = 'AUDIT_TRAIL',
+  onOpenPurgeModal,
+  onOpenDeviceModal,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<SecurityAuditSubTab>(initialSubTab);
   const [auditUnlocked, setAuditUnlocked] = useState<boolean>(false);
@@ -40,6 +46,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
   const [isUserManagerOpen, setIsUserManagerOpen] = useState<boolean>(false);
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState<boolean>(false);
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState<boolean>(false);
+  const [showApprovedPassword, setShowApprovedPassword] = useState<boolean>(false);
 
   const currentUser = db.getCurrentUser();
 
@@ -87,39 +94,39 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Hub Top Navigation Header */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 text-white flex items-center justify-center shadow-xs">
-              <ShieldCheck className="w-6 h-6 text-emerald-400" />
+      {/* Hub Top Navigation Header - Modern Sleek Pill Navigation */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-800 to-slate-950 text-white flex items-center justify-center shadow-xs shrink-0">
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900">مركز الرقابة والأمان وإدارة البيانات</h2>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-emerald-400 border border-slate-700">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-black text-slate-900 dark:text-white">مركز الرقابة والأمان وإدارة البيانات</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-emerald-400 border border-slate-700">
                   Security & Audit
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                سجل الرقابة المهني الصارم، النسخ الاحتياطي التلقائي والمشفر، إدارة صلاحيات المستخدمين وربط الأجهزة.
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                سجل الرقابة والتدقيق الصارم، النسخ الاحتياطي المشفر، وصلاحيات المستخدمين
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs shrink-0">
             <button
               onClick={() => setIsBackupModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>أخذ نسخة احتياطية فورية</span>
+              <span>نسخة احتياطية فورية</span>
             </button>
           </div>
         </div>
 
-        {/* Sub-Tabs Selector */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-4">
+        {/* Sub-Tabs Selector - Clean Horizontal Segmented Tab Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
@@ -127,34 +134,25 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between cursor-pointer ${
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 border ${
                   isActive
-                    ? 'bg-slate-900 border-slate-800 text-white shadow-xs ring-1 ring-slate-700'
-                    : 'bg-slate-50/70 hover:bg-slate-100/80 border-slate-200/80 text-slate-700 hover:border-slate-300'
+                    ? 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700 shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                        isActive ? 'bg-slate-800 text-emerald-400' : 'bg-slate-200/80 text-slate-600'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <span className={`font-bold text-xs ${isActive ? 'text-white' : 'text-slate-900'}`}>{tab.label}</span>
-                  </div>
-                  {tab.badge !== undefined && (
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        tab.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </div>
-                <p className={`text-[10px] line-clamp-1 ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>{tab.description}</p>
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`} />
+                <span className="whitespace-nowrap">{tab.label}</span>
+                {tab.badge !== undefined && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -219,7 +217,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     AES-256 Protocol
                   </span>
-                  <p className="text-[11px] text-slate-400 mt-1">محمية بالرمز السيادي Mg120</p>
+                  <p className="text-[11px] text-slate-400 mt-1">محمية بالرمز السيادي السري</p>
                 </div>
               </div>
             </div>
@@ -233,7 +231,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
                 <div>
                   <h4 className="text-sm font-bold text-red-900">إعادة ضبط وتفريغ قاعدة البيانات</h4>
                   <p className="text-xs text-red-700 mt-0.5">
-                    تفريغ كافة البيانات والبدء من الصفر (يتطلب كلمة المرور الرئيسية Mg120).
+                    تفريغ كافة البيانات والبدء من الصفر (يتطلب كلمة المرور الرئيسية المعتمدة).
                   </p>
                 </div>
               </div>
@@ -318,10 +316,20 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <span className="text-slate-500 block mb-1 font-semibold">كلمة المرور المعتمدة:</span>
-                  <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block">
-                    {state.preferences?.customEditPassword || 'Mg120'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block mt-1">(تقبل حروف كبيرة أو صغيرة مثل mg120 أو Mg120)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block tracking-wider">
+                      {showApprovedPassword ? (state.preferences?.customEditPassword || 'Mg120') : '••••••••'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowApprovedPassword(!showApprovedPassword)}
+                      className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      title={showApprovedPassword ? 'إخفاء' : 'إظهار'}
+                    >
+                      {showApprovedPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-slate-500" />}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">مشفرة ومحمية ضمن إعدادات النظام</span>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">

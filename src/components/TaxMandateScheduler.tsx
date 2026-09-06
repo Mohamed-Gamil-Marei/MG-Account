@@ -119,11 +119,11 @@ export const TaxMandateScheduler: React.FC<TaxMandateSchedulerProps> = ({ state 
     const matchesType = filterTaxType === 'ALL' || m.taxType === filterTaxType;
     const matchesClient = filterClientId === 'ALL' || m.clientId === filterClientId;
     const matchesSearch =
-      m.mandateTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.mandateCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.mandateTitle || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.clientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.mandateCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (m.assignedTo && m.assignedTo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      m.periodName.toLowerCase().includes(searchTerm.toLowerCase());
+      (m.periodName || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesStatus && matchesType && matchesClient && matchesSearch;
   });

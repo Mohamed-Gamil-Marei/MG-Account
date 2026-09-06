@@ -1,0 +1,34 @@
+{
+  "entities": {
+    "AccountingWorkspace": {
+      "title": "AccountingWorkspace",
+      "description": "The complete cloud synchronized accounting workspace for the office",
+      "type": "object",
+      "properties": {
+        "version": { "type": "number", "description": "Schema version" },
+        "lastSyncedAt": { "type": "string", "description": "ISO timestamp of sync" },
+        "updatedBy": { "type": "string", "description": "Auditor or user name who performed the sync" },
+        "accounts": { "type": "array", "description": "Chart of accounts" },
+        "journalEntries": { "type": "array", "description": "Double entry journal entries" },
+        "clients": { "type": "array", "description": "Companies and client folders" },
+        "treasuryTransactions": { "type": "array", "description": "Office cash box & bank transactions" },
+        "taxDeclarations": { "type": "array", "description": "Tax declarations (VAT 10, Form 41, etc.)" },
+        "invoices": { "type": "array", "description": "E-invoices and receipts" },
+        "certificates": { "type": "array", "description": "Auditor certified certificates" },
+        "feasibilityStudies": { "type": "array", "description": "Feasibility studies" },
+        "creditSimulations": { "type": "array", "description": "Banking credit simulations" },
+        "fixedAssets": { "type": "array", "description": "Fixed assets and depreciation" },
+        "officeProfile": { "type": "object", "description": "Office profile and branding" },
+        "users": { "type": "array", "description": "System users and access keys" },
+        "auditLogs": { "type": "array", "description": "Audit trail logs" }
+      },
+      "required": ["version", "lastSyncedAt"]
+    }
+  },
+  "firestore": {
+    "/workspaces/{workspaceId}": {
+      "schema": "AccountingWorkspace",
+      "description": "Cloud synchronized accounting workspace"
+    }
+  }
+}

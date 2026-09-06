@@ -37,9 +37,17 @@ interface NoteItem {
 }
 
 export const FinancialNotesBuilderView: React.FC<FinancialNotesBuilderProps> = ({ state }) => {
-  const [selectedClient, setSelectedClient] = useState<string>(state.clients[0]?.id || '');
+  const activeClientId = state.activeClientContext?.clientId;
+  const [selectedClient, setSelectedClient] = useState<string>(activeClientId || state.clients[0]?.id || '');
   const [fiscalYear, setFiscalYear] = useState<number>(2025);
   const [activeNoteId, setActiveNoteId] = useState<string>('note-1');
+
+  // Sync if activeClientContext changes
+  React.useEffect(() => {
+    if (activeClientId) {
+      setSelectedClient(activeClientId);
+    }
+  }, [activeClientId]);
 
   const client = state.clients.find((c) => c.id === selectedClient) || state.clients[0];
 
@@ -338,9 +346,42 @@ export const FinancialNotesBuilderView: React.FC<FinancialNotesBuilderProps> = (
 
           {/* Table Data if exists */}
           {activeNote.tableData && (
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">الجدول المالي التحليلي المرفق:</label>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800">الجدول المالي التحليلي المرفق:</label>
+                  <span className="text-[11px] text-slate-500">
+                    يمكنك تعديل أي رقم أو نص مباشرة بالجدول (يدعم الأرقام السالبة مثل -50000 أو (50,000) والكسور العشرية).
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newRow = activeNote.tableData!.headers.map((_, i) =>
+                      i === 0 ? 'بند تحليلي جديد' : '0.00'
+                    );
+                    setNotes((prev) =>
+                      prev.map((n) =>
+                        n.id === activeNote.id && n.tableData
+                          ? {
+                              ...n,
+                              tableData: {
+                                ...n.tableData,
+                                rows: [...n.tableData.rows, newRow],
+                              },
+                            }
+                          : n
+                      )
+                    );
+                  }}
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>+ إضافة صف جديد للجدول</span>
+                </button>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
                 <table className="w-full text-right text-xs">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
@@ -349,23 +390,75 @@ export const FinancialNotesBuilderView: React.FC<FinancialNotesBuilderProps> = (
                           {h}
                         </th>
                       ))}
+                      <th className="p-2.5 w-10 text-center">إجراء</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {activeNote.tableData.rows.map((row, rIdx) => (
-                      <tr key={rIdx} className="hover:bg-slate-50">
+                      <tr key={rIdx} className="hover:bg-slate-50/80 transition-colors">
                         {row.map((cell, cIdx) => (
-                          <td
-                            key={cIdx}
-                            className={`p-2.5 ${
-                              cIdx === 0
-                                ? 'font-bold text-slate-900'
-                                : 'font-mono text-left text-slate-700'
-                            }`}
-                          >
-                            {cell}
+                          <td key={cIdx} className="p-1.5">
+                            <input
+                              type="text"
+                              value={cell}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setNotes((prev) =>
+                                  prev.map((n) => {
+                                    if (n.id !== activeNote.id || !n.tableData) return n;
+                                    const updatedRows = n.tableData.rows.map((r, ri) => {
+                                      if (ri !== rIdx) return r;
+                                      const newR = [...r];
+                                      newR[cIdx] = val;
+                                      return newR;
+                                    });
+                                    return {
+                                      ...n,
+                                      tableData: {
+                                        ...n.tableData,
+                                        rows: updatedRows,
+                                      },
+                                    };
+                                  })
+                                );
+                              }}
+                              className={`w-full px-2 py-1.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-500/20 focus:outline-none ${
+                                cIdx === 0
+                                  ? 'font-bold text-slate-900 bg-white border-slate-200'
+                                  : 'font-mono text-left bg-slate-50 border-slate-200 focus:bg-white text-slate-800'
+                              } ${
+                                typeof cell === 'string' &&
+                                (cell.startsWith('-') || cell.startsWith('('))
+                                  ? 'text-red-700 font-semibold'
+                                  : ''
+                              }`}
+                              placeholder={cIdx === 0 ? 'اسم البند' : '0.00'}
+                            />
                           </td>
                         ))}
+                        <td className="p-1.5 text-center">
+                          <button
+                            type="button"
+                            title="حذف هذا الصف"
+                            onClick={() => {
+                              setNotes((prev) =>
+                                prev.map((n) => {
+                                  if (n.id !== activeNote.id || !n.tableData) return n;
+                                  return {
+                                    ...n,
+                                    tableData: {
+                                      ...n.tableData,
+                                      rows: n.tableData.rows.filter((_, ri) => ri !== rIdx),
+                                    },
+                                  };
+                                })
+                              );
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
