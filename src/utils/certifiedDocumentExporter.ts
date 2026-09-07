@@ -258,13 +258,25 @@ function findTargetElement(elementIdOrSelector?: string): HTMLElement | null {
     '#credit-financials-container',
     '#credit-batch-print-wrapper',
     '#credit-printable-dossier',
+    '#financial-simulator-report',
     '#auditor-report-paper',
     '#financial-statements-container',
     '#feasibility-study-paper',
+    '#feasibility-study-document',
     '#tax-declaration-paper',
+    '#egyptian-official-tax-form',
     '#invoice-print-container',
+    '#official-invoice-document',
+    '#trial-balance-report',
+    '#audit-working-papers-container',
+    '#payroll-payslip-canvas',
+    '#financial-notes-canvas',
+    '#bank-reconciliation-print',
+    '#cash-flow-predictor-print',
+    '#fraud-sentinel-print',
     '[data-printable="true"]',
     '.official-paper',
+    '.printable-canvas',
     '.printable-content',
     '.printable-certificate',
     'main',
@@ -311,12 +323,76 @@ export async function exportElementToPdf(
     // Standard A4 dimensions in mm
     const pdfWidth = orientation === 'portrait' ? 210 : 297;
     const pdfHeight = orientation === 'portrait' ? 297 : 210;
+
+    const pdf = new jsPDF({
+      orientation,
+      unit: 'mm',
+      format,
+      compress: true,
+    });
+
+    // Check if element contains discrete page sheets (like multi-page A4 canvas dossier)
+    let discreteSheets: HTMLElement[] = [];
+    if (
+      element.matches &&
+      (element.matches('.a4-sheet-canvas') ||
+        element.matches('.print-page-break') ||
+        element.matches('[data-page-break="always"]'))
+    ) {
+      discreteSheets = [element];
+    } else {
+      const found = element.querySelectorAll<HTMLElement>(
+        '.a4-sheet-canvas, .print-page-break, [data-page-break="always"]'
+      );
+      if (found.length > 0) {
+        discreteSheets = Array.from(found);
+      }
+    }
+
+    // Filter to visible sheets to avoid exporting blank/hidden filtered pages
+    const visibleSheets = discreteSheets.filter(
+      (s) => s.offsetParent !== null || s.offsetHeight > 0 || (s.style && s.style.display !== 'none')
+    );
+    const sheetsToCapture = visibleSheets.length > 0 ? visibleSheets : discreteSheets;
+
+    if (sheetsToCapture.length > 0) {
+      // Multi-sheet discrete rendering: capture each page individually for exact 1:1 A4 alignment
+      for (let i = 0; i < sheetsToCapture.length; i++) {
+        const sheet = sheetsToCapture[i];
+        if (i > 0) {
+          pdf.addPage();
+        }
+
+        const sheetCanvas = await html2canvas(sheet, {
+          scale: 2.2, // High resolution for crisp Arabic typography and lines
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 1200, // Force desktop width so A4 layout doesn't collapse into mobile breakpoint
+          onclone: (clonedDoc) => {
+            sanitizeClonedDocForHtml2Canvas(clonedDoc);
+          },
+        });
+
+        const imgData = sheetCanvas.toDataURL('image/png', 1.0);
+        // Add full-bleed exact page image (the sheet already contains internal 14-16mm padding)
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+      }
+
+      pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+      return true;
+    }
+
+    // Continuous single-element fallback with careful proportional margins
     const marginMm = 8;
     const printableWidth = pdfWidth - marginMm * 2;
     const printableHeight = pdfHeight - marginMm * 2;
 
     const canvas = await html2canvas(element, {
-      scale: 2.2, // High resolution for crisp Arabic font and table lines
+      scale: 2.2,
       useCORS: true,
       allowTaint: true,
       logging: false,
@@ -325,15 +401,8 @@ export async function exportElementToPdf(
       scrollY: 0,
       windowWidth: Math.max(element.scrollWidth, 1200),
       onclone: (clonedDoc) => {
-        // Deeply sanitize all oklch / lab color values and elements
         sanitizeClonedDocForHtml2Canvas(clonedDoc);
       },
-    });
-
-    const pdf = new jsPDF({
-      orientation,
-      unit: 'mm',
-      format,
     });
 
     const pageCanvasHeight = Math.floor(canvas.width * (printableHeight / printableWidth));
@@ -341,11 +410,14 @@ export async function exportElementToPdf(
     let pageIndex = 0;
 
     while (sourceY < canvas.height) {
+      const currentSliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY);
+      if (currentSliceHeight <= 4) {
+        break;
+      }
+
       if (pageIndex > 0) {
         pdf.addPage();
       }
-
-      const currentSliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY);
       const sliceCanvas = document.createElement('canvas');
       sliceCanvas.width = canvas.width;
       sliceCanvas.height = currentSliceHeight;
@@ -368,7 +440,7 @@ export async function exportElementToPdf(
 
         const sliceImgData = sliceCanvas.toDataURL('image/png', 1.0);
         const sliceHeightMm = (currentSliceHeight * printableWidth) / canvas.width;
-        pdf.addImage(sliceImgData, 'PNG', marginMm, marginMm, printableWidth, sliceHeightMm);
+        pdf.addImage(sliceImgData, 'PNG', marginMm, marginMm, printableWidth, sliceHeightMm, undefined, 'FAST');
       }
 
       sourceY += pageCanvasHeight;

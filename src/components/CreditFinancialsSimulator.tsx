@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp,
+  ShieldCheck,
   FileSpreadsheet,
   Printer,
   Scale,
@@ -28,6 +29,13 @@ import {
   Image,
   Check,
   MoreVertical,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Minimize2,
+  ChevronLeft,
+  ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
@@ -159,6 +167,87 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     customPagesString: '',
     showPageNumbers: true,
   });
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [activePreviewPage, setActivePreviewPage] = useState<number>(1);
+  const [isModalFullscreen, setIsModalFullscreen] = useState<boolean>(false);
+  const [isPageRangeExpanded, setIsPageRangeExpanded] = useState<boolean>(false);
+  const [isHeaderControlsExpanded, setIsHeaderControlsExpanded] = useState<boolean>(false);
+  const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState<boolean>(false);
+
+  const previewScrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Real-time Scroll-Spy synchronization between preview scroll position and toolbar active page
+  useEffect(() => {
+    if (!isPrintModalOpen) return;
+
+    const container = previewScrollContainerRef.current;
+    if (!container) return;
+
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const sheets = container.querySelectorAll<HTMLElement>('[id^="page-sheet-"]');
+          if (!sheets.length) {
+            ticking = false;
+            return;
+          }
+
+          const containerRect = container.getBoundingClientRect();
+          const targetY = containerRect.top + 80;
+
+          let bestPage = 1;
+          let minDistance = Infinity;
+
+          sheets.forEach((sheet) => {
+            const pageNumStr = sheet.id.replace('page-sheet-', '');
+            const pageNum = parseInt(pageNumStr, 10);
+            if (isNaN(pageNum)) return;
+
+            const rect = sheet.getBoundingClientRect();
+            const distance = Math.abs(rect.top - targetY);
+
+            if (rect.top <= targetY + 60 && rect.bottom >= targetY) {
+              bestPage = pageNum;
+              minDistance = 0;
+            } else if (distance < minDistance) {
+              minDistance = distance;
+              bestPage = pageNum;
+            }
+          });
+
+          if (bestPage && !isNaN(bestPage)) {
+            setActivePreviewPage((prev) => (prev !== bestPage ? bestPage : prev));
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    const timer = setTimeout(handleScroll, 120);
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      clearTimeout(timer);
+    };
+  }, [isPrintModalOpen, printScope]);
+
+  const scrollToPage = (pageNum: number) => {
+    setActivePreviewPage(pageNum);
+    const container = previewScrollContainerRef.current;
+    const el = document.getElementById(`page-sheet-${pageNum}`);
+    if (container && el) {
+      const containerRect = container.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const offset = elRect.top - containerRect.top + container.scrollTop - 16;
+      container.scrollTo({ top: offset, behavior: 'smooth' });
+    } else if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   // Dynamic Print Stylesheet Isolation for Clean A4 Output
   const handlePrintDossier = () => {
@@ -224,20 +313,24 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           background: #ffffff !important;
         }
 
-        .print-page, .page-break {
+        .print-page, .page-break, .a4-sheet-canvas, [id^="page-sheet-"] {
           page-break-after: always !important;
           break-after: page !important;
           page-break-inside: avoid !important;
           break-inside: avoid !important;
           display: block !important;
           width: 100% !important;
+          max-width: none !important;
+          min-height: 0 !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
+          box-shadow: none !important;
+          border: none !important;
           margin: 0 0 10mm 0 !important;
           padding: 0 !important;
         }
 
-        .print-page:last-child, .page-break:last-child {
+        .print-page:last-child, .page-break:last-child, .a4-sheet-canvas:last-child, [id^="page-sheet-"]:last-child {
           page-break-after: auto !important;
           break-after: auto !important;
           margin-bottom: 0 !important;
@@ -1131,430 +1224,599 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       </div>
 
       {/* ADVANCED PRINT & BATCH PRINT MODAL (وحدة الطباعة والتصدير المجمعة) */}
-      {isPrintModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white print:static print:inset-auto print:z-auto">
-          <div className="bg-white w-full max-w-5xl h-[92vh] print:h-auto print:max-w-none print:w-full rounded-3xl print:rounded-none border border-slate-200 print:border-none shadow-2xl print:shadow-none flex flex-col p-5 sm:p-6 print:p-0 space-y-4">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 no-print">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-blue-100 text-blue-800 rounded-xl">
-                  <Printer className="w-5 h-5" />
+      {isPrintModalOpen && (() => {
+        // Calculate estimated total pages and titles based on current print scope
+        let totalPages = 1;
+        let pageTitles: { pageNumber: number; title: string }[] = [];
+        if (printScope === 'COMPLETE_DOSSIER') {
+          totalPages = 8;
+          pageTitles = [
+            { pageNumber: 1, title: 'الغلاف الرسمي الشامل' },
+            { pageNumber: 2, title: `القوائم المالية لسنة ${selectedYear}` },
+            { pageNumber: 3, title: 'تقرير مراقب الحسابات المستقل' },
+            { pageNumber: 4, title: `مشروع وتوزيع الأرباح لسنة ${selectedYear}` },
+            { pageNumber: 5, title: `جدول حركة وإهلاك الأصول الثابتة` },
+            { pageNumber: 6, title: `كشف المصروفات العمومية والإدارية` },
+            { pageNumber: 7, title: `الإيضاحات المتممة للقوائم المالية` },
+            { pageNumber: 8, title: `شهادة الموقف الضريبي والتأميني` },
+          ];
+        } else if (printScope === 'ALL_YEARS_BATCH') {
+          totalPages = yearsList.length;
+          pageTitles = yearsList.map((y, idx) => ({
+            pageNumber: idx + 1,
+            title: `القوائم المالية لسنة ${y} م`,
+          }));
+        } else if (printScope === 'CUSTOM_RANGE_BATCH') {
+          totalPages = Math.max(1, batchSelectedYears.length);
+          pageTitles = batchSelectedYears.map((y, idx) => ({
+            pageNumber: idx + 1,
+            title: `القوائم المالية لسنة ${y} م`,
+          }));
+        } else {
+          totalPages = 1;
+          const singleTitleMap: Record<string, string> = {
+            SELECTED_YEAR: `القوائم المالية لسنة ${selectedYear}`,
+            PROFIT_DIST_ONLY: 'مشروع توزيع الأرباح المعتمد',
+            TAX_CERT_ONLY: 'شهادة الموقف الضريبي والتأميني',
+            AUDITOR_ONLY: 'تقرير مراقب الحسابات المستقل',
+            FIXED_ASSETS_ONLY: 'جدول حركة وإهلاك الأصول الثابتة',
+            GA_EXPENSES_ONLY: 'كشف المصروفات العمومية والإدارية',
+            NOTES_ONLY: 'الإيضاحات المتممة للقوائم المالية',
+          };
+          pageTitles = [{ pageNumber: 1, title: singleTitleMap[printScope] || 'الصفحة المستهدفة للطباعة' }];
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:inset-auto print:z-auto">
+            <div
+              className={`bg-white dark:bg-slate-900 w-full ${
+                isModalFullscreen ? 'max-w-none h-full rounded-none p-3 sm:p-4' : 'max-w-7xl h-[95vh] rounded-3xl p-4 sm:p-5'
+              } print:h-auto print:max-w-none print:w-full print:rounded-none border border-slate-200 dark:border-slate-800 print:border-none shadow-2xl print:shadow-none flex flex-col space-y-3 transition-all`}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 no-print">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 rounded-xl shadow-2xs">
+                    <Printer className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100">
+                        مركز الطباعة المجمعة والتصدير المعتمد (Batch Printing Hub)
+                      </h3>
+                      <span className="hidden sm:inline-block px-2 py-0.5 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono text-[11px] font-bold rounded-md border border-blue-200 dark:border-blue-800">
+                        A4 Certified Engine
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xl">
+                      معاينة حية دقيقة بنسبة 1:1 مطابقة للطباعة الورقية على مقاس A4، مع إمكانية التصدير بضغطة زر.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    مركز الطباعة المجمعة والتصدير المعتمد (Batch Printing Manager)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    حدد نطاق الطباعة ومحتوى المستندات لتوليد ملف طباعة موحد أو تصدير PDF لكافة السنوات المحددة.
-                  </p>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalFullscreen(!isModalFullscreen)}
+                    className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                    title={isModalFullscreen ? 'استعادة الحجم الطبيعي' : 'ملء الشاشة'}
+                  >
+                    {isModalFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPrintModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsPrintModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+              {/* COMPACT UNIFIED CONTROL RIBBON (شريط الأدوات الموحد فائق الانسيابية) */}
+              <div className="no-print bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-2.5 shadow-xs space-y-2.5">
+                {/* Row 1: Document Scope Selection & Customization Drawers */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  {/* Right: Scope Selection Pills & Single Documents Dropdown */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-black text-slate-800 dark:text-slate-200 text-xs pl-1">
+                      نطاق الوثائق:
+                    </span>
 
-            {/* Scope Selection Toolbar */}
-            <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs no-print">
-              <span className="font-bold text-slate-700">نطاق المستندات:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('ALL_YEARS_BATCH');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: yearsList.length,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'ALL_YEARS_BATCH'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                دفعة القوائم المالية لكافة السنوات ({yearsList.join(' - ')})
-              </button>
+                    {/* Complete Dossier (Primary) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrintScope('COMPLETE_DOSSIER');
+                        setPageRangeConfig((prev) => ({
+                          ...prev,
+                          mode: 'ALL',
+                          fromPage: 1,
+                          toPage: 8,
+                        }));
+                        setIsScopeDropdownOpen(false);
+                        scrollToPage(1);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                        printScope === 'COMPLETE_DOSSIER'
+                          ? 'bg-indigo-700 text-white shadow-sm ring-2 ring-indigo-300 dark:ring-indigo-800'
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <Award className="w-3.5 h-3.5" />
+                      <span>الملف الائتماني الشامل (8 ص)</span>
+                    </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('COMPLETE_DOSSIER');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 8,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'COMPLETE_DOSSIER'
-                    ? 'bg-indigo-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                الملف الائتماني الشامل (تقرير + قوائم + إهلاك + إيضاحات)
-              </button>
+                    {/* All Years Batch */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrintScope('ALL_YEARS_BATCH');
+                        setPageRangeConfig((prev) => ({
+                          ...prev,
+                          mode: 'ALL',
+                          fromPage: 1,
+                          toPage: yearsList.length,
+                        }));
+                        setIsScopeDropdownOpen(false);
+                        scrollToPage(1);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                        printScope === 'ALL_YEARS_BATCH'
+                          ? 'bg-blue-700 text-white shadow-sm ring-2 ring-blue-300 dark:ring-blue-800'
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>كافة السنوات مجمعة ({yearsList.length} ص)</span>
+                    </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('SELECTED_YEAR');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'SELECTED_YEAR'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                السنة النشطة فقط ({selectedYear})
-              </button>
+                    {/* Active Year Only */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrintScope('SELECTED_YEAR');
+                        setPageRangeConfig((prev) => ({
+                          ...prev,
+                          mode: 'ALL',
+                          fromPage: 1,
+                          toPage: 1,
+                        }));
+                        setIsScopeDropdownOpen(false);
+                        scrollToPage(1);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                        printScope === 'SELECTED_YEAR'
+                          ? 'bg-sky-700 text-white shadow-sm ring-2 ring-sky-300 dark:ring-sky-800'
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>قوائم سنة {selectedYear}</span>
+                    </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('PROFIT_DIST_ONLY');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'PROFIT_DIST_ONLY'
-                    ? 'bg-purple-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                مشروع توزيع الأرباح فقط
-              </button>
+                    {/* More Specific Single Documents Dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border ${
+                          ['PROFIT_DIST_ONLY', 'TAX_CERT_ONLY', 'AUDITOR_ONLY', 'FIXED_ASSETS_ONLY', 'GA_EXPENSES_ONLY', 'NOTES_ONLY'].includes(printScope)
+                            ? 'bg-purple-700 text-white border-purple-700 shadow-sm ring-2 ring-purple-300 dark:ring-purple-800'
+                            : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>
+                          {printScope === 'PROFIT_DIST_ONLY'
+                            ? 'توزيع الأرباح'
+                            : printScope === 'TAX_CERT_ONLY'
+                            ? 'الشهادة الضريبية'
+                            : printScope === 'AUDITOR_ONLY'
+                            ? 'تقرير المراقب'
+                            : printScope === 'FIXED_ASSETS_ONLY'
+                            ? 'إهلاك الأصول'
+                            : printScope === 'GA_EXPENSES_ONLY'
+                            ? 'المصروفات الإدارية'
+                            : printScope === 'NOTES_ONLY'
+                            ? 'الإيضاحات المتممة'
+                            : printScope === 'CREDIT_ANALYSIS_ONLY'
+                            ? 'التحليل المالي والنسب'
+                            : printScope === 'CREDIT_SCORING_ONLY'
+                            ? 'الجدارة ومذكرة التسهيل'
+                            : 'مستندات مفردة أخرى'}
+                        </span>
+                        <ChevronDown className="w-3 h-3 opacity-70" />
+                      </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('TAX_CERT_ONLY');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'TAX_CERT_ONLY'
-                    ? 'bg-emerald-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                الشهادة والموقف الضريبي والتأميني فقط
-              </button>
+                      {isScopeDropdownOpen && (
+                        <div className="absolute top-full mt-1.5 right-0 z-50 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                          {[
+                            { id: 'PROFIT_DIST_ONLY', label: 'مشروع وتوزيع الأرباح فقط', icon: Scale },
+                            { id: 'TAX_CERT_ONLY', label: 'شهادة الموقف الضريبي والتأميني', icon: Award },
+                            { id: 'AUDITOR_ONLY', label: 'تقرير مراقب الحسابات المستقل', icon: FileCheck2 },
+                            { id: 'FIXED_ASSETS_ONLY', label: 'جدول حركة وإهلاك الأصول الثابتة', icon: FileSpreadsheet },
+                            { id: 'GA_EXPENSES_ONLY', label: 'كشف المصروفات العمومية والإدارية', icon: DollarSign },
+                            { id: 'NOTES_ONLY', label: 'الإيضاحات المتممة للقوائم المالية (EAS)', icon: BookOpen },
+                            { id: 'CREDIT_ANALYSIS_ONLY', label: 'تقرير التحليل المالي والنسب الائتمانية', icon: TrendingUp },
+                            { id: 'CREDIT_SCORING_ONLY', label: 'تقييم الجدارة ومذكرة التسهيل الائتماني', icon: ShieldCheck },
+                          ].map((item) => {
+                            const IconComp = item.icon;
+                            const isSelected = printScope === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  setPrintScope(item.id as CreditPrintScope);
+                                  setPageRangeConfig((prev) => ({
+                                    ...prev,
+                                    mode: 'ALL',
+                                    fromPage: 1,
+                                    toPage: 1,
+                                  }));
+                                  setIsScopeDropdownOpen(false);
+                                  scrollToPage(1);
+                                }}
+                                className={`w-full text-right px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? 'bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <IconComp className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                                  <span>{item.label}</span>
+                                </span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-purple-700" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('AUDITOR_ONLY');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'AUDITOR_ONLY'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                تقرير مراقب الحسابات فقط
-              </button>
+                  {/* Left: Toggles for Page Range & Header Customization */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Page Range Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPageRangeExpanded(!isPageRangeExpanded);
+                        setIsHeaderControlsExpanded(false);
+                        setIsScopeDropdownOpen(false);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border ${
+                        isPageRangeExpanded
+                          ? 'bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700 ring-2 ring-blue-200 dark:ring-blue-900'
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>نطاق الصفحات:</span>
+                      <span className="font-mono bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                        {pageRangeConfig.mode === 'ALL'
+                          ? `كافة الصفحات (${totalPages})`
+                          : `ص ${pageRangeConfig.fromPage} - ${pageRangeConfig.toPage}`}
+                      </span>
+                      <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isPageRangeExpanded ? 'rotate-180' : ''}`} />
+                    </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('FIXED_ASSETS_ONLY');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'FIXED_ASSETS_ONLY'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                جدول إهلاك الأصول فقط
-              </button>
+                    {/* Header Customizer Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsHeaderControlsExpanded(!isHeaderControlsExpanded);
+                        setIsPageRangeExpanded(false);
+                        setIsScopeDropdownOpen(false);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border ${
+                        isHeaderControlsExpanded
+                          ? 'bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 ring-2 ring-amber-200 dark:ring-amber-900'
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>ترويسة المستند</span>
+                      <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isHeaderControlsExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('GA_EXPENSES_ONLY');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'GA_EXPENSES_ONLY'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                جدول المصروفات الإدارية فقط
-              </button>
+                {/* Row 2: Active Page Indicator with Scroll-Sync, Zoom, and Quick Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-700/80 text-xs">
+                  {/* Active Page Navigator with Real-Time Title */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs shadow-2xs">
+                      <button
+                        type="button"
+                        disabled={activePreviewPage <= 1}
+                        onClick={() => scrollToPage(Math.max(1, activePreviewPage - 1))}
+                        className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg disabled:opacity-30 cursor-pointer transition-colors"
+                        title="الصفحة السابقة"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="px-2 font-mono font-bold text-blue-700 dark:text-blue-300 text-xs">
+                        ص {activePreviewPage} من {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={activePreviewPage >= totalPages}
+                        onClick={() => scrollToPage(Math.min(totalPages, activePreviewPage + 1))}
+                        className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg disabled:opacity-30 cursor-pointer transition-colors"
+                        title="الصفحة التالية"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintScope('NOTES_ONLY');
-                  setPageRangeConfig((prev) => ({
-                    ...prev,
-                    fromPage: 1,
-                    toPage: 1,
-                  }));
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  printScope === 'NOTES_ONLY'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                الإيضاحات المتممة فقط
-              </button>
-            </div>
+                    {/* Dynamic Active Page Title Badge */}
+                    <div className="hidden md:flex items-center gap-1.5 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 px-2.5 py-1 rounded-xl border border-blue-200/60 dark:border-blue-800/60 text-[11px] font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+                      <span>{pageTitles.find((p) => p.pageNumber === activePreviewPage)?.title || `صفحة ${activePreviewPage}`}</span>
+                    </div>
+                  </div>
 
-            {/* Quick Header Flexibility Controls for Printing & Preview */}
-            <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 bg-blue-50/80 dark:bg-slate-800/80 rounded-2xl border border-blue-200/80 dark:border-slate-700 text-xs no-print">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-black text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
-                  <span>التحكم المرن في ترويسة المستندات:</span>
-                </span>
+                  {/* Zoom Controls & Quick Actions */}
+                  <div className="flex items-center gap-2">
+                    {/* Zoom Level */}
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
+                        className="p-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+                        title="تصغير المعاينة"
+                      >
+                        <ZoomOut className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZoomLevel(100)}
+                        className="px-1.5 font-mono font-bold text-slate-700 dark:text-slate-300 text-[11px] min-w-[36px] text-center hover:text-blue-600 cursor-pointer"
+                        title="إعادة ضبط الحجم إلى 100%"
+                      >
+                        {zoomLevel}%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
+                        className="p-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+                        title="تكبير المعاينة"
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsHeaderModalOpen(true)}
-                  className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
-                >
-                  <span>تخصيص الترويسة ومقرات المكتب وبيانات المنشأة</span>
-                </button>
+                    {/* Quick Print Button in Toolbar */}
+                    <button
+                      type="button"
+                      onClick={handlePrintDossier}
+                      className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>طباعة A4</span>
+                    </button>
+                  </div>
+                </div>
 
-                <div className="h-4 w-px bg-blue-200 dark:bg-slate-700 hidden sm:block" />
+                {/* EXPANDABLE DRAWER 1: PAGE RANGE CONTROLLER */}
+                {isPageRangeExpanded && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-750 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="flex items-center justify-between pb-1.5">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                        تحديد نطاق الأوراق وتخصيص الترقيم:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsPageRangeExpanded(false)}
+                        className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        إغلاق القائمة ✕
+                      </button>
+                    </div>
+                    <PageRangeSelector
+                      totalPages={totalPages}
+                      config={{
+                        ...pageRangeConfig,
+                        toPage: Math.min(pageRangeConfig.toPage, totalPages) || totalPages,
+                      }}
+                      onChange={(newCfg) => setPageRangeConfig(newCfg)}
+                      pageTitles={pageTitles}
+                      className="shadow-none border-0 p-0"
+                    />
+                  </div>
+                )}
 
-                {/* Quick Toggles */}
-                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
-                  <input
-                    type="checkbox"
-                    checked={officeProfile.showMainOfficeAddress !== false}
-                    onChange={(e) =>
-                      handleSaveOfficeProfile({
-                        ...officeProfile,
-                        showMainOfficeAddress: e.target.checked,
-                      })
-                    }
-                    className="rounded accent-blue-700 w-3.5 h-3.5 cursor-pointer"
-                  />
-                  <span>المقر الرئيسي</span>
-                </label>
+                {/* EXPANDABLE DRAWER 2: HEADER FLEXIBILITY QUICK CONTROLS */}
+                {isHeaderControlsExpanded && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-750 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsHeaderModalOpen(true)}
+                        className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                      >
+                        <Sliders className="w-3 h-3" />
+                        <span>تخصيص بيانات الترويسة والمقرات بالكامل...</span>
+                      </button>
 
-                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
-                  <input
-                    type="checkbox"
-                    checked={officeProfile.showBranchOfficeAddress !== false}
-                    onChange={(e) =>
-                      handleSaveOfficeProfile({
-                        ...officeProfile,
-                        showBranchOfficeAddress: e.target.checked,
-                      })
-                    }
-                    className="rounded accent-indigo-700 w-3.5 h-3.5 cursor-pointer"
-                  />
-                  <span>فرع المكتب</span>
-                </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        <input
+                          type="checkbox"
+                          checked={officeProfile.showMainOfficeAddress !== false}
+                          onChange={(e) =>
+                            handleSaveOfficeProfile({
+                              ...officeProfile,
+                              showMainOfficeAddress: e.target.checked,
+                            })
+                          }
+                          className="rounded accent-blue-700 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>المقر الرئيسي</span>
+                      </label>
 
-                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
-                  <input
-                    type="checkbox"
-                    checked={officeProfile.showOfficePhones !== false}
-                    onChange={(e) =>
-                      handleSaveOfficeProfile({
-                        ...officeProfile,
-                        showOfficePhones: e.target.checked,
-                      })
-                    }
-                    className="rounded accent-emerald-700 w-3.5 h-3.5 cursor-pointer"
-                  />
-                  <span>هواتف المكتب</span>
-                </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        <input
+                          type="checkbox"
+                          checked={officeProfile.showBranchOfficeAddress !== false}
+                          onChange={(e) =>
+                            handleSaveOfficeProfile({
+                              ...officeProfile,
+                              showBranchOfficeAddress: e.target.checked,
+                            })
+                          }
+                          className="rounded accent-indigo-700 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>فرع المكتب</span>
+                      </label>
 
-                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
-                  <input
-                    type="checkbox"
-                    checked={showHeaderClientBanner}
-                    onChange={(e) => setShowHeaderClientBanner(e.target.checked)}
-                    className="rounded accent-purple-700 w-3.5 h-3.5 cursor-pointer"
-                  />
-                  <span>شريط بيانات المنشأة</span>
-                </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        <input
+                          type="checkbox"
+                          checked={officeProfile.showOfficePhones !== false}
+                          onChange={(e) =>
+                            handleSaveOfficeProfile({
+                              ...officeProfile,
+                              showOfficePhones: e.target.checked,
+                            })
+                          }
+                          className="rounded accent-emerald-700 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>هواتف المكتب</span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        <input
+                          type="checkbox"
+                          checked={showHeaderClientBanner}
+                          onChange={(e) => setShowHeaderClientBanner(e.target.checked)}
+                          className="rounded accent-purple-700 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>شريط بيانات المنشأة</span>
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsHeaderControlsExpanded(false)}
+                      className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      إغلاق ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="text-[11px] font-mono text-blue-900 dark:text-blue-300 font-bold hidden md:block">
-                نمط الترويسة: {officeProfile.headerStyle === 'compact' ? 'مدمج وموجز' : officeProfile.headerStyle === 'formal-classic' ? 'رسمي كلاسيكي مؤطر' : 'عصري قياسي'}
-              </div>
-            </div>
-
-            {/* Page Range Flexible Controller (From Page X to Page Y) */}
-            {(() => {
-              // Calculate estimated total pages based on current print scope
-              let totalPages = 1;
-              let pageTitles: { pageNumber: number; title: string }[] = [];
-              if (printScope === 'COMPLETE_DOSSIER') {
-                totalPages = 8;
-                pageTitles = [
-                  { pageNumber: 1, title: 'الغلاف الرسمي الشامل' },
-                  { pageNumber: 2, title: `القوائم المالية لسنة ${selectedYear}` },
-                  { pageNumber: 3, title: 'تقرير مراقب الحسابات المستقل' },
-                  { pageNumber: 4, title: `مشروع وتوزيع الأرباح لسنة ${selectedYear}` },
-                  { pageNumber: 5, title: `جدول حركة وإهلاك الأصول الثابتة` },
-                  { pageNumber: 6, title: `كشف المصروفات العمومية والإدارية` },
-                  { pageNumber: 7, title: `الإيضاحات المتممة للقوائم المالية` },
-                  { pageNumber: 8, title: `شهادة الموقف الضريبي والتأميني` },
-                ];
-              } else if (printScope === 'ALL_YEARS_BATCH') {
-                totalPages = yearsList.length;
-                pageTitles = yearsList.map((y, idx) => ({
-                  pageNumber: idx + 1,
-                  title: `القوائم المالية لسنة ${y} م`,
-                }));
-              } else if (printScope === 'CUSTOM_RANGE_BATCH') {
-                totalPages = Math.max(1, batchSelectedYears.length);
-                pageTitles = batchSelectedYears.map((y, idx) => ({
-                  pageNumber: idx + 1,
-                  title: `القوائم المالية لسنة ${y} م`,
-                }));
-              } else {
-                totalPages = 1;
-                pageTitles = [{ pageNumber: 1, title: 'الصفحة المستهدفة للطباعة' }];
-              }
-
-              return (
-                <PageRangeSelector
-                  totalPages={totalPages}
-                  config={{
-                    ...pageRangeConfig,
-                    toPage: Math.min(pageRangeConfig.toPage, totalPages) || totalPages,
+              {/* REALISTIC DOCUMENT PREVIEW DESK AREA (مساحة المعاينة الواقعية الواسعة) */}
+              <div
+                ref={previewScrollContainerRef}
+                className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-8 print:p-0 bg-slate-200/90 dark:bg-slate-950 rounded-2xl print:rounded-none border border-slate-300/80 dark:border-slate-800 print:border-none flex justify-center"
+              >
+                <div
+                  style={{
+                    transform: `scale(${zoomLevel / 100})`,
+                    transformOrigin: 'top center',
+                    transition: 'transform 0.15s ease-out',
+                    width: `${100 * (100 / Math.max(50, zoomLevel))}%`,
+                    minWidth: 'fit-content',
                   }}
-                  onChange={(newCfg) => setPageRangeConfig(newCfg)}
-                  pageTitles={pageTitles}
-                  className="no-print"
-                />
-              );
-            })()}
+                  className="flex justify-center"
+                >
+                  <CreditBatchPrintDocument
+                    printScope={printScope}
+                    selectedYear={selectedYear}
+                    yearsList={yearsList}
+                    customYearsList={batchSelectedYears}
+                    yearsData={yearsData}
+                    computedData={computedData}
+                    officeProfile={officeProfile}
+                    assetCategories={assetCategories}
+                    adminExpenseItems={adminExpenses}
+                    notesList={supplementaryNotes}
+                    clientProfile={clientProfile}
+                    showHeaderClientBanner={showHeaderClientBanner}
+                    pageRangeConfig={pageRangeConfig}
+                  />
+                </div>
+              </div>
 
-            {/* Scrollable Document Preview Area */}
-            <div className="flex-1 overflow-y-auto p-4 print:p-0 bg-slate-100 print:bg-white rounded-2xl print:rounded-none border border-slate-200 print:border-none">
-              <CreditBatchPrintDocument
-                printScope={printScope}
-                selectedYear={selectedYear}
-                yearsList={yearsList}
-                customYearsList={batchSelectedYears}
-                yearsData={yearsData}
-                computedData={computedData}
-                officeProfile={officeProfile}
-                assetCategories={assetCategories}
-                adminExpenseItems={adminExpenses}
-                notesList={supplementaryNotes}
-                clientProfile={clientProfile}
-                showHeaderClientBanner={showHeaderClientBanner}
-                pageRangeConfig={pageRangeConfig}
-              />
-            </div>
+              {/* Modal Actions Footer */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 no-print">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  طباعة رسمية A4 معتمدة • تصدير PDF نقي عالي الدقة (300 DPI) • تصدير صور PNG فورية
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={isExportingPdf}
+                    onClick={async () => {
+                      setIsExportingPdf(true);
+                      try {
+                        const rangeSuffix =
+                          pageRangeConfig.mode === 'ALL'
+                            ? 'كافة_الصفحات'
+                            : pageRangeConfig.mode === 'RANGE'
+                            ? `ص_${pageRangeConfig.fromPage}_إلى_${pageRangeConfig.toPage}`
+                            : `صفحات_${pageRangeConfig.customPagesString || 'مخصصة'}`;
+                        await exportElementToPdf(
+                          'credit-printable-dossier',
+                          `ملف_الائتمان_المعتمد_${selectedYear}_${rangeSuffix}.pdf`
+                        );
+                      } finally {
+                        setIsExportingPdf(false);
+                      }
+                    }}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    <Download className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                    <span>{isExportingPdf ? 'جارِ التصدير...' : 'تصدير PDF (jspdf)'}</span>
+                  </button>
 
-            {/* Modal Actions */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 no-print">
-              <span className="text-xs text-slate-500">
-                يمكنك التصدير كملف PDF عالي الدقة (jspdf + html2canvas) أو صورة PNG أو الطباعة المباشرة على ورق A4.
-              </span>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  disabled={isExportingPdf}
-                  onClick={async () => {
-                    setIsExportingPdf(true);
-                    try {
+                  <button
+                    type="button"
+                    onClick={async () => {
                       const rangeSuffix =
                         pageRangeConfig.mode === 'ALL'
                           ? 'كافة_الصفحات'
                           : pageRangeConfig.mode === 'RANGE'
                           ? `ص_${pageRangeConfig.fromPage}_إلى_${pageRangeConfig.toPage}`
                           : `صفحات_${pageRangeConfig.customPagesString || 'مخصصة'}`;
-                      await exportElementToPdf(
+                      await exportElementToImage(
                         'credit-printable-dossier',
-                        `ملف_الائتمان_المعتمد_${selectedYear}_${rangeSuffix}.pdf`
+                        `ملف_الائتمان_المعتمد_${selectedYear}_${rangeSuffix}.png`,
+                        'png'
                       );
-                    } finally {
-                      setIsExportingPdf(false);
-                    }
-                  }}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  <Download className="w-3.5 h-3.5 text-rose-600" />
-                  <span>{isExportingPdf ? 'جارِ التصدير...' : 'تصدير PDF (jspdf)'}</span>
-                </button>
+                    }}
+                    className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>تصدير PNG</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const rangeSuffix =
-                      pageRangeConfig.mode === 'ALL'
-                        ? 'كافة_الصفحات'
-                        : pageRangeConfig.mode === 'RANGE'
-                        ? `ص_${pageRangeConfig.fromPage}_إلى_${pageRangeConfig.toPage}`
-                        : `صفحات_${pageRangeConfig.customPagesString || 'مخصصة'}`;
-                    await exportElementToImage(
-                      'credit-printable-dossier',
-                      `ملف_الائتمان_المعتمد_${selectedYear}_${rangeSuffix}.png`,
-                      'png'
-                    );
-                  }}
-                  className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5 text-purple-600" />
-                  <span>تصدير PNG</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPrintModalOpen(false)}
+                    className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    إغلاق
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsPrintModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  إغلاق
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePrintDossier}
-                  className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  بدء الطباعة الآن (Print A4)
-                </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintDossier}
+                    className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm hover:shadow cursor-pointer transition-all"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>بدء الطباعة الآن (Print A4)</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* CLIENT PROFILE MODAL */}
       {isClientModalOpen && (
