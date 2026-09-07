@@ -106,7 +106,6 @@ export interface TranslationDict {
   backupRestore: string;
 
   // Additional Enterprise & Navigation Keys
-  oracleErp: string;
   sapErp: string;
   ocrScanner: string;
   bankReconciliation: string;
@@ -249,7 +248,6 @@ export const translations: Record<AppLanguage, TranslationDict> = {
     shortcuts: 'اختصارات لوحة المفاتيح',
     backupRestore: 'النسخ الاحتياطي والاستعادة',
 
-    oracleErp: 'منظومة أوراكل ERP المالية',
     sapErp: 'منظومة ساب S/4HANA المحاسبية',
     ocrScanner: 'مسح واستخراج الفواتير (OCR)',
     bankReconciliation: 'مذكرة التسوية البنكية',
@@ -390,7 +388,6 @@ export const translations: Record<AppLanguage, TranslationDict> = {
     shortcuts: 'Keyboard Shortcuts',
     backupRestore: 'Backup & Restore',
 
-    oracleErp: 'Oracle Fusion ERP Financials',
     sapErp: 'SAP S/4HANA & B1 Integration',
     ocrScanner: 'OCR Invoice Scanner',
     bankReconciliation: 'Bank Reconciliation',

@@ -276,14 +276,6 @@ const ALL_SYSTEM_SCREENS: NavItemDef[] = [
 
   // 7. ERP & Security Hub
   {
-    id: 'ORACLE_ERP',
-    labelAr: 'منظومة أوراكل ERP المالية',
-    labelEn: 'Oracle Fusion ERP Financials',
-    categoryAr: 'الأنظمة والرقابة',
-    categoryEn: 'ERP & Security',
-    icon: Database,
-  },
-  {
     id: 'SAP_ERP',
     labelAr: 'منظومة ساب S/4HANA المحاسبية',
     labelEn: 'SAP S/4HANA Integration',

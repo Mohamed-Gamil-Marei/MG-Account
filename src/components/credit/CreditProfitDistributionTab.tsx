@@ -1,18 +1,24 @@
 import React, { useState } from 'react';
-import { Award, CheckCircle, Percent, FileSpreadsheet, ShieldCheck, Printer } from 'lucide-react';
+import { Award, CheckCircle, Percent, FileSpreadsheet, ShieldCheck, Printer, BookOpen, ExternalLink, Sparkles } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../../utils/numberToWordsArabic';
+import { SupplementaryNoteItem, DEFAULT_SUPPLEMENTARY_NOTES } from './CreditNotesTab';
+import { DisclosureDetailModal } from './DisclosureDetailModal';
 
 interface CreditProfitDistributionTabProps {
   yearsList: number[];
   computedData: Record<number, any>;
   officeProfile: any;
+  supplementaryNotes?: SupplementaryNoteItem[];
+  onUpdateNotesList?: (notes: SupplementaryNoteItem[]) => void;
 }
 
 export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabProps> = ({
   yearsList,
   computedData,
   officeProfile,
+  supplementaryNotes = DEFAULT_SUPPLEMENTARY_NOTES,
+  onUpdateNotesList,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(yearsList[yearsList.length - 1] || 2026);
   const [legalReserveRatio, setLegalReserveRatio] = useState<number>(5); // 5% Legal Reserve
@@ -22,8 +28,30 @@ export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabPr
   const [dividendsRatio, setDividendsRatio] = useState<number>(60); // 60% Cash Dividends
   const [retainedRatio, setRetainedRatio] = useState<number>(15); // 15% Carried Forward
 
+  // Modal State for Disclosure Detail
+  const [selectedNoteModal, setSelectedNoteModal] = useState<SupplementaryNoteItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const activeData = computedData[selectedYear] || {};
   const netProfit = activeData.netProfit || 1046250;
+
+  // Find Note 15 or legal reserve notes
+  const profitDistNote = supplementaryNotes.find((n) => Number(n.noteNumber) === 15) || supplementaryNotes[supplementaryNotes.length - 1];
+
+  const handleOpenNoteModal = (noteNum: number) => {
+    const target = supplementaryNotes.find((n) => Number(n.noteNumber) === noteNum) || profitDistNote;
+    if (target) {
+      setSelectedNoteModal(target);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleSaveNoteFromModal = (updatedNote: SupplementaryNoteItem) => {
+    if (onUpdateNotesList) {
+      const updatedList = supplementaryNotes.map((n) => (n.id === updatedNote.id ? updatedNote : n));
+      onUpdateNotesList(updatedList);
+    }
+  };
 
   // Compute breakdown
   const legalReserve = Math.round(netProfit * (legalReserveRatio / 100));
@@ -268,11 +296,33 @@ export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabPr
             </table>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 leading-relaxed text-xs">
-            <strong>ملاحظة الاعتماد المهني:</strong> يقر مراقب الحسابات بأن مشروع توزيع الأرباح أعلاه قد تم إعداده وفقاً لأحكام القانون رقم 159 لسنة 1981 ولائحته التنفيذية، وتعديلات القانون رقم 4 لسنة 2018، والنظام الأساسي للشركة.
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 leading-relaxed text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <strong>ملاحظة الاعتماد المهني والإيضاح المتمم:</strong> يقر مراقب الحسابات بأن مشروع توزيع الأرباح أعلاه قد تم إعداده وفقاً لأحكام القانون رقم 159 لسنة 1981 ولائحته التنفيذية، وتعديلات القانون رقم 4 لسنة 2018، والنظام الأساسي للشركة.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleOpenNoteModal(15)}
+              className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>عرض / تعديل إيضاح متمم (15)</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Render Disclosure Detail Modal */}
+      {selectedNoteModal && (
+        <DisclosureDetailModal
+          note={selectedNoteModal}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSaveNote={handleSaveNoteFromModal}
+          yearsList={yearsList}
+        />
+      )}
     </div>
   );
 };

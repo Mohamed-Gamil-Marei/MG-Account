@@ -43,7 +43,6 @@ import { OfficePracticeHubView } from './components/hubs/OfficePracticeHubView';
 import { SecurityAuditHubView } from './components/hubs/SecurityAuditHubView';
 import { InvoicingView } from './components/InvoicingView';
 import { CustomsHubView } from './components/CustomsHubView';
-import { OracleFinancialsHubView } from './components/oracle/OracleFinancialsHubView';
 import { SapErpHubView } from './components/sap/SapErpHubView';
 
 import { BackupExportModal } from './components/BackupExportModal';
@@ -511,17 +510,7 @@ export default function App() {
           />
         );
 
-      // 7. Oracle ERP Fusion Financials Architecture
-      case 'ORACLE_ERP':
-        return (
-          <OracleFinancialsHubView
-            state={state}
-            fiscalYear={selectedFiscalYear}
-            onReturnToStandardMode={() => setActiveTab('DASHBOARD')}
-          />
-        );
-
-      // 8. SAP S/4HANA & Business One Integration Suite
+      // 7. SAP S/4HANA & Business One Integration Suite
       case 'SAP_ERP':
         return (
           <SapErpHubView

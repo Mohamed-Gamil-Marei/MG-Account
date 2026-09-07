@@ -910,7 +910,6 @@ export type NavigationTab =
   | 'FEASIBILITY_STUDY'
   | 'INVOICING'
   | 'CUSTOMS_SHIPMENTS'
-  | 'ORACLE_ERP'
   | 'SAP_ERP'
   | 'AUDIT_TRAIL';
 

@@ -12,10 +12,15 @@ import {
   Save,
   RefreshCw,
   Sliders,
+  BookOpen,
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { FiscalYearData } from './CreditYearlyEditor';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
+import { SupplementaryNoteItem, DEFAULT_SUPPLEMENTARY_NOTES } from './CreditNotesTab';
+import { DisclosureDetailModal } from './DisclosureDetailModal';
+import { FixedAssetCategoryItem } from './CreditFixedAssetsTab';
+import { AdminExpenseItem } from './CreditAdminExpensesTab';
 
 export interface StatementLineItem {
   id: string;
@@ -47,6 +52,10 @@ interface CreditFinancialStatementsTabProps {
   computedData: Record<number, any>;
   customItems?: StatementLineItem[];
   onUpdateCustomItems?: (items: StatementLineItem[]) => void;
+  supplementaryNotes?: SupplementaryNoteItem[];
+  onUpdateNotesList?: (notes: SupplementaryNoteItem[]) => void;
+  assetCategories?: FixedAssetCategoryItem[];
+  adminExpenses?: AdminExpenseItem[];
 }
 
 export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTabProps> = ({
@@ -55,6 +64,10 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
   computedData,
   customItems: propCustomItems,
   onUpdateCustomItems,
+  supplementaryNotes = DEFAULT_SUPPLEMENTARY_NOTES,
+  onUpdateNotesList,
+  assetCategories = [],
+  adminExpenses = [],
 }) => {
   const [statementView, setStatementView] = useState<'ALL' | 'BS' | 'IS' | 'CF' | 'RATIOS'>('ALL');
   const [isAddingLineModal, setIsAddingLineModal] = useState(false);
@@ -63,9 +76,59 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
   const [newItemNote, setNewItemNote] = useState('');
   const [newItemBaseAmount, setNewItemBaseAmount] = useState<number>(100000);
 
+  // Modal State for Disclosure Detail
+  const [selectedNoteModal, setSelectedNoteModal] = useState<SupplementaryNoteItem | null>(null);
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+
   // Local state if not controlled from parent
   const [localCustomItems, setLocalCustomItems] = useState<StatementLineItem[]>([]);
   const activeCustomItems = propCustomItems || localCustomItems;
+
+  const handleOpenNoteModalByNum = (num: number) => {
+    const target = supplementaryNotes.find((n) => Number(n.noteNumber) === num) || supplementaryNotes[0];
+    if (target) {
+      setSelectedNoteModal(target);
+      setIsNoteModalOpen(true);
+    }
+  };
+
+  const handleOpenNoteModalByRef = (refStr: string) => {
+    const num = parseInt(refStr.replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(num) && num > 0) {
+      handleOpenNoteModalByNum(num);
+    } else {
+      setSelectedNoteModal(supplementaryNotes[0]);
+      setIsNoteModalOpen(true);
+    }
+  };
+
+  const handleSaveNoteFromModal = (updatedNote: SupplementaryNoteItem) => {
+    if (onUpdateNotesList) {
+      const updatedList = supplementaryNotes.map((n) => (n.id === updatedNote.id ? updatedNote : n));
+      onUpdateNotesList(updatedList);
+    }
+  };
+
+  const renderNoteBadge = (noteRef: string | number) => {
+    const noteNumStr = String(noteRef).replace(/[^0-9]/g, '');
+    const noteNum = noteNumStr ? parseInt(noteNumStr, 10) : null;
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (noteNum) {
+            handleOpenNoteModalByNum(noteNum);
+          } else {
+            handleOpenNoteModalByRef(String(noteRef));
+          }
+        }}
+        className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono font-bold rounded-lg border border-purple-200 dark:border-purple-800 text-[11px] cursor-pointer transition-colors shadow-2xs"
+        title="اضغط لمشاهدة وتعديل الإيضاح المتمم"
+      >
+        {typeof noteRef === 'number' ? `إيضاح (${noteRef})` : noteRef}
+      </button>
+    );
+  };
 
   const handleUpdate = (updated: StatementLineItem[]) => {
     if (onUpdateCustomItems) {
@@ -355,7 +418,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">الأصول الثابتة بالصافي (بعد مجمع الإهلاك)</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (4)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(4)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono font-bold">
                       {formatEgyptianCurrency(computedData[y]?.netFixedAssets || 0)}
@@ -365,7 +428,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">مشروعات تحت التنفيذ ودفعات مقدمة للأصول</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (5)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(5)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.projectsInProgress || 0)}
@@ -380,7 +443,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     <td className="p-2.5 pr-6 font-bold text-blue-950 flex items-center justify-between">
                       <span>• {item.name}</span>
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
                     {yearsList.map((y) => (
                       <td key={y} className="p-2.5 text-left font-mono">
                         <AccountingNumberInput
@@ -428,7 +491,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">المخزون السلعي والبضائع</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (6)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(6)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.inventory || 0)}
@@ -438,7 +501,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">العملاء والمدينون وأوراق القبض</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (7)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(7)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.receivables || 0)}
@@ -448,7 +511,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">أرصدة مدينة أخرى ومصروفات مدفوعة مقدماً</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (8)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(8)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.otherDebit || 0)}
@@ -458,7 +521,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">النقدية بالصندوق ولدى البنوك</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (9)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(9)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono font-bold text-emerald-800">
                       {formatEgyptianCurrency(computedData[y]?.cash || 0)}
@@ -539,7 +602,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">رأس المال المصدر والمدفوع</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (10)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono font-bold">
                       {formatEgyptianCurrency(computedData[y]?.paidUpCapital || 0)}
@@ -549,7 +612,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">الاحتياطي القانوني (5%)</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (10)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.legalReserve || 0)}
@@ -559,7 +622,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">الأرباح المرحلة وصافي ربح العام</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (10)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.retainedEarningsAndProfit || 0)}
@@ -574,7 +637,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     <td className="p-2.5 pr-6 font-bold text-purple-950 flex items-center justify-between">
                       <span>• {item.name}</span>
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
                     {yearsList.map((y) => (
                       <td key={y} className="p-2.5 text-left font-mono">
                         <AccountingNumberInput
@@ -621,7 +684,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">قروض وتسهيلات بنكية طويلة الأجل</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (11)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(11)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.longLoans || 0)}
@@ -631,7 +694,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">الموردون وأوراق الدفع</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (12)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(12)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.suppliers || 0)}
@@ -641,7 +704,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">سحب على المكشوف وتسهيلات قصيرة الأجل</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (13)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(13)}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.shortLoans || 0)}
@@ -651,7 +714,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 </tr>
                 <tr>
                   <td className="p-2.5 pr-6">مخصص ضرائب ومصروفات مستحقة وأرصدة دائنة</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (13/ب)</td>
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge('13/ب')}</td>
                   {yearsList.map((y) => (
                     <td key={y} className="p-2.5 text-left font-mono">
                       {formatEgyptianCurrency(computedData[y]?.otherCurrentLiab || 0)}
@@ -1115,6 +1178,19 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
             </table>
           </div>
         </div>
+      )}
+
+      {/* Render Disclosure Detail Modal */}
+      {selectedNoteModal && (
+        <DisclosureDetailModal
+          note={selectedNoteModal}
+          isOpen={isNoteModalOpen}
+          onClose={() => setIsNoteModalOpen(false)}
+          onSaveNote={handleSaveNoteFromModal}
+          yearsList={yearsList}
+          assetCategories={assetCategories}
+          adminExpenses={adminExpenses}
+        />
       )}
     </div>
   );

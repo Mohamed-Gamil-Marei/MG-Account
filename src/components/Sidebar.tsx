@@ -104,9 +104,6 @@ export const getParentHub = (tabId: string): string => {
     case 'AUDIT_SECURITY_HUB':
       return 'AUDIT_SECURITY_HUB';
 
-    case 'ORACLE_ERP':
-      return 'ORACLE_ERP';
-
     case 'SAP_ERP':
       return 'SAP_ERP';
 
@@ -289,16 +286,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'CUSTOMS_LANDED_COST', label: 'حاسبة التكلفة الإنزالية', labelEn: 'Landed Cost (EAS 2)' },
         { id: 'CUSTOMS_NAFEZA_ACI', label: 'منظومة نافذة والتسجيل ACI', labelEn: 'Nafeza ACI Hub' },
       ],
-    },
-    {
-      id: 'ORACLE_ERP',
-      defaultTab: 'ORACLE_ERP',
-      label: 'منظومة أوراكل المالية',
-      labelEn: 'Oracle Fusion ERP',
-      icon: Database,
-      badge: 'ERP',
-      badgeColor: 'bg-slate-800 text-slate-300 border border-slate-700',
-      subItems: [],
     },
     {
       id: 'SAP_ERP',

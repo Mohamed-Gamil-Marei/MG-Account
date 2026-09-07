@@ -56,6 +56,9 @@ import {
   DEFAULT_SUPPLEMENTARY_NOTES,
 } from './credit/CreditNotesTab';
 import { CreditBatchPrintDocument, CreditPrintScope, ClientProfileData } from './credit/CreditBatchPrintDocument';
+import { PageRangeSelector, PageRangeConfig } from './common/PageRangeSelector';
+import { PrintHeaderCustomizerModal, ExtendedOfficeProfile } from './credit/PrintHeaderCustomizerModal';
+import { db } from '../db/localDatabase';
 import { CompanyHeaderSelector } from './common/CompanyHeaderSelector';
 import { QuickCompanyModal } from './common/QuickCompanyModal';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
@@ -149,7 +152,13 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [printScope, setPrintScope] = useState<CreditPrintScope>('ALL_YEARS_BATCH');
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
-  const [isActionsDropdownOpen, setIsActionsDropdownOpen] = useState<boolean>(false);
+  const [pageRangeConfig, setPageRangeConfig] = useState<PageRangeConfig>({
+    mode: 'ALL',
+    fromPage: 1,
+    toPage: 3,
+    customPagesString: '',
+    showPageNumbers: true,
+  });
 
   // Dynamic Print Stylesheet Isolation for Clean A4 Output
   const handlePrintDossier = () => {
@@ -318,6 +327,57 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   });
   const [isClientModalOpen, setIsClientModalOpen] = useState<boolean>(false);
   const [isQuickCompanyModalInSimulatorOpen, setIsQuickCompanyModalInSimulatorOpen] = useState<boolean>(false);
+
+  // Office Profile Reactive State with flexible addresses, phones, and branding
+  const [officeProfile, setOfficeProfile] = useState<ExtendedOfficeProfile>(() => {
+    const savedOffice = state.officeProfile;
+    return {
+      firmName: savedOffice?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+      auditorName: savedOffice?.auditorName || 'أ/ محمد جميل مرعي',
+      licenseNumber: savedOffice?.licenseNumber || 'س.م.م 43122',
+      taxAuthorityLicense: savedOffice?.taxAuthorityLicense || 'سجل خبراء الضرائب 1849',
+      taxAuthorityRegNo: savedOffice?.taxAuthorityRegNo || '492-817-302',
+      phone: savedOffice?.phone || '01003335360',
+      mobile: savedOffice?.mobile || '01003335360',
+      email: savedOffice?.email || 'info@audit-office.eg',
+      title: savedOffice?.title || 'محاسب قانوني وخبير ضرائب ومراقب حسابات الشركات المساهمة',
+      address: savedOffice?.address || 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية',
+      mainOfficeTitle: (savedOffice as any)?.mainOfficeTitle || 'المقر الرئيسي',
+      mainOfficeAddress: savedOffice?.mainOfficeAddress || savedOffice?.address || 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية',
+      showMainOfficeAddress: savedOffice?.showMainOfficeAddress !== false,
+      branchOfficeTitle: (savedOffice as any)?.branchOfficeTitle || 'فرع العاشر من رمضان',
+      branchOfficeAddress: savedOffice?.branchOfficeAddress || 'المباركية مول - مدينة العاشر من رمضان - الشرقية',
+      showBranchOfficeAddress: savedOffice?.showBranchOfficeAddress !== false,
+      showOfficePhones: (savedOffice as any)?.showOfficePhones !== false,
+      showLogo: (savedOffice as any)?.showLogo !== false,
+      headerStyle: (savedOffice as any)?.headerStyle || 'standard',
+      logoUrl: savedOffice?.logoUrl || '',
+      stampUrl: savedOffice?.stampUrl || '',
+      ...savedOffice,
+    };
+  });
+
+  const [isHeaderModalOpen, setIsHeaderModalOpen] = useState<boolean>(false);
+  const [showHeaderClientBanner, setShowHeaderClientBanner] = useState<boolean>(true);
+
+  // Synchronize officeProfile when state.officeProfile updates
+  useEffect(() => {
+    if (state.officeProfile) {
+      setOfficeProfile((prev) => ({
+        ...prev,
+        ...state.officeProfile,
+      }));
+    }
+  }, [state.officeProfile]);
+
+  const handleSaveOfficeProfile = (newProfile: ExtendedOfficeProfile) => {
+    setOfficeProfile(newProfile);
+    try {
+      db.updateOfficeProfile(newProfile as any);
+    } catch (err) {
+      console.warn('Error saving office profile:', err);
+    }
+  };
 
   // Automatically synchronize clientProfile when active client context changes
   useEffect(() => {
@@ -732,14 +792,6 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     XLSX.writeFile(wb, `الملف_الائتماني_المتكامل_والقوائم_المالية_${selectedYear}.xlsx`);
   };
 
-  const officeProfile = state.officeProfile || {
-    firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
-    auditorName: 'محمد جميل مرعي',
-    licenseNumber: 'س.م.م 43122',
-    phone: '01003335360',
-    title: 'محاسب قانوني وخبير ضرائب ومراقب حسابات',
-  };
-
   const navTabs: { id: SimulatorTab; label: string; icon: any }[] = [
     { id: 'STATEMENTS', label: '1. القوائم المالية المقارنة (المركز والدخل والتدفقات)', icon: Scale },
     { id: 'PROFIT_DIST', label: '2. مشروع ومذكرة توزيع الأرباح', icon: Award },
@@ -774,8 +826,24 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
             <button
               type="button"
+              onClick={() => setIsHeaderModalOpen(true)}
+              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-900 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+              title="تخصيص ترويسة ومقرات وهواتف المكتب وبيانات المنشأة"
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
+              <span className="hidden sm:inline">ترويسة المكتب والطباعة</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setPrintScope('COMPLETE_DOSSIER');
+                setPageRangeConfig((prev) => ({
+                  ...prev,
+                  mode: 'ALL',
+                  fromPage: 1,
+                  toPage: 8,
+                }));
                 setIsPrintModalOpen(true);
               }}
               className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
@@ -791,6 +859,12 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
               triggerVariant="secondary"
               align="left"
               items={[
+                {
+                  id: 'header-customizer',
+                  label: 'تخصيص ترويسة ومقرات وهواتف المكتب وبيانات المنشأة',
+                  icon: Sliders,
+                  onClick: () => setIsHeaderModalOpen(true),
+                },
                 {
                   id: 'client-data',
                   label: 'بيانات المنشأة والضرائب',
@@ -822,6 +896,12 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                   icon: Layers,
                   onClick: () => {
                     setPrintScope('ALL_YEARS_BATCH');
+                    setPageRangeConfig((prev) => ({
+                      ...prev,
+                      mode: 'ALL',
+                      fromPage: 1,
+                      toPage: yearsList.length,
+                    }));
                     setIsPrintModalOpen(true);
                   },
                 },
@@ -947,6 +1027,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           officeProfile={officeProfile}
           clientProfile={clientProfile}
           fiscalYear={selectedYear}
+          showHeaderClientBanner={showHeaderClientBanner}
           documentTitle={
             activeTab === 'STATEMENTS'
               ? 'القوائم المالية والحسابات الختامية المقارنة'
@@ -972,6 +1053,10 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             yearsData={yearsData}
             yearsList={yearsList}
             computedData={computedData}
+            supplementaryNotes={supplementaryNotes}
+            onUpdateNotesList={setSupplementaryNotes}
+            assetCategories={assetCategories}
+            adminExpenses={adminExpenses}
           />
         )}
 
@@ -980,6 +1065,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             yearsList={yearsList}
             computedData={computedData}
             officeProfile={officeProfile}
+            supplementaryNotes={supplementaryNotes}
+            onUpdateNotesList={setSupplementaryNotes}
           />
         )}
 
@@ -1077,7 +1164,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
               <span className="font-bold text-slate-700">نطاق المستندات:</span>
               <button
                 type="button"
-                onClick={() => setPrintScope('ALL_YEARS_BATCH')}
+                onClick={() => {
+                  setPrintScope('ALL_YEARS_BATCH');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: yearsList.length,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'ALL_YEARS_BATCH'
                     ? 'bg-blue-700 text-white'
@@ -1089,7 +1183,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
               <button
                 type="button"
-                onClick={() => setPrintScope('COMPLETE_DOSSIER')}
+                onClick={() => {
+                  setPrintScope('COMPLETE_DOSSIER');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 8,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'COMPLETE_DOSSIER'
                     ? 'bg-indigo-700 text-white'
@@ -1101,7 +1202,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
               <button
                 type="button"
-                onClick={() => setPrintScope('SELECTED_YEAR')}
+                onClick={() => {
+                  setPrintScope('SELECTED_YEAR');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'SELECTED_YEAR'
                     ? 'bg-blue-700 text-white'
@@ -1113,7 +1221,52 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
               <button
                 type="button"
-                onClick={() => setPrintScope('AUDITOR_ONLY')}
+                onClick={() => {
+                  setPrintScope('PROFIT_DIST_ONLY');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  printScope === 'PROFIT_DIST_ONLY'
+                    ? 'bg-purple-700 text-white'
+                    : 'bg-white text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                مشروع توزيع الأرباح فقط
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintScope('TAX_CERT_ONLY');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  printScope === 'TAX_CERT_ONLY'
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-white text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                الشهادة والموقف الضريبي والتأميني فقط
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintScope('AUDITOR_ONLY');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'AUDITOR_ONLY'
                     ? 'bg-blue-700 text-white'
@@ -1125,7 +1278,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
               <button
                 type="button"
-                onClick={() => setPrintScope('FIXED_ASSETS_ONLY')}
+                onClick={() => {
+                  setPrintScope('FIXED_ASSETS_ONLY');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'FIXED_ASSETS_ONLY'
                     ? 'bg-blue-700 text-white'
@@ -1137,7 +1297,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
               <button
                 type="button"
-                onClick={() => setPrintScope('GA_EXPENSES_ONLY')}
+                onClick={() => {
+                  setPrintScope('GA_EXPENSES_ONLY');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'GA_EXPENSES_ONLY'
                     ? 'bg-blue-700 text-white'
@@ -1149,7 +1316,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
               <button
                 type="button"
-                onClick={() => setPrintScope('NOTES_ONLY')}
+                onClick={() => {
+                  setPrintScope('NOTES_ONLY');
+                  setPageRangeConfig((prev) => ({
+                    ...prev,
+                    fromPage: 1,
+                    toPage: 1,
+                  }));
+                }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   printScope === 'NOTES_ONLY'
                     ? 'bg-blue-700 text-white'
@@ -1159,6 +1333,134 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 الإيضاحات المتممة فقط
               </button>
             </div>
+
+            {/* Quick Header Flexibility Controls for Printing & Preview */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 bg-blue-50/80 dark:bg-slate-800/80 rounded-2xl border border-blue-200/80 dark:border-slate-700 text-xs no-print">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-black text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
+                  <span>التحكم المرن في ترويسة المستندات:</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setIsHeaderModalOpen(true)}
+                  className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <span>تخصيص الترويسة ومقرات المكتب وبيانات المنشأة</span>
+                </button>
+
+                <div className="h-4 w-px bg-blue-200 dark:bg-slate-700 hidden sm:block" />
+
+                {/* Quick Toggles */}
+                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={officeProfile.showMainOfficeAddress !== false}
+                    onChange={(e) =>
+                      handleSaveOfficeProfile({
+                        ...officeProfile,
+                        showMainOfficeAddress: e.target.checked,
+                      })
+                    }
+                    className="rounded accent-blue-700 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>المقر الرئيسي</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={officeProfile.showBranchOfficeAddress !== false}
+                    onChange={(e) =>
+                      handleSaveOfficeProfile({
+                        ...officeProfile,
+                        showBranchOfficeAddress: e.target.checked,
+                      })
+                    }
+                    className="rounded accent-indigo-700 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>فرع المكتب</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={officeProfile.showOfficePhones !== false}
+                    onChange={(e) =>
+                      handleSaveOfficeProfile({
+                        ...officeProfile,
+                        showOfficePhones: e.target.checked,
+                      })
+                    }
+                    className="rounded accent-emerald-700 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>هواتف المكتب</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={showHeaderClientBanner}
+                    onChange={(e) => setShowHeaderClientBanner(e.target.checked)}
+                    className="rounded accent-purple-700 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>شريط بيانات المنشأة</span>
+                </label>
+              </div>
+
+              <div className="text-[11px] font-mono text-blue-900 dark:text-blue-300 font-bold hidden md:block">
+                نمط الترويسة: {officeProfile.headerStyle === 'compact' ? 'مدمج وموجز' : officeProfile.headerStyle === 'formal-classic' ? 'رسمي كلاسيكي مؤطر' : 'عصري قياسي'}
+              </div>
+            </div>
+
+            {/* Page Range Flexible Controller (From Page X to Page Y) */}
+            {(() => {
+              // Calculate estimated total pages based on current print scope
+              let totalPages = 1;
+              let pageTitles: { pageNumber: number; title: string }[] = [];
+              if (printScope === 'COMPLETE_DOSSIER') {
+                totalPages = 8;
+                pageTitles = [
+                  { pageNumber: 1, title: 'الغلاف الرسمي الشامل' },
+                  { pageNumber: 2, title: `القوائم المالية لسنة ${selectedYear}` },
+                  { pageNumber: 3, title: 'تقرير مراقب الحسابات المستقل' },
+                  { pageNumber: 4, title: `مشروع وتوزيع الأرباح لسنة ${selectedYear}` },
+                  { pageNumber: 5, title: `جدول حركة وإهلاك الأصول الثابتة` },
+                  { pageNumber: 6, title: `كشف المصروفات العمومية والإدارية` },
+                  { pageNumber: 7, title: `الإيضاحات المتممة للقوائم المالية` },
+                  { pageNumber: 8, title: `شهادة الموقف الضريبي والتأميني` },
+                ];
+              } else if (printScope === 'ALL_YEARS_BATCH') {
+                totalPages = yearsList.length;
+                pageTitles = yearsList.map((y, idx) => ({
+                  pageNumber: idx + 1,
+                  title: `القوائم المالية لسنة ${y} م`,
+                }));
+              } else if (printScope === 'CUSTOM_RANGE_BATCH') {
+                totalPages = Math.max(1, batchSelectedYears.length);
+                pageTitles = batchSelectedYears.map((y, idx) => ({
+                  pageNumber: idx + 1,
+                  title: `القوائم المالية لسنة ${y} م`,
+                }));
+              } else {
+                totalPages = 1;
+                pageTitles = [{ pageNumber: 1, title: 'الصفحة المستهدفة للطباعة' }];
+              }
+
+              return (
+                <PageRangeSelector
+                  totalPages={totalPages}
+                  config={{
+                    ...pageRangeConfig,
+                    toPage: Math.min(pageRangeConfig.toPage, totalPages) || totalPages,
+                  }}
+                  onChange={(newCfg) => setPageRangeConfig(newCfg)}
+                  pageTitles={pageTitles}
+                  className="no-print"
+                />
+              );
+            })()}
 
             {/* Scrollable Document Preview Area */}
             <div className="flex-1 overflow-y-auto p-4 print:p-0 bg-slate-100 print:bg-white rounded-2xl print:rounded-none border border-slate-200 print:border-none">
@@ -1174,6 +1476,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 adminExpenseItems={adminExpenses}
                 notesList={supplementaryNotes}
                 clientProfile={clientProfile}
+                showHeaderClientBanner={showHeaderClientBanner}
+                pageRangeConfig={pageRangeConfig}
               />
             </div>
 
@@ -1189,7 +1493,16 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                   onClick={async () => {
                     setIsExportingPdf(true);
                     try {
-                      await exportElementToPdf('credit-printable-dossier', `ملف_الائتمان_المعتمد_${selectedYear}.pdf`);
+                      const rangeSuffix =
+                        pageRangeConfig.mode === 'ALL'
+                          ? 'كافة_الصفحات'
+                          : pageRangeConfig.mode === 'RANGE'
+                          ? `ص_${pageRangeConfig.fromPage}_إلى_${pageRangeConfig.toPage}`
+                          : `صفحات_${pageRangeConfig.customPagesString || 'مخصصة'}`;
+                      await exportElementToPdf(
+                        'credit-printable-dossier',
+                        `ملف_الائتمان_المعتمد_${selectedYear}_${rangeSuffix}.pdf`
+                      );
                     } finally {
                       setIsExportingPdf(false);
                     }
@@ -1203,7 +1516,17 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 <button
                   type="button"
                   onClick={async () => {
-                    await exportElementToImage('credit-printable-dossier', `ملف_الائتمان_المعتمد_${selectedYear}.png`, 'png');
+                    const rangeSuffix =
+                      pageRangeConfig.mode === 'ALL'
+                        ? 'كافة_الصفحات'
+                        : pageRangeConfig.mode === 'RANGE'
+                        ? `ص_${pageRangeConfig.fromPage}_إلى_${pageRangeConfig.toPage}`
+                        : `صفحات_${pageRangeConfig.customPagesString || 'مخصصة'}`;
+                    await exportElementToImage(
+                      'credit-printable-dossier',
+                      `ملف_الائتمان_المعتمد_${selectedYear}_${rangeSuffix}.png`,
+                      'png'
+                    );
                   }}
                   className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
@@ -1398,6 +1721,35 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         onCompanyCreated={(newCl) => {
           applyClientRecordToProfile(newCl);
         }}
+      />
+
+      {/* Flexible Print Header & Office Profile Customizer Modal */}
+      <PrintHeaderCustomizerModal
+        isOpen={isHeaderModalOpen}
+        onClose={() => setIsHeaderModalOpen(false)}
+        officeProfile={officeProfile}
+        onSaveOfficeProfile={handleSaveOfficeProfile}
+        clientProfile={clientProfile}
+        onSaveClientProfile={setClientProfile}
+        showHeaderClientBanner={showHeaderClientBanner}
+        onToggleShowHeaderClientBanner={setShowHeaderClientBanner}
+        onApplyAndPrint={() => {
+          setIsHeaderModalOpen(false);
+          setPrintScope('COMPLETE_DOSSIER');
+          setIsPrintModalOpen(true);
+        }}
+        sampleDocumentTitle={
+          activeTab === 'STATEMENTS'
+            ? 'القوائم المالية والحسابات الختامية المقارنة'
+            : activeTab === 'PROFIT_DIST'
+            ? 'مشروع ومذكرة توزيع الأرباح المقترحة'
+            : activeTab === 'AUDITOR_REPORT'
+            ? 'تقرير مراقب الحسابات المستقل المعتمد'
+            : activeTab === 'TAX_CERT'
+            ? 'شهادة الموقف الضريبي والتأميني'
+            : 'الملف الائتماني والتقارير المالية المعتمدة'
+        }
+        sampleYear={selectedYear}
       />
     </div>
   );
