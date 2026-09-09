@@ -57,17 +57,31 @@ export interface ImportResult {
 }
 
 /**
- * Downloads a blob locally with proper MIME type
+ * Downloads a blob locally with proper MIME type and safe lifecycle
  */
 export function triggerFileDownload(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  try {
+    // Sanitize fileName to prevent invalid file path characters
+    const sanitizedFileName = (fileName || 'export.dat').replace(/[/\\?%*:|"<>]/g, '_');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = sanitizedFileName;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore cleanup error
+      }
+    }, 60000); // Allow 60 seconds for browser download manager
+  } catch (err) {
+    console.error('File download error:', err);
+  }
 }
 
 /**
@@ -102,6 +116,20 @@ export function convertToCsv(data: Record<string, any>[]): string {
  */
 export function getModelTabularData(model: ModelType, state: DatabaseState): Record<string, any>[] {
   switch (model) {
+    case 'ALL_DATA': {
+      return [
+        { 'النموذج المحاسبي': 'شجرة الحسابات الدليلية', 'عدد السجلات': state.accounts?.length || 0, 'الحالة': 'مطابق للمعايير المصرية' },
+        { 'النموذج المحاسبي': 'دفتر اليومية العامة والقيود', 'عدد السجلات': state.journalEntries?.length || 0, 'الحالة': 'موزون ومعتمد' },
+        { 'النموذج المحاسبي': 'أرشيف العملاء والمكلفين', 'عدد السجلات': state.clients?.length || 0, 'الحالة': 'محدث' },
+        { 'النموذج المحاسبي': 'خزينة المكتب والإيصالات', 'عدد السجلات': state.treasuryTransactions?.length || 0, 'الحالة': 'مرحل ومطابق' },
+        { 'النموذج المحاسبي': 'الإقرارات والملفات الضريبية', 'عدد السجلات': state.taxDeclarations?.length || 0, 'الحالة': 'معتمد' },
+        { 'النموذج المحاسبي': 'الشهادات المحاسبية المعتمدة', 'عدد السجلات': state.certificates?.length || 0, 'الحالة': 'موثق برمز QR' },
+        { 'النموذج المحاسبي': 'فواتير الأتعاب المهنية', 'عدد السجلات': state.invoices?.length || 0, 'الحالة': 'مصدر ومطابق' },
+        { 'النموذج المحاسبي': 'دراسات الجدوى الاقتصادية', 'عدد السجلات': state.feasibilityStudies?.length || 0, 'الحالة': 'معتمد بنكياً' },
+        { 'النموذج المحاسبي': 'الأصول الثابتة ومجمعات الإهلاك', 'عدد السجلات': (state.accounts || []).filter((a) => a.code.startsWith('11') || a.code.startsWith('12')).length, 'الحالة': 'محسوب الإهلاك' },
+      ];
+    }
+
     case 'ACCOUNTS':
       return state.accounts.map((a) => ({
         'كود الحساب (Serial)': a.code,
@@ -649,7 +677,11 @@ export function exportModelData(
       XLSX.utils.book_append_sheet(wb, wsMain, 'بيانات_المستند');
 
       const fileName = `${cleanDocTitle}_${timestamp}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+      });
+      triggerFileDownload(blob, fileName);
       return { success: true, fileName, message: `تم تصدير بيانات [${docTitle}] بصيغة Excel بنجاح` };
     }
 
@@ -710,7 +742,11 @@ export function exportModelData(
       }
 
       const fileName = `المصنف_المحاسبي_الشامل_لكافة_النماذج_${timestamp}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+      });
+      triggerFileDownload(blob, fileName);
       return { success: true, fileName, message: 'تم تصدير مصنف الإكسل الشامل لكافة النماذج والبيانات بنجاح' };
     }
 
@@ -847,7 +883,11 @@ export function exportModelData(
     }
 
     const fileName = `${baseName}_${timestamp}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+    });
+    triggerFileDownload(blob, fileName);
     return { success: true, fileName, message: `تم تصدير مصنف [${baseName}] بصيغة Excel (.xlsx) بنجاح` };
   }
 

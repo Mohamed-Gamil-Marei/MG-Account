@@ -7,6 +7,7 @@ export interface PageRangeConfig {
   toPage: number;
   customPagesString?: string; // e.g. "1, 3, 5-7"
   showPageNumbers: boolean;
+  resequencePageNumbers?: boolean; // When true, renumbers footers 1..N based on selected pages
 }
 
 interface PageRangeSelectorProps {
@@ -255,21 +256,45 @@ export const PageRangeSelector: React.FC<PageRangeSelectorProps> = ({
         </div>
       )}
 
-      {/* Page number footer toggle */}
-      <div className="flex items-center justify-between pt-1 text-xs">
-        <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 dark:text-slate-300">
+      {/* Page number footer and resequencing options */}
+      <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={config.showPageNumbers}
+              onChange={(e) => onChange({ ...config, showPageNumbers: e.target.checked })}
+              className="rounded accent-blue-700 w-4 h-4 cursor-pointer"
+            />
+            <span>إظهار الترقيم التلقائي أسفل الورقة المطبوعة (مثل: صفحة [س] من [ص])</span>
+          </label>
+
+          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+            تطبيق على أوامر الطباعة A4 وتصدير PDF/PNG
+          </span>
+        </div>
+
+        {/* Dynamic Resequencing Toggle based on selected pages */}
+        <div className="p-2.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-start gap-2.5">
           <input
             type="checkbox"
-            checked={config.showPageNumbers}
-            onChange={(e) => onChange({ ...config, showPageNumbers: e.target.checked })}
-            className="rounded accent-blue-700 w-4 h-4 cursor-pointer"
+            id="resequence-toggle-input"
+            checked={config.resequencePageNumbers !== false}
+            onChange={(e) => onChange({ ...config, resequencePageNumbers: e.target.checked })}
+            className="rounded accent-emerald-600 w-4 h-4 cursor-pointer mt-0.5 shrink-0"
           />
-          <span>إظهار الترقيم التلقائي أسفل الورقة المطبوعة (مثل: صفحة [س] من [ص])</span>
-        </label>
-
-        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-          تطبيق على أوامر الطباعة A4 وتصدير PDF/PNG
-        </span>
+          <label htmlFor="resequence-toggle-input" className="cursor-pointer space-y-0.5">
+            <div className="font-black text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-1.5">
+              <span>إعادة ترتيب وترقيم تذييل الصفحات تلقائياً بناءً على الصفحات المحددة</span>
+              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 rounded font-mono font-bold">
+                Dynamic Pagination
+              </span>
+            </div>
+            <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 leading-relaxed">
+              عند التفعيل واختيار صفحات محددة (مثلاً 3 صفحات)، يُعاد ترقيم تذييل الأوراق المطبوعة تسلسلياً (1 من 3، 2 من 3، 3 من 3) بدلاً من الاحتفاظ بأرقام الأوراق الأصلية.
+            </p>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -334,3 +359,42 @@ export function isPageIncluded(
   }
   return true;
 }
+
+/**
+ * Convert array of page numbers into compressed range string like "1, 3, 5-7"
+ */
+export function formatPagesToRangeString(pages: number[]): string {
+  if (pages.length === 0) return '';
+  const sorted = Array.from(new Set(pages)).sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0];
+  let prev = start;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const curr = sorted[i];
+    if (curr === prev + 1) {
+      prev = curr;
+    } else {
+      ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+      start = curr;
+      prev = curr;
+    }
+  }
+  ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+  return ranges.join(', ');
+}
+
+/**
+ * Toggle a page in custom page string
+ */
+export function togglePageInCustomString(currentStr: string, pageNum: number, maxPages: number): string {
+  const currentPages = new Set(parseCustomPageString(currentStr, maxPages));
+  if (currentPages.has(pageNum)) {
+    currentPages.delete(pageNum);
+  } else {
+    currentPages.add(pageNum);
+  }
+  const sorted = Array.from(currentPages).sort((a, b) => a - b);
+  return formatPagesToRangeString(sorted);
+}
+

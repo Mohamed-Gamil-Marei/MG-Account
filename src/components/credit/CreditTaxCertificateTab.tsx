@@ -15,6 +15,9 @@ interface CreditTaxCertificateTabProps {
   computedData: Record<number, any>;
   officeProfile: any;
   clientProfile?: any;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
 }
 
 export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = ({
@@ -22,6 +25,9 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
   computedData,
   officeProfile,
   clientProfile,
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
 }) => {
   const [taxRegNumber, setTaxRegNumber] = useState<string>(clientProfile?.taxRegNo || '492-817-302');
   const [vatRegNumber, setVatRegNumber] = useState<string>(clientProfile?.taxRegNo || '492-817-302');
@@ -205,6 +211,8 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
           }}
           documentTitle="شهادة الموقف الضريبي والتأميني"
           fiscalYear={statusYear}
+          periodStartDate={periodStartDate}
+          periodEndDate={periodEndDate}
           documentReference={`TAX-CERT-${statusYear}`}
           documentSubtitle="شهادة مهنية معتمدة وموثقة صادرة عن مراقب الحسابات المقيد بسجل المحاسبين والمراجعين"
         />
@@ -222,7 +230,7 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
         {/* Certificate Body */}
         <div className="space-y-4">
           <p className="text-right text-slate-800 leading-loose">
-            يشهد مكتب المحاسب القانوني ومراقب الحسابات <strong>{officeProfile.auditorName}</strong>، وبصفتنا مراقب حسابات ومستشار الضرائب لـ <strong>{companyName}</strong> (رقم التسجيل الضريبي: <span className="font-mono font-bold text-emerald-900">{taxRegNumber}</span>، والتابع لمأمورية: <strong>{taxOffice}</strong>، والرقم التأميني: <span className="font-mono font-bold text-emerald-900">{socialInsuranceNo}</span>)، بأنه بعد فحص ومراجعة الدفاتر والسجلات والمستندات والإقرارات الضريبية وسدادات التأمينات الاجتماعية للسنة المالية المنتهية في {statusYear}/12/31، تبين الآتي:
+            يشهد مكتب المحاسب القانوني ومراقب الحسابات <strong>{officeProfile.auditorName}</strong>، وبصفتنا مراقب حسابات ومستشار الضرائب لـ <strong>{companyName}</strong> (رقم التسجيل الضريبي: <span className="font-mono font-bold text-emerald-900">{taxRegNumber}</span>، والتابع لمأمورية: <strong>{taxOffice}</strong>، والرقم التأميني: <span className="font-mono font-bold text-emerald-900">{socialInsuranceNo}</span>)، بأنه بعد فحص ومراجعة الدفاتر والسجلات والمستندات والإقرارات الضريبية وسدادات التأمينات الاجتماعية {periodStartDate && periodEndDate ? `عن الفترة المالية من ${periodStartDate} إلى ${periodEndDate}` : `للسنة المالية المنتهية في ${statusYear}/12/31`}، تبين الآتي:
           </p>
 
           {/* Tax Types Grid */}

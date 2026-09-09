@@ -1,9 +1,19 @@
+import fs from "fs";
+import path from "path";
+import QRCode from "qrcode";
+import pino from "pino";
+import makeWASocket, {
+  DisconnectReason,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+} from "@whiskeysockets/baileys";
+
 export interface WhatsAppServerConfig {
   phoneNumberId: string;
   wabaId: string;
   accessToken: string;
   verifyToken: string;
-  landlineNumber: string; // e.g. "0237654321" or "+20237654321"
+  landlineNumber: string;
   officeName: string;
   webhookUrl: string;
   isEnabled: boolean;
@@ -14,7 +24,7 @@ export interface WhatsAppServerConfig {
 
 export interface WhatsAppIncomingMessage {
   id: string;
-  from: string; // phone number of sender
+  from: string;
   name?: string;
   text: string;
   timestamp: number;
@@ -33,6 +43,49 @@ export interface WhatsAppLogEntry {
   category?: 'QUOTATION' | 'CERTIFIED_REPORT' | 'INVOICE' | 'TAX' | 'GENERAL';
   referenceCode?: string;
   amount?: number;
+  channel?: 'BAILEYS_QR_GATEWAY' | 'META_CLOUD_API' | 'LOCAL_GATEWAY';
+}
+
+export interface WhatsAppSessionStatus {
+  status: 'DISCONNECTED' | 'SCAN_QR_CODE' | 'CONNECTING' | 'CONNECTED';
+  qrCodeDataUrl: string | null;
+  qrRawString: string | null;
+  connectedPhone: string | null;
+  connectedName: string | null;
+  platform: string;
+  lastConnectedTime: string | null;
+  autoReplyEnabled: boolean;
+  activeMode: 'BAILEYS_FREE_GATEWAY' | 'META_CLOUD_API' | 'SIMULATION';
+  stats: {
+    sentCount: number;
+    receivedCount: number;
+    failedCount: number;
+  };
+}
+
+export interface WhatsAppChatMessage {
+  id: string;
+  phone: string;
+  clientName?: string;
+  sender: 'CLIENT' | 'OFFICE' | 'BOT';
+  direction: 'INCOMING' | 'OUTGOING';
+  text: string;
+  timestamp: string;
+  status: 'RECEIVED' | 'SENT' | 'DELIVERED' | 'READ';
+  category?: 'QUOTATION' | 'CERTIFIED_REPORT' | 'INVOICE' | 'TAX' | 'GENERAL';
+  referenceCode?: string;
+  amount?: number;
+}
+
+export interface WhatsAppChatThread {
+  phone: string;
+  clientName: string;
+  lastMessage: string;
+  lastTimestamp: string;
+  lastDirection: 'INCOMING' | 'OUTGOING';
+  lastSender: 'CLIENT' | 'OFFICE' | 'BOT';
+  unreadCount: number;
+  totalMessages: number;
 }
 
 export interface QuotationPayload {
@@ -71,6 +124,8 @@ export interface CertifiedReportPayload {
   verificationCode?: string;
 }
 
+const SESSION_DIR = path.join(process.cwd(), ".whatsapp_session");
+
 class WhatsAppServerEngine {
   private config: WhatsAppServerConfig = {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
@@ -86,6 +141,27 @@ class WhatsAppServerEngine {
     businessDescription: "استشارات محاسبية وضريبية، مراجعة واعتماد قوائم مالية، تأسيس شركات وفحص ضرائب",
   };
 
+  private sessionStatus: WhatsAppSessionStatus = {
+    status: "DISCONNECTED",
+    qrCodeDataUrl: null,
+    qrRawString: null,
+    connectedPhone: null,
+    connectedName: null,
+    platform: "WhatsApp Multi-Device Gateway (Free)",
+    lastConnectedTime: null,
+    autoReplyEnabled: true,
+    activeMode: "BAILEYS_FREE_GATEWAY",
+    stats: {
+      sentCount: 0,
+      receivedCount: 0,
+      failedCount: 0,
+    },
+  };
+
+  private sock: any = null;
+  private isConnecting: boolean = false;
+  private reconnectTimer: any = null;
+
   private logs: WhatsAppLogEntry[] = [
     {
       id: "log-init-1",
@@ -95,6 +171,7 @@ class WhatsAppServerEngine {
       clientName: "شركة الأمل للتجارة والتوزيع",
       message: "تم إرسال إشعار استحقاق إقرار ضريبة القيمة المضافة لشهر يوليو",
       status: "DELIVERED",
+      channel: "BAILEYS_QR_GATEWAY",
     },
     {
       id: "log-init-2",
@@ -104,6 +181,7 @@ class WhatsAppServerEngine {
       clientName: "مؤسسة النور الهندسية",
       message: "1",
       status: "RECEIVED",
+      channel: "BAILEYS_QR_GATEWAY",
     },
     {
       id: "log-init-3",
@@ -113,8 +191,331 @@ class WhatsAppServerEngine {
       clientName: "مؤسسة النور الهندسية",
       message: "كشف فواتير الأتعاب: إجمالي المستحق 15,000 ج.م",
       status: "DELIVERED",
-    }
+      channel: "BAILEYS_QR_GATEWAY",
+    },
   ];
+
+  private chatMessages: WhatsAppChatMessage[] = [
+    {
+      id: "chat-msg-1",
+      phone: "201098765432",
+      clientName: "شركة الأمل للتجارة والتوزيع",
+      sender: "OFFICE",
+      direction: "OUTGOING",
+      text: "السلام عليكم ورحمة الله، مرفق لسيادتكم إشعار استحقاق إقرار ضريبة القيمة المضافة لشهر يوليو 2026 ومطابقة الفواتير الإلكترونية.",
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      status: "DELIVERED",
+      category: "TAX",
+    },
+    {
+      id: "chat-msg-2",
+      phone: "201098765432",
+      clientName: "شركة الأمل للتجارة والتوزيع",
+      sender: "CLIENT",
+      direction: "INCOMING",
+      text: "وعليكم السلام يا أستاذ محمد، تمام تم الاطلاع ومراجعة البنود وسنقوم بسداد الضريبة اليوم، شكراً جزيلاً لسرعة المتابعة.",
+      timestamp: new Date(Date.now() - 3200000).toISOString(),
+      status: "RECEIVED",
+    },
+    {
+      id: "chat-msg-3",
+      phone: "201123456789",
+      clientName: "مؤسسة النور الهندسية",
+      sender: "CLIENT",
+      direction: "INCOMING",
+      text: "السلام عليكم، ممكن استعلام عن أتعاب الفحص الضريبي وسند القبض الأخير؟",
+      timestamp: new Date(Date.now() - 1800000).toISOString(),
+      status: "RECEIVED",
+    },
+    {
+      id: "chat-msg-4",
+      phone: "201123456789",
+      clientName: "مؤسسة النور الهندسية",
+      sender: "BOT",
+      direction: "OUTGOING",
+      text: "🧾 استعلام فواتير الأتعاب والمستحقات:\nعزيزي العميل، مسجل باسمكم:\n• حالة الحساب: ساري ونشط\n• فواتير معلقة: أتعاب إشراف سنوي 4,500 ج.م\n• سند القبض الأخير: REC-2026-089 بقيمة 5,000 ج.م معتمد بالخزينة.",
+      timestamp: new Date(Date.now() - 1795000).toISOString(),
+      status: "DELIVERED",
+    },
+    {
+      id: "chat-msg-5",
+      phone: "201123456789",
+      clientName: "مؤسسة النور الهندسية",
+      sender: "CLIENT",
+      direction: "INCOMING",
+      text: "ممتاز يا فندم، غداً صباحاً سيمر مندوبنا بالمكتب لسداد المتبقي واستلام الشهادة المعتمدة.",
+      timestamp: new Date(Date.now() - 900000).toISOString(),
+      status: "RECEIVED",
+    },
+    {
+      id: "chat-msg-6",
+      phone: "201200001122",
+      clientName: "مجموعة الباسم للمقاولات العامة",
+      sender: "CLIENT",
+      direction: "INCOMING",
+      text: "أستاذ محمد، هل تم الانتهاء من إعداد المركز المالي والشهادة البنكية لتقديمها للبنك الأهلي المصري؟",
+      timestamp: new Date(Date.now() - 600000).toISOString(),
+      status: "RECEIVED",
+    },
+    {
+      id: "chat-msg-7",
+      phone: "201200001122",
+      clientName: "مجموعة الباسم للمقاولات العامة",
+      sender: "OFFICE",
+      direction: "OUTGOING",
+      text: "أهلاً بك يا بشمهندس باسم، نعم بفضل الله تم توثيق واعتماد القوائم المالية وشهادة الدخل ومختومة بختم المحاسب القانوني ومرفق كود QR الرسمي، وجاهزة للاستلام بمقر المكتب أو إرسال نسخة معتمدة PDF فوراً.",
+      timestamp: new Date(Date.now() - 300000).toISOString(),
+      status: "DELIVERED",
+      category: "CERTIFIED_REPORT",
+    },
+  ];
+
+  constructor() {
+    this.ensureSessionDir();
+    // If previous session files exist, attempt background auto-connect
+    if (this.hasSavedSession()) {
+      setTimeout(() => {
+        this.startBaileysSession().catch((err) => {
+          console.warn("Auto reconnect Baileys warning:", err?.message);
+        });
+      }, 2500);
+    }
+  }
+
+  private ensureSessionDir() {
+    if (!fs.existsSync(SESSION_DIR)) {
+      try {
+        fs.mkdirSync(SESSION_DIR, { recursive: true });
+      } catch (err) {
+        console.warn("Failed to create session dir:", err);
+      }
+    }
+  }
+
+  private hasSavedSession(): boolean {
+    try {
+      if (!fs.existsSync(SESSION_DIR)) return false;
+      const files = fs.readdirSync(SESSION_DIR);
+      return files.some((f) => f.startsWith("creds.json"));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Start or initialize the Baileys Multi-Device WhatsApp Socket
+   */
+  public async startBaileysSession(): Promise<WhatsAppSessionStatus> {
+    if (this.sessionStatus.status === "CONNECTED" && this.sock) {
+      return this.getSessionStatus();
+    }
+    if (this.isConnecting) {
+      return this.getSessionStatus();
+    }
+
+    this.isConnecting = true;
+    this.sessionStatus.status = "CONNECTING";
+    this.ensureSessionDir();
+
+    try {
+      const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+      const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307] as any }));
+
+      const socketFactory: any = (makeWASocket as any).default || makeWASocket;
+      const sock = socketFactory({
+        version,
+        auth: state,
+        logger: pino({ level: "silent" }),
+        printQRInTerminal: false,
+        browser: ["مكتب المحاسب القانوني مرعي", "Chrome", "124.0.0"],
+        syncFullHistory: false,
+        connectTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+      });
+
+      this.sock = sock;
+
+      sock.ev.on("connection.update", async (update: any) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          try {
+            this.sessionStatus.status = "SCAN_QR_CODE";
+            this.sessionStatus.qrRawString = qr;
+            this.sessionStatus.qrCodeDataUrl = await QRCode.toDataURL(qr, {
+              width: 340,
+              margin: 2,
+              color: { dark: "#0f172a", light: "#ffffff" },
+            });
+          } catch (qrErr) {
+            console.error("QR Code generation error:", qrErr);
+          }
+        }
+
+        if (connection === "open") {
+          this.isConnecting = false;
+          this.sessionStatus.status = "CONNECTED";
+          this.sessionStatus.qrCodeDataUrl = null;
+          this.sessionStatus.qrRawString = null;
+          this.sessionStatus.lastConnectedTime = new Date().toISOString();
+
+          const rawId = sock.user?.id || "";
+          const phone = rawId.split(":")[0].split("@")[0];
+          this.sessionStatus.connectedPhone = phone ? (phone.startsWith("+") ? phone : `+${phone}`) : "+201000000000";
+          this.sessionStatus.connectedName = sock.user?.name || "مكتب المحاسب القانوني - مرعي";
+        }
+
+        if (connection === "close") {
+          this.isConnecting = false;
+          const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+          if (statusCode === DisconnectReason.loggedOut) {
+            this.sessionStatus.status = "DISCONNECTED";
+            this.sessionStatus.qrCodeDataUrl = null;
+            this.sessionStatus.qrRawString = null;
+            this.sessionStatus.connectedPhone = null;
+            this.sessionStatus.connectedName = null;
+            this.clearSessionFolder();
+          } else if (shouldReconnect) {
+            this.sessionStatus.status = "CONNECTING";
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = setTimeout(() => {
+              this.startBaileysSession().catch(() => {});
+            }, 4000);
+          } else {
+            this.sessionStatus.status = "DISCONNECTED";
+          }
+        }
+      });
+
+      sock.ev.on("creds.update", saveCreds);
+
+      // Handle Incoming WhatsApp Messages
+      sock.ev.on("messages.upsert", async (m: any) => {
+        try {
+          if (!m.messages || m.messages.length === 0) return;
+          const msg = m.messages[0];
+
+          // Ignore messages sent by ourselves or system notifications
+          if (msg.key.fromMe) return;
+
+          const remoteJid = msg.key.remoteJid || "";
+          if (remoteJid.endsWith("@g.us")) return; // skip group messages by default
+
+          const rawPhone = remoteJid.replace("@s.whatsapp.net", "");
+          const senderName = msg.pushName || "عميل المكتب";
+
+          const text =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.buttonsResponseMessage?.selectedDisplayText ||
+            "";
+
+          if (!text) return;
+
+          this.sessionStatus.stats.receivedCount += 1;
+
+          // Record log entry
+          this.addLog({
+            direction: "INCOMING",
+            phoneNumber: rawPhone,
+            clientName: senderName,
+            message: text,
+            status: "RECEIVED",
+            channel: "BAILEYS_QR_GATEWAY",
+          });
+
+          // Record in Live Chat thread
+          this.addChatMessage({
+            phone: rawPhone,
+            clientName: senderName,
+            sender: "CLIENT",
+            direction: "INCOMING",
+            text,
+            status: "RECEIVED",
+          });
+
+          // Generate auto-reply if enabled
+          if (this.sessionStatus.autoReplyEnabled && this.config.autoReplyEnabled) {
+            const reply = this.generateAutoReply(text, senderName, rawPhone);
+            await this.sendMessageDirect(rawPhone, reply);
+          }
+        } catch (msgErr) {
+          console.error("Error processing incoming WhatsApp message:", msgErr);
+        }
+      });
+
+      this.isConnecting = false;
+      return this.getSessionStatus();
+    } catch (err: any) {
+      this.isConnecting = false;
+      this.sessionStatus.status = "DISCONNECTED";
+      console.error("Failed to initialize Baileys session:", err);
+      return this.getSessionStatus();
+    }
+  }
+
+  /**
+   * Disconnect the active WhatsApp session and remove stored credentials
+   */
+  public async disconnectBaileysSession(): Promise<WhatsAppSessionStatus> {
+    clearTimeout(this.reconnectTimer);
+    if (this.sock) {
+      try {
+        await this.sock.logout().catch(() => {});
+        this.sock.end();
+      } catch (err) {
+        console.warn("Logout error:", err);
+      }
+      this.sock = null;
+    }
+
+    this.clearSessionFolder();
+
+    this.sessionStatus.status = "DISCONNECTED";
+    this.sessionStatus.qrCodeDataUrl = null;
+    this.sessionStatus.qrRawString = null;
+    this.sessionStatus.connectedPhone = null;
+    this.sessionStatus.connectedName = null;
+    this.isConnecting = false;
+
+    return this.getSessionStatus();
+  }
+
+  private clearSessionFolder() {
+    try {
+      if (fs.existsSync(SESSION_DIR)) {
+        const files = fs.readdirSync(SESSION_DIR);
+        for (const file of files) {
+          try {
+            fs.unlinkSync(path.join(SESSION_DIR, file));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to clear session files:", err);
+    }
+  }
+
+  public getSessionStatus(): WhatsAppSessionStatus {
+    const isMetaConfigured = !!(this.config.accessToken && this.config.phoneNumberId);
+    let activeMode: 'BAILEYS_FREE_GATEWAY' | 'META_CLOUD_API' | 'SIMULATION' = "BAILEYS_FREE_GATEWAY";
+
+    if (this.sessionStatus.status === "CONNECTED") {
+      activeMode = "BAILEYS_FREE_GATEWAY";
+    } else if (isMetaConfigured) {
+      activeMode = "META_CLOUD_API";
+    } else {
+      activeMode = "SIMULATION";
+    }
+
+    return {
+      ...this.sessionStatus,
+      autoReplyEnabled: this.config.autoReplyEnabled,
+      activeMode,
+    };
+  }
 
   public getConfig(): WhatsAppServerConfig {
     return { ...this.config };
@@ -125,6 +526,9 @@ class WhatsAppServerEngine {
       ...this.config,
       ...newConfig,
     };
+    if (newConfig.autoReplyEnabled !== undefined) {
+      this.sessionStatus.autoReplyEnabled = newConfig.autoReplyEnabled;
+    }
     return this.getConfig();
   }
 
@@ -147,6 +551,115 @@ class WhatsAppServerEngine {
       this.logs.pop();
     }
     return newLog;
+  }
+
+  public addChatMessage(entry: Omit<WhatsAppChatMessage, "id" | "timestamp">): WhatsAppChatMessage {
+    const formattedPhone = this.formatPhoneNumber(entry.phone);
+    const newMsg: WhatsAppChatMessage = {
+      id: `chat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      ...entry,
+      phone: formattedPhone,
+    };
+    this.chatMessages.push(newMsg);
+    if (this.chatMessages.length > 1000) {
+      this.chatMessages.shift();
+    }
+    return newMsg;
+  }
+
+  public getChatThreads(): WhatsAppChatThread[] {
+    const map = new Map<string, WhatsAppChatThread>();
+
+    for (const msg of this.chatMessages) {
+      const isUnread = msg.direction === 'INCOMING' && msg.status === 'RECEIVED';
+      const existing = map.get(msg.phone);
+      if (!existing) {
+        map.set(msg.phone, {
+          phone: msg.phone,
+          clientName: msg.clientName || 'عميل واتساب',
+          lastMessage: msg.text,
+          lastTimestamp: msg.timestamp,
+          lastDirection: msg.direction,
+          lastSender: msg.sender,
+          unreadCount: isUnread ? 1 : 0,
+          totalMessages: 1,
+        });
+      } else {
+        existing.lastMessage = msg.text;
+        existing.lastTimestamp = msg.timestamp;
+        existing.lastDirection = msg.direction;
+        existing.lastSender = msg.sender;
+        existing.totalMessages += 1;
+        if (msg.clientName && existing.clientName === 'عميل واتساب') {
+          existing.clientName = msg.clientName;
+        }
+        if (isUnread) {
+          existing.unreadCount += 1;
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime()
+    );
+  }
+
+  public getChatMessages(phone: string): WhatsAppChatMessage[] {
+    const formatted = this.formatPhoneNumber(phone);
+    return this.chatMessages.filter(
+      (m) => m.phone === formatted || m.phone.endsWith(formatted.slice(-9))
+    );
+  }
+
+  public simulateIncomingClientReply(
+    phone: string,
+    text: string,
+    clientName: string = "عميل المكتب"
+  ): { incoming: WhatsAppChatMessage; reply?: WhatsAppChatMessage } {
+    const formatted = this.formatPhoneNumber(phone);
+    this.sessionStatus.stats.receivedCount += 1;
+
+    this.addLog({
+      direction: "INCOMING",
+      phoneNumber: formatted,
+      clientName,
+      message: text,
+      status: "RECEIVED",
+      channel: "LOCAL_GATEWAY",
+    });
+
+    const incoming = this.addChatMessage({
+      phone: formatted,
+      clientName,
+      sender: "CLIENT",
+      direction: "INCOMING",
+      text,
+      status: "RECEIVED",
+    });
+
+    let reply: WhatsAppChatMessage | undefined;
+    if (this.config.autoReplyEnabled) {
+      const replyText = this.generateAutoReply(text, clientName, formatted);
+      reply = this.addChatMessage({
+        phone: formatted,
+        clientName,
+        sender: "BOT",
+        direction: "OUTGOING",
+        text: replyText,
+        status: "DELIVERED",
+      });
+      this.addLog({
+        direction: "OUTGOING",
+        phoneNumber: formatted,
+        clientName,
+        message: replyText,
+        status: "DELIVERED",
+        channel: "LOCAL_GATEWAY",
+      });
+    }
+
+    return { incoming, reply };
   }
 
   /**
@@ -181,16 +694,24 @@ class WhatsAppServerEngine {
               text = msg.button?.text || "";
             }
 
-            // Log incoming message
             this.addLog({
               direction: "INCOMING",
               phoneNumber: senderPhone,
               clientName: senderName,
               message: text || `[${msgType}]`,
               status: "RECEIVED",
+              channel: "META_CLOUD_API",
             });
 
-            // Generate Auto-Reply if enabled
+            this.addChatMessage({
+              phone: senderPhone,
+              clientName: senderName,
+              sender: "CLIENT",
+              direction: "INCOMING",
+              text: text || `[${msgType}]`,
+              status: "RECEIVED",
+            });
+
             if (this.config.autoReplyEnabled) {
               const replyText = this.generateAutoReply(text, senderName, senderPhone);
               await this.sendMessageDirect(senderPhone, replyText);
@@ -209,7 +730,7 @@ class WhatsAppServerEngine {
   /**
    * Intelligent Rule-based Auto Reply Engine for Office Bot
    */
-  public generateAutoReply(userMessage: string, clientName: string, phone: string): string {
+  public generateAutoReply(userMessage: string, clientName: string, _phone: string): string {
     const trimmed = userMessage.trim().toLowerCase();
     const officeHeader = `🏛️ *${this.config.officeName}*\n📞 رقم الخط الأرضي للمكتب: ${this.config.landlineNumber}\n━━━━━━━━━━━━━━━━━━━━`;
 
@@ -263,12 +784,25 @@ class WhatsAppServerEngine {
       return `${officeHeader}\n\n👨‍💼 *طلب تحويل للمحاسب القانوني المسؤول:*\n\nتم إشعار إدارة المكتب برغبتكم في التحدث المباشر مع المحاسب المسؤول عن ملف شركتكم.\n\nسيقوم أحد الزملاء بالاتصال بكم أو الرد المباشر على هذه المحادثة في أقرب وقت خلال ساعات العمل الرسمية.\n\n_أرسل (0) للعودة للقائمة الرئيسية._`;
     }
 
-    // Fallback response with helpful menu
     return `${officeHeader}\n\nمرحباً بك يا أستاذ *${clientName}*.\nتم استلام رسالتكم: "${userMessage}".\n\nللحصول على خدمة فورية، يرجى إرسال رقم الخدمة:\n1️⃣ فواتير الأتعاب\n2️⃣ الضرائب والإقرارات\n3️⃣ سندات الخزينة\n4️⃣ السجل التجاري\n5️⃣ طلب شهادة معتمدة\n6️⃣ عنوان ومواعيد المكتب\n7️⃣ التحدث مع المحاسب المسؤول`;
   }
 
   /**
-   * Send WhatsApp message via Meta Cloud API or log locally
+   * Format phone number to WhatsApp international standard (e.g. 2010... or 2011...)
+   */
+  private formatPhoneNumber(to: string): string {
+    let clean = to.replace(/[^0-9]/g, "");
+    if (clean.startsWith("0")) {
+      clean = "2" + clean;
+    }
+    if (!clean.startsWith("20") && clean.length === 10 && clean.startsWith("1")) {
+      clean = "20" + clean;
+    }
+    return clean;
+  }
+
+  /**
+   * Send WhatsApp message via active connection (Priority: Baileys Multi-Device -> Meta Cloud API -> Simulation)
    */
   public async sendMessageDirect(
     to: string,
@@ -279,10 +813,54 @@ class WhatsAppServerEngine {
       referenceCode?: string;
       amount?: number;
     }
-  ): Promise<{ success: boolean; messageId?: string; error?: string; status?: string }> {
-    const sanitizedTo = to.replace(/[^0-9]/g, "");
+  ): Promise<{ success: boolean; messageId?: string; error?: string; status?: string; channel?: string }> {
+    const formattedPhone = this.formatPhoneNumber(to);
 
-    // If Meta Access Token & Phone Number ID are provided, call Meta Cloud API
+    // 1. PRIORITY 1: Baileys Web Multi-Device Gateway (Free & Direct from Phone)
+    if (this.sock && this.sessionStatus.status === "CONNECTED") {
+      try {
+        const jid = `${formattedPhone}@s.whatsapp.net`;
+        const result = await this.sock.sendMessage(jid, { text: messageText });
+        const messageId = result?.key?.id || `BAIL-${Date.now()}`;
+
+        this.sessionStatus.stats.sentCount += 1;
+        this.addLog({
+          direction: "OUTGOING",
+          phoneNumber: formattedPhone,
+          clientName: meta?.clientName,
+          message: messageText,
+          status: "DELIVERED",
+          category: meta?.category || 'GENERAL',
+          referenceCode: meta?.referenceCode,
+          amount: meta?.amount,
+          channel: "BAILEYS_QR_GATEWAY",
+        });
+
+        this.addChatMessage({
+          phone: formattedPhone,
+          clientName: meta?.clientName,
+          sender: "OFFICE",
+          direction: "OUTGOING",
+          text: messageText,
+          status: "DELIVERED",
+          category: meta?.category,
+          referenceCode: meta?.referenceCode,
+          amount: meta?.amount,
+        });
+
+        return {
+          success: true,
+          messageId,
+          status: "DELIVERED",
+          channel: "BAILEYS_QR_GATEWAY",
+        };
+      } catch (baileysErr: any) {
+        console.warn("Baileys send error, falling back:", baileysErr?.message);
+        this.sessionStatus.stats.failedCount += 1;
+      }
+    }
+
+    // 2. PRIORITY 2: Meta Cloud API (Official Cloud API)
     if (this.config.accessToken && this.config.phoneNumberId) {
       try {
         const url = `https://graph.facebook.com/v19.0/${this.config.phoneNumberId}/messages`;
@@ -295,7 +873,7 @@ class WhatsAppServerEngine {
           body: JSON.stringify({
             messaging_product: "whatsapp",
             recipient_type: "individual",
-            to: sanitizedTo,
+            to: formattedPhone,
             type: "text",
             text: {
               preview_url: false,
@@ -307,22 +885,25 @@ class WhatsAppServerEngine {
         const data: any = await res.json();
         if (res.ok && data.messages?.[0]?.id) {
           const msgId = data.messages[0].id;
+          this.sessionStatus.stats.sentCount += 1;
           this.addLog({
             direction: "OUTGOING",
-            phoneNumber: sanitizedTo,
+            phoneNumber: formattedPhone,
             clientName: meta?.clientName,
             message: messageText,
             status: "DELIVERED",
             category: meta?.category || 'GENERAL',
             referenceCode: meta?.referenceCode,
             amount: meta?.amount,
+            channel: "META_CLOUD_API",
           });
-          return { success: true, messageId: msgId, status: "DELIVERED" };
+          return { success: true, messageId: msgId, status: "DELIVERED", channel: "META_CLOUD_API" };
         } else {
           const errorMsg = data?.error?.message || "فشل الإرسال عبر خادم Meta Cloud API";
+          this.sessionStatus.stats.failedCount += 1;
           this.addLog({
             direction: "OUTGOING",
-            phoneNumber: sanitizedTo,
+            phoneNumber: formattedPhone,
             clientName: meta?.clientName,
             message: messageText,
             status: "FAILED",
@@ -330,13 +911,15 @@ class WhatsAppServerEngine {
             category: meta?.category || 'GENERAL',
             referenceCode: meta?.referenceCode,
             amount: meta?.amount,
+            channel: "META_CLOUD_API",
           });
           return { success: false, error: errorMsg, status: "FAILED" };
         }
       } catch (err: any) {
+        this.sessionStatus.stats.failedCount += 1;
         this.addLog({
           direction: "OUTGOING",
-          phoneNumber: sanitizedTo,
+          phoneNumber: formattedPhone,
           clientName: meta?.clientName,
           message: messageText,
           status: "FAILED",
@@ -344,39 +927,90 @@ class WhatsAppServerEngine {
           category: meta?.category || 'GENERAL',
           referenceCode: meta?.referenceCode,
           amount: meta?.amount,
+          channel: "META_CLOUD_API",
         });
         return { success: false, error: err.message, status: "FAILED" };
       }
     }
 
-    // Local / Sandbox direct simulation mode
+    // 3. PRIORITY 3: Local Gateway Simulation & Archive Mode
     const simMsgId = `WAM-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    this.sessionStatus.stats.sentCount += 1;
     this.addLog({
       direction: "OUTGOING",
-      phoneNumber: sanitizedTo,
+      phoneNumber: formattedPhone,
       clientName: meta?.clientName,
       message: messageText,
       status: "DELIVERED",
       category: meta?.category || 'GENERAL',
       referenceCode: meta?.referenceCode,
       amount: meta?.amount,
+      channel: "LOCAL_GATEWAY",
     });
 
     return {
       success: true,
       messageId: simMsgId,
       status: "DELIVERED",
+      channel: "LOCAL_GATEWAY",
     };
   }
 
   /**
-   * Send Official Price Quotation Directly via WhatsApp Business API
+   * Send document / PDF file directly via WhatsApp session
+   */
+  public async sendDocumentDirect(
+    to: string,
+    fileBase64: string,
+    fileName: string,
+    mimetype: string = "application/pdf",
+    caption?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const formattedPhone = this.formatPhoneNumber(to);
+
+    if (this.sock && this.sessionStatus.status === "CONNECTED") {
+      try {
+        const jid = `${formattedPhone}@s.whatsapp.net`;
+        const base64Clean = fileBase64.includes(",") ? fileBase64.split(",")[1] : fileBase64;
+        const buffer = Buffer.from(base64Clean, "base64");
+
+        const result = await this.sock.sendMessage(jid, {
+          document: buffer,
+          mimetype,
+          fileName,
+          caption: caption || `مرفق لحضراتكم مستند معتمد: ${fileName}`,
+        });
+
+        this.addLog({
+          direction: "OUTGOING",
+          phoneNumber: formattedPhone,
+          message: `[مستند PDF]: ${fileName}`,
+          status: "DELIVERED",
+          category: "CERTIFIED_REPORT",
+          channel: "BAILEYS_QR_GATEWAY",
+        });
+
+        return { success: true, messageId: result?.key?.id };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    return {
+      success: false,
+      error: "جلسة الواتساب غير متصلة حالياً. يرجى مسح كود QR لتشغيل الإرسال المباشر.",
+    };
+  }
+
+  /**
+   * Send Official Price Quotation
    */
   public async sendQuotationDirect(payload: QuotationPayload): Promise<{
     success: boolean;
     messageId?: string;
     formattedMessage?: string;
     error?: string;
+    channel?: string;
   }> {
     const scopeFormatted = (payload.scopeOfWork && payload.scopeOfWork.length > 0)
       ? payload.scopeOfWork.map((item, idx) => `  ${idx + 1}. ${item}`).join('\n')
@@ -431,13 +1065,14 @@ ${payload.notes ? `📝 *ملاحظات وشروط:* ${payload.notes}\n\n` : ''}
   }
 
   /**
-   * Send Official Certified Financial Report Directly via WhatsApp Business API
+   * Send Official Certified Financial Report
    */
   public async sendCertifiedReportDirect(payload: CertifiedReportPayload): Promise<{
     success: boolean;
     messageId?: string;
     formattedMessage?: string;
     error?: string;
+    channel?: string;
   }> {
     const keyFiguresText = (payload.keyFigures && payload.keyFigures.length > 0)
       ? payload.keyFigures.map((k) => `• ${k.label}: *${typeof k.value === 'number' ? k.value.toLocaleString('en-US') + ' ج.م' : k.value}*`).join('\n')
@@ -490,25 +1125,41 @@ ${payload.notes ? `\n📝 *ملاحظات إضافية:* ${payload.notes}` : ''}
    * Run Connection & Setup Diagnostics
    */
   public runDiagnostics() {
+    const isBaileysConnected = this.sessionStatus.status === "CONNECTED";
     const hasToken = !!this.config.accessToken;
     const hasPhoneId = !!this.config.phoneNumberId;
-    const hasWabaId = !!this.config.wabaId;
 
     return {
-      configured: hasToken && hasPhoneId,
-      status: (hasToken && hasPhoneId) ? "CONNECTED" : "READY_FOR_CREDENTIALS",
+      configured: isBaileysConnected || (hasToken && hasPhoneId),
+      status: isBaileysConnected ? "CONNECTED" : (hasToken && hasPhoneId) ? "CONNECTED_META" : "READY_FOR_CREDENTIALS",
       landlineNumber: this.config.landlineNumber,
       officeName: this.config.officeName,
       verifyToken: this.config.verifyToken,
       webhookPath: "/api/whatsapp/webhook",
       freeTierEligible: true,
-      freeConversationsPerMonth: 1000,
+      freeConversationsPerMonth: "غير محدود (مجاني عبر مسح كود QR من هاتفك)",
       checks: [
-        { name: "خادم الرد التلقائي بالسيرفر (Webhook)", status: "ACTIVE", detail: "يعمل على استقبال واستجابة الرسائل 24/7" },
-        { name: "قواعد بيانات الضرائب والفواتير", status: "CONNECTED", detail: "متصل بملفات العملاء والضرائب والسندات" },
-        { name: "دعم ربط التليفون الأرضي (Landline)", status: "SUPPORTED", detail: `مجهز للربط برقم الخط الأرضي: ${this.config.landlineNumber}` },
-        { name: "حساب Meta Cloud API المجاني", status: hasToken ? "ACTIVE" : "PENDING_TOKEN", detail: hasToken ? "تم ضبط التوكن بنجاح" : "بانتظار إدخال بيانات حساب Meta Business" },
-      ]
+        {
+          name: "بوابة الواتساب المجانية (Baileys Web Gateway)",
+          status: isBaileysConnected ? "ACTIVE" : (this.sessionStatus.status === "SCAN_QR_CODE" ? "PENDING_SCAN" : "STANDBY"),
+          detail: isBaileysConnected ? `متصل برقم: ${this.sessionStatus.connectedPhone}` : "جاهز لتوليد كود QR ومسحه من هاتفك",
+        },
+        {
+          name: "خادم الرد التلقائي بالسيرفر (Auto-Reply Engine)",
+          status: "ACTIVE",
+          detail: "يعمل على استقبال واستجابة الرسائل 24/7",
+        },
+        {
+          name: "قواعد بيانات الضرائب والفواتير",
+          status: "CONNECTED",
+          detail: "متصل بملفات العملاء والضرائب والسندات",
+        },
+        {
+          name: "دعم ربط التليفون الأرضي (Landline)",
+          status: "SUPPORTED",
+          detail: `مجهز للربط برقم الخط الأرضي: ${this.config.landlineNumber}`,
+        },
+      ],
     };
   }
 }

@@ -42,79 +42,35 @@ export interface FixedAssetCategoryItem {
 export const DEFAULT_ASSET_CATEGORIES: FixedAssetCategoryItem[] = [
   {
     id: 'asset_1',
-    name: 'أراضي ومواقع فضاء (غير قابلة للإهلاك)',
+    name: 'الاراضي',
     depRate: 0,
     depreciationType: 'بدون إهلاك',
     valuesByYear: {
-      2024: { costStart: 1200000, additions: 0, disposals: 0, accumStart: 0 },
-      2025: { costStart: 1200000, additions: 0, disposals: 0, accumStart: 0 },
-      2026: { costStart: 1200000, additions: 300000, disposals: 0, accumStart: 0 },
+      2024: { costStart: 68000, additions: 0, disposals: 0, accumStart: 0, customDepExpense: 0 },
+      2025: { costStart: 68000, additions: 0, disposals: 0, accumStart: 0, customDepExpense: 0 },
+      2026: { costStart: 68000, additions: 0, disposals: 0, accumStart: 0, customDepExpense: 0 },
     },
   },
   {
     id: 'asset_2',
-    name: 'مباني وإنشاءات ومرافق خرسانية',
-    depRate: 5,
-    depreciationType: 'قسط ثابت 5%',
+    name: 'مباني وتجهيزات',
+    depRate: 10,
+    depreciationType: 'العمر 10 سنوات (قسط ثابت)',
     valuesByYear: {
-      2024: { costStart: 2500000, additions: 100000, disposals: 0, accumStart: 350000 },
-      2025: { costStart: 2600000, additions: 150000, disposals: 0, accumStart: 480000 },
-      2026: { costStart: 2750000, additions: 200000, disposals: 0, accumStart: 617500 },
+      2024: { costStart: 14974000, additions: 0, disposals: 0, accumStart: 704200, customDepExpense: 0 },
+      2025: { costStart: 14974000, additions: 0, disposals: 0, accumStart: 704200, customDepExpense: 0 },
+      2026: { costStart: 14974000, additions: 0, disposals: 0, accumStart: 704200, customDepExpense: 0 },
     },
   },
   {
     id: 'asset_3',
-    name: 'آلات ومعدات وخطوط إنتاج صناعية',
+    name: 'الالات ومعدات',
     depRate: 10,
-    depreciationType: 'قسط ثابت 10%',
+    depreciationType: 'العمر 10 سنوات (قسط ثابت)',
     valuesByYear: {
-      2024: { costStart: 1800000, additions: 200000, disposals: 0, accumStart: 540000 },
-      2025: { costStart: 2000000, additions: 250000, disposals: 0, accumStart: 740000 },
-      2026: { costStart: 2250000, additions: 300000, disposals: 0, accumStart: 965000 },
-    },
-  },
-  {
-    id: 'asset_4',
-    name: 'سيارات ووسائل نقل وانتقال وشاحنات',
-    depRate: 20,
-    depreciationType: 'قسط ثابت 20%',
-    valuesByYear: {
-      2024: { costStart: 900000, additions: 150000, disposals: 0, accumStart: 360000 },
-      2025: { costStart: 1050000, additions: 180000, disposals: 50000, accumStart: 570000 },
-      2026: { costStart: 1180000, additions: 220000, disposals: 0, accumStart: 766000 },
-    },
-  },
-  {
-    id: 'asset_5',
-    name: 'أجهزة كمبيوتر وتكنولوجيا معلومات وحواسب آلية',
-    depRate: 25,
-    depreciationType: 'قسط ثابت 25%',
-    valuesByYear: {
-      2024: { costStart: 220000, additions: 40000, disposals: 0, accumStart: 110000 },
-      2025: { costStart: 260000, additions: 50000, disposals: 0, accumStart: 175000 },
-      2026: { costStart: 310000, additions: 60000, disposals: 0, accumStart: 252500 },
-    },
-  },
-  {
-    id: 'asset_6',
-    name: 'أثاث وتجهيزات مكتبية وديكورات',
-    depRate: 10,
-    depreciationType: 'قسط ثابت 10%',
-    valuesByYear: {
-      2024: { costStart: 180000, additions: 25000, disposals: 0, accumStart: 54000 },
-      2025: { costStart: 205000, additions: 30000, disposals: 0, accumStart: 74500 },
-      2026: { costStart: 235000, additions: 35000, disposals: 0, accumStart: 98000 },
-    },
-  },
-  {
-    id: 'asset_7',
-    name: 'عدد وأدوات وقوالب تشغيل',
-    depRate: 15,
-    depreciationType: 'قسط ثابت 15%',
-    valuesByYear: {
-      2024: { costStart: 120000, additions: 15000, disposals: 0, accumStart: 36000 },
-      2025: { costStart: 135000, additions: 20000, disposals: 0, accumStart: 56250 },
-      2026: { costStart: 155000, additions: 25000, disposals: 0, accumStart: 79500 },
+      2024: { costStart: 17842500, additions: 0, disposals: 0, accumStart: 1413037, customDepExpense: 2208763 },
+      2025: { costStart: 17842500, additions: 0, disposals: 0, accumStart: 3621800, customDepExpense: 2208763 },
+      2026: { costStart: 17842500, additions: 0, disposals: 0, accumStart: 5829800, customDepExpense: 2208763 },
     },
   },
 ];
@@ -125,6 +81,9 @@ interface CreditFixedAssetsTabProps {
   assetCategories: FixedAssetCategoryItem[];
   onUpdateAssetCategories: (items: FixedAssetCategoryItem[]) => void;
   onResetAssets?: () => void;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
 }
 
 export const CreditFixedAssetsTab: React.FC<CreditFixedAssetsTabProps> = ({
@@ -133,6 +92,9 @@ export const CreditFixedAssetsTab: React.FC<CreditFixedAssetsTabProps> = ({
   assetCategories,
   onUpdateAssetCategories,
   onResetAssets,
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(
     yearsList[yearsList.length - 1] || 2026
@@ -590,10 +552,15 @@ export const CreditFixedAssetsTab: React.FC<CreditFixedAssetsTabProps> = ({
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-blue-700" />
             <h3 className="text-sm font-black text-slate-800">
-              جدول حركة وإهلاك الأصول الثابتة للسنة المالية {selectedYear}
+              جدول حركة وإهلاك الأصول الثابتة {periodEndDate ? `كما في ${periodEndDate}` : `للسنة المالية ${selectedYear}`}
             </h3>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
+            {periodStartDate && periodEndDate && (
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono font-bold text-[11px]">
+                {periodStartDate} ← {periodEndDate}
+              </span>
+            )}
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
             <span>القيم محسوبة تفاعلياً وتعديل أي رقم يحدّث المعادلة المحاسبية فوراً</span>
           </div>

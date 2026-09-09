@@ -11,6 +11,9 @@ interface CreditProfitDistributionTabProps {
   officeProfile: any;
   supplementaryNotes?: SupplementaryNoteItem[];
   onUpdateNotesList?: (notes: SupplementaryNoteItem[]) => void;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
 }
 
 export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabProps> = ({
@@ -19,6 +22,9 @@ export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabPr
   officeProfile,
   supplementaryNotes = DEFAULT_SUPPLEMENTARY_NOTES,
   onUpdateNotesList,
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(yearsList[yearsList.length - 1] || 2026);
   const [legalReserveRatio, setLegalReserveRatio] = useState<number>(5); // 5% Legal Reserve
@@ -216,8 +222,14 @@ export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabPr
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-purple-400" />
             <div>
-              <h3 className="font-bold text-sm">جدول بيان مشروع توزيع الأرباح لسنة {selectedYear}</h3>
-              <p className="text-[11px] text-slate-300">مقدم للعرض على الجمعية العامة العادية للمساهمين</p>
+              <h3 className="font-bold text-sm">
+                جدول بيان مشروع توزيع الأرباح {periodEndDate ? `عن الفترة المنتهية في ${periodEndDate}` : `لسنة ${selectedYear}`}
+              </h3>
+              <p className="text-[11px] text-slate-300">
+                {periodStartDate && periodEndDate
+                  ? `عن الفترة من ${periodStartDate} إلى ${periodEndDate} — مقدم للعرض على الجمعية العامة العادية`
+                  : 'مقدم للعرض على الجمعية العامة العادية للمساهمين'}
+              </p>
             </div>
           </div>
           <span className="text-xs font-mono font-bold text-emerald-300">

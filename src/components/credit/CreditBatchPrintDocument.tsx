@@ -19,6 +19,11 @@ import {
   Layers,
   FileText,
 } from 'lucide-react';
+import {
+  CreditMemoConfig,
+  CustomCreditRatioItem,
+  DEFAULT_CREDIT_MEMO_CONFIG,
+} from './CreditScoringKpisTab';
 
 export type CreditPrintScope =
   | 'SELECTED_YEAR'
@@ -63,12 +68,103 @@ export interface CreditBatchPrintDocumentProps {
   taxCertificateItems?: any[];
   showHeaderClientBanner?: boolean;
   pageRangeConfig?: PageRangeConfig;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
+  creditMemoConfig?: CreditMemoConfig;
+  customCreditRatios?: CustomCreditRatioItem[];
+  creditRatioNames?: Record<string, string>;
+  hiddenCreditRatioIds?: string[];
 }
 
 export interface PrintablePageDefinition {
   pageNumber: number;
   title: string;
   render: () => React.ReactNode;
+}
+
+export interface PrintablePageMeta {
+  id: string;
+  pageNumber: number; // 1-based index in the original complete sequence
+  title: string;
+}
+
+/**
+ * Returns metadata for all available pages in the current print scope
+ */
+export function getDossierPageMetas(
+  printScope: CreditPrintScope,
+  selectedYear: number,
+  yearsList: number[],
+  customYearsList?: number[]
+): PrintablePageMeta[] {
+  const metas: PrintablePageMeta[] = [];
+  let pageNum = 1;
+
+  if (printScope === 'COMPLETE_DOSSIER') {
+    metas.push({ id: 'cover', pageNumber: pageNum++, title: 'الغلاف الرسمي للملف الائتماني والمالي' });
+    metas.push({ id: `statements-${selectedYear}`, pageNumber: pageNum++, title: `القوائم المالية لسنة ${selectedYear} (المركز والدخل والتدفقات)` });
+    metas.push({ id: 'auditor-report', pageNumber: pageNum++, title: 'تقرير مراقب الحسابات المستقل' });
+    metas.push({ id: 'profit-distribution', pageNumber: pageNum++, title: 'مشروع وتوزيع الأرباح المقترح' });
+    metas.push({ id: 'fixed-assets', pageNumber: pageNum++, title: 'جدول حركة وإهلاك الأصول الثابتة' });
+    metas.push({ id: 'ga-expenses', pageNumber: pageNum++, title: 'كشف المصروفات العمومية والإدارية' });
+    metas.push({ id: 'notes-part-1', pageNumber: pageNum++, title: 'الإيضاحات المتممة (1/2) - السياسات وجداول الأصول' });
+    metas.push({ id: 'notes-part-2', pageNumber: pageNum++, title: 'الإيضاحات المتممة (2/2) - الالتزامات والتمويل والملكية' });
+    metas.push({ id: 'tax-certificate', pageNumber: pageNum++, title: 'شهادة الموقف الضريبي والتأميني' });
+    metas.push({ id: 'credit-analysis', pageNumber: pageNum++, title: 'تقرير التحليل المالي ومؤشرات السيولة والربحية' });
+    metas.push({ id: 'credit-memo', pageNumber: pageNum++, title: 'تقييم الجدارة ومذكرة التوصية الائتمانية المصرفية' });
+    return metas;
+  }
+
+  if (printScope === 'ALL_YEARS_BATCH') {
+    return yearsList.map((yr, idx) => ({
+      id: `statements-${yr}`,
+      pageNumber: idx + 1,
+      title: `القوائم المالية لسنة ${yr} (المركز والدخل والتدفقات)`,
+    }));
+  }
+
+  if (printScope === 'CUSTOM_RANGE_BATCH') {
+    const list = customYearsList && customYearsList.length > 0 ? customYearsList : yearsList;
+    return list.map((yr, idx) => ({
+      id: `statements-${yr}`,
+      pageNumber: idx + 1,
+      title: `القوائم المالية لسنة ${yr} (المركز والدخل والتدفقات)`,
+    }));
+  }
+
+  if (printScope === 'SELECTED_YEAR') {
+    return [{ id: `statements-${selectedYear}`, pageNumber: 1, title: `القوائم المالية لسنة ${selectedYear} (المركز والدخل والتدفقات)` }];
+  }
+  if (printScope === 'AUDITOR_ONLY') {
+    return [{ id: 'auditor-report', pageNumber: 1, title: 'تقرير مراقب الحسابات المستقل' }];
+  }
+  if (printScope === 'PROFIT_DIST_ONLY') {
+    return [{ id: 'profit-distribution', pageNumber: 1, title: 'مشروع وتوزيع الأرباح المقترح' }];
+  }
+  if (printScope === 'FIXED_ASSETS_ONLY') {
+    return [{ id: 'fixed-assets', pageNumber: 1, title: 'جدول حركة وإهلاك الأصول الثابتة' }];
+  }
+  if (printScope === 'GA_EXPENSES_ONLY') {
+    return [{ id: 'ga-expenses', pageNumber: 1, title: 'كشف المصروفات العمومية والإدارية' }];
+  }
+  if (printScope === 'NOTES_ONLY') {
+    return [
+      { id: 'notes-part-1', pageNumber: 1, title: 'الإيضاحات المتممة (1/2) - السياسات وجداول الأصول' },
+      { id: 'notes-part-2', pageNumber: 2, title: 'الإيضاحات المتممة (2/2) - الالتزامات والتمويل والملكية' },
+    ];
+  }
+  if (printScope === 'TAX_CERT_ONLY') {
+    return [{ id: 'tax-certificate', pageNumber: 1, title: 'شهادة الموقف الضريبي والتأميني' }];
+  }
+  if (printScope === 'CREDIT_ANALYSIS_ONLY') {
+    return [{ id: 'credit-analysis', pageNumber: 1, title: 'تقرير التحليل المالي ومؤشرات السيولة والربحية' }];
+  }
+  if (printScope === 'CREDIT_SCORING_ONLY') {
+    return [{ id: 'credit-memo', pageNumber: 1, title: 'تقييم الجدارة ومذكرة التوصية الائتمانية المصرفية' }];
+  }
+
+  return [{ id: 'single-page', pageNumber: 1, title: 'وثيقة الطباعة المعتمدة' }];
 }
 
 export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> = ({
@@ -98,6 +194,13 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
   taxCertificateItems,
   showHeaderClientBanner = true,
   pageRangeConfig,
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
+  creditMemoConfig = DEFAULT_CREDIT_MEMO_CONFIG,
+  customCreditRatios = [],
+  creditRatioNames = {},
+  hiddenCreditRatioIds = [],
 }) => {
   const yearsToPrint =
     printScope === 'CUSTOM_RANGE_BATCH' && customYearsList && customYearsList.length > 0
@@ -153,6 +256,8 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
       clientProfile={clientProfile}
       documentTitle={title}
       fiscalYear={year}
+      periodStartDate={periodStartDate}
+      periodEndDate={periodEndDate}
       showHeaderClientBanner={showHeaderClientBanner}
       documentSubtitle="ملف القوائم المالية المعتمدة والتوثيق الائتماني والبنكي الرسمي"
     />
@@ -222,7 +327,11 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
             <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
               صفحة {currentPageNum} من {totalCount}
             </span>
-            <span>السنة المالية: {year} م</span>
+            <span>
+              {periodEndDate
+                ? `الفترة المنتهية في: ${periodEndDate}`
+                : `السنة المالية: ${year} م`}
+            </span>
           </div>
         )}
       </div>
@@ -351,7 +460,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
             <div className="space-y-4 flex-1">
               <div>
                 <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5">
-                  1. قائمة المركز المالي كما في 31 ديسمبر {yr}
+                  1. قائمة المركز المالي {periodEndDate ? `كما في ${periodEndDate}` : `كما في 31 ديسمبر ${yr}`}
                 </h4>
                 <table className="w-full text-[11px] border border-slate-300 divide-y divide-slate-300">
                   <tbody className="divide-y divide-slate-200">
@@ -403,7 +512,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
 
               <div>
                 <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5">
-                  2. قائمة الدخل الشامل عن السنة المنتهية في 31 ديسمبر {yr}
+                  2. قائمة الدخل الشامل {periodStartDate && periodEndDate ? `عن الفترة من ${periodStartDate} إلى ${periodEndDate}` : `عن السنة المنتهية في 31 ديسمبر ${yr}`}
                 </h4>
                 <table className="w-full text-[11px] border border-slate-300 divide-y divide-slate-300">
                   <tbody className="divide-y divide-slate-200">
@@ -494,7 +603,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
               <div>
                 <strong className="text-blue-950 font-bold block mb-0.5">أولاً: تقرير عن القوائم المالية</strong>
                 <p>
-                  لقد راجعنا القوائم المالية المقارنة المرفقة لـ <strong>{clientProfile.companyName || 'الشركة'} ({clientProfile.legalForm || 'شركة مساهمة مصرية'})</strong>، والمتمثلة في قائمة المركز المالي كما في 31 ديسمبر {selectedYear}، وقوائم الدخل الشامل، والتغيرات في حقوق الملكية، والتدفقات النقدية عن السنة المالية المنتهية في ذلك التاريخ، وملخصاً لأهم السياسات المحاسبية المتبعة وغيرها من الإيضاحات التفسيرية المتممة.
+                  لقد راجعنا القوائم المالية المقارنة المرفقة لـ <strong>{clientProfile.companyName || 'الشركة'} ({clientProfile.legalForm || 'شركة مساهمة مصرية'})</strong>، والمتمثلة في قائمة المركز المالي كما في {periodEndDate ? periodEndDate : `31 ديسمبر ${selectedYear}`}، وقوائم الدخل الشامل، والتغيرات في حقوق الملكية، والتدفقات النقدية عن {periodStartDate && periodEndDate ? `الفترة المالية المنتهية في ذلك التاريخ (من ${periodStartDate} إلى ${periodEndDate})` : `السنة المالية المنتهية في ذلك التاريخ`}، وملخصاً لأهم السياسات المحاسبية المتبعة وغيرها من الإيضاحات التفسيرية المتممة.
                 </p>
               </div>
 
@@ -549,7 +658,9 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
         >
           {renderOfficialHeader('مشروع ومذكرة توزيع الأرباح القانوني', selectedYear)}
           <div className="space-y-4">
-            <h3 className="font-black text-center text-sm">مشروع توزيع الأرباح المقترح لسنة {selectedYear}</h3>
+            <h3 className="font-black text-center text-sm">
+              مشروع توزيع الأرباح المقترح {periodEndDate ? `عن الفترة المنتهية في ${periodEndDate}` : `لسنة ${selectedYear}`}
+            </h3>
             {(computedData[selectedYear]?.netProfit || 0) > 0 ? (
               <table className="w-full text-[11px] border border-slate-300 divide-y divide-slate-300">
                 <tbody className="divide-y divide-slate-200">
@@ -613,7 +724,9 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
         >
           {renderOfficialHeader('جدول حركة وإهلاك الأصول الثابتة (معيار 10)', selectedYear)}
           <div className="space-y-4">
-            <h3 className="font-black text-center text-sm">جدول إهلاك الأصول الثابتة المعتمد لسنة {selectedYear}</h3>
+            <h3 className="font-black text-center text-sm">
+              جدول إهلاك الأصول الثابتة المعتمد {periodEndDate ? `كما في ${periodEndDate}` : `لسنة ${selectedYear}`}
+            </h3>
             <table className="w-full text-[10px] border border-slate-300 divide-y divide-slate-300">
               <thead className="bg-slate-100 font-bold">
                 <tr>
@@ -681,7 +794,9 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
         >
           {renderOfficialHeader('جدول تفصيلي بالمصروفات العمومية والإدارية', selectedYear)}
           <div className="space-y-4">
-            <h3 className="font-black text-center text-sm">كشف المصروفات العمومية والإدارية المعتمد لسنة {selectedYear}</h3>
+            <h3 className="font-black text-center text-sm">
+              كشف المصروفات العمومية والإدارية المعتمد {periodStartDate && periodEndDate ? `عن الفترة من ${periodStartDate} إلى ${periodEndDate}` : `لسنة ${selectedYear}`}
+            </h3>
             <table className="w-full text-[10px] border border-slate-300 divide-y divide-slate-300">
               <thead className="bg-slate-100 font-bold">
                 <tr>
@@ -1168,7 +1283,9 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                 شهادة محاسب قانوني ومراقب حسابات بشأن الموقف الضريبي والتأميني
               </h3>
               <p className="text-[11px] text-slate-600 font-bold">
-                عن السنة المالية المنتهية في 31 ديسمبر {selectedYear} م
+                {periodStartDate && periodEndDate
+                  ? `عن الفترة المالية من ${periodStartDate} إلى ${periodEndDate}`
+                  : `عن السنة المالية المنتهية في 31 ديسمبر ${selectedYear} م`}
               </p>
             </div>
 
@@ -1500,17 +1617,31 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
         const totalLiab = d.totalLiabilities || 1;
         const equity = d.totalEquity || d.equity || 1;
 
-        // Altman Z'-Score for Private / Non-manufacturing
+        // Altman Z'-Score or Z-Score based on modelType
+        const isManufacturing = creditMemoConfig?.modelType === 'MANUFACTURING';
         const x1 = workingCapital / totalAssets;
         const x2 = (netProfit * 1.5) / totalAssets;
         const x3 = ebit / totalAssets;
         const x4 = equity / totalLiab;
-        const zScore = 6.56 * x1 + 3.26 * x2 + 6.72 * x3 + 1.05 * x4;
+        const x5 = sales / totalAssets;
+        const zScore = isManufacturing
+          ? 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 0.999 * x5
+          : 6.56 * x1 + 3.26 * x2 + 6.72 * x3 + 1.05 * x4;
 
-        // Facility Recommendation based on Sales & Working Capital
-        const recommendedOverdraft = Math.round((sales * 0.18) / 100000) * 100000;
-        const recommendedLG = Math.round((sales * 0.12) / 100000) * 100000;
-        const totalRecommendedFacility = recommendedOverdraft + recommendedLG;
+        // Dynamic Facility Recommendation based on Sales & Config
+        const facilityPct = (creditMemoConfig?.facilityRatio ?? 30) / 100;
+        const overdraftPct = (creditMemoConfig?.overdraftRatio ?? 60) / 100;
+        const totalRecommendedFacility = Math.round((sales * facilityPct) / 100000) * 100000;
+        const recommendedOverdraft = Math.round((totalRecommendedFacility * overdraftPct) / 100000) * 100000;
+        const recommendedLG = totalRecommendedFacility - recommendedOverdraft;
+
+        const stressScenarios = creditMemoConfig?.stressScenarios && creditMemoConfig.stressScenarios.length > 0
+          ? creditMemoConfig.stressScenarios
+          : DEFAULT_CREDIT_MEMO_CONFIG.stressScenarios;
+
+        const guaranteesText = creditMemoConfig?.guaranteesText || DEFAULT_CREDIT_MEMO_CONFIG.guaranteesText;
+        const covenantsText = creditMemoConfig?.covenantsText || DEFAULT_CREDIT_MEMO_CONFIG.covenantsText;
+        const recommendationNote = creditMemoConfig?.recommendationNote || DEFAULT_CREDIT_MEMO_CONFIG.recommendationNote;
 
         return (
           <div
@@ -1540,12 +1671,14 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 bg-slate-50 border border-slate-300 rounded-xl space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <span className="font-bold text-slate-800 text-[10.5px]">1. نموذج التنبؤ بالسلامة المالية (Altman Z'-Score)</span>
+                    <span className="font-bold text-slate-800 text-[10.5px]">
+                      1. نموذج التنبؤ بالسلامة المالية ({isManufacturing ? "Altman Z-Score" : "Altman Z'-Score"})
+                    </span>
                     <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-black text-[10px]">منطقة الأمان المالي</span>
                   </div>
                   <div className="flex items-baseline gap-2 pt-0.5">
                     <span className="text-xl font-mono font-black text-emerald-700">{zScore.toFixed(2)}</span>
-                    <span className="text-slate-500 text-[9.5px]">(حد الأمان الأدنى Z &gt; 2.60)</span>
+                    <span className="text-slate-500 text-[9.5px]">({isManufacturing ? "حد الأمان الأدنى Z > 2.99" : "حد الأمان الأدنى Z' > 2.60"})</span>
                   </div>
                   <p className="text-slate-600 text-[9px] leading-relaxed">
                     تشير نتيجة النموذج الكمي إلى استقرار مالي متين وانعدام تام لمخاطر التعثر أو الإفلاس، مع كفاءة دوران رأس المال العامل وتماسك حقوق الملكية.
@@ -1582,24 +1715,14 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    <tr>
-                      <td className="p-1.5 font-medium">السيناريو 1: انخفاض المبيعات بنسبة 10%</td>
-                      <td className="p-1.5 text-center text-slate-700">تراجع صافي الربح بنسبة 14%</td>
-                      <td className="p-1.5 text-center font-mono font-bold text-emerald-700">1.45x (&gt; 1.25x)</td>
-                      <td className="p-1.5 text-center text-emerald-800 font-bold">صلابة مالية تامة</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5 font-medium">السيناريو 2: ارتفاع تكلفة المبيعات (COGS) بنسبة 5%</td>
-                      <td className="p-1.5 text-center text-slate-700">تراجع هامش الربح 3.5%</td>
-                      <td className="p-1.5 text-center font-mono font-bold text-emerald-700">1.38x (&gt; 1.25x)</td>
-                      <td className="p-1.5 text-center text-emerald-800 font-bold">قدرة استيعابية ممتازة</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5 font-medium">السيناريو 3: زيادة أسعار الفائدة المصرفية بمقدار 200 نقطة أساس</td>
-                      <td className="p-1.5 text-center text-slate-700">زيادة أعباء التمويل 12%</td>
-                      <td className="p-1.5 text-center font-mono font-bold text-emerald-700">1.35x (&gt; 1.25x)</td>
-                      <td className="p-1.5 text-center text-emerald-800 font-bold">تغطية آمنة دون تعثر</td>
-                    </tr>
+                    {stressScenarios.map((sc, idx) => (
+                      <tr key={sc.id || idx}>
+                        <td className="p-1.5 font-medium">{sc.title}</td>
+                        <td className="p-1.5 text-center text-slate-700">{sc.profitImpact}</td>
+                        <td className="p-1.5 text-center font-mono font-bold text-emerald-700">{sc.dscr}</td>
+                        <td className="p-1.5 text-center text-emerald-800 font-bold">{sc.result}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1611,20 +1734,20 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                     4. مذكرة التوصية بمنح التسهيلات الائتمانية المصرفية المقترحة:
                   </strong>
                   <span className="font-mono font-black text-emerald-700 text-xs">
-                    إجمالي الحد المقترح: {formatEgyptianCurrency(totalRecommendedFacility)}
+                    إجمالي الحد المقترح: {formatEgyptianCurrency(totalRecommendedFacility)} ({creditMemoConfig?.facilityRatio ?? 30}% من المبيعات)
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[9.5px]">
                   <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <span className="text-slate-500 block font-bold">أ. تسهيل جاري مدين سحب على المكشوف (Overdraft):</span>
+                    <span className="text-slate-500 block font-bold">أ. تسهيل جاري مدين سحب على المكشوف ({creditMemoConfig?.overdraftRatio ?? 60}%):</span>
                     <span className="font-mono font-black text-slate-900 text-xs block my-0.5">
                       {formatEgyptianCurrency(recommendedOverdraft)}
                     </span>
                     <span className="text-slate-600 text-[9px]">لتمويل دورة رأس المال العامل والمشتريات وتغطية التدفقات النقدية التشغيلية.</span>
                   </div>
                   <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <span className="text-slate-500 block font-bold">ب. خطابات ضمان واعتمادات مستندية (LG / LC):</span>
+                    <span className="text-slate-500 block font-bold">ب. خطابات ضمان واعتمادات مستندية ({creditMemoConfig?.lettersOfCreditRatio ?? 40}%):</span>
                     <span className="font-mono font-black text-slate-900 text-xs block my-0.5">
                       {formatEgyptianCurrency(recommendedLG)}
                     </span>
@@ -1634,17 +1757,17 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
 
                 <div className="text-[9px] text-slate-700 leading-relaxed border-t border-slate-200 pt-1.5 space-y-0.5">
                   <p>
-                    <strong>الضمانات المقترحة:</strong> التنازل عن مستحقات عقود التوريد وأوامر الإسناد لصالح البنك + تحصيل شيكات العملاء عبر الحساب الجاري + رهن تجاري على الأصول.
+                    <strong>الضمانات المقترحة:</strong> {guaranteesText}
                   </p>
                   <p>
-                    <strong>الاشتراطات والعهود المالية (Financial Covenants):</strong> الحفاظ على معدل تداول لا يقل عن 1.30x، ومعدل تغطية خدمة دين لا يقل عن 1.25x، مع تقديم القوائم المالية المدققة ربع سنوية وسنوية بانتظام.
+                    <strong>الاشتراطات والعهود المالية (Financial Covenants):</strong> {covenantsText}
                   </p>
                 </div>
               </div>
 
               {/* Official Seal and Sign-off */}
               <div className="p-2 bg-blue-50/50 border border-blue-200 rounded-lg text-[9px] text-blue-950 font-medium leading-relaxed">
-                <strong>تأكيد واعتماد مراقب الحسابات المستقل:</strong> بناءً على فحص المركز المالي والتدفقات النقدية التشغيلية للشركة، نوصي بالموافقة على منح الحدود والتسهيلات الائتمانية الموضحة أعلاه لملائمتها تماماً مع القدرة التشغيلية والملاءة الائتمانية للشركة.
+                <strong>تأكيد واعتماد مراقب الحسابات المستقل:</strong> {recommendationNote}
               </div>
             </div>
 
@@ -1665,22 +1788,37 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
       return isPageIncluded(item.originalPageNumber, pageRangeConfig, totalPagesCount);
     });
 
+  // Dynamic resequencing: If enabled (default), renumbers pages sequentially 1..N of selected
+  const shouldResequence = pageRangeConfig?.resequencePageNumbers !== false;
+  const effectiveTotalCount = shouldResequence ? filteredPages.length : totalPagesCount;
+
   return (
     <div id="credit-printable-dossier" className="space-y-10 print:space-y-0 text-slate-900 w-full max-w-[210mm] mx-auto">
       {filteredPages.length > 0 ? (
-        filteredPages.map((page) => {
-          const displayPageNum = page.originalPageNumber;
+        filteredPages.map((page, index) => {
+          const displayPageNum = shouldResequence ? index + 1 : page.originalPageNumber;
+          const displayTotal = effectiveTotalCount;
+
           return (
             <div
               key={page.id}
-              id={`page-sheet-${displayPageNum}`}
+              id={`page-sheet-${index + 1}`}
+              data-page-index={index + 1}
+              data-original-page={page.originalPageNumber}
               className="relative my-8 print:my-0 transition-all flex flex-col items-center"
             >
               {/* Document Sheet Screen Identifier - Floating above paper */}
               <div className="no-print w-full max-w-[210mm] flex items-center justify-between px-3 py-1.5 mb-2 bg-slate-900/90 backdrop-blur-md text-white rounded-lg shadow-sm text-xs font-mono select-none">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-bold">ورقة معتمدة {displayPageNum} من {totalPagesCount}</span>
+                  <span className="font-bold">
+                    ورقة معتمدة {displayPageNum} من {displayTotal}
+                    {shouldResequence && filteredPages.length !== totalPagesCount && (
+                      <span className="text-slate-400 text-[10px] mr-1.5 font-normal">
+                        (الأصلية بالملف: {page.originalPageNumber})
+                      </span>
+                    )}
+                  </span>
                   <span className="text-slate-500">•</span>
                   <span className="text-slate-200 font-sans font-medium text-[11px] truncate max-w-sm">
                     {page.title}
@@ -1696,7 +1834,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                 className="a4-sheet-canvas bg-white text-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.16)] print:shadow-none border border-slate-300/80 print:border-none w-[210mm] min-h-[297mm] p-[14mm] sm:p-[16mm] print:p-[10mm] flex flex-col justify-between overflow-hidden box-border print:page-break-after-always"
                 style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
               >
-                {page.render(displayPageNum, totalPagesCount)}
+                {page.render(displayPageNum, displayTotal)}
               </div>
             </div>
           );

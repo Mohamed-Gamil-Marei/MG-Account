@@ -17,6 +17,7 @@ interface BalanceSheetTableProps {
   reportingExchangeRate?: number;
   currencyDisplayMode?: 'REPORTING' | 'ORIGINAL' | 'DUAL';
   language?: 'ar' | 'en';
+  asOfDateFormatted?: string;
 }
 
 export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
@@ -32,6 +33,7 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
   reportingExchangeRate = 1,
   currencyDisplayMode = 'REPORTING',
   language = 'ar',
+  asOfDateFormatted,
 }) => {
   const isEn = language === 'en';
   const fxRate = reportingExchangeRate > 0 ? reportingExchangeRate : 1;
@@ -52,9 +54,11 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
     <div className="space-y-6 text-xs" dir={isEn ? 'ltr' : 'rtl'}>
       <div className="text-center space-y-1">
         <h2 className="text-base sm:text-lg font-black text-slate-900 underline underline-offset-4">
-          {isEn
-            ? `STATEMENT OF FINANCIAL POSITION AS AT 31 DECEMBER ${fiscalYear}`
-            : `قائمة المركز المالي كما في 31 ديسمبر ${fiscalYear}`}
+          {asOfDateFormatted
+            ? (isEn ? `STATEMENT OF FINANCIAL POSITION ${asOfDateFormatted.toUpperCase()}` : `قائمة المركز المالي ${asOfDateFormatted}`)
+            : (isEn
+                ? `STATEMENT OF FINANCIAL POSITION AS AT 31 DECEMBER ${fiscalYear}`
+                : `قائمة المركز المالي كما في 31 ديسمبر ${fiscalYear}`)}
         </h2>
         <p className="text-[11px] text-slate-500 font-semibold">
           {isEn

@@ -20,6 +20,7 @@ import {
   Receipt,
   Scale,
   Sparkles,
+  Smartphone,
 } from 'lucide-react';
 import { NavigationTab } from '../../types';
 import { useI18n } from '../../utils/i18n';
@@ -43,6 +44,15 @@ const ALL_SYSTEM_SCREENS: NavItemDef[] = [
     categoryAr: 'الرئيسية والمؤشرات',
     categoryEn: 'Dashboard & Core',
     icon: LayoutDashboard,
+  },
+  {
+    id: 'MOBILE_COMPANION',
+    labelAr: 'المساعد الميداني للهاتف (سداد وإجراءات)',
+    labelEn: 'Mobile Field Companion',
+    categoryAr: 'الرئيسية والمؤشرات',
+    categoryEn: 'Dashboard & Core',
+    badge: 'ميداني 📱',
+    icon: Smartphone,
   },
 
   // 2. Accounting & Journals Hub
@@ -345,11 +355,11 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
         className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0 select-none ${
           isOpen
             ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-            : 'bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700 hover:border-slate-600'
+            : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700'
         }`}
         title={isEn ? 'Switch Module / Screen (Dropdown)' : 'قائمة الشاشات والأقسام المنسدلة'}
       >
-        <LayoutGrid className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+        <LayoutGrid className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
         <span className="hidden md:inline text-xs font-bold max-w-[140px] truncate">
           {isEn ? currentScreen.labelEn : currentScreen.labelAr}
         </span>
@@ -366,7 +376,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
       {/* Dropdown Menu Modal */}
       {isOpen && (
         <div
-          className={`absolute top-full mt-1.5 w-72 sm:w-80 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl z-50 p-2 text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-150 ${
+          className={`absolute top-full mt-1.5 w-72 sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl z-50 p-2 text-xs text-slate-800 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-150 ${
             isEn ? 'left-0' : 'right-0'
           }`}
         >
@@ -378,7 +388,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={isEn ? 'Filter screens & modules...' : 'تصفية الشاشات والأقسام...'}
-              className={`w-full bg-slate-950 border border-slate-700/80 rounded-xl py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-all ${
+              className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/80 rounded-xl py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-all ${
                 isEn ? 'pl-8 pr-3' : 'pr-8 pl-3'
               }`}
               autoFocus
@@ -386,7 +396,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
           </div>
 
           {/* Screen Categories & Items */}
-          <div className="max-h-96 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-slate-700">
+          <div className="max-h-96 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
             {categories.map((cat) => {
               const items = filteredScreens.filter((s) =>
                 (isEn ? s.categoryEn : s.categoryAr) === cat
@@ -395,7 +405,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
 
               return (
                 <div key={cat} className="space-y-1">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-0.5 border-b border-slate-800/60">
+                  <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-2 py-0.5 border-b border-slate-100 dark:border-slate-800/60">
                     {cat}
                   </div>
                   <div className="space-y-0.5">
@@ -417,7 +427,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
                           } ${
                             isActive
                               ? 'bg-blue-600 text-white font-bold shadow-xs'
-                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -430,7 +440,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
                               className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold shrink-0 ${
                                 isActive
                                   ? 'bg-white/20 text-white'
-                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
                               }`}
                             >
                               {item.badge}
@@ -445,7 +455,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
             })}
 
             {filteredScreens.length === 0 && (
-              <div className="p-4 text-center text-slate-500 text-xs">
+              <div className="p-4 text-center text-slate-400 dark:text-slate-500 text-xs">
                 {isEn ? 'No matching screens found.' : 'لا توجد شاشات مطابقة للبحث.'}
               </div>
             )}

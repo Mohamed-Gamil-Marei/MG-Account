@@ -2,6 +2,7 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { OfficeProfile } from '../types';
+import { triggerFileDownload } from './dataImportExport';
 
 /**
  * Utility to export certified accounting documents (Certificates, Invoices, Declarations, Financial Statements)
@@ -100,6 +101,8 @@ export function sanitizeClonedDocForHtml2Canvas(clonedDoc: Document): void {
   const COLOR_PROPS = [
     'color',
     'backgroundColor',
+    'background',
+    'backgroundImage',
     'borderColor',
     'borderTopColor',
     'borderRightColor',
@@ -450,8 +453,14 @@ export async function exportElementToPdf(
     pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
     return true;
   } catch (error) {
-    console.error('Error generating PDF:', error);
-    return false;
+    console.error('Error generating PDF with html2canvas:', error);
+    try {
+      // Graceful fallback: trigger native browser print which allows Save as PDF without canvas errors
+      window.print();
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -652,7 +661,11 @@ export function exportDocumentToExcel(
     XLSX.utils.book_append_sheet(wb, ws, 'بيانات الشهادة المعتمدة');
 
     const filename = customFilename || `شهادة_معتمدة_${doc.clientName || doc.certificateNumber || 'بيانات'}.xlsx`;
-    XLSX.writeFile(wb, filename);
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+    });
+    triggerFileDownload(blob, filename);
     return true;
   } catch (error) {
     console.error('Error exporting Excel:', error);
@@ -675,16 +688,9 @@ export function exportDocumentToJson(doc: CertifiedDocumentData, customFilename?
       2
     );
 
-    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
     const filename = customFilename || `شهادة_معتمدة_${doc.certificateNumber || 'بيانات'}.json`;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    triggerFileDownload(blob, filename);
     return true;
   } catch (error) {
     console.error('Error exporting JSON:', error);
@@ -728,14 +734,7 @@ export function exportDocumentToXml(doc: CertifiedDocumentData, customFilename?:
 
     const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
     const filename = customFilename || `شهادة_معتمدة_${doc.certificateNumber || 'بيانات'}.xml`;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    triggerFileDownload(blob, filename);
     return true;
   } catch (error) {
     console.error('Error exporting XML:', error);

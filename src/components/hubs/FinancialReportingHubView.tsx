@@ -177,6 +177,7 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
             state={state}
             fiscalYear={fiscalYear}
             onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
+            onNavigateToCreditSimulator={() => setActiveSubTab('CREDIT_SIMULATOR')}
           />
         )}
         {activeSubTab === 'CURRENCY_RATES' && (

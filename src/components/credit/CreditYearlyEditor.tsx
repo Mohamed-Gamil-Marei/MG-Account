@@ -29,6 +29,30 @@ export interface FiscalYearData {
   suppliersRatio: number;
   shortLoansRatio: number;
   longLoansRatio: number;
+  // Optional explicit overrides for 2-way sync with statements and notes
+  cogs?: number;
+  grossProfit?: number;
+  adminExp?: number;
+  sellingExp?: number;
+  ebit?: number;
+  financeExp?: number;
+  ebt?: number;
+  tax?: number;
+  netProfit?: number;
+  cash?: number;
+  receivables?: number;
+  inventory?: number;
+  otherDebit?: number;
+  projectsInProgress?: number;
+  netFixedAssets?: number;
+  depreciation?: number;
+  suppliers?: number;
+  shortLoans?: number;
+  longLoans?: number;
+  otherCurrentLiab?: number;
+  paidUpCapital?: number;
+  legalReserve?: number;
+  retainedEarningsAndProfit?: number;
 }
 
 interface CreditYearlyEditorProps {

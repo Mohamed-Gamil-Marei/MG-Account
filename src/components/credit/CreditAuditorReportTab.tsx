@@ -8,6 +8,9 @@ interface CreditAuditorReportTabProps {
   computedData: Record<number, any>;
   officeProfile: any;
   clientProfile?: any;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
 }
 
 export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
@@ -15,6 +18,9 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
   computedData,
   officeProfile,
   clientProfile,
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(yearsList[yearsList.length - 1] || 2026);
   const [companyName, setCompanyName] = useState<string>(clientProfile?.companyName || 'شركة النيل للصناعات الهندسية والتوريدات (ش.م.م)');
@@ -106,6 +112,8 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
           }}
           documentTitle="تقرير مراقب الحسابات المستقل"
           fiscalYear={selectedYear}
+          periodStartDate={periodStartDate}
+          periodEndDate={periodEndDate}
           documentSubtitle="طبقاً لمعايير المراجعة المصرية (ESA) وأحكام قانون الشركات المساهمة رقم 159 لسنة 1981"
         />
 
@@ -113,7 +121,7 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-900">
           إلى السادة / السادة المساهمين والشركاء وإدارات الائتمان بالبنوك المانحة
           <div className="text-xs font-normal text-slate-600 mt-0.5">
-            بشأن القوائم المالية لـ {companyName} عن السنة المالية المنتهية في 31 ديسمبر {selectedYear}
+            بشأن القوائم المالية لـ {companyName} عن {periodStartDate && periodEndDate ? `الفترة المالية من ${periodStartDate} إلى ${periodEndDate}` : `السنة المالية المنتهية في 31 ديسمبر ${selectedYear}`}
           </div>
         </div>
 
@@ -123,10 +131,10 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
             أولاً: تقرير عن القوائم المالية (رأي مراقب الحسابات)
           </h4>
           <p className="text-right text-slate-800 leading-relaxed">
-            لقد راجعنا القوائم المالية المرفقة لـ <strong>{companyName}</strong>، والمتمثلة في قائمة المركز المالي كما في 31 ديسمبر {selectedYear}، وقوائم الدخل الشامل، والتغير في حقوق الملكية، والتدفقات النقدية عن السنة المالية المنتهية في ذلك التاريخ، وملخصاً لأهم السياسات المحاسبية والإيضاحات التفسيرية الأخرى.
+            لقد راجعنا القوائم المالية المرفقة لـ <strong>{companyName}</strong>، والمتمثلة في قائمة المركز المالي كما في {periodEndDate ? periodEndDate : `31 ديسمبر ${selectedYear}`}، وقوائم الدخل الشامل، والتغير في حقوق الملكية، والتدفقات النقدية عن {periodStartDate && periodEndDate ? `الفترة المالية المنتهية في ذلك التاريخ (من ${periodStartDate} إلى ${periodEndDate})` : `السنة المالية المنتهية في ذلك التاريخ`}، وملخصاً لأهم السياسات المحاسبية والإيضاحات التفسيرية الأخرى.
           </p>
           <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-300 text-emerald-950 font-medium text-right leading-relaxed">
-            <strong>وفي رأينا:</strong> تعبر القوائم المالية المرفقة بعدالة ووضوح، من كافة النواحي الجوهرية، عن المركز المالي للشركة كما في 31 ديسمبر {selectedYear}، وعن أدائها المالي وتدفقاتها النقدية عن السنة المالية المنتهية في ذلك التاريخ، وذلك وفقاً لمعايير المحاسبة المصرية وفي ضوء القوانين واللوائح المصرية ذات الصلة.
+            <strong>وفي رأينا:</strong> تعبر القوائم المالية المرفقة بعدالة ووضوح، من كافة النواحي الجوهرية، عن المركز المالي للشركة كما في {periodEndDate ? periodEndDate : `31 ديسمبر ${selectedYear}`}، وعن أدائها المالي وتدفقاتها النقدية عن {periodStartDate && periodEndDate ? `الفترة المالية المنتهية في ذلك التاريخ` : `السنة المالية المنتهية في ذلك التاريخ`}، وذلك وفقاً لمعايير المحاسبة المصرية وفي ضوء القوانين واللوائح المصرية ذات الصلة.
           </div>
         </div>
 

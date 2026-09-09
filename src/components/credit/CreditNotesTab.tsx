@@ -21,6 +21,7 @@ import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { SimpleRichTextEditor } from '../common/SimpleRichTextEditor';
 import { FixedAssetCategoryItem } from './CreditFixedAssetsTab';
 import { AdminExpenseItem } from './CreditAdminExpensesTab';
+import { AccountingNumberInput } from '../common/AccountingNumberInput';
 import * as XLSX from 'xlsx';
 
 export interface NoteBreakdownRow {
@@ -48,6 +49,9 @@ interface CreditNotesTabProps {
   onResetNotes?: () => void;
   assetCategories?: FixedAssetCategoryItem[];
   adminExpenses?: AdminExpenseItem[];
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
 }
 
 export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
@@ -57,7 +61,7 @@ export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
     title: 'نبذة عن الشركة والشكل القانوني والنشاط الرئيسي',
     category: 'عام',
     content:
-      '<p>تأسست الشركة كشركة مساهمة مصرية (ش.م.م) خاضعة لأحكام قانون الشركات رقم 159 لسنة 1981 ولائحته التنفيذية وتعديلاته، وقانون الاستثمار رقم 72 لسنة 2017. يتمثل النشاط الرئيسي في التجارة والتوزيع والعمليات الصناعية والتوريدات العمومية، ومركزها الرئيسي بمحافظة القاهرة ومدة الشركة 25 سنة تبدأ من تاريخ القيد بالسجل التجاري.</p>',
+      '<p>تأسست <strong>شركة الانظمة الكهربائية المتكاملة (هاني سعيد محمد محمود وشريكه)</strong> كشركة توصية بسيطة، ونشاطها توريدات كهربائية ومقاولات كهربائية والاستيراد والتصدير وصيانة ملفات المحولات الكهربائية وصيانة مواتير كهربائية وصيانة لوحات كهربائية جهد منخفض وتصنيع لوحات جهد متوسط ومنخفض ومقاومات معدنية للمحولات الكهربائية وتصنيع جميع المهمات الخاصة بالشبكات ومحطات الطاقة الكهربائية ونقل وتوزيع وبيع الطاقة الكهربائية وادارة وصيانة الشبكات الخاصة بها، ومقرها الرئيسي: قطعة 6 تقسيم الملابس الجاهزة الشيخ زايد الاسماعيلية، وفرع آخر قطعة 81 المنطقة الصناعية الثانية الصالحية محافظة الشرقية، وفرع آخر تقسيم الجمعية التعاونية لتعمير الصحاري وادي الملاك طريق اسماعيلية القاهرة - الاسماعيلية.</p>',
     linkedScheduleType: 'NONE',
   },
   {
@@ -66,7 +70,7 @@ export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
     title: 'أسس إعداد القوائم المالية والامتثال للمعايير',
     category: 'سياسات محاسبية',
     content:
-      '<p>أُعدت القوائم المالية وفقاً لـ <strong>معايير المحاسبة المصرية (EAS)</strong> الصادرة بالقرار الوزاري رقم 110 لسنة 2015 وتعديلاتها بالقرار 69 لسنة 2019 والقوانين واللوائح المصرية السارية، وعلى أساس مبدأ التكلفة التاريخية والاستمرارية ومبدأ الاستحقاق. وعملة العرض والتعامل هي <em>الجنيه المصري (ج.م)</em> وهو العملة الوظيفية للمنشأة.</p>',
+      '<p>أُعدت القوائم المالية وفقاً لـ <strong>معايير المحاسبة المصرية (EAS)</strong> الصادرة بالقرار الوزاري رقم 110 لسنة 2015 وتعديلاتها والقوانين واللوائح المصرية السارية، وعلى أساس مبدأ التكلفة التاريخية والاستمرارية ومبدأ الاستحقاق. وعملة العرض والتعامل هي <em>الجنيه المصري (ج.م)</em> وهو العملة الوظيفية للمنشأة.</p>',
     linkedScheduleType: 'NONE',
   },
   {
@@ -75,7 +79,7 @@ export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
     title: 'ملخص أهم السياسات المحاسبية المتبعة',
     category: 'سياسات محاسبية',
     content:
-      '<ul><li><strong>الاعتراف بالإيراد (معيار 48):</strong> يُعترف بالإيراد عند انتقال السيطرة على البضائع أو تقديم الخدمات للعميل بقيمة العوض المتوقع.</li><li><strong>تقييم المخزون (معيار 2):</strong> بالتكلفة أو صافي القيمة البيعية الاستردادية أيهما أقل بطريقة الوارد أولاً يصرف أولاً (FIFO).</li><li><strong>الأصول الثابتة (معيار 10):</strong> تثبت بالتكلفة التاريخية مخصوماً منها مجمع الإهلاك بطريقة القسط الثابت.</li><li><strong>ضريبة الدخل (معيار 24):</strong> تحسب بمعدل 22.5% وفقاً لقانون الضرائب 91 لسنة 2005 وتعديلاته.</li></ul>',
+      '<ul><li><strong>العملة المستخدمة:</strong> العملة التي تعرض بها القوائم المالية هي الجنيه المصري فقط.</li><li><strong>الأصول الثابتة وإهلاكاتها:</strong> يتم إثبات الأصول الثابتة بتكلفتها التاريخية ويتم إهلاكها بطريقة القسط الثابت على مدار العمر الإنتاجي المقدر لكل منها (الآلات ومعدات وعدد: 10 سنوات، مباني وإنشاءات: 10 سنوات).</li><li><strong>المخزون:</strong> يقيم بالتكلفة أو صافي القيمة البيعية أيهما أقل بطريقة الوارد أولاً يصرف أولاً (خام، تحت التشغيل، إنتاج تام).</li></ul>',
     linkedScheduleType: 'NONE',
   },
   {
@@ -84,7 +88,7 @@ export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
     title: 'الأصول الثابتة ومجمع الإهلاك (معيار المحاسبة المصري 10)',
     category: 'أصول غير متداولة',
     content:
-      '<p>تتضمن الأصول الثابتة الأراضي والمباني والآلات والمعدات ووسائل النقل والحواسب الآلية بالصافي بعد خصم مجمع الإهلاك المحسوب وفقاً للأعمار الإنتاجية والنسب المحددة، وبيان حركتها وقيمها مرحل آلياً من جدول إهلاك الأصول الثابتة:</p>',
+      '<p>تتضمن الأصول الثابتة الأراضي ومباني وتجهيزات والآلات ومعدات بالصافي بعد خصم مجمع الإهلاك المحسوب، وبيان حركتها وقيمها مرحل آلياً من جدول إهلاك الأصول الثابتة:</p>',
     linkedScheduleType: 'FIXED_ASSETS',
   },
   {
@@ -93,124 +97,150 @@ export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
     title: 'مشروعات تحت التنفيذ ودفعات مقدمة للاستثمارات',
     category: 'أصول غير متداولة',
     content:
-      '<p>تمثل تكاليف الأعمال الإنشائية وتوسعات خطوط الإنتاج والآلات تحت التركيب والتي لم تكتمل وتدخل في نطاق التشغيل التجاري حتى تاريخ المركز المالي، وتتحول إلى أصول ثابتة قابلة للإهلاك فور اكتمالها.</p>',
+      '<p>تمثل تكاليف الأعمال الإنشائية وتوسعات خطوط الإنتاج والآلات تحت التركيب والتي لم تكتمل وتدخل في نطاق التشغيل التجاري حتى تاريخ المركز المالي.</p>',
     linkedScheduleType: 'CUSTOM_TABLE',
     customBreakdownRows: [
       {
         id: 'row_cip_1',
-        label: 'أعمال مدنية وإنشائية لتوسعات المصنع والمستودعات',
-        valuesByYear: { 2024: 300000, 2025: 450000, 2026: 550000 },
-      },
-      {
-        id: 'row_cip_2',
-        label: 'دفعات مقدمة لشراء خطوط إنتاج وآلات ومعدات',
-        valuesByYear: { 2024: 140000, 2025: 200000, 2026: 250000 },
+        label: 'أعمال مدنية وإنشائية وتوسعات',
+        valuesByYear: { 2024: 0, 2025: 0, 2026: 0 },
       },
     ],
   },
   {
     id: 'note_6',
     noteNumber: 6,
-    title: 'المخزون السلعي والبضائع (معيار المحاسبة المصري 2)',
+    title: 'المخزون (بضاعة بالمخزن)',
     category: 'أصول متداولة',
     content:
-      '<p>يشمل المخزون بضائع تامة الصنع بالمخازن، مواد خام ومستلزمات تشغيل وتعبئة، وبضائع بالطريق واعتمادات مستندية مفتوحة للاستيراد مقيمة بالتكلفة أو صافي القيمة القابلة للتحقق أيهما أقل:</p>',
+      '<p>يشمل المخزون البضائع بالمخزن مقسمة إلى خام وتحت التشغيل وإنتاج تام وفقاً للشهادات المعتمدة من مراقب الحسابات:</p>',
     linkedScheduleType: 'CUSTOM_TABLE',
     customBreakdownRows: [
       {
         id: 'row_inv_1',
-        label: 'مخزون بضائع تامة الصنع ومنتجات جاهزة للبيع',
-        valuesByYear: { 2024: 1500000, 2025: 1800000, 2026: 2250000 },
+        label: 'خام',
+        valuesByYear: { 2024: 2425000, 2025: 6268000, 2026: 6468000 },
       },
       {
         id: 'row_inv_2',
-        label: 'مواد خام ومستلزمات تشغيل وتعبئة وتغليف',
-        valuesByYear: { 2024: 850000, 2025: 980000, 2026: 1100000 },
+        label: 'تحت التشغيل',
+        valuesByYear: { 2024: 634000, 2025: 752000, 2026: 866384 },
       },
       {
         id: 'row_inv_3',
-        label: 'اعتمادات مستندية وبضائع مشحونة بالطريق',
-        valuesByYear: { 2024: 400000, 2025: 395000, 2026: 400000 },
+        label: 'انتاج تام',
+        valuesByYear: { 2024: 1691000, 2025: 1881000, 2026: 1881000 },
       },
     ],
   },
   {
     id: 'note_7',
     noteNumber: 7,
-    title: 'العملاء والمدينون وأوراق القبض (معيار 48 ومعيار 47)',
+    title: 'العملاء',
     category: 'أصول متداولة',
     content:
-      '<p>أرصدة العملاء الناتجة عن مبيعات النشاط التجاري والتوريدات، بالإضافة لأوراق القبض والشيكات الآجلة المستحقة خلال دورة التشغيل العادية مخصوماً منها مخصص الخسائر الائتمانية المتوقعة ECL:</p>',
+      '<p>أرصدة العملاء الناتجة عن مبيعات النشاط التجاري وتوريدات الأدوات الكهربائية والمقاولات:</p>',
     linkedScheduleType: 'CUSTOM_TABLE',
     customBreakdownRows: [
       {
         id: 'row_rec_1',
-        label: 'عملاء تجاريون وحسابات جارية طرف العملاء',
-        valuesByYear: { 2024: 1800000, 2025: 2100000, 2026: 2500000 },
-      },
-      {
-        id: 'row_rec_2',
-        label: 'شيكات وأوراق قبض برسم التحصيل والضمان',
-        valuesByYear: { 2024: 620000, 2025: 694000, 2026: 800000 },
+        label: 'عملاء توريدات ومقاولات كهربائية',
+        valuesByYear: { 2024: 3600000, 2025: 4513548, 2026: 6850400 },
       },
     ],
   },
   {
     id: 'note_8',
     noteNumber: 8,
-    title: 'النقدية وما في حكمها وحسابات البنوك',
+    title: 'النقدية و الصندوق والبنوك',
     category: 'أصول متداولة',
     content:
-      '<p>تشمل النقدية بالخزينة الرئيسية للمنشأة والحسابات الجارية والودائع تحت الطلب لدى البنوك المصرية المعتمدة الخاضعة لرقابة البنك المركزي المصري دون وجود أية قيود على السحب:</p>',
+      '<p>تشمل النقدية بالصندوق والحسابات البنكية للمنشأة:</p>',
     linkedScheduleType: 'CUSTOM_TABLE',
     customBreakdownRows: [
       {
         id: 'row_cash_1',
-        label: 'النقدية بالخزائن الرئيسية والعهد الفرعية',
-        valuesByYear: { 2024: 120000, 2025: 150000, 2026: 180000 },
-      },
-      {
-        id: 'row_cash_2',
-        label: 'حسابات جارية وودائع لدى البنوك المعتمدة',
-        valuesByYear: { 2024: 760000, 2025: 866000, 2026: 1020000 },
+        label: 'نقدية بالصندوق',
+        valuesByYear: { 2024: 100000, 2025: 175000, 2026: 200000 },
       },
     ],
   },
   {
     id: 'note_9',
     noteNumber: 9,
-    title: 'المصروفات الإدارية والعمومية وتكاليف التشغيل',
+    title: 'المصروفات الادارية والعمومية',
     category: 'قائمة الدخل',
     content:
-      '<p>تتضمن المصروفات الإدارية والعمومية أجور الإدارة، التأمينات الاجتماعية، إيجارات المقرات، الاستشارات المهنية، ومصروفات التشغيل الإداري، والبيان التفصيلي مرحل مباشرة من جدول المصروفات الإدارية والعمومية:</p>',
+      '<p>تتضمن المصروفات الإدارية والعمومية أجور الإدارة، التأمينات الاجتماعية، إيجارات المقرات، ومصروفات التشغيل، والبيان التفصيلي مرحل مباشرة من جدول المصروفات الإدارية والعمومية:</p>',
     linkedScheduleType: 'ADMIN_EXPENSES',
   },
   {
     id: 'note_10',
     noteNumber: 10,
-    title: 'رأس المال المصدر والمدفوع والاحتياطيات النظامية',
+    title: 'حقوق المساهمين والشركاء',
     category: 'حقوق الملكية',
     content:
-      '<p>رأس المال المصدر والمدفوع بالكامل موزع على أسهم اسمية بقيمة اسمية 100 ج.م للسهم الواحد. ويجنب 5% سنوياً من صافي الأرباح لتكوين <strong>الاحتياطي القانوني</strong> وفقاً للمادة 40 من القانون 159 لسنة 1981 حتى يبلغ 50% من رأس المال المدفوع.</p>',
-    linkedScheduleType: 'NONE',
+      '<p>رأس المال المصدر والمدفوع وجاري صاحب المنشأة وصافي أرباح العام:</p>',
+    linkedScheduleType: 'CUSTOM_TABLE',
+    customBreakdownRows: [
+      {
+        id: 'row_eq_1',
+        label: 'رأس المال',
+        valuesByYear: { 2024: 2000000, 2025: 2000000, 2026: 2000000 },
+      },
+      {
+        id: 'row_eq_2',
+        label: 'جاري صاحب المنشأة',
+        valuesByYear: { 2024: 34630587, 2025: 21229021, 2026: 28666948 },
+      },
+      {
+        id: 'row_eq_3',
+        label: 'صافي ارباح العام',
+        valuesByYear: { 2024: 196913, 2025: 9710000, 2026: 4971462 },
+      },
+    ],
   },
   {
     id: 'note_11',
     noteNumber: 11,
-    title: 'القروض والتسهيلات الائتمانية طويلة وقصيرة الأجل',
+    title: 'الخصوم المتداولة (الالتزامات)',
     category: 'التزامات وتمويل',
     content:
-      '<p>حصلت المنشأة على تسهيلات ائتمانية وقروض من البنوك المصرية لتمويل رأس المال العامل والعمليات التشغيلية وشراء الأصول الرأسمالية بضمانات تجارية وتدفقات نقدية مستقبلية وفقاً للأسعار السائدة لدى البنك المركزي المصري.</p>',
-    linkedScheduleType: 'NONE',
+      '<p>تتضمن الدائنين وأوراق الدفع ورصيد التسهيل الائتماني قصير الأجل (جاري مدين) ورصيد القرض متوسط الأجل من البنوك (البنك الأهلي المصري / البنك العربي):</p>',
+    linkedScheduleType: 'CUSTOM_TABLE',
+    customBreakdownRows: [
+      {
+        id: 'row_liab_1',
+        label: 'دائنون و اوراق دفع',
+        valuesByYear: { 2024: 180500, 2025: 190250, 2026: 202000 },
+      },
+      {
+        id: 'row_liab_2',
+        label: 'رصيد التسهيل قصير الاجل : جاري مدين',
+        valuesByYear: { 2024: 0, 2025: 3567209, 2026: 3996065 },
+      },
+      {
+        id: 'row_liab_3',
+        label: 'رصيد القرض متوسط الاجل',
+        valuesByYear: { 2024: 0, 2025: 3243568, 2026: 2779809 },
+      },
+    ],
   },
   {
     id: 'note_12',
     noteNumber: 12,
-    title: 'المعاملات مع الأطراف ذات العلاقة',
-    category: 'إفصاحات إضافية',
+    title: 'المصروفات التمويلية',
+    category: 'قائمة الدخل',
     content:
-      '<p>تتم المعاملات مع الأطراف ذات العلاقة والشركات الشقيقة وفقاً لنفس الأسس والشروط التجارية المطبقة مع الأطراف الخارجية المستقلة (Arm\'s Length Basis) وباعتماد الجمعية العامة للشركاء.</p>',
-    linkedScheduleType: 'NONE',
+      '<p>تمثل الفوائد والمصروفات التمويلية الناتجة عن التسهيلات والقروض البنكية لدى البنك الأهلي المصري والبنك العربي:</p>',
+    linkedScheduleType: 'CUSTOM_TABLE',
+    customBreakdownRows: [
+      {
+        id: 'row_fin_1',
+        label: 'المصروفات التمويلية (البنك الاهلي المصري/ البنك العربي)',
+        valuesByYear: { 2024: 0, 2025: 285000, 2026: 185635 },
+      },
+    ],
   },
   {
     id: 'note_13',
@@ -276,6 +306,9 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
   onResetNotes,
   assetCategories = [],
   adminExpenses = [],
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
 }) => {
   const [localNotes, setLocalNotes] = useState<SupplementaryNoteItem[]>(DEFAULT_SUPPLEMENTARY_NOTES);
   const activeNotes = propNotesList || localNotes;
@@ -506,9 +539,16 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-900">
-                الإيضاحات المتممة للقوائم المالية (Notes to Financial Statements)
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-black text-slate-900">
+                  الإيضاحات المتممة للقوائم المالية (Notes to Financial Statements)
+                </h2>
+                {periodStartDate && periodEndDate && (
+                  <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono font-bold text-[11px]">
+                    {periodStartDate} ← {periodEndDate}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 محرر نصوص ثري لتنسيق السياسات والإفصاحات وجداول ديناميكية مربوطة بجدول الأصول والمصاريف والقوائم المالية.
               </p>
@@ -957,19 +997,20 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                               </td>
                               {yearsList.map((yr) => (
                                 <td key={yr} className="py-1.5 px-3 text-center">
-                                  <input
-                                    type="number"
-                                    step="any"
+                                  <AccountingNumberInput
                                     value={row.valuesByYear[yr] || 0}
-                                    onChange={(e) =>
+                                    onChange={(val) =>
                                       handleUpdateBreakdownValue(
                                         note.id,
                                         row.id,
                                         yr,
-                                        parseFloat(e.target.value) || 0
+                                        val
                                       )
                                     }
-                                    className="w-28 text-center font-mono font-bold text-xs bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded px-1 py-0.5 outline-none"
+                                    allowNegative={true}
+                                    allowDecimals={true}
+                                    decimalPlaces={2}
+                                    className="w-32 text-center font-mono font-bold text-xs bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-blue-500 rounded px-1.5 py-1 outline-none"
                                   />
                                 </td>
                               ))}

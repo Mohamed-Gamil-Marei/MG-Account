@@ -32,6 +32,7 @@ import {
   Settings,
   Ship,
   Film,
+  Smartphone,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, OfficeProfile } from '../types';
@@ -116,6 +117,9 @@ export const getParentHub = (tabId: string): string => {
     case 'CUSTOMS_NAFEZA_ACI':
       return 'CUSTOMS_HUB';
 
+    case 'MOBILE_COMPANION':
+      return 'MOBILE_COMPANION';
+
     case 'DASHBOARD':
     default:
       return 'DASHBOARD';
@@ -185,6 +189,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       labelEn: 'Executive Dashboard',
       icon: LayoutDashboard,
       badge: null,
+      subItems: [],
+    },
+    {
+      id: 'MOBILE_COMPANION',
+      label: 'المساعد الميداني للهاتف',
+      labelEn: 'Mobile Field Companion',
+      icon: Smartphone,
+      badge: isEn ? 'FIELD' : 'ميداني 📱',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
       subItems: [],
     },
     {

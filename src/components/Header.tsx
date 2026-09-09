@@ -21,6 +21,7 @@ import {
   Lock,
   Globe2,
   BookOpen,
+  Smartphone,
 } from 'lucide-react';
 import { db } from '../db/localDatabase';
 import { cloudSync, SyncStatus } from '../lib/cloudSync';
@@ -194,6 +195,18 @@ export const Header: React.FC<HeaderProps> = ({
             state={dbState}
             onNavigate={onSelectTab}
           />
+
+          {/* Mobile Field Companion Switcher */}
+          <button
+            onClick={() => onSelectTab && onSelectTab('MOBILE_COMPANION')}
+            id="btn-mobile-companion-switch"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer border border-emerald-400/30"
+            title={isEn ? 'Switch to Mobile Field Companion (Optimized for phones & field work)' : 'التبديل إلى المساعد الميداني للهاتف (سداد، تحصيل، إثبات إجراءات)'}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{isEn ? 'Mobile Field' : 'وضع الهاتف'}</span>
+            <span className="hidden xl:inline-block px-1 rounded-full bg-white/20 text-[10px] font-mono">⚡</span>
+          </button>
 
           {/* Quick Action Button: New Journal Entry */}
           <button

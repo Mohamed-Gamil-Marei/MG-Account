@@ -44,6 +44,7 @@ import {
   ClientProcedureTask,
 } from '../types';
 import { WhatsAppBotService } from '../services/whatsappBotService';
+import { WhatsAppApiService } from '../services/whatsappApiService';
 
 interface WhatsAppBotViewProps {
   initialClientId?: string;
@@ -97,6 +98,54 @@ export const WhatsAppBotView: React.FC<WhatsAppBotViewProps> = ({
 
   const botSettings = db.getWhatsAppBotSettings();
 
+  // Sync real-time WhatsApp server messages and incoming client replies
+  useEffect(() => {
+    if (!selectedClient?.phone) return;
+    const phone = selectedClient.phone;
+
+    const syncServerMessages = async () => {
+      try {
+        const serverMsgs = await WhatsAppApiService.getChatMessages(phone);
+        if (serverMsgs && serverMsgs.length > 0) {
+          const currentLocalTexts = new Set(
+            state.whatsappMessages
+              .filter((m) => m.clientId === selectedClient.id)
+              .map((m) => m.text.trim())
+          );
+
+          for (const sMsg of serverMsgs) {
+            if (!currentLocalTexts.has(sMsg.text.trim())) {
+              const mappedCategory: WhatsAppEventCategory =
+                sMsg.category === 'INVOICE'
+                  ? 'INVOICE'
+                  : sMsg.category === 'TAX'
+                  ? 'TAX_DECLARATION'
+                  : sMsg.category === 'CERTIFIED_REPORT'
+                  ? 'CERTIFICATE'
+                  : 'GENERAL';
+
+              db.sendWhatsAppMessage({
+                clientId: selectedClient.id,
+                clientName: selectedClient.name,
+                phone: selectedClient.phone || '',
+                direction: sMsg.direction === 'INCOMING' ? 'INCOMING' : 'OUTGOING',
+                sender: sMsg.sender === 'CLIENT' ? 'CLIENT' : sMsg.sender === 'BOT' ? 'OFFICE_BOT' : 'AUDITOR',
+                text: sMsg.text,
+                category: mappedCategory,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // silent sync
+      }
+    };
+
+    syncServerMessages();
+    const interval = setInterval(syncServerMessages, 3500);
+    return () => clearInterval(interval);
+  }, [selectedClient?.id, selectedClient?.phone, state.whatsappMessages]);
+
   // Filter clients list
   const filteredClients = (state.clients || []).filter((c) => {
     const matchesSearch =
@@ -141,6 +190,11 @@ export const WhatsAppBotView: React.FC<WhatsAppBotViewProps> = ({
       category,
       mediaPayload,
     });
+
+    // Send through server WhatsApp session (Baileys / Meta)
+    if (selectedClient.phone) {
+      WhatsAppApiService.sendChatMessage(selectedClient.phone, msgText, selectedClient.name).catch(() => {});
+    }
 
     if (!textToSend) {
       setInputText('');

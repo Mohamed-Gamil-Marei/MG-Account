@@ -34,32 +34,82 @@ import {
   BookOpen,
   Play,
   Settings,
+  Smartphone,
+  Monitor,
 } from 'lucide-react';
 
-import { AccountingHubView } from './components/hubs/AccountingHubView';
-import { FinancialReportingHubView } from './components/hubs/FinancialReportingHubView';
-import { TaxAuditHubView } from './components/hubs/TaxAuditHubView';
-import { OfficePracticeHubView } from './components/hubs/OfficePracticeHubView';
-import { SecurityAuditHubView } from './components/hubs/SecurityAuditHubView';
-import { InvoicingView } from './components/InvoicingView';
-import { CustomsHubView } from './components/CustomsHubView';
-import { SapErpHubView } from './components/sap/SapErpHubView';
+// Lazy-loaded views and hubs for instant initial load and peak performance
+const AccountingHubView = lazy(() =>
+  import('./components/hubs/AccountingHubView').then((m) => ({ default: m.AccountingHubView }))
+);
+const FinancialReportingHubView = lazy(() =>
+  import('./components/hubs/FinancialReportingHubView').then((m) => ({ default: m.FinancialReportingHubView }))
+);
+const TaxAuditHubView = lazy(() =>
+  import('./components/hubs/TaxAuditHubView').then((m) => ({ default: m.TaxAuditHubView }))
+);
+const OfficePracticeHubView = lazy(() =>
+  import('./components/hubs/OfficePracticeHubView').then((m) => ({ default: m.OfficePracticeHubView }))
+);
+const SecurityAuditHubView = lazy(() =>
+  import('./components/hubs/SecurityAuditHubView').then((m) => ({ default: m.SecurityAuditHubView }))
+);
+const InvoicingView = lazy(() =>
+  import('./components/InvoicingView').then((m) => ({ default: m.InvoicingView }))
+);
+const CustomsHubView = lazy(() =>
+  import('./components/CustomsHubView').then((m) => ({ default: m.CustomsHubView }))
+);
+const SapErpHubView = lazy(() =>
+  import('./components/sap/SapErpHubView').then((m) => ({ default: m.SapErpHubView }))
+);
+const MobileFieldCompanionView = lazy(() =>
+  import('./components/mobile/MobileFieldCompanionView').then((m) => ({ default: m.MobileFieldCompanionView }))
+);
 
-import { BackupExportModal } from './components/BackupExportModal';
-import { DesktopAppModal } from './components/DesktopAppModal';
-import { UpdateNotificationModal } from './components/UpdateNotificationModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { UserManagementModal } from './components/UserManagementModal';
-import { PinAuthModal } from './components/PinAuthModal';
-import { DeviceLockModal } from './components/DeviceLockModal';
-import { PurgeDatabaseModal } from './components/PurgeDatabaseModal';
-import { DocumentVerificationModal } from './components/common/DocumentVerificationModal';
-import { SystemManualModal } from './components/common/SystemManualModal';
-import { MgOfficePromoModal } from './components/common/MgOfficePromoModal';
-import { AppSettingsModal } from './components/AppSettingsModal';
+// Lazy-loaded on-demand modals to keep initial bundle lightweight
+const BackupExportModal = lazy(() =>
+  import('./components/BackupExportModal').then((m) => ({ default: m.BackupExportModal }))
+);
+const DesktopAppModal = lazy(() =>
+  import('./components/DesktopAppModal').then((m) => ({ default: m.DesktopAppModal }))
+);
+const UpdateNotificationModal = lazy(() =>
+  import('./components/UpdateNotificationModal').then((m) => ({ default: m.UpdateNotificationModal }))
+);
+const KeyboardShortcutsModal = lazy(() =>
+  import('./components/KeyboardShortcutsModal').then((m) => ({ default: m.KeyboardShortcutsModal }))
+);
+const UserManagementModal = lazy(() =>
+  import('./components/UserManagementModal').then((m) => ({ default: m.UserManagementModal }))
+);
+const PinAuthModal = lazy(() =>
+  import('./components/PinAuthModal').then((m) => ({ default: m.PinAuthModal }))
+);
+const DeviceLockModal = lazy(() =>
+  import('./components/DeviceLockModal').then((m) => ({ default: m.DeviceLockModal }))
+);
+const PurgeDatabaseModal = lazy(() =>
+  import('./components/PurgeDatabaseModal').then((m) => ({ default: m.PurgeDatabaseModal }))
+);
+const DocumentVerificationModal = lazy(() =>
+  import('./components/common/DocumentVerificationModal').then((m) => ({ default: m.DocumentVerificationModal }))
+);
+const SystemManualModal = lazy(() =>
+  import('./components/common/SystemManualModal').then((m) => ({ default: m.SystemManualModal }))
+);
+const MgOfficePromoModal = lazy(() =>
+  import('./components/common/MgOfficePromoModal').then((m) => ({ default: m.MgOfficePromoModal }))
+);
+const AppSettingsModal = lazy(() =>
+  import('./components/AppSettingsModal').then((m) => ({ default: m.AppSettingsModal }))
+);
+const GlobalCommandPalette = lazy(() =>
+  import('./components/common/GlobalCommandPalette').then((m) => ({ default: m.GlobalCommandPalette }))
+);
+
 import { LanguageToggle } from './components/LanguageToggle';
 import { CloudSyncHeaderWidget } from './components/CloudSyncHeaderWidget';
-import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
 import { HeaderNavigationDropdown } from './components/common/HeaderNavigationDropdown';
 import { I18nProvider, getTranslation } from './utils/i18n';
 import { parseVerificationFromUrl, VerificationPayloadData } from './utils/qrCodeGenerator';
@@ -77,9 +127,63 @@ function HubLoadingFallback() {
 
 export default function App() {
   const [state, setState] = useState<DatabaseState>(db.getState());
-  const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
+
+  // User View Mode: 'DESKTOP' vs 'MOBILE' with auto-detection & persistence
+  const [viewMode, setViewMode] = useState<'DESKTOP' | 'MOBILE'>(() => {
+    try {
+      const saved = localStorage.getItem('mg_app_view_mode');
+      if (saved === 'mobile') return 'MOBILE';
+      if (saved === 'desktop') return 'DESKTOP';
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        return 'MOBILE';
+      }
+    } catch {
+      // Safe fallback
+    }
+    return 'DESKTOP';
+  });
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('mg_app_view_mode');
+      if (saved === 'mobile') return 'MOBILE_COMPANION';
+      if (saved === 'desktop') return 'DASHBOARD';
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        return 'MOBILE_COMPANION';
+      }
+    } catch {
+      // Fallback
+    }
+    return 'DASHBOARD';
+  });
+
+  const handleSwitchToMobileMode = () => {
+    setViewMode('MOBILE');
+    try {
+      localStorage.setItem('mg_app_view_mode', 'mobile');
+    } catch {
+      // Safe fallback
+    }
+    setActiveTab('MOBILE_COMPANION');
+  };
+
+  const handleSwitchToDesktopMode = (targetTab: string = 'DASHBOARD') => {
+    setViewMode('DESKTOP');
+    try {
+      localStorage.setItem('mg_app_view_mode', 'desktop');
+    } catch {
+      // Safe fallback
+    }
+    setActiveTab(targetTab === 'MOBILE_COMPANION' ? 'DASHBOARD' : targetTab);
+  };
+
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(2026);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      return false;
+    }
+    return true;
+  });
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDesktopModalOpen, setIsDesktopModalOpen] = useState<boolean>(false);
@@ -527,6 +631,15 @@ export default function App() {
       case 'CUSTOMS_NAFEZA_ACI':
         return <CustomsHubView state={state} onNavigateToTab={(tab) => setActiveTab(tab)} />;
 
+      case 'MOBILE_COMPANION':
+        return (
+          <MobileFieldCompanionView
+            state={state}
+            onExitMobileMode={() => setActiveTab('DASHBOARD')}
+            onNavigateToFullAppTab={(tab) => setActiveTab(tab)}
+          />
+        );
+
       default:
         return (
           <Dashboard
@@ -539,6 +652,28 @@ export default function App() {
   };
 
   const isDark = themeMode === 'dark';
+
+  // If user is in Mobile Field Companion mode or activeTab is MOBILE_COMPANION, render a clean full-screen mobile app
+  if (viewMode === 'MOBILE' || activeTab === 'MOBILE_COMPANION') {
+    return (
+      <I18nProvider language={currentLanguage} onLanguageChange={(l) => db.setLanguage(l)}>
+        <div
+          className={`min-h-screen w-full flex flex-col ${
+            isDark ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-900 text-slate-100'
+          }`}
+          dir={isRtl ? 'rtl' : 'ltr'}
+        >
+          <Suspense fallback={<HubLoadingFallback />}>
+            <MobileFieldCompanionView
+              state={state}
+              onExitMobileMode={() => handleSwitchToDesktopMode('DASHBOARD')}
+              onNavigateToFullAppTab={(tab) => handleSwitchToDesktopMode(tab)}
+            />
+          </Suspense>
+        </div>
+      </I18nProvider>
+    );
+  }
 
   return (
     <I18nProvider language={currentLanguage} onLanguageChange={(l) => db.setLanguage(l)}>
@@ -682,6 +817,17 @@ export default function App() {
 
             {/* Right Side: Clean Control Suite */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Device View Mode Switcher: Desktop vs Mobile Field */}
+              <button
+                onClick={handleSwitchToMobileMode}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:border-emerald-500/50 shadow-2xs active:scale-95"
+                title={!isRtl ? 'Switch to Mobile Field Mode' : 'التبديل إلى وضع الهاتف الميداني (سداد وإجراءات)'}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">{!isRtl ? 'Mobile Field Mode' : 'وضع الهاتف الميداني'}</span>
+                <span className="md:hidden text-[11px]">ميداني 📱</span>
+              </button>
+
               {/* Combined Context Capsule: Company + Fiscal Year */}
               <div
                 className={`hidden lg:flex items-center gap-1.5 p-1 px-2 border rounded-xl shrink-0 ${
@@ -918,6 +1064,17 @@ export default function App() {
             </Suspense>
           </div>
         </main>
+
+        {/* Mobile Quick Return Floating Badge when viewing Desktop mode on mobile screens */}
+        <div className="md:hidden fixed bottom-14 left-4 right-4 z-40 flex justify-center pointer-events-none">
+          <button
+            onClick={handleSwitchToMobileMode}
+            className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xl border border-emerald-400/40 active:scale-95 transition-all animate-in fade-in slide-in-from-bottom-3"
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>التبديل إلى وضع الهاتف الميداني 📱</span>
+          </button>
+        </div>
 
         {/* Bottom Status / Footer info */}
         <footer

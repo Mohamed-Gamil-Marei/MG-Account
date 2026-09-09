@@ -1,6 +1,6 @@
 {
   "name": "منظومة المحاسب والمراجع القانوني - محمد جميل مرعي",
   "description": "برنامج محاسبة ومراجعة مالية متكامل يدعم المعايير المحاسبية المصرية (EAS)، تعدد العملات وأسعار الصرف اليومية (معيار 13 EAS / IAS 21)، منظومة الفاتورة والإيصال الإلكتروني (ETA SDK v1.0)، الاستيراد والتصدير المتكامل، القوائم المالية، قيود اليومية، والرقابة المهنية.",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -581,6 +581,50 @@ ${JSON.stringify(sampleEntries, null, 2)}
 
   // --- WhatsApp Business API Integration Endpoints ---
 
+  // 0. Live Session Status (Baileys Web Gateway & Meta)
+  app.get("/api/whatsapp/session-status", (_req, res) => {
+    try {
+      const status = whatsappServerEngine.getSessionStatus();
+      res.json({ success: true, data: status });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Start / Connect Baileys Session & Generate QR Code
+  app.post("/api/whatsapp/start-session", async (_req, res) => {
+    try {
+      const status = await whatsappServerEngine.startBaileysSession();
+      res.json({ success: true, data: status, message: "تم بدء جلسة الواتساب وتوليد كود QR." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Disconnect Baileys Session
+  app.post("/api/whatsapp/disconnect-session", async (_req, res) => {
+    try {
+      const status = await whatsappServerEngine.disconnectBaileysSession();
+      res.json({ success: true, data: status, message: "تم تسجيل الخروج وقطع اتصال الواتساب بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Direct Send Document / PDF
+  app.post("/api/whatsapp/send-document", async (req, res) => {
+    try {
+      const { to, fileBase64, fileName, mimetype, caption } = req.body;
+      if (!to || !fileBase64 || !fileName) {
+        return res.status(400).json({ success: false, message: "بيانات المستند غير مكتملة." });
+      }
+      const result = await whatsappServerEngine.sendDocumentDirect(to, fileBase64, fileName, mimetype, caption);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // 1. Direct Send Message
   app.post("/api/whatsapp/send", async (req, res) => {
     try {
@@ -716,6 +760,56 @@ ${JSON.stringify(sampleEntries, null, 2)}
     } catch (err: any) {
       console.error("Webhook processing error:", err);
       res.status(200).json({ handled: false, error: err.message });
+    }
+  });
+
+  // 11. Live WhatsApp Chat: Get all conversation threads
+  app.get("/api/whatsapp/chats", (_req, res) => {
+    try {
+      const threads = whatsappServerEngine.getChatThreads();
+      res.json({ success: true, data: threads });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 12. Live WhatsApp Chat: Get messages for a specific phone number
+  app.get("/api/whatsapp/chat/:phone", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const messages = whatsappServerEngine.getChatMessages(phone);
+      res.json({ success: true, data: messages });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 13. Live WhatsApp Chat: Send message in active chat
+  app.post("/api/whatsapp/chat/send", async (req, res) => {
+    try {
+      const { to, message, clientName } = req.body;
+      if (!to || !message) {
+        return res.status(400).json({ success: false, message: "يرجى كتابة رقم الهاتف ومحتوى الرسالة." });
+      }
+      const sendResult = await whatsappServerEngine.sendMessageDirect(to, message, { clientName });
+      const currentMessages = whatsappServerEngine.getChatMessages(to);
+      res.json({ success: true, sendResult, messages: currentMessages });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 14. Live WhatsApp Chat: Simulate incoming client reply (for interactive preview & verification)
+  app.post("/api/whatsapp/chat/simulate-incoming", (req, res) => {
+    try {
+      const { phone, text, clientName } = req.body;
+      if (!phone || !text) {
+        return res.status(400).json({ success: false, message: "يرجى تحديد رقم الهاتف ونص رسالة العميل." });
+      }
+      const result = whatsappServerEngine.simulateIncomingClientReply(phone, text, clientName);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

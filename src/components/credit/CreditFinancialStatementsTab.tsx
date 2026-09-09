@@ -3,6 +3,7 @@ import {
   FileSpreadsheet,
   TrendingUp,
   CheckCircle,
+  AlertTriangle,
   Scale,
   DollarSign,
   Activity,
@@ -13,6 +14,15 @@ import {
   RefreshCw,
   Sliders,
   BookOpen,
+  Check,
+  X,
+  RotateCcw,
+  Sparkles,
+  ShieldCheck,
+  ArrowRightLeft,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { FiscalYearData } from './CreditYearlyEditor';
@@ -52,10 +62,21 @@ interface CreditFinancialStatementsTabProps {
   computedData: Record<number, any>;
   customItems?: StatementLineItem[];
   onUpdateCustomItems?: (items: StatementLineItem[]) => void;
+  itemNames?: Record<string, string>;
+  onUpdateItemName?: (idOrField: string, newName: string) => void;
+  hiddenItemIds?: string[];
+  onToggleHideItem?: (idOrField: string) => void;
+  onRestoreAllItems?: () => void;
+  onAutoBalanceYear?: (year: number) => void;
+  onAutoBalanceAllYears?: () => void;
   supplementaryNotes?: SupplementaryNoteItem[];
   onUpdateNotesList?: (notes: SupplementaryNoteItem[]) => void;
   assetCategories?: FixedAssetCategoryItem[];
   adminExpenses?: AdminExpenseItem[];
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
+  onUpdateCell?: (field: string, year: number, val: number) => void;
 }
 
 export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTabProps> = ({
@@ -64,17 +85,34 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
   computedData,
   customItems: propCustomItems,
   onUpdateCustomItems,
+  itemNames = {},
+  onUpdateItemName,
+  hiddenItemIds = [],
+  onToggleHideItem,
+  onRestoreAllItems,
+  onAutoBalanceYear,
+  onAutoBalanceAllYears,
   supplementaryNotes = DEFAULT_SUPPLEMENTARY_NOTES,
   onUpdateNotesList,
   assetCategories = [],
   adminExpenses = [],
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
+  onUpdateCell,
 }) => {
-  const [statementView, setStatementView] = useState<'ALL' | 'BS' | 'IS' | 'CF' | 'RATIOS'>('ALL');
+  const [statementView, setStatementView] = useState<'ALL' | 'BS' | 'IS' | 'CF' | 'RATIOS' | 'TRIAL_BALANCE'>('ALL');
+  const [isDirectEditMode, setIsDirectEditMode] = useState<boolean>(false);
   const [isAddingLineModal, setIsAddingLineModal] = useState(false);
+  const [isBalancePanelOpen, setIsBalancePanelOpen] = useState(true);
   const [targetSection, setTargetSection] = useState<StatementLineItem['section']>('CURRENT_ASSETS');
   const [newItemName, setNewItemName] = useState('');
   const [newItemNote, setNewItemNote] = useState('');
   const [newItemBaseAmount, setNewItemBaseAmount] = useState<number>(100000);
+
+  // State for inline renaming
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [tempItemName, setTempItemName] = useState<string>('');
 
   // Modal State for Disclosure Detail
   const [selectedNoteModal, setSelectedNoteModal] = useState<SupplementaryNoteItem | null>(null);
@@ -122,11 +160,60 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
             handleOpenNoteModalByRef(String(noteRef));
           }
         }}
-        className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono font-bold rounded-lg border border-purple-200 dark:border-purple-800 text-[11px] cursor-pointer transition-colors shadow-2xs"
+        className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono font-bold rounded-lg border border-purple-200 dark:border-purple-800 text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
         title="اضغط لمشاهدة وتعديل الإيضاح المتمم"
       >
-        {typeof noteRef === 'number' ? `إيضاح (${noteRef})` : noteRef}
+        <span>{typeof noteRef === 'number' ? `إيضاح (${noteRef})` : noteRef}</span>
+        <BookOpen className="w-2.5 h-2.5 opacity-60" />
       </button>
+    );
+  };
+
+  const renderEditableCell = (
+    fieldKey: string,
+    year: number,
+    currentVal: number,
+    textColorClass: string = 'text-slate-900',
+    isBold: boolean = false,
+    allowNegative: boolean = false
+  ) => {
+    if (isDirectEditMode && onUpdateCell) {
+      return (
+        <td key={year} className="p-1.5 text-left font-mono">
+          <AccountingNumberInput
+            value={currentVal || 0}
+            onChange={(val) => onUpdateCell(fieldKey, year, val)}
+            allowNegative={allowNegative}
+            allowDecimals={true}
+            decimalPlaces={2}
+            className={`w-full text-left px-2 py-1 rounded bg-amber-50 hover:bg-amber-100/90 focus:bg-white border border-amber-300 focus:border-blue-600 font-mono text-xs ${
+              isBold ? 'font-black' : 'font-bold'
+            } ${textColorClass} focus:outline-none transition-colors shadow-2xs`}
+          />
+        </td>
+      );
+    }
+
+    return (
+      <td
+        key={year}
+        onClick={() => {
+          if (onUpdateCell) {
+            setIsDirectEditMode(true);
+          }
+        }}
+        title={onUpdateCell ? 'انقر لتعديل هذا الرقم مباشرة في القوائم والإيضاحات' : undefined}
+        className={`p-2.5 text-left font-mono ${isBold ? 'font-black' : 'font-semibold'} ${textColorClass} ${
+          onUpdateCell ? 'cursor-pointer hover:bg-blue-50/80 rounded transition-colors group' : ''
+        }`}
+      >
+        <div className="flex items-center justify-end gap-1">
+          <span>{formatEgyptianCurrency(currentVal || 0, allowNegative)}</span>
+          {onUpdateCell && (
+            <Edit2 className="w-3 h-3 text-slate-300 group-hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          )}
+        </div>
+      </td>
     );
   };
 
@@ -208,6 +295,129 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
     return getSectionCustomItems(section).reduce((sum, i) => sum + (i.values[yr] || 0), 0);
   };
 
+  const getItemDisplayName = (fieldKey: string, defaultName: string) => {
+    if (itemNames && itemNames[fieldKey]) {
+      return itemNames[fieldKey];
+    }
+    return defaultName;
+  };
+
+  const handleStartRename = (idOrField: string, currentName: string) => {
+    setEditingItemId(idOrField);
+    setTempItemName(currentName);
+  };
+
+  const handleSaveRename = (idOrField: string) => {
+    if (tempItemName.trim()) {
+      if (onUpdateItemName) {
+        onUpdateItemName(idOrField, tempItemName.trim());
+      } else {
+        const isCustom = activeCustomItems.some((i) => i.id === idOrField);
+        if (isCustom) {
+          handleUpdate(
+            activeCustomItems.map((i) =>
+              i.id === idOrField ? { ...i, name: tempItemName.trim() } : i
+            )
+          );
+        }
+      }
+    }
+    setEditingItemId(null);
+    setTempItemName('');
+  };
+
+  const handleCancelRename = () => {
+    setEditingItemId(null);
+    setTempItemName('');
+  };
+
+  const handleDeleteOrHide = (idOrField: string, isCustom: boolean) => {
+    if (isCustom) {
+      handleDeleteCustomLine(idOrField);
+    } else {
+      if (onToggleHideItem) {
+        onToggleHideItem(idOrField);
+      }
+    }
+  };
+
+  const isItemHidden = (idOrField: string) => {
+    return hiddenItemIds.includes(idOrField);
+  };
+
+  const renderItemNameWithActions = (
+    idOrField: string,
+    defaultName: string,
+    isCustom: boolean = false,
+    indentClass: string = 'pr-6'
+  ) => {
+    const displayName = isCustom ? defaultName : getItemDisplayName(idOrField, defaultName);
+    const isEditing = editingItemId === idOrField;
+
+    if (isEditing) {
+      return (
+        <div className={`flex items-center gap-1.5 ${indentClass}`}>
+          <input
+            type="text"
+            value={tempItemName}
+            onChange={(e) => setTempItemName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveRename(idOrField);
+              if (e.key === 'Escape') handleCancelRename();
+            }}
+            autoFocus
+            className="px-2 py-0.5 border-2 border-blue-500 rounded bg-white text-slate-900 font-bold text-xs focus:outline-none w-full max-w-xs shadow-xs"
+          />
+          <button
+            type="button"
+            onClick={() => handleSaveRename(idOrField)}
+            className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer transition-colors"
+            title="حفظ الاسم الجديد"
+          >
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelRename}
+            className="p-1 bg-slate-300 hover:bg-slate-400 text-slate-700 rounded cursor-pointer transition-colors"
+            title="إلغاء"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex items-center justify-between group/row ${indentClass}`}>
+        <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+          {isCustom && <span className="text-blue-600 font-bold">•</span>}
+          {displayName}
+        </span>
+        <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity no-print">
+          <button
+            type="button"
+            onClick={() => handleStartRename(idOrField, displayName)}
+            className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 cursor-pointer transition-colors"
+            title="تعديل اسم البند"
+          >
+            <Edit2 className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteOrHide(idOrField, isCustom)}
+            className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 cursor-pointer transition-colors"
+            title={isCustom ? 'حذف البند المخصص نهائياً' : 'استبعاد هذا البند من الميزانية وحسابات التوازن'}
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const allYearsBalanced = yearsList.every((y) => computedData[y]?.isBalanced ?? true);
+
   return (
     <div className="space-y-6">
       {/* Top Controls Bar */}
@@ -269,17 +479,48 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
           >
             4. النسب والمؤشرات
           </button>
+          <button
+            type="button"
+            onClick={() => setStatementView('TRIAL_BALANCE')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              statementView === 'TRIAL_BALANCE'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span>5. ميزان المراجعة والتحقق (مدين ودائن)</span>
+          </button>
         </div>
 
-        {/* Action: Add new custom item */}
-        <button
-          type="button"
-          onClick={() => setIsAddingLineModal(!isAddingLineModal)}
-          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors no-print whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4 text-slate-300 dark:text-blue-200" />
-          <span>إضافة بند مخصص</span>
-        </button>
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
+          {onUpdateCell && (
+            <button
+              type="button"
+              onClick={() => setIsDirectEditMode(!isDirectEditMode)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all no-print whitespace-nowrap border ${
+                isDirectEditMode
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-600 ring-2 ring-amber-400/40 animate-pulse'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'
+              }`}
+              title="تفعيل نمط التعديل المباشر للأرقام كأوراق إكسيل مع الربط اللحظي بالإيضاحات"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+              <span>{isDirectEditMode ? 'وضع التعديل المباشر (نشط ✏️)' : 'تعديل الأرقام مباشرة (Excel Mode)'}</span>
+            </button>
+          )}
+
+          {/* Action: Add new custom item */}
+          <button
+            type="button"
+            onClick={() => setIsAddingLineModal(!isAddingLineModal)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors no-print whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4 text-slate-300 dark:text-blue-200" />
+            <span>إضافة بند مخصص</span>
+          </button>
+        </div>
       </div>
 
       {/* Add Custom Line Modal / Form */}
@@ -385,28 +626,203 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
               <Scale className="w-5 h-5 text-emerald-400" />
               <div>
                 <h3 className="font-bold text-sm">قائمة المركز المالي المقارنة (Balance Sheet)</h3>
-                <p className="text-[11px] text-slate-300">وفقاً لمعايير المحاسبة المصرية (EAS 1)</p>
+                <p className="text-[11px] text-slate-300">
+                  وفقاً لمعايير المحاسبة المصرية (EAS 1)
+                  {periodEndDate ? ` — كما في ${periodEndDate}` : ' — كما في 31 ديسمبر'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold">
-                توازن محاسبي متطابق 100%
+              {periodStartDate && periodEndDate && (
+                <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-mono font-bold">
+                  {periodStartDate} ← {periodEndDate}
+                </span>
+              )}
+              <span
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${
+                  allYearsBalanced
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse'
+                }`}
+              >
+                {allYearsBalanced ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                <span>{allYearsBalanced ? 'توازن محاسبي متطابق 100%' : 'تنبيه: يوجد عدم توازن بالميزان!'}</span>
               </span>
             </div>
           </div>
+
+          {/* Live Balance Verification Panel */}
+          <div className="bg-slate-50 border-b border-slate-200">
+            <div className="p-3.5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-2 cursor-pointer select-none"
+                onClick={() => setIsBalancePanelOpen(!isBalancePanelOpen)}
+              >
+                <div
+                  className={`p-1.5 rounded-lg ${
+                    allYearsBalanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                  }`}
+                >
+                  {allYearsBalanced ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900 flex items-center gap-2">
+                    <span>التحقق المحاسبي الفعلي من توازن الميزانية (المدين = الدائن)</span>
+                    {allYearsBalanced ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        متزن تماماً ✓
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold animate-pulse">
+                        يوجد فرق في الميزان!
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    أي تعديل في رقم أو إضافة/استبعاد بند ينعكس لحظياً على الإجماليات وفرق الميزان (الأصول = الخصوم + حقوق الملكية).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {!allYearsBalanced && onAutoBalanceAllYears && (
+                  <button
+                    type="button"
+                    onClick={onAutoBalanceAllYears}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                    title="موازنة الفرق تلقائياً لجميع السنوات وتعديل الأرباح المرحلة"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-rose-200" />
+                    <span>موازنة فورية لكافة السنوات</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsBalancePanelOpen(!isBalancePanelOpen)}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+                  title={isBalancePanelOpen ? 'طي بطاقات المقارنة لتقليل ازدحام الشاشة' : 'توسيع بطاقات تفاصيل المقارنة'}
+                >
+                  <span className="text-[11px]">{isBalancePanelOpen ? 'طي التفاصيل' : 'عرض التفاصيل'}</span>
+                  {isBalancePanelOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Collapsible Year-by-Year Comparison Cards */}
+            {isBalancePanelOpen && (
+              <div className="px-4 pb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-slate-200/80">
+                  {yearsList.map((y) => {
+                    const cd = computedData[y];
+                    const diff = cd?.balanceDiff ?? 0;
+                    const isBal = cd?.isBalanced ?? Math.abs(diff) < 1;
+                    return (
+                      <div
+                        key={y}
+                        className={`p-3 rounded-xl border transition-all ${
+                          isBal
+                            ? 'bg-white border-emerald-200 shadow-2xs'
+                            : 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-200/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-xs text-slate-900">سنة {y}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold flex items-center gap-1 ${
+                              isBal
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}
+                          >
+                            {isBal ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                متزن (0.00 ج.م)
+                              </>
+                            ) : (
+                              <>
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                فرق: {formatEgyptianCurrency(diff, true)} ج.م
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] space-y-1 text-slate-600 font-mono">
+                          <div className="flex justify-between">
+                            <span>الأصول (الجانب المدين):</span>
+                            <span className="font-bold text-slate-900">
+                              {formatEgyptianCurrency(cd?.totalAssets || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>الخصوم والملكية (الدائن):</span>
+                            <span className="font-bold text-slate-900">
+                              {formatEgyptianCurrency(cd?.totalEquityAndLiabilities || 0)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {!isBal && (
+                          <div className="mt-2 pt-2 border-t border-rose-200/70 flex flex-col gap-1.5">
+                            <span className="text-[10px] text-rose-700 font-semibold">
+                              {diff > 0
+                                ? 'الأصول (المدين) أكبر من الخصوم والملكية'
+                                : 'الخصوم والملكية (الدائن) أكبر من الأصول'}
+                            </span>
+                            {onAutoBalanceYear && (
+                              <button
+                                type="button"
+                                onClick={() => onAutoBalanceYear(y)}
+                                className="w-full py-1 px-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <Sparkles className="w-3 h-3 text-rose-200" />
+                                <span>موازنة سنة {y} آلياً بالأرباح المرحلة</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hidden items restore banner */}
+          {hiddenItemIds.length > 0 && (
+            <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center justify-between text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>تم استبعاد عدد ({hiddenItemIds.length}) بنود من بنود الميزانية وحسابات التوازن.</span>
+              </div>
+              {onRestoreAllItems && (
+                <button
+                  type="button"
+                  onClick={onRestoreAllItems}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  استعادة كافة البنود المستبعدة
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-right divide-y divide-slate-200">
               <thead className="bg-slate-50 text-slate-700 font-bold">
                 <tr>
-                  <th className="p-3 min-w-[240px]">بيان بنود المركز المالي</th>
+                  <th className="p-3 min-w-[260px]">بيان بنود المركز المالي</th>
                   <th className="p-3 text-center min-w-[90px]">الإيضاح</th>
                   {yearsList.map((y) => (
                     <th key={y} className="p-3 text-left font-mono min-w-[130px]">
                       سنة {y} (ج.م)
                     </th>
                   ))}
-                  <th className="p-3 text-center w-12 no-print"></th>
+                  <th className="p-3 text-center w-16 no-print">إجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
@@ -416,32 +832,56 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     أولاً: الأصول غير المتداولة (Non-Current Assets)
                   </td>
                 </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">الأصول الثابتة بالصافي (بعد مجمع الإهلاك)</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(4)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono font-bold">
-                      {formatEgyptianCurrency(computedData[y]?.netFixedAssets || 0)}
+
+                {!isItemHidden('netFixedAssets') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('netFixedAssets', 'الأصول الثابتة بالصافي (بعد مجمع الإهلاك)')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">مشروعات تحت التنفيذ ودفعات مقدمة للأصول</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(5)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.projectsInProgress || 0)}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(4)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('netFixedAssets', y, computedData[y]?.netFixedAssets || 0, 'text-slate-900', true)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('netFixedAssets', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
+                  </tr>
+                )}
+
+                {!isItemHidden('projectsInProgress') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('projectsInProgress', 'مشروعات تحت التنفيذ ودفعات مقدمة للأصول')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(5)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('projectsInProgress', y, computedData[y]?.projectsInProgress || 0)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('projectsInProgress', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
 
                 {/* Custom Non-Current Assets */}
                 {getSectionCustomItems('NON_CURRENT_ASSETS').map((item) => (
                   <tr key={item.id} className="bg-blue-50/30">
-                    <td className="p-2.5 pr-6 font-bold text-blue-950 flex items-center justify-between">
-                      <span>• {item.name}</span>
+                    <td className="p-2.5 font-bold text-blue-950">
+                      {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
                     <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
                     {yearsList.map((y) => (
@@ -461,7 +901,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
                         className="text-red-400 hover:text-red-700 cursor-pointer p-1"
-                        title="حذف هذا البند المخصص"
+                        title="حذف هذا البند المخصص نهائياً"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -472,14 +912,11 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 <tr className="bg-blue-50/50 font-bold text-blue-950">
                   <td className="p-2.5 pr-6">إجمالي الأصول غير المتداولة</td>
                   <td className="p-2.5 text-center">-</td>
-                  {yearsList.map((y) => {
-                    const extra = getSectionCustomSum('NON_CURRENT_ASSETS', y);
-                    return (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        {formatEgyptianCurrency((computedData[y]?.totalNonCurrentAssets || 0) + extra)}
-                      </td>
-                    );
-                  })}
+                  {yearsList.map((y) => (
+                    <td key={y} className="p-2.5 text-left font-mono font-bold text-blue-950">
+                      {formatEgyptianCurrency(computedData[y]?.totalNonCurrentAssets || 0)}
+                    </td>
+                  ))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -489,52 +926,94 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     ثانياً: الأصول المتداولة (Current Assets)
                   </td>
                 </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">المخزون السلعي والبضائع</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(6)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.inventory || 0)}
+
+                {!isItemHidden('inventory') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('inventory', 'المخزون السلعي والبضائع')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">العملاء والمدينون وأوراق القبض</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(7)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.receivables || 0)}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(6)}</td>
+                    {yearsList.map((y) => renderEditableCell('inventory', y, computedData[y]?.inventory || 0))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('inventory', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">أرصدة مدينة أخرى ومصروفات مدفوعة مقدماً</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(8)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.otherDebit || 0)}
+                  </tr>
+                )}
+
+                {!isItemHidden('receivables') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('receivables', 'العملاء والمدينون وأوراق القبض')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">النقدية بالصندوق ولدى البنوك</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(9)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono font-bold text-emerald-800">
-                      {formatEgyptianCurrency(computedData[y]?.cash || 0)}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(7)}</td>
+                    {yearsList.map((y) => renderEditableCell('receivables', y, computedData[y]?.receivables || 0))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('receivables', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
+                  </tr>
+                )}
+
+                {!isItemHidden('otherDebit') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('otherDebit', 'أرصدة مدينة أخرى ومصروفات مدفوعة مقدماً')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(8)}</td>
+                    {yearsList.map((y) => renderEditableCell('otherDebit', y, computedData[y]?.otherDebit || 0))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('otherDebit', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
+                {!isItemHidden('cash') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('cash', 'النقدية بالصندوق ولدى البنوك')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(9)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('cash', y, computedData[y]?.cash || 0, 'text-emerald-800', true)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('cash', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
 
                 {/* Custom Current Assets */}
                 {getSectionCustomItems('CURRENT_ASSETS').map((item) => (
                   <tr key={item.id} className="bg-emerald-50/30">
-                    <td className="p-2.5 pr-6 font-bold text-emerald-950 flex items-center justify-between">
-                      <span>• {item.name}</span>
+                    <td className="p-2.5 font-bold text-emerald-950">
+                      {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
                     <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
                     {yearsList.map((y) => (
@@ -554,7 +1033,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
                         className="text-red-400 hover:text-red-700 cursor-pointer p-1"
-                        title="حذف هذا البند المخصص"
+                        title="حذف هذا البند المخصص نهائياً"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -565,32 +1044,23 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 <tr className="bg-emerald-50/50 font-bold text-emerald-950">
                   <td className="p-2.5 pr-6">إجمالي الأصول المتداولة</td>
                   <td className="p-2.5 text-center">-</td>
-                  {yearsList.map((y) => {
-                    const extra = getSectionCustomSum('CURRENT_ASSETS', y);
-                    return (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        {formatEgyptianCurrency((computedData[y]?.totalCurrentAssets || 0) + extra)}
-                      </td>
-                    );
-                  })}
+                  {yearsList.map((y) => (
+                    <td key={y} className="p-2.5 text-left font-mono">
+                      {formatEgyptianCurrency(computedData[y]?.totalCurrentAssets || 0)}
+                    </td>
+                  ))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
-                {/* Total Assets */}
+                {/* Total Assets (Debit Side) */}
                 <tr className="bg-slate-900 text-white font-black text-sm">
-                  <td className="p-3">إجمالي أصول المنشأة (Total Assets)</td>
+                  <td className="p-3">إجمالي أصول المنشأة (الجانب المدين - Total Assets)</td>
                   <td className="p-3 text-center">-</td>
-                  {yearsList.map((y) => {
-                    const extraNC = getSectionCustomSum('NON_CURRENT_ASSETS', y);
-                    const extraCA = getSectionCustomSum('CURRENT_ASSETS', y);
-                    return (
-                      <td key={y} className="p-3 text-left font-mono text-emerald-400">
-                        {formatEgyptianCurrency(
-                          (computedData[y]?.totalAssets || 0) + extraNC + extraCA
-                        )}
-                      </td>
-                    );
-                  })}
+                  {yearsList.map((y) => (
+                    <td key={y} className="p-3 text-left font-mono text-emerald-400">
+                      {formatEgyptianCurrency(computedData[y]?.totalAssets || 0)}
+                    </td>
+                  ))}
                   <td className="p-3 no-print"></td>
                 </tr>
 
@@ -600,42 +1070,85 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     ثالثاً: حقوق الملكية (Shareholders Equity)
                   </td>
                 </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">رأس المال المصدر والمدفوع</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono font-bold">
-                      {formatEgyptianCurrency(computedData[y]?.paidUpCapital || 0)}
+
+                {!isItemHidden('paidUpCapital') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('paidUpCapital', 'رأس المال المصدر والمدفوع')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">الاحتياطي القانوني (5%)</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.legalReserve || 0)}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('paidUpCapital', y, computedData[y]?.paidUpCapital || 0, 'text-purple-950', true)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('paidUpCapital', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">الأرباح المرحلة وصافي ربح العام</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.retainedEarningsAndProfit || 0)}
+                  </tr>
+                )}
+
+                {!isItemHidden('legalReserve') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('legalReserve', 'الاحتياطي القانوني (5%)')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('legalReserve', y, computedData[y]?.legalReserve || 0)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('legalReserve', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
+                {!isItemHidden('retainedEarningsAndProfit') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('retainedEarningsAndProfit', 'الأرباح المرحلة وصافي ربح العام')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell(
+                        'retainedEarningsAndProfit',
+                        y,
+                        computedData[y]?.retainedEarningsAndProfit || 0,
+                        'text-purple-900',
+                        false,
+                        true
+                      )
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('retainedEarningsAndProfit', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
 
                 {/* Custom Equity */}
                 {getSectionCustomItems('EQUITY').map((item) => (
                   <tr key={item.id} className="bg-purple-50/30">
-                    <td className="p-2.5 pr-6 font-bold text-purple-950 flex items-center justify-between">
-                      <span>• {item.name}</span>
+                    <td className="p-2.5 font-bold text-purple-950">
+                      {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
                     <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
                     {yearsList.map((y) => (
@@ -655,6 +1168,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
                         className="text-red-400 hover:text-red-700 cursor-pointer p-1"
+                        title="حذف هذا البند المخصص نهائياً"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -665,14 +1179,11 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 <tr className="bg-purple-50/50 font-bold text-purple-950">
                   <td className="p-2.5 pr-6">إجمالي حقوق الملكية (أو العجز)</td>
                   <td className="p-2.5 text-center">-</td>
-                  {yearsList.map((y) => {
-                    const extra = getSectionCustomSum('EQUITY', y);
-                    return (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        {formatEgyptianCurrency((computedData[y]?.totalEquity || 0) + extra, true)}
-                      </td>
-                    );
-                  })}
+                  {yearsList.map((y) => (
+                    <td key={y} className="p-2.5 text-left font-mono font-bold text-purple-950">
+                      {formatEgyptianCurrency(computedData[y]?.totalEquity || 0, true)}
+                    </td>
+                  ))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -682,52 +1193,94 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     رابعاً: الالتزامات (Liabilities)
                   </td>
                 </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">قروض وتسهيلات بنكية طويلة الأجل</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(11)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.longLoans || 0)}
+
+                {!isItemHidden('longLoans') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('longLoans', 'قروض وتسهيلات بنكية طويلة الأجل')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">الموردون وأوراق الدفع</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(12)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.suppliers || 0)}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(11)}</td>
+                    {yearsList.map((y) => renderEditableCell('longLoans', y, computedData[y]?.longLoans || 0))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('longLoans', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">سحب على المكشوف وتسهيلات قصيرة الأجل</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(13)}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.shortLoans || 0)}
+                  </tr>
+                )}
+
+                {!isItemHidden('suppliers') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('suppliers', 'الموردون وأوراق الدفع')}
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
-                <tr>
-                  <td className="p-2.5 pr-6">مخصص ضرائب ومصروفات مستحقة وأرصدة دائنة</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge('13/ب')}</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      {formatEgyptianCurrency(computedData[y]?.otherCurrentLiab || 0)}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(12)}</td>
+                    {yearsList.map((y) => renderEditableCell('suppliers', y, computedData[y]?.suppliers || 0))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('suppliers', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
-                  ))}
-                  <td className="p-2.5 no-print"></td>
-                </tr>
+                  </tr>
+                )}
+
+                {!isItemHidden('shortLoans') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('shortLoans', 'سحب على المكشوف وتسهيلات قصيرة الأجل')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(13)}</td>
+                    {yearsList.map((y) => renderEditableCell('shortLoans', y, computedData[y]?.shortLoans || 0))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('shortLoans', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
+                {!isItemHidden('otherCurrentLiab') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('otherCurrentLiab', 'مخصص ضرائب ومصروفات مستحقة وأرصدة دائنة')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge('13/ب')}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('otherCurrentLiab', y, computedData[y]?.otherCurrentLiab || 0)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('otherCurrentLiab', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
 
                 {/* Custom Liabilities */}
                 {getSectionCustomItems('CURRENT_LIABILITIES').map((item) => (
                   <tr key={item.id} className="bg-amber-50/30">
-                    <td className="p-2.5 pr-6 font-bold text-amber-950 flex items-center justify-between">
-                      <span>• {item.name}</span>
+                    <td className="p-2.5 font-bold text-amber-950">
+                      {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
                     <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
                     {yearsList.map((y) => (
@@ -747,6 +1300,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
                         className="text-red-400 hover:text-red-700 cursor-pointer p-1"
+                        title="حذف هذا البند المخصص نهائياً"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -757,28 +1311,61 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 <tr className="bg-amber-50/50 font-bold text-amber-950">
                   <td className="p-2.5 pr-6">إجمالي الالتزامات</td>
                   <td className="p-2.5 text-center">-</td>
-                  {yearsList.map((y) => {
-                    const extra = getSectionCustomSum('CURRENT_LIABILITIES', y);
-                    return (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        {formatEgyptianCurrency((computedData[y]?.totalLiabilities || 0) + extra)}
-                      </td>
-                    );
-                  })}
+                  {yearsList.map((y) => (
+                    <td key={y} className="p-2.5 text-left font-mono">
+                      {formatEgyptianCurrency(computedData[y]?.totalLiabilities || 0)}
+                    </td>
+                  ))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
-                {/* Total Equity & Liabilities */}
+                {/* Total Equity & Liabilities (Credit Side) */}
                 <tr className="bg-slate-900 text-white font-black text-sm">
-                  <td className="p-3">إجمالي حقوق الملكية والالتزامات (Total Equity & Liabilities)</td>
+                  <td className="p-3">إجمالي حقوق الملكية والالتزامات (الجانب الدائن - Total Equity & Liabilities)</td>
                   <td className="p-3 text-center">-</td>
+                  {yearsList.map((y) => (
+                    <td key={y} className="p-3 text-left font-mono text-emerald-400">
+                      {formatEgyptianCurrency(computedData[y]?.totalEquityAndLiabilities || 0)}
+                    </td>
+                  ))}
+                  <td className="p-3 no-print"></td>
+                </tr>
+
+                {/* Real-Time Balance Verification Row */}
+                <tr className="bg-slate-800 text-white font-black text-xs border-t-2 border-slate-700">
+                  <td className="p-3 text-amber-300 flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>التحقق من توازن الميزان (فرق المدين والدائن = الأصول - الخصوم والملكية)</span>
+                  </td>
+                  <td className="p-3 text-center text-slate-400">-</td>
                   {yearsList.map((y) => {
-                    const extraNC = getSectionCustomSum('NON_CURRENT_ASSETS', y);
-                    const extraCA = getSectionCustomSum('CURRENT_ASSETS', y);
+                    const cd = computedData[y];
+                    const diff = cd?.balanceDiff ?? 0;
+                    const isBal = cd?.isBalanced ?? Math.abs(diff) < 1;
                     return (
-                      <td key={y} className="p-3 text-left font-mono text-emerald-400">
-                        {formatEgyptianCurrency(
-                          (computedData[y]?.totalEquityAndLiabilities || 0) + extraNC + extraCA
+                      <td key={y} className="p-3 text-left font-mono">
+                        {isBal ? (
+                          <span className="text-emerald-400 font-bold flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400 inline" />
+                            متزن (0.00 ج.م)
+                          </span>
+                        ) : (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-rose-400 font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                              فرق: {formatEgyptianCurrency(diff, true)}
+                            </span>
+                            {onAutoBalanceYear && (
+                              <button
+                                type="button"
+                                onClick={() => onAutoBalanceYear(y)}
+                                className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded font-sans cursor-pointer transition-colors shadow-2xs"
+                                title="موازنة الفرق في الأرباح المرحلة فورياً"
+                              >
+                                موازنة الميزان ⚡
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     );
@@ -799,12 +1386,22 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
               <TrendingUp className="w-5 h-5 text-blue-400" />
               <div>
                 <h3 className="font-bold text-sm">قائمة الدخل الشامل والأرباح والخسائر (Income Statement)</h3>
-                <p className="text-[11px] text-slate-300">وفقاً لمعايير المحاسبة المصرية (EAS 1 / EAS 48)</p>
+                <p className="text-[11px] text-slate-300">
+                  وفقاً لمعايير المحاسبة المصرية (EAS 1 / EAS 48)
+                  {periodStartDate && periodEndDate ? ` — عن الفترة من ${periodStartDate} إلى ${periodEndDate}` : ' — عن السنة المالية'}
+                </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-bold">
-              معتمد ومطابق ضريبياً
-            </span>
+            <div className="flex items-center gap-2">
+              {periodStartDate && periodEndDate && (
+                <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-mono font-bold">
+                  {periodStartDate} ← {periodEndDate}
+                </span>
+              )}
+              <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-bold">
+                معتمد ومطابق ضريبياً
+              </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -824,12 +1421,8 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
               <tbody className="divide-y divide-slate-100 text-slate-800">
                 <tr className="font-bold text-slate-900">
                   <td className="p-2.5">صافي إيرادات المبيعات والنشاط</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (14)</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono font-bold text-blue-900">
-                      {formatEgyptianCurrency(computedData[y]?.sales || 0)}
-                    </td>
-                  ))}
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(14)}</td>
+                  {yearsList.map((y) => renderEditableCell('sales', y, computedData[y]?.sales || 0, 'text-blue-900', true))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -839,16 +1432,15 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     <td className="p-2.5 pr-6 font-bold text-blue-900 flex items-center justify-between">
                       <span>• {item.name}</span>
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
                     {yearsList.map((y) => (
                       <td key={y} className="p-2.5 text-left font-mono">
-                        <input
-                          type="number"
-                          step="any"
+                        <AccountingNumberInput
                           value={item.values[y] || 0}
-                          onChange={(e) =>
-                            handleUpdateItemValue(item.id, y, parseFloat(e.target.value) || 0)
-                          }
+                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
+                          allowNegative={true}
+                          allowDecimals={true}
+                          decimalPlaces={2}
                           className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-blue-300 font-mono font-bold text-blue-900 focus:outline-none"
                         />
                       </td>
@@ -867,12 +1459,8 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 <tr>
                   <td className="p-2.5 pr-6 text-red-700">يخصم: تكلفة الحصول على الإيراد (تكلفة المبيعات)</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (15)</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono text-red-700">
-                      ({formatEgyptianCurrency(computedData[y]?.cogs || 0)})
-                    </td>
-                  ))}
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(15)}</td>
+                  {yearsList.map((y) => renderEditableCell('cogs', y, computedData[y]?.cogs || 0, 'text-red-700', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -880,7 +1468,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                   <td className="p-2.5">مجمل ربح النشاط (Gross Profit)</td>
                   <td className="p-2.5 text-center">-</td>
                   {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
+                    <td key={y} className="p-2.5 text-left font-mono font-bold text-blue-950">
                       {formatEgyptianCurrency(computedData[y]?.grossProfit || 0)}
                     </td>
                   ))}
@@ -889,12 +1477,8 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 <tr>
                   <td className="p-2.5 pr-6 text-slate-600">يخصم: المصروفات الإدارية والعمومية</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (16)</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      ({formatEgyptianCurrency(computedData[y]?.adminExp || 0)})
-                    </td>
-                  ))}
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(16)}</td>
+                  {yearsList.map((y) => renderEditableCell('adminExp', y, computedData[y]?.adminExp || 0, 'text-slate-700', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -904,10 +1488,17 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     <td className="p-2.5 pr-8 text-red-800 flex items-center justify-between">
                       <span>• يخصم: {item.name}</span>
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
                     {yearsList.map((y) => (
                       <td key={y} className="p-2.5 text-left font-mono text-red-700">
-                        ({formatEgyptianCurrency(item.values[y] || 0)})
+                        <AccountingNumberInput
+                          value={item.values[y] || 0}
+                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
+                          allowNegative={true}
+                          allowDecimals={true}
+                          decimalPlaces={2}
+                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-red-300 font-mono font-bold text-red-700 focus:outline-none"
+                        />
                       </td>
                     ))}
                     <td className="p-2.5 text-center no-print">
@@ -924,12 +1515,8 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 <tr>
                   <td className="p-2.5 pr-6 text-slate-600">يخصم: المصروفات البيعية والتسويقية</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (17)</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
-                      ({formatEgyptianCurrency(computedData[y]?.sellingExp || 0)})
-                    </td>
-                  ))}
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(17)}</td>
+                  {yearsList.map((y) => renderEditableCell('sellingExp', y, computedData[y]?.sellingExp || 0, 'text-slate-700', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -937,7 +1524,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                   <td className="p-2.5">أرباح التشغيل قبل الفوائد والضرائب (EBIT)</td>
                   <td className="p-2.5 text-center">-</td>
                   {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
+                    <td key={y} className="p-2.5 text-left font-mono font-bold text-slate-900">
                       {formatEgyptianCurrency(computedData[y]?.ebit || 0)}
                     </td>
                   ))}
@@ -946,12 +1533,8 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 <tr>
                   <td className="p-2.5 pr-6 text-purple-800">يخصم: أعباء وفوائد التمويل البنكي</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (18)</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono text-purple-900">
-                      ({formatEgyptianCurrency(computedData[y]?.financeExp || 0)})
-                    </td>
-                  ))}
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(18)}</td>
+                  {yearsList.map((y) => renderEditableCell('financeExp', y, computedData[y]?.financeExp || 0, 'text-purple-900', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -959,7 +1542,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                   <td className="p-2.5">صافي الأرباح قبل الضريبة (EBT)</td>
                   <td className="p-2.5 text-center">-</td>
                   {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono">
+                    <td key={y} className="p-2.5 text-left font-mono font-bold text-blue-950">
                       {formatEgyptianCurrency(computedData[y]?.ebt || 0)}
                     </td>
                   ))}
@@ -968,12 +1551,8 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 <tr>
                   <td className="p-2.5 pr-6 text-red-700">يخصم: ضريبة الدخل المستحقة (22.5%)</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">إيضاح (19)</td>
-                  {yearsList.map((y) => (
-                    <td key={y} className="p-2.5 text-left font-mono text-red-700">
-                      ({formatEgyptianCurrency(computedData[y]?.tax || 0)})
-                    </td>
-                  ))}
+                  <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(19)}</td>
+                  {yearsList.map((y) => renderEditableCell('tax', y, computedData[y]?.tax || 0, 'text-red-700', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
 
@@ -1004,9 +1583,17 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
               <DollarSign className="w-5 h-5 text-emerald-400" />
               <div>
                 <h3 className="font-bold text-sm">قائمة التدفقات النقدية المقارنة (Cash Flows Statement)</h3>
-                <p className="text-[11px] text-slate-300">وفقاً لمعيار المحاسبة المصري رقم (4) الطريقة غير المباشرة</p>
+                <p className="text-[11px] text-slate-300">
+                  وفقاً لمعيار المحاسبة المصري رقم (4) الطريقة غير المباشرة
+                  {periodStartDate && periodEndDate ? ` — عن الفترة من ${periodStartDate} إلى ${periodEndDate}` : ' — عن السنة المالية'}
+                </p>
               </div>
             </div>
+            {periodStartDate && periodEndDate && (
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-bold">
+                {periodStartDate} ← {periodEndDate}
+              </span>
+            )}
           </div>
 
           <div className="overflow-x-auto">

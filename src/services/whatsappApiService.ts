@@ -70,6 +70,23 @@ export interface WhatsAppApiLogItem {
   amount?: number;
 }
 
+export interface WhatsAppApiSessionStatus {
+  status: 'DISCONNECTED' | 'SCAN_QR_CODE' | 'CONNECTING' | 'CONNECTED';
+  qrCodeDataUrl: string | null;
+  qrRawString: string | null;
+  connectedPhone: string | null;
+  connectedName: string | null;
+  platform: string;
+  lastConnectedTime: string | null;
+  autoReplyEnabled: boolean;
+  activeMode: 'BAILEYS_FREE_GATEWAY' | 'META_CLOUD_API' | 'SIMULATION';
+  stats: {
+    sentCount: number;
+    receivedCount: number;
+    failedCount: number;
+  };
+}
+
 export interface WhatsAppApiDiagnostics {
   configured: boolean;
   status: 'CONNECTED' | 'READY_FOR_CREDENTIALS';
@@ -80,6 +97,31 @@ export interface WhatsAppApiDiagnostics {
   freeTierEligible: boolean;
   freeConversationsPerMonth: number;
   checks: { name: string; status: string; detail: string }[];
+}
+
+export interface WhatsAppChatMessage {
+  id: string;
+  phone: string;
+  clientName?: string;
+  sender: 'CLIENT' | 'OFFICE' | 'BOT';
+  direction: 'INCOMING' | 'OUTGOING';
+  text: string;
+  timestamp: string;
+  status: 'RECEIVED' | 'SENT' | 'DELIVERED' | 'READ';
+  category?: 'QUOTATION' | 'CERTIFIED_REPORT' | 'INVOICE' | 'TAX' | 'GENERAL';
+  referenceCode?: string;
+  amount?: number;
+}
+
+export interface WhatsAppChatThread {
+  phone: string;
+  clientName: string;
+  lastMessage: string;
+  lastTimestamp: string;
+  lastDirection: 'INCOMING' | 'OUTGOING';
+  lastSender: 'CLIENT' | 'OFFICE' | 'BOT';
+  unreadCount: number;
+  totalMessages: number;
 }
 
 export class WhatsAppApiService {
@@ -261,6 +303,75 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
   }
 
   /**
+   * Get WhatsApp Live Session Status (Baileys / Meta / QR Code)
+   */
+  public static async getSessionStatus(): Promise<WhatsAppApiSessionStatus | null> {
+    try {
+      const res = await fetch('/api/whatsapp/session-status');
+      const data = await res.json();
+      return data.success ? data.data : null;
+    } catch (err) {
+      console.error('Failed to fetch WhatsApp session status:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Start Baileys Multi-Device WhatsApp session and generate QR Code
+   */
+  public static async startSession(): Promise<WhatsAppApiSessionStatus | null> {
+    try {
+      const res = await fetch('/api/whatsapp/start-session', { method: 'POST' });
+      const data = await res.json();
+      return data.success ? data.data : null;
+    } catch (err) {
+      console.error('Failed to start WhatsApp session:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Disconnect Baileys Multi-Device WhatsApp session
+   */
+  public static async disconnectSession(): Promise<WhatsAppApiSessionStatus | null> {
+    try {
+      const res = await fetch('/api/whatsapp/disconnect-session', { method: 'POST' });
+      const data = await res.json();
+      return data.success ? data.data : null;
+    } catch (err) {
+      console.error('Failed to disconnect WhatsApp session:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Send document / PDF file directly via WhatsApp session
+   */
+  public static async sendDocument(
+    to: string,
+    fileBase64: string,
+    fileName: string,
+    caption?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/whatsapp/send-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          fileBase64,
+          fileName,
+          caption,
+        }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      console.error('Failed to send WhatsApp document:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Clear transmission logs
    */
   public static async clearLogs(): Promise<boolean> {
@@ -271,6 +382,76 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
     } catch (err) {
       console.error('Failed to clear WhatsApp logs:', err);
       return false;
+    }
+  }
+
+  /**
+   * Get all live WhatsApp chat conversation threads
+   */
+  public static async getChatThreads(): Promise<WhatsAppChatThread[]> {
+    try {
+      const res = await fetch('/api/whatsapp/chats');
+      const data = await res.json();
+      return data.success && Array.isArray(data.data) ? data.data : [];
+    } catch (err) {
+      console.error('Failed to get WhatsApp chat threads:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Get all chronological messages for a specific phone number
+   */
+  public static async getChatMessages(phone: string): Promise<WhatsAppChatMessage[]> {
+    try {
+      const res = await fetch(`/api/whatsapp/chat/${encodeURIComponent(phone)}`);
+      const data = await res.json();
+      return data.success && Array.isArray(data.data) ? data.data : [];
+    } catch (err) {
+      console.error('Failed to get WhatsApp chat messages:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Send a direct message in an active WhatsApp chat
+   */
+  public static async sendChatMessage(
+    to: string,
+    message: string,
+    clientName?: string
+  ): Promise<{ success: boolean; messages?: WhatsAppChatMessage[]; error?: string }> {
+    try {
+      const res = await fetch('/api/whatsapp/chat/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, message, clientName }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      console.error('Failed to send WhatsApp chat message:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Simulate an incoming client message/reply for testing and demonstration
+   */
+  public static async simulateIncomingReply(
+    phone: string,
+    text: string,
+    clientName?: string
+  ): Promise<{ success: boolean; data?: { incoming: WhatsAppChatMessage; reply?: WhatsAppChatMessage }; error?: string }> {
+    try {
+      const res = await fetch('/api/whatsapp/chat/simulate-incoming', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, text, clientName }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      console.error('Failed to simulate WhatsApp incoming reply:', err);
+      return { success: false, error: err.message };
     }
   }
 }

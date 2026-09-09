@@ -875,6 +875,7 @@ export interface FixedAsset {
 
 export type NavigationTab =
   | 'DASHBOARD'
+  | 'MOBILE_COMPANION'
   | 'ACCOUNTING_HUB'
   | 'FINANCIAL_REPORTING_HUB'
   | 'TAX_AUDIT_HUB'

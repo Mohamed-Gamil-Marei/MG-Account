@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Search,
   CheckCircle2,
+  Smartphone,
 } from 'lucide-react';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu, ActionMenuItem } from './common/ActionMenu';
@@ -557,46 +558,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           },
         ],
       },
-      {
-        id: 'kpi-invoices',
-        title: 'الفواتير الإلكترونية',
-        value: `${state.invoices?.length || 0} فاتورة`,
-        badge: 'ETA منظومة',
-        badgeVariant: 'blue',
-        category: 'OPERATIONS',
-        targetTab: 'INVOICING',
-        icon: Zap,
-        iconColor: 'text-blue-600 dark:text-blue-400',
-        iconBg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',
-        actions: [
-          {
-            id: 'act-inv-view',
-            label: 'سجل الفواتير والإشعارات',
-            icon: ExternalLink,
-            onClick: () => navigate('INVOICING'),
-          },
-        ],
-      },
-      {
-        id: 'kpi-fixed-assets',
-        title: 'سجل الأصول الثابتة',
-        value: `${state.fixedAssets?.length || 0} أصل`,
-        badge: 'إهلاك دفتري',
-        badgeVariant: 'slate',
-        category: 'FINANCIAL',
-        targetTab: 'FIXED_ASSETS',
-        icon: Calculator,
-        iconColor: 'text-slate-600 dark:text-slate-400',
-        iconBg: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-        actions: [
-          {
-            id: 'act-fa-view',
-            label: 'جدول إهلاك الأصول الثابتة',
-            icon: ExternalLink,
-            onClick: () => navigate('FIXED_ASSETS'),
-          },
-        ],
-      },
     ];
   }, [
     incomeData,
@@ -610,11 +571,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     state.clients.length,
     state.journalEntries.length,
     state.accounts.length,
-    state.invoices?.length,
-    state.fixedAssets?.length,
     navigate,
-    onOpenQuickJournal,
-    onOpenQuickTreasury,
   ]);
 
   // Filter KPIs by Category and Search Term
@@ -647,6 +604,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const dashboardHeaderActions: ActionMenuItem[] = [
+    {
+      id: 'act-mobile-companion',
+      label: 'المساعد الميداني للهاتف (سداد وإجراءات)',
+      icon: Smartphone,
+      onClick: () => navigate('MOBILE_COMPANION'),
+    },
     {
       id: 'act-new-j-entry',
       label: 'تسجيل قيد يومية جديد',

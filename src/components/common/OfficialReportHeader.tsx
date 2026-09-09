@@ -15,6 +15,8 @@ export interface OfficialReportHeaderProps {
   documentTitle?: string;
   documentSubtitle?: string;
   fiscalYear?: number | string;
+  periodStartDate?: string;
+  periodEndDate?: string;
   documentReference?: string;
   issueDate?: string;
   isOfficialStampVisible?: boolean;
@@ -29,6 +31,8 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
   documentTitle = 'القوائم المالية والحسابات الختامية المعتمدة',
   documentSubtitle = 'طبقاً لمعايير المحاسبة المصرية (EAS) والقوانين واللوائح السارية',
   fiscalYear,
+  periodStartDate,
+  periodEndDate,
   documentReference,
   issueDate,
   isOfficialStampVisible = true,
@@ -167,6 +171,12 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
             {documentTitle}
             {fiscalYear ? ` (${fiscalYear})` : ''}
           </div>
+          {periodStartDate && periodEndDate && (
+            <div className="text-[10px] text-blue-900 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+              <span className="text-slate-500 font-normal">عن الفترة: </span>
+              <span>من {periodStartDate} إلى {periodEndDate}</span>
+            </div>
+          )}
           <div className="text-slate-600">
             <span className="text-slate-400">التاريخ: </span>
             <span className="font-semibold text-slate-800">{dateStr}</span>

@@ -25,6 +25,10 @@ import {
   Unlock,
   Languages,
   Coins,
+  Calendar,
+  CalendarDays,
+  Clock,
+  ArrowRight,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { CurrencyCode } from '../types';
@@ -53,10 +57,53 @@ import { CurrencyRevaluationWizardModal } from './accounting/CurrencyRevaluation
 import { YearEndClosingWizardModal } from './accounting/YearEndClosingWizardModal';
 import { AutoArchiverService } from '../services/AutoArchiver';
 
+export const formatArabicDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const months = [
+        'يناير', 'فبراير', 'مارس', 'إبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+      ];
+      const monthName = months[m - 1] || `${m}`;
+      return `${d} ${monthName} ${y}`;
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+};
+
+export const formatEnglishDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      const monthName = months[m - 1] || `${m}`;
+      return `${d} ${monthName} ${y}`;
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+};
+
 interface FinancialStatementsViewProps {
   state: DatabaseState;
   fiscalYear?: number;
   onNavigateToExchangeRates?: () => void;
+  onNavigateToCreditSimulator?: () => void;
 }
 
 export interface CustomFinancialLine {
@@ -83,12 +130,133 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   state,
   fiscalYear: initialFiscalYear,
   onNavigateToExchangeRates,
+  onNavigateToCreditSimulator,
 }) => {
   const [statementTab, setStatementTab] = useState<'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES'>('BALANCE_SHEET');
-  const [fiscalYear, setFiscalYear] = useState(initialFiscalYear || 2026);
+  const [fiscalYear, setFiscalYear] = useState<number>(initialFiscalYear || 2026);
+  const [periodPreset, setPeriodPreset] = useState<'FULL_YEAR' | 'Q1' | 'H1' | '9M' | 'Q4' | 'CUSTOM'>('FULL_YEAR');
+  const [startDate, setStartDate] = useState<string>(`${initialFiscalYear || 2026}-01-01`);
+  const [endDate, setEndDate] = useState<string>(`${initialFiscalYear || 2026}-12-31`);
   const [statementLanguage, setStatementLanguage] = useState<'ar' | 'en'>('ar');
   const [isFxRevaluationModalOpen, setIsFxRevaluationModalOpen] = useState(false);
   const [isYearClosingModalOpen, setIsYearClosingModalOpen] = useState(false);
+
+  // Period management handlers
+  const handleFiscalYearChange = (newYear: number) => {
+    setFiscalYear(newYear);
+    if (periodPreset === 'FULL_YEAR') {
+      setStartDate(`${newYear}-01-01`);
+      setEndDate(`${newYear}-12-31`);
+    } else if (periodPreset === 'Q1') {
+      setStartDate(`${newYear}-01-01`);
+      setEndDate(`${newYear}-03-31`);
+    } else if (periodPreset === 'H1') {
+      setStartDate(`${newYear}-01-01`);
+      setEndDate(`${newYear}-06-30`);
+    } else if (periodPreset === '9M') {
+      setStartDate(`${newYear}-01-01`);
+      setEndDate(`${newYear}-09-30`);
+    } else if (periodPreset === 'Q4') {
+      setStartDate(`${newYear}-10-01`);
+      setEndDate(`${newYear}-12-31`);
+    } else {
+      const sParts = startDate.split('-');
+      const eParts = endDate.split('-');
+      if (sParts.length === 3 && eParts.length === 3) {
+        setStartDate(`${newYear}-${sParts[1]}-${sParts[2]}`);
+        setEndDate(`${newYear}-${eParts[1]}-${eParts[2]}`);
+      } else {
+        setStartDate(`${newYear}-01-01`);
+        setEndDate(`${newYear}-12-31`);
+      }
+    }
+  };
+
+  const applyPreset = (preset: 'FULL_YEAR' | 'Q1' | 'H1' | '9M' | 'Q4' | 'CUSTOM') => {
+    setPeriodPreset(preset);
+    if (preset === 'FULL_YEAR') {
+      setStartDate(`${fiscalYear}-01-01`);
+      setEndDate(`${fiscalYear}-12-31`);
+    } else if (preset === 'Q1') {
+      setStartDate(`${fiscalYear}-01-01`);
+      setEndDate(`${fiscalYear}-03-31`);
+    } else if (preset === 'H1') {
+      setStartDate(`${fiscalYear}-01-01`);
+      setEndDate(`${fiscalYear}-06-30`);
+    } else if (preset === '9M') {
+      setStartDate(`${fiscalYear}-01-01`);
+      setEndDate(`${fiscalYear}-09-30`);
+    } else if (preset === 'Q4') {
+      setStartDate(`${fiscalYear}-10-01`);
+      setEndDate(`${fiscalYear}-12-31`);
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    setPeriodPreset('CUSTOM');
+    const y = parseInt(val.split('-')[0], 10);
+    if (!isNaN(y) && y >= 2000 && y <= 2050 && y !== fiscalYear) {
+      setFiscalYear(y);
+    }
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDate(val);
+    setPeriodPreset('CUSTOM');
+    const y = parseInt(val.split('-')[0], 10);
+    if (!isNaN(y) && y >= 2000 && y <= 2050 && y !== fiscalYear) {
+      setFiscalYear(y);
+    }
+  };
+
+  const periodDurationText = useMemo(() => {
+    if (!startDate || !endDate) return '';
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      if (diffDays <= 0) return 'تاريخ النهاية يجب أن يكون لاحقاً لتاريخ البداية';
+      if (diffDays >= 360 && diffDays <= 366) return 'سنة مالية كاملة (12 شهراً)';
+      const months = Math.round((diffDays / 30.4375) * 10) / 10;
+      return `${diffDays} يوماً (~${months} شهر)`;
+    } catch {
+      return '';
+    }
+  }, [startDate, endDate]);
+
+  const isFullYear = useMemo(() => {
+    return startDate === `${fiscalYear}-01-01` && endDate === `${fiscalYear}-12-31`;
+  }, [startDate, endDate, fiscalYear]);
+
+  const periodHeaderAr = useMemo(() => {
+    if (isFullYear) {
+      return `عن السنة المالية المنتهية في 31 ديسمبر ${fiscalYear}`;
+    }
+    return `عن الفترة المالية من ${formatArabicDate(startDate)} إلى ${formatArabicDate(endDate)}`;
+  }, [isFullYear, startDate, endDate, fiscalYear]);
+
+  const periodHeaderEn = useMemo(() => {
+    if (isFullYear) {
+      return `For the Year Ended 31 Dec ${fiscalYear}`;
+    }
+    return `For the Period from ${formatEnglishDate(startDate)} to ${formatEnglishDate(endDate)}`;
+  }, [isFullYear, startDate, endDate, fiscalYear]);
+
+  const asOfDateAr = useMemo(() => {
+    if (endDate === `${fiscalYear}-12-31`) {
+      return `كما في 31 ديسمبر ${fiscalYear}`;
+    }
+    return `كما في ${formatArabicDate(endDate)}`;
+  }, [endDate, fiscalYear]);
+
+  const asOfDateEn = useMemo(() => {
+    if (endDate === `${fiscalYear}-12-31`) {
+      return `As at 31 Dec ${fiscalYear}`;
+    }
+    return `As at ${formatEnglishDate(endDate)}`;
+  }, [endDate, fiscalYear]);
 
   // Fiscal period lock status for the selected year
   const isPeriodLocked = useMemo(() => {
@@ -104,9 +272,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   // Active exchange rate for fiscal year closing date
   const reportingExchangeRate = useMemo(() => {
     if (reportingCurrency === 'EGP') return 1;
-    const closingDate = `${fiscalYear}-12-31`;
+    const closingDate = endDate || `${fiscalYear}-12-31`;
     return db.getExchangeRateValue(reportingCurrency, closingDate);
-  }, [reportingCurrency, fiscalYear, state.exchangeRates]);
+  }, [reportingCurrency, fiscalYear, endDate, state.exchangeRates]);
 
   const currencyInfo = currencyService.getCurrencyInfo(reportingCurrency);
 
@@ -136,17 +304,68 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
   const activeClient = state.clients.find((c) => c.id === state.activeClientContext?.clientId);
 
-  // Compute base ledger figures
-  const relevantEntries = useMemo(() => {
+  // Filter client entries
+  const clientFilteredEntries = useMemo(() => {
     return state.activeClientContext?.clientId
       ? state.journalEntries.filter((e) => !e.clientId || e.clientId === state.activeClientContext?.clientId)
       : state.journalEntries;
   }, [state.journalEntries, state.activeClientContext]);
 
-  const calculatedAccounts = useMemo(() => computeAccountBalances(state.accounts, relevantEntries), [state.accounts, relevantEntries]);
-  const baseIncomeData = useMemo(() => generateIncomeStatement(calculatedAccounts), [calculatedAccounts]);
-  const baseBalanceData = useMemo(() => generateBalanceSheet(calculatedAccounts, baseIncomeData), [calculatedAccounts, baseIncomeData]);
-  const baseCashFlowData = useMemo(() => generateCashFlowStatement(baseIncomeData, baseBalanceData), [baseIncomeData, baseBalanceData]);
+  // Entries strictly within the selected period [startDate, endDate] for periodic statements (Income, Expenses, Cash flow)
+  const periodEntries = useMemo(() => {
+    return clientFilteredEntries.filter((e) => {
+      if (!e.date) return true;
+      const afterStart = !startDate || e.date >= startDate;
+      const beforeEnd = !endDate || e.date <= endDate;
+      return afterStart && beforeEnd;
+    });
+  }, [clientFilteredEntries, startDate, endDate]);
+
+  // Entries cumulative up to cut-off endDate for Balance Sheet
+  const cumulativeEntries = useMemo(() => {
+    return clientFilteredEntries.filter((e) => {
+      if (!e.date) return true;
+      return !endDate || e.date <= endDate;
+    });
+  }, [clientFilteredEntries, endDate]);
+
+  // Prior period entries (before startDate) to preserve equity balancing
+  const priorPeriodEntries = useMemo(() => {
+    if (!startDate) return [];
+    return clientFilteredEntries.filter((e) => e.date && e.date < startDate);
+  }, [clientFilteredEntries, startDate]);
+
+  // 1. Calculate periodic account movements for Income Statement & Cash Flow
+  const periodCalculatedAccounts = useMemo(() => {
+    return computeAccountBalances(state.accounts, periodEntries);
+  }, [state.accounts, periodEntries]);
+
+  const baseIncomeData = useMemo(() => {
+    return generateIncomeStatement(periodCalculatedAccounts);
+  }, [periodCalculatedAccounts]);
+
+  // 2. Calculate cumulative balances for Balance Sheet as of cut-off date (endDate)
+  const cumulativeCalculatedAccounts = useMemo(() => {
+    return computeAccountBalances(state.accounts, cumulativeEntries);
+  }, [state.accounts, cumulativeEntries]);
+
+  const priorPeriodAccounts = useMemo(() => {
+    return computeAccountBalances(state.accounts, priorPeriodEntries);
+  }, [state.accounts, priorPeriodEntries]);
+
+  const priorNetProfit = useMemo(() => {
+    if (priorPeriodEntries.length === 0) return 0;
+    const priorIncome = generateIncomeStatement(priorPeriodAccounts);
+    return priorIncome.netProfitAfterTax;
+  }, [priorPeriodEntries.length, priorPeriodAccounts]);
+
+  const baseBalanceData = useMemo(() => {
+    return generateBalanceSheet(cumulativeCalculatedAccounts, baseIncomeData);
+  }, [cumulativeCalculatedAccounts, baseIncomeData]);
+
+  const baseCashFlowData = useMemo(() => {
+    return generateCashFlowStatement(baseIncomeData, baseBalanceData);
+  }, [baseIncomeData, baseBalanceData]);
 
   // Helper to get value: either overridden or from base calculation
   const getVal = (key: string, defaultVal: number): number => {
@@ -225,7 +444,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     const notesReceivable = getVal('bs_notesReceivable', baseBalanceData.currentAssets.notesReceivable);
     const taxDebit = getVal('bs_taxDebit', baseBalanceData.currentAssets.whtTaxDebit + baseBalanceData.currentAssets.vatInputTax);
     const prepayments = getVal('bs_prepayments', baseBalanceData.currentAssets.prepaymentsAndOther);
-    const cashAndBanks = getVal('bs_cash', baseBalanceData.currentAssets.cashAndBanks);
+    const cashAndBanks = getVal('bs_cashAndBanks', baseBalanceData.currentAssets.cashAndBanks);
     const customCurrentAssets = getSectionCustomSum('CURRENT_ASSETS');
     const totalCurrentAssets = inventory + receivables + notesReceivable + taxDebit + prepayments + cashAndBanks + customCurrentAssets;
 
@@ -234,7 +453,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     // Equity
     const capital = getVal('bs_capital', baseBalanceData.equity.paidUpCapital);
     const legalReserve = getVal('bs_legalReserve', baseBalanceData.equity.legalReserve);
-    const retainedEarnings = getVal('bs_retainedEarnings', baseBalanceData.equity.retainedEarnings);
+    const retainedEarnings = getVal('bs_retainedEarnings', baseBalanceData.equity.retainedEarnings + priorNetProfit);
     const currentProfit = getVal('bs_currentProfit', computedIncome.netProfitAfterTax);
     const partnersCurrent = getVal('bs_partnersCurrent', baseBalanceData.equity.partnersCurrentAccount);
     const customEquity = getSectionCustomSum('EQUITY');
@@ -296,7 +515,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       totalEquityAndLiabilities,
       balanceDifference,
     };
-  }, [overrides, customLines, baseBalanceData, computedIncome.netProfitAfterTax]);
+  }, [overrides, customLines, baseBalanceData, computedIncome.netProfitAfterTax, priorNetProfit]);
 
   // 3. RECALCULATED CASH FLOW FIGURES
   const computedCashFlow = useMemo(() => {
@@ -446,7 +665,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               <span className="text-[11px] text-slate-500">السنة:</span>
               <select
                 value={fiscalYear}
-                onChange={(e) => setFiscalYear(Number(e.target.value))}
+                onChange={(e) => handleFiscalYearChange(Number(e.target.value))}
                 className="bg-transparent font-mono font-bold focus:outline-none cursor-pointer"
               >
                 <option value={2026}>2026</option>
@@ -455,6 +674,14 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                 <option value={2023}>2023</option>
               </select>
             </div>
+
+            <ActionButton
+              label="طباعة PDF"
+              icon={Printer}
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+            />
 
             {/* Unified ActionMenu for Financial Statements */}
             <ActionMenu
@@ -496,6 +723,16 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   icon: ShieldCheck,
                   onClick: handleAutoArchiveFinancials,
                 },
+                ...(onNavigateToCreditSimulator
+                  ? [
+                      {
+                        id: 'credit-simulator',
+                        label: 'الملف الائتماني والتقييم البنكي',
+                        icon: TrendingUp,
+                        onClick: onNavigateToCreditSimulator,
+                      },
+                    ]
+                  : []),
                 {
                   id: 'fx-wizard',
                   label: 'فروق العملة (EAS 13)',
@@ -529,6 +766,110 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </button>
             </div>
           )}
+
+          {/* Flexible Financial Period & Date Range Selection Bar (EAS 1 / EAS 30 / IAS 34) */}
+          <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700/80 p-3 sm:p-4 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 rounded-lg text-emerald-700 dark:text-emerald-400">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <span>فترة القوائم المالية المحددة</span>
+                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                      من وإلى
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                    مرونة كاملة لإعداد القوائم الربع سنوية، النصفية، الدورية والسنوية (EAS 30)
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Period Presets */}
+              <div className="flex items-center gap-1 flex-wrap text-xs">
+                <span className="text-[11px] text-slate-400 font-bold ml-1">فترات قياسية:</span>
+                {[
+                  { id: 'FULL_YEAR', label: 'سنة كاملة' },
+                  { id: 'Q1', label: 'الربع الأول (Q1)' },
+                  { id: 'H1', label: 'النصف الأول (H1)' },
+                  { id: '9M', label: '9 أشهر (Q3)' },
+                  { id: 'Q4', label: 'الربع الرابع (Q4)' },
+                ].map((p) => {
+                  const isSelected = periodPreset === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => applyPreset(p.id as any)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Inputs & Period Details */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                {/* Start Date */}
+                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">من تاريخ:</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                    className="bg-transparent font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer text-xs"
+                  />
+                </div>
+
+                {/* Arrow */}
+                <span className="text-slate-400 font-bold text-xs">←</span>
+
+                {/* End Date */}
+                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">إلى تاريخ:</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
+                    className="bg-transparent font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer text-xs"
+                  />
+                </div>
+
+                {/* Duration & Period Chip */}
+                {periodDurationText && (
+                  <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold">
+                    <Clock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    <span>{periodDurationText}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Entries count badge & Reset */}
+              <div className="flex items-center gap-2.5">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  القيود المشمولة بالفترة: <strong className="font-mono text-slate-900 dark:text-slate-100">{periodEntries.length}</strong> قيد
+                </span>
+                {!isFullYear && (
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('FULL_YEAR')}
+                    className="text-[11px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold cursor-pointer flex items-center gap-1"
+                  >
+                    <span>استعادة السنة كاملة</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Streamlined Multi-Currency & Language Ribbon */}
           <div className="bg-slate-50/80 dark:bg-slate-800/50 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
@@ -700,9 +1041,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                 {statementLanguage === 'en' ? 'Audited Financial Statements' : 'القوائم المالية المدققة'}
               </div>
               <div className="text-sm font-black text-emerald-900">
-                {statementLanguage === 'en'
-                  ? `For the Year Ended 31 Dec ${fiscalYear}`
-                  : `عن السنة المنتهية في 31 ديسمبر ${fiscalYear}`}
+                {statementLanguage === 'en' ? periodHeaderEn : periodHeaderAr}
               </div>
               <div className="text-[10px] text-slate-500 font-bold">
                 {currencyDisplayMode === 'ORIGINAL'
@@ -735,6 +1074,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             reportingExchangeRate={reportingExchangeRate}
             currencyDisplayMode={currencyDisplayMode}
             language={statementLanguage}
+            asOfDateFormatted={statementLanguage === 'en' ? asOfDateEn : asOfDateAr}
           />
         )}
 
@@ -744,8 +1084,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-black text-slate-900 underline underline-offset-4">
                 {statementLanguage === 'en'
-                  ? `STATEMENT OF COMPREHENSIVE INCOME FOR THE YEAR ENDED 31 DECEMBER ${fiscalYear}`
-                  : `قائمة الدخل الشامل عن السنة المالية المنتهية في 31 ديسمبر ${fiscalYear}`}
+                  ? `STATEMENT OF COMPREHENSIVE INCOME ${periodHeaderEn.toUpperCase()}`
+                  : `قائمة الدخل الشامل ${periodHeaderAr}`}
               </h2>
             </div>
 
@@ -940,8 +1280,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-black text-slate-900 underline underline-offset-4">
                 {statementLanguage === 'en'
-                  ? `STATEMENT OF CASH FLOWS FOR THE YEAR ENDED 31 DECEMBER ${fiscalYear}`
-                  : `قائمة التدفقات النقدية عن السنة المالية المنتهية في 31 ديسمبر ${fiscalYear}`}
+                  ? `STATEMENT OF CASH FLOWS ${periodHeaderEn.toUpperCase()}`
+                  : `قائمة التدفقات النقدية ${periodHeaderAr}`}
               </h2>
             </div>
 
@@ -1084,7 +1424,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
           <div className="space-y-5 text-xs text-slate-800 leading-relaxed max-w-3xl mx-auto">
             <div className="text-center pb-2 border-b border-slate-200">
               <h2 className="text-base font-black text-slate-900">
-                الإيضاحات المتممة للقوائم المالية والسياسات المحاسبية الهامة
+                {statementLanguage === 'en'
+                  ? `NOTES TO THE FINANCIAL STATEMENTS ${periodHeaderEn.toUpperCase()}`
+                  : `الإيضاحات المتممة للقوائم المالية ${periodHeaderAr}`}
               </h2>
             </div>
 

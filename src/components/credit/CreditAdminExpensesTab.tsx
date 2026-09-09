@@ -32,79 +32,55 @@ export const DEFAULT_ADMIN_EXPENSES: AdminExpenseItem[] = [
     id: 'exp_1',
     name: 'أجور ورواتب ومكافآت العاملين بالإدارة',
     category: 'تكاليف عمالة',
-    valuesByYear: { 2024: 450000, 2025: 520000, 2026: 620000 },
+    valuesByYear: { 2024: 250000, 2025: 1800000, 2026: 1200000 },
   },
   {
     id: 'exp_2',
-    name: 'حصة الشركة في التأمينات الاجتماعية',
+    name: 'حصة المنشأة في التأمينات الاجتماعية',
     category: 'تكاليف عمالة',
-    valuesByYear: { 2024: 75000, 2025: 86000, 2026: 102000 },
+    valuesByYear: { 2024: 35000, 2025: 240000, 2026: 160000 },
   },
   {
     id: 'exp_3',
-    name: 'بدلات وانتقالات ومصاريف سفر الإدارة',
-    category: 'انتقالات وسفر',
-    valuesByYear: { 2024: 40000, 2025: 48000, 2026: 58000 },
+    name: 'إيجار المقرات الإدارية والفروع والمخازن',
+    category: 'إيجارات ومرافق',
+    valuesByYear: { 2024: 45000, 2025: 320000, 2026: 220000 },
   },
   {
     id: 'exp_4',
-    name: 'إيجار المقرات الإدارية والفروع',
-    category: 'إيجارات ومرافق',
-    valuesByYear: { 2024: 120000, 2025: 135000, 2026: 150000 },
+    name: 'بدلات وانتقالات ومصاريف سفر ونقل',
+    category: 'انتقالات وسفر',
+    valuesByYear: { 2024: 25000, 2025: 180000, 2026: 125000 },
   },
   {
     id: 'exp_5',
-    name: 'صيانة وترميمات ونظافة وأمن وحراسة',
+    name: 'صيانة ونظافة وأمن وحراسة',
     category: 'خدمات وصيانة',
-    valuesByYear: { 2024: 35000, 2025: 42000, 2026: 50000 },
+    valuesByYear: { 2024: 18000, 2025: 130000, 2026: 90000 },
   },
   {
     id: 'exp_6',
-    name: 'أتعاب استشارات مهنية وقانونية ومحاسبية ومراجعة',
+    name: 'أتعاب استشارات مهنية ومحاسبية وقانونية',
     category: 'استشارات مهنية',
-    valuesByYear: { 2024: 50000, 2025: 60000, 2026: 75000 },
+    valuesByYear: { 2024: 20000, 2025: 140000, 2026: 95000 },
   },
   {
     id: 'exp_7',
-    name: 'عمولات ومصروفات بنكية وخدمات مصرفية',
-    category: 'مصاريف بنكية',
-    valuesByYear: { 2024: 25000, 2025: 30000, 2026: 38000 },
+    name: 'كهرباء ومياه وإنارة واتصالات وإنترنت',
+    category: 'إيجارات ومرافق',
+    valuesByYear: { 2024: 15000, 2025: 110000, 2026: 75000 },
   },
   {
     id: 'exp_8',
     name: 'أدوات كتابية ومطبوعات ومستلزمات مكتبية',
     category: 'مستلزمات إدارية',
-    valuesByYear: { 2024: 18000, 2025: 22000, 2026: 28000 },
+    valuesByYear: { 2024: 10000, 2025: 75000, 2026: 50000 },
   },
   {
     id: 'exp_9',
-    name: 'كهرباء ومياه وإنارة وغاز المقرات',
-    category: 'إيجارات ومرافق',
-    valuesByYear: { 2024: 28000, 2025: 34000, 2026: 42000 },
-  },
-  {
-    id: 'exp_10',
-    name: 'اتصالات وإنترنت واشتراكات برمجيات وسحابة',
-    category: 'تقنية واتصالات',
-    valuesByYear: { 2024: 22000, 2025: 28000, 2026: 35000 },
-  },
-  {
-    id: 'exp_11',
-    name: 'ضيافة وبوفيه واستقبال عملاء ووفود',
-    category: 'مصروفات عامة',
-    valuesByYear: { 2024: 15000, 2025: 18000, 2026: 22000 },
-  },
-  {
-    id: 'exp_12',
-    name: 'ضرائب عقارية ورسوم وتراخيص حكومية واشتراكات غرف',
-    category: 'رسوم حكومية',
-    valuesByYear: { 2024: 20000, 2025: 24000, 2026: 30000 },
-  },
-  {
-    id: 'exp_13',
     name: 'مصروفات إدارية وعمومية أخرى متنوعة',
     category: 'مصروفات عامة',
-    valuesByYear: { 2024: 30000, 2025: 35000, 2026: 45000 },
+    valuesByYear: { 2024: 10462, 2025: 55042, 2026: 35480 },
   },
 ];
 
@@ -114,6 +90,9 @@ interface CreditAdminExpensesTabProps {
   expenseItems: AdminExpenseItem[];
   onUpdateExpenseItems: (items: AdminExpenseItem[]) => void;
   onResetExpenses?: () => void;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  periodLabel?: string;
 }
 
 export const CreditAdminExpensesTab: React.FC<CreditAdminExpensesTabProps> = ({
@@ -122,6 +101,9 @@ export const CreditAdminExpensesTab: React.FC<CreditAdminExpensesTabProps> = ({
   expenseItems,
   onUpdateExpenseItems,
   onResetExpenses,
+  periodStartDate,
+  periodEndDate,
+  periodLabel,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(
     yearsList[yearsList.length - 1] || 2026
@@ -446,13 +428,22 @@ export const CreditAdminExpensesTab: React.FC<CreditAdminExpensesTabProps> = ({
       {/* Main Interactive Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-indigo-700" />
-            بيان وتفصيل المصروفات الإدارية والعمومية للسنوات المالية المقارنة
-          </h3>
-          <span className="text-xs text-slate-500">
-            يمكنك تعديل أي قيمة مباشرة داخل خلايا الجدول لتحديث القوائم المالية فوراً
-          </span>
+            <h3 className="text-sm font-black text-slate-800">
+              بيان وتفصيل المصروفات الإدارية والعمومية {periodStartDate && periodEndDate ? `(الفترة من ${periodStartDate} إلى ${periodEndDate})` : `للسنوات المالية المقارنة`}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {periodStartDate && periodEndDate && (
+              <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono font-bold text-[11px]">
+                {periodStartDate} ← {periodEndDate}
+              </span>
+            )}
+            <span className="text-xs text-slate-500">
+              تعديل أي قيمة يحدث القوائم المالية فوراً
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
