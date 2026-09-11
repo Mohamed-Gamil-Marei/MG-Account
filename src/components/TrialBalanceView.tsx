@@ -5,11 +5,15 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileSpreadsheet,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import { DatabaseState } from '../db/localDatabase';
 import { computeAccountBalances } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { TrialBalanceAutoMapperModal } from './accounting/TrialBalanceAutoMapperModal';
+import { AuditConsistencySentinelModal } from './audit/AuditConsistencySentinelModal';
 import * as XLSX from 'xlsx';
 
 interface TrialBalanceViewProps {
@@ -17,8 +21,10 @@ interface TrialBalanceViewProps {
   fiscalYear?: number;
 }
 
-export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state }) => {
+export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fiscalYear = 2026 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAutoMapperOpen, setIsAutoMapperOpen] = useState(false);
+  const [isAuditSentinelOpen, setIsAuditSentinelOpen] = useState(false);
   
   const calculatedAccounts = useMemo(() => {
     return computeAccountBalances(state.accounts, state.journalEntries);
@@ -112,7 +118,20 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state }) => 
       icon={Scale}
       badge={isEndingBalanced ? 'متزن محاسبياً ✓' : 'غير متزن ⚠'}
       badgeVariant={isEndingBalanced ? 'emerald' : 'rose'}
+      primaryAction={{
+        id: 'btn-open-tb-mapper',
+        label: 'استيراد ميزان ذكي من أي برنامج',
+        icon: Sparkles,
+        variant: 'primary',
+        onClick: () => setIsAutoMapperOpen(true),
+      }}
       actionMenuItems={[
+        {
+          id: 'btn-audit-sentinel-tb',
+          label: 'الفحص والتدقيق الآلي المتقاطع',
+          icon: ShieldCheck,
+          onClick: () => setIsAuditSentinelOpen(true),
+        },
         {
           id: 'btn-export-tb-excel',
           label: 'تصدير إكسيل رسمي',
@@ -284,6 +303,20 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state }) => 
           </table>
         </div>
       </div>
+
+      {/* Breakthrough Modals */}
+      <TrialBalanceAutoMapperModal
+        isOpen={isAutoMapperOpen}
+        onClose={() => setIsAutoMapperOpen(false)}
+        state={state}
+      />
+
+      <AuditConsistencySentinelModal
+        isOpen={isAuditSentinelOpen}
+        onClose={() => setIsAuditSentinelOpen(false)}
+        state={state}
+        fiscalYear={fiscalYear}
+      />
     </UnifiedScreenCard>
   );
 };

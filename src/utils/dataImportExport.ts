@@ -112,6 +112,247 @@ export function convertToCsv(data: Record<string, any>[]): string {
 }
 
 /**
+ * Applies professional Arabic formatting to a worksheet:
+ * - Enables Right-to-Left (RTL) view for standard Arabic layout
+ * - Dynamically calculates column widths (wch) based on header and data lengths with safety margin
+ * - Formats numbers and text for high readability
+ */
+export function formatWorksheetForArabicExport(
+  ws: XLSX.WorkSheet,
+  dataRows: Record<string, any>[]
+): XLSX.WorkSheet {
+  if (!ws) return ws;
+
+  // 1. Enable RTL View in Excel
+  ws['!views'] = [{ RTL: true }];
+
+  if (!dataRows || dataRows.length === 0) {
+    ws['!cols'] = [{ wch: 32 }];
+    return ws;
+  }
+
+  // 2. Compute dynamic column widths
+  const keys = Object.keys(dataRows[0] || {});
+  const colWidths: { wch: number }[] = [];
+
+  keys.forEach((key) => {
+    let maxLen = String(key).length;
+    for (const row of dataRows) {
+      const val = row[key];
+      if (val !== null && val !== undefined) {
+        const valStr = typeof val === 'number'
+          ? val.toLocaleString('ar-EG', { maximumFractionDigits: 2 })
+          : String(val);
+        if (valStr.length > maxLen) {
+          maxLen = valStr.length;
+        }
+      }
+    }
+    // Generous padding for Arabic glyphs + min/max clamping
+    colWidths.push({ wch: Math.min(Math.max(maxLen + 4, 16), 68) });
+  });
+
+  ws['!cols'] = colWidths;
+  return ws;
+}
+
+/**
+ * Maps English key names to standard official Arabic titles for exports
+ */
+const ARABIC_FIELD_DICTIONARY: Record<string, string> = {
+  id: 'المعرف الرقمي',
+  serialNumber: 'رقم السيريال / القيد',
+  certificateNumber: 'رقم الشهادة المعتمدة',
+  invoiceNumber: 'رقم الفاتورة الإلكترونية',
+  voucherNumber: 'رقم إيصال / سند الخزينة',
+  referenceNumber: 'الرقم المرجعي',
+  clientCode: 'كود العميل بالسجل',
+  name: 'الاسم / البيان',
+  clientName: 'اسم العميل / المكلف',
+  companyName: 'اسم الشركة / المنشأة',
+  tradeName: 'الاسم التجاري',
+  activityName: 'النشاط الاقتصادي',
+  activity: 'النشاط الرئيسي',
+  legalForm: 'الشكل القانوني',
+  companyType: 'نوع المنشأة',
+  nationalId: 'الرقم القومي',
+  taxCardNo: 'رقم البطاقة الضريبية',
+  commercialRegNo: 'رقم السجل التجاري',
+  commercialRegistrationNo: 'رقم السجل التجاري',
+  taxOffice: 'مأمورية الضرائب المختصة',
+  incomeTaxFileNo: 'رقم ملف ضريبة الدخل',
+  vatRegistrationNo: 'رقم التسجيل بضريبة القيمة المضافة',
+  socialInsuranceNo: 'الرقم التأميني للمنشأة',
+  jobTitle: 'المهنة / الصفة',
+  phone: 'رقم الهاتف / المحمول',
+  email: 'البريد الإلكتروني',
+  address: 'العنوان القانوني المقر',
+  capital: 'رأس المال المصدر (ج.م)',
+  date: 'التاريخ',
+  issueDate: 'تاريخ الإصدار',
+  dueDate: 'تاريخ الاستحقاق',
+  submissionDate: 'تاريخ التقديم',
+  period: 'الفترة المحاسبية / الضريبية',
+  periodText: 'الفترة المحاسبية المغطاة',
+  taxYear: 'السنة الضريبية / المالية',
+  declarationType: 'نوع الإقرار الضريبي',
+  certificateType: 'نوع الشهادة المهنية',
+  purpose: 'الغرض من المستند / الاستخدام',
+  recipientEntity: 'الجهة الموجه إليها',
+  auditorNotes: 'ملاحظات وتأكيدات المحاسب القانوني',
+  notes: 'ملاحظات وإيضاحات',
+  description: 'البيان والشرح التفصيلي',
+  status: 'الحالة',
+  amount: 'المبلغ الإجمالي (ج.م)',
+  totalAmount: 'إجمالي القيمة (ج.م)',
+  certifiedAmount: 'المبلغ المعتمد (ج.م)',
+  monthlyAmount: 'الدخل الشهري المعتمد (ج.م)',
+  annualNetIncome: 'صافي الدخل السنوي المعتمد (ج.م)',
+  monthlyNetIncome: 'متوسط الدخل الشهري المعتمد (ج.م)',
+  investedCapitalAmount: 'إجمالي رأس المال المستثمر (ج.م)',
+  subtotal: 'المبلغ قبل الضريبة (ج.م)',
+  totalVat: 'ضريبة القيمة المضافة (14%) (ج.م)',
+  totalWht: 'ضريبة الخصم والتحصيل (WHT) (ج.م)',
+  grandTotal: 'الصافي النهائي المستحق (ج.م)',
+  paidAmount: 'المبلغ المسدد (ج.م)',
+  remainingAmount: 'المبلغ المتبقي (ج.م)',
+  paymentMethod: 'طريقة السداد / الدفع',
+  entryType: 'نوع القيد المحاسبي',
+  totalDebit: 'إجمالي المدين (ج.م)',
+  totalCredit: 'إجمالي الدائن (ج.م)',
+  isPosted: 'حالة الترحيل لدفتر الأستاذ',
+  recordedBy: 'المسؤول عن التسجيل والاعتماد',
+  projectName: 'اسم المشروع الاستثماري',
+  studyCode: 'كود دراسة الجدوى',
+  sector: 'القطاع الاستثماري',
+  totalCapitalCost: 'التكاليف الاستثمارية الكلية (ج.م)',
+  npv: 'صافي القيمة الحالية (NPV)',
+  irr: 'معدل العائد الداخلي (IRR)',
+  paybackPeriod: 'فترة الاسترداد (سنوات)',
+  qrPayload: 'رمز التحقق الرقمي المشفر (QR Code)',
+  verificationCode: 'كود التحقق الإلكتروني',
+};
+
+/**
+ * Builds structured Arabic sheets and tables from any arbitrary custom document
+ */
+function buildStructuredArabicDocumentSheets(
+  doc: any,
+  model: ModelType,
+  state: DatabaseState
+): {
+  overviewRows: Record<string, any>[];
+  detailSheets: { sheetName: string; rows: Record<string, any>[] }[];
+} {
+  const auditor = state.officeProfile.auditorName || 'محمد جميل مرعي';
+  const license = state.officeProfile.licenseNumber || 'س.م.م 43122';
+  const firm = state.officeProfile.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+
+  // 1. Primary Overview Sheet (Two-column Key-Value Arabic Layout)
+  const overviewRows: Record<string, any>[] = [
+    { 'البيان / الحقل الرسمي': 'اسم المنشأة المهنية', 'القيمة / التفاصيل': firm },
+    { 'البيان / الحقل الرسمي': 'المحاسب القانوني ومراقب الحسابات', 'القيمة / التفاصيل': auditor },
+    { 'البيان / الحقل الرسمي': 'رقم القيد بسجل المحاسبين والمراجعين', 'القيمة / التفاصيل': license },
+    { 'البيان / الحقل الرسمي': 'تاريخ ووقت استخراج المستند', 'القيمة / التفاصيل': new Date().toLocaleString('ar-EG') },
+    { 'البيان / الحقل الرسمي': 'حالة التوثيق والاعتماد', 'القيمة / التفاصيل': 'معتمد وموثق رسمياً وفق معايير المحاسبة والمراجعة المصرية' },
+  ];
+
+  // Map each top-level key in customDocument
+  Object.keys(doc).forEach((k) => {
+    const val = doc[k];
+    if (val === null || val === undefined) return;
+    if (typeof val === 'object' && !Array.isArray(val)) return; // skip nested complex objects in key-val
+    if (Array.isArray(val)) return; // handle in sub-sheets
+
+    const arabicLabel = ARABIC_FIELD_DICTIONARY[k] || k;
+    let formattedVal = val;
+    if (typeof val === 'boolean') {
+      formattedVal = val ? 'نعم / معتمد' : 'لا / غير معتمد';
+    } else if (typeof val === 'number') {
+      formattedVal = val.toLocaleString('ar-EG');
+    }
+    overviewRows.push({
+      'البيان / الحقل الرسمي': arabicLabel,
+      'القيمة / التفاصيل': formattedVal,
+    });
+  });
+
+  // 2. Process detail sub-sheets (e.g., items, lines, breakdownItems, procedures, partners)
+  const detailSheets: { sheetName: string; rows: Record<string, any>[] }[] = [];
+
+  // Items / Invoices lines
+  if (doc.items && Array.isArray(doc.items) && doc.items.length > 0) {
+    const itemRows = doc.items.map((it: any, idx: number) => ({
+      'م': idx + 1,
+      'كود الصنف / الخدمة': it.itemCode || it.code || `ITM-${idx + 1}`,
+      'بيان الصنف أو الخدمة المهنية': it.description || it.name || it.itemDescription || '',
+      'الكمية': it.quantity || 1,
+      'سعر الوحدة (ج.م)': it.unitPrice || it.rate || 0,
+      'القيمة قبل الضريبة (ج.م)': it.subtotal || it.amount || ((it.quantity || 1) * (it.unitPrice || 0)),
+      'معدل الضريبة (%)': it.vatRate ? `${it.vatRate}%` : '14%',
+      'قيمة ضريبة القيمة المضافة': it.vatAmount || (it.subtotal ? it.subtotal * 0.14 : 0),
+      'الصافي الإجمالي (ج.م)': it.total || it.netAmount || 0,
+    }));
+    detailSheets.push({ sheetName: 'بنود_الفاتورة_المعتمدة', rows: itemRows });
+  }
+
+  // Journal Lines
+  if (doc.lines && Array.isArray(doc.lines) && doc.lines.length > 0) {
+    const lineRows = doc.lines.map((ln: any, idx: number) => ({
+      'م': idx + 1,
+      'كود الحساب': ln.accountCode || '',
+      'اسم الحساب المحاسبي': ln.accountName || '',
+      'مدين (ج.م)': ln.debit || 0,
+      'دائن (ج.م)': ln.credit || 0,
+      'شرح السطر': ln.description || '',
+      'مركز التكلفة': ln.costCenter || '',
+    }));
+    detailSheets.push({ sheetName: 'أطراف_القيد_المحاسبي', rows: lineRows });
+  }
+
+  // Capital Certificate Breakdown Items
+  if (doc.breakdownItems && Array.isArray(doc.breakdownItems) && doc.breakdownItems.length > 0) {
+    const bdRows = doc.breakdownItems.map((bd: any, idx: number) => ({
+      'م': idx + 1,
+      'عنصر رأس المال / المكون الاستثماري': bd.source || bd.title || bd.item || '',
+      'القيمة المعتمدة (ج.م)': bd.amount || 0,
+      'النسبة المئوية من رأس المال': bd.percentage ? `${bd.percentage}%` : '',
+      'الإيضاح والسند المستندي': bd.notes || bd.description || '',
+    }));
+    detailSheets.push({ sheetName: 'مكونات_رأس_المال_المستثمر', rows: bdRows });
+  }
+
+  // Procedures
+  if (doc.procedures && Array.isArray(doc.procedures) && doc.procedures.length > 0) {
+    const procRows = doc.procedures.map((p: any, idx: number) => ({
+      'م': idx + 1,
+      'كود الإجراء': p.procedureId || p.id || '',
+      'عنوان الإجراء / الخدمة': p.title || p.name || '',
+      'تاريخ البدء': p.startDate || '',
+      'الحالة الحالية': p.status || '',
+      'المبلغ والأتعاب (ج.م)': p.feeAmount || p.amount || 0,
+      'الملاحظات': p.notes || '',
+    }));
+    detailSheets.push({ sheetName: 'إجراءات_ومعاملات_العميل', rows: procRows });
+  }
+
+  // Partners
+  if (doc.partners && Array.isArray(doc.partners) && doc.partners.length > 0) {
+    const partnerRows = doc.partners.map((pt: any, idx: number) => ({
+      'م': idx + 1,
+      'اسم الشريك / المساهم': pt.name || '',
+      'الصفة': pt.role || 'شريك',
+      'حصة رأس المال (ج.م)': pt.capitalShare || pt.amount || 0,
+      'نسبة المشاركة (%)': pt.percentage ? `${pt.percentage}%` : '',
+      'الرقم القومي': pt.nationalId || '',
+    }));
+    detailSheets.push({ sheetName: 'هيكل_الشركاء_والمساهمين', rows: partnerRows });
+  }
+
+  return { overviewRows, detailSheets };
+}
+
+/**
  * Maps model data into structured tabular rows for Excel / CSV / Table view
  */
 export function getModelTabularData(model: ModelType, state: DatabaseState): Record<string, any>[] {
@@ -628,7 +869,16 @@ export function exportModelData(
 
   // If a specific document or active operation is provided, export that specific document
   if (customDocument) {
-    const docTitle = customDocument.name || customDocument.clientName || customDocument.projectName || customDocument.title || customDocument.serialNumber || customDocument.invoiceNumber || customDocument.clientCode || 'المستند_الحالي';
+    const docTitle =
+      customDocument.name ||
+      customDocument.clientName ||
+      customDocument.projectName ||
+      customDocument.title ||
+      customDocument.serialNumber ||
+      customDocument.invoiceNumber ||
+      customDocument.voucherNumber ||
+      customDocument.clientCode ||
+      'المستند_المعتمد';
     const cleanDocTitle = String(docTitle).replace(/[/\\?%*:|"<>]/g, '_');
 
     if (format === 'JSON') {
@@ -652,29 +902,20 @@ export function exportModelData(
 
     if (format === 'XLSX') {
       const wb = XLSX.utils.book_new();
-      // If document contains arrays (e.g. items, lines, partners, procedures)
-      if (customDocument.items && Array.isArray(customDocument.items)) {
-        const wsItems = XLSX.utils.json_to_sheet(customDocument.items);
-        XLSX.utils.book_append_sheet(wb, wsItems, 'بنود_المستند');
-      }
-      if (customDocument.lines && Array.isArray(customDocument.lines)) {
-        const wsLines = XLSX.utils.json_to_sheet(customDocument.lines);
-        XLSX.utils.book_append_sheet(wb, wsLines, 'أطراف_القيد');
-      }
-      if (customDocument.procedures && Array.isArray(customDocument.procedures)) {
-        const wsProcs = XLSX.utils.json_to_sheet(customDocument.procedures);
-        XLSX.utils.book_append_sheet(wb, wsProcs, 'إجراءات_العميل');
-      }
+      const { overviewRows, detailSheets } = buildStructuredArabicDocumentSheets(customDocument, model, state);
 
-      // Main overview sheet
-      const mainRow: Record<string, any> = {};
-      Object.keys(customDocument).forEach((k) => {
-        if (typeof customDocument[k] !== 'object') {
-          mainRow[k] = customDocument[k];
-        }
+      // Sheet 1: Main Overview / Metadata
+      const wsMain = XLSX.utils.json_to_sheet(overviewRows);
+      formatWorksheetForArabicExport(wsMain, overviewRows);
+      XLSX.utils.book_append_sheet(wb, wsMain, '1. بيانات المستند المعتمد');
+
+      // Additional Detail Sheets (e.g., Items, Lines, Breakdown, Procedures)
+      detailSheets.forEach((ds, idx) => {
+        const wsDetail = XLSX.utils.json_to_sheet(ds.rows);
+        formatWorksheetForArabicExport(wsDetail, ds.rows);
+        const safeSheetName = `${idx + 2}. ${ds.sheetName}`.substring(0, 31);
+        XLSX.utils.book_append_sheet(wb, wsDetail, safeSheetName);
       });
-      const wsMain = XLSX.utils.json_to_sheet([mainRow]);
-      XLSX.utils.book_append_sheet(wb, wsMain, 'بيانات_المستند');
 
       const fileName = `${cleanDocTitle}_${timestamp}.xlsx`;
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -682,21 +923,44 @@ export function exportModelData(
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
       });
       triggerFileDownload(blob, fileName);
-      return { success: true, fileName, message: `تم تصدير بيانات [${docTitle}] بصيغة Excel بنجاح` };
+      return { success: true, fileName, message: `تم تصدير بيانات [${docTitle}] بصيغة Excel منسقة ومنظمة بالكامل` };
     }
 
-    if (format === 'CSV' || format === 'TXT') {
-      const mainRow: Record<string, any> = {};
-      Object.keys(customDocument).forEach((k) => {
-        if (typeof customDocument[k] !== 'object') {
-          mainRow[k] = customDocument[k];
-        }
-      });
-      const csvStr = convertToCsv([mainRow]);
+    if (format === 'CSV') {
+      const { overviewRows } = buildStructuredArabicDocumentSheets(customDocument, model, state);
+      const csvStr = convertToCsv(overviewRows);
       const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
-      const fileName = `${cleanDocTitle}_${timestamp}.${format.toLowerCase()}`;
+      const fileName = `${cleanDocTitle}_${timestamp}.csv`;
       triggerFileDownload(blob, fileName);
-      return { success: true, fileName, message: `تم تصدير [${docTitle}] بصيغة ${format}` };
+      return { success: true, fileName, message: `تم تصدير [${docTitle}] بصيغة CSV منسقة مع إكسل` };
+    }
+
+    if (format === 'TXT') {
+      const { overviewRows, detailSheets } = buildStructuredArabicDocumentSheets(customDocument, model, state);
+      let txtContent = `========================================================================\n`;
+      txtContent += `مكتب المحاسب القانوني ومراقب الحسابات: ${state.officeProfile.auditorName}\n`;
+      txtContent += `رقم القيد بسجل المحاسبين والمراجعين: ${state.officeProfile.licenseNumber}\n`;
+      txtContent += `مستند معتمد ورسمي: ${docTitle}\n`;
+      txtContent += `تاريخ ووقت الاستخراج: ${new Date().toLocaleString('ar-EG')}\n`;
+      txtContent += `========================================================================\n\n`;
+
+      txtContent += `[ملخص وبيانات المستند]\n`;
+      overviewRows.forEach((r) => {
+        txtContent += `  • ${r['البيان / الحقل الرسمي']}: ${r['القيمة / التفاصيل']}\n`;
+      });
+
+      detailSheets.forEach((ds) => {
+        txtContent += `\n------------------------------------------------------------------------\n`;
+        txtContent += `[${ds.sheetName}]\n`;
+        ds.rows.forEach((row, i) => {
+          txtContent += `  [بند ${i + 1}]: ` + Object.entries(row).map(([k, v]) => `${k}=${v}`).join(' | ') + '\n';
+        });
+      });
+
+      const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+      const fileName = `${cleanDocTitle}_${timestamp}.txt`;
+      triggerFileDownload(blob, fileName);
+      return { success: true, fileName, message: `تم تصدير مستند [${docTitle}] بصيغة نصية Text (.txt)` };
     }
   }
 
@@ -737,6 +1001,7 @@ export function exportModelData(
         const rows = getModelTabularData(m, state);
         if (rows.length > 0) {
           const ws = XLSX.utils.json_to_sheet(rows);
+          formatWorksheetForArabicExport(ws, rows);
           XLSX.utils.book_append_sheet(wb, ws, sheetNames[m] || m);
         }
       }
@@ -747,7 +1012,7 @@ export function exportModelData(
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
       });
       triggerFileDownload(blob, fileName);
-      return { success: true, fileName, message: 'تم تصدير مصنف الإكسل الشامل لكافة النماذج والبيانات بنجاح' };
+      return { success: true, fileName, message: 'تم تصدير مصنف الإكسل الشامل لكافة النماذج والبيانات بنجاح وتنسيق كامل' };
     }
 
     if (format === 'CSV' || format === 'TXT') {
@@ -835,7 +1100,9 @@ export function exportModelData(
         { 'البند': 'الالتزامات المتداولة - الموردون والدائنون ومخصص الضرائب', 'المبلغ 2026 (ج.م)': balData.currentLiabilities.totalCurrentLiabilities, 'مقارنة 2025 (ج.م)': Math.round(balData.currentLiabilities.totalCurrentLiabilities * 0.85), 'الإيضاح': 'إيضاح (10)' },
         { 'البند': 'إجمالي حقوق الملكية والالتزامات', 'المبلغ 2026 (ج.م)': balData.totalEquityAndLiabilities, 'مقارنة 2025 (ج.م)': Math.round(balData.totalEquityAndLiabilities * 0.86), 'الإيضاح': 'مجموع' },
       ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bsRows), '1. قائمة المركز المالي');
+      const wsBS = XLSX.utils.json_to_sheet(bsRows);
+      formatWorksheetForArabicExport(wsBS, bsRows);
+      XLSX.utils.book_append_sheet(wb, wsBS, '1. قائمة المركز المالي');
 
       // Sheet 2: Income Statement
       const isRows = [
@@ -850,7 +1117,9 @@ export function exportModelData(
         { 'بيان قائمة الدخل الشامل': 'يخصم: ضريبة الدخل المستحقة (22.5%)', 'سنة 2026 (ج.م)': -incData.taxExpense, 'سنة 2025 (ج.م)': -Math.round(incData.taxExpense * 0.85), 'الإيضاح': 'الضريبة' },
         { 'بيان قائمة الدخل الشامل': 'صافي أرباح العام بعد الضريبة', 'سنة 2026 (ج.م)': incData.netProfitAfterTax, 'سنة 2025 (ج.م)': Math.round(incData.netProfitAfterTax * 0.85), 'الإيضاح': 'Net Profit' },
       ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(isRows), '2. قائمة الدخل الشامل');
+      const wsIS = XLSX.utils.json_to_sheet(isRows);
+      formatWorksheetForArabicExport(wsIS, isRows);
+      XLSX.utils.book_append_sheet(wb, wsIS, '2. قائمة الدخل الشامل');
 
       // Sheet 3: Cash Flow
       const cfRows = [
@@ -861,12 +1130,18 @@ export function exportModelData(
         { 'بيان التدفقات النقدية': 'رصيد النقدية في بداية السنة المالية', 'المبلغ (ج.م)': cfData.beginningCash, 'المعيار المحاسبي': 'EAS 4' },
         { 'بيان التدفقات النقدية': 'رصيد النقدية في نهاية السنة المالية', 'المبلغ (ج.م)': cfData.endingCash, 'المعيار المحاسبي': 'EAS 4' },
       ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cfRows), '3. قائمة التدفقات النقدية');
+      const wsCF = XLSX.utils.json_to_sheet(cfRows);
+      formatWorksheetForArabicExport(wsCF, cfRows);
+      XLSX.utils.book_append_sheet(wb, wsCF, '3. قائمة التدفقات النقدية');
 
       // Sheet 4: Comprehensive Lines
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '4. كافة بنود القوائم والإيضاحات');
+      const wsAll = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(wsAll, rows);
+      XLSX.utils.book_append_sheet(wb, wsAll, '4. كافة بنود القوائم والإيضاحات');
     } else if (model === 'CREDIT_SIM' || model === 'CREDIT_SIMULATOR') {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '1. القوائم المقارنة 3 سنوات');
+      const ws1 = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws1, rows);
+      XLSX.utils.book_append_sheet(wb, ws1, '1. القوائم المقارنة 3 سنوات');
 
       const kpiRows = [
         { 'المؤشر والنسبة الائتمانية': 'نسبة التداول (Current Ratio)', 'القيمة المحسوبة': '1.75x', 'المعيار البنكي المستهدف': '> 1.30x', 'التقييم': 'ممتاز' },
@@ -876,9 +1151,13 @@ export function exportModelData(
         { 'المؤشر والنسبة الائتمانية': 'معدل تغطية الفوائد البنكية (ICR)', 'القيمة المحسوبة': '4.00x', 'المعيار البنكي المستهدف': '> 2.50x', 'التقييم': 'أمان ائتماني عالي' },
         { 'المؤشر والنسبة الائتمانية': 'العائد على حقوق الملكية (ROE)', 'القيمة المحسوبة': '19.5%', 'المعيار البنكي المستهدف': '> 15.0%', 'التقييم': 'كفاءة رأسمالية ممتازة' },
       ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpiRows), '2. المؤشرات والنسب الائتمانية');
+      const ws2 = XLSX.utils.json_to_sheet(kpiRows);
+      formatWorksheetForArabicExport(ws2, kpiRows);
+      XLSX.utils.book_append_sheet(wb, ws2, '2. المؤشرات والنسب الائتمانية');
     } else {
-      const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'ملاحظة': 'لا توجد سجلات حالية' }]);
+      const dataRows = rows.length > 0 ? rows : [{ 'ملاحظة': 'لا توجد سجلات حالية' }];
+      const ws = XLSX.utils.json_to_sheet(dataRows);
+      formatWorksheetForArabicExport(ws, dataRows);
       XLSX.utils.book_append_sheet(wb, ws, baseName.substring(0, 31));
     }
 
@@ -888,7 +1167,7 @@ export function exportModelData(
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     });
     triggerFileDownload(blob, fileName);
-    return { success: true, fileName, message: `تم تصدير مصنف [${baseName}] بصيغة Excel (.xlsx) بنجاح` };
+    return { success: true, fileName, message: `تم تصدير مصنف [${baseName}] بصيغة Excel (.xlsx) منسق ومنظم بالكامل` };
   }
 
   if (format === 'CSV') {
@@ -900,21 +1179,21 @@ export function exportModelData(
   }
 
   if (format === 'TXT') {
-    let txtContent = `====================================================\n`;
+    let txtContent = `========================================================================\n`;
     txtContent += `مكتب المحاسب القانوني ومراقب الحسابات: ${state.officeProfile.auditorName}\n`;
     txtContent += `رقم القيد بسجل المحاسبين والمراجعين: ${state.officeProfile.licenseNumber}\n`;
     txtContent += `هاتف وتواصل المكتب: ${state.officeProfile.phone || '01003335360'}\n`;
     txtContent += `تقرير تصدير نموذج: ${baseName}\n`;
     txtContent += `تاريخ ووقت التصدير: ${new Date().toLocaleString('ar-EG')}\n`;
     txtContent += `إجمالي السجلات المعتمدة: ${rows.length}\n`;
-    txtContent += `====================================================\n\n`;
+    txtContent += `========================================================================\n\n`;
 
     rows.forEach((r, idx) => {
       txtContent += `[سجل رقم ${idx + 1}]\n`;
       Object.entries(r).forEach(([k, v]) => {
         txtContent += `  • ${k}: ${v}\n`;
       });
-      txtContent += `----------------------------------------------------\n`;
+      txtContent += `------------------------------------------------------------------------\n`;
     });
 
     const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });

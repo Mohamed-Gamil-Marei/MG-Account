@@ -101,13 +101,16 @@ export const PrintLayoutWrapper: React.FC<PrintLayoutWrapperProps> = ({
           </div>
 
           {/* Left side: QR Code & Verification Stamp */}
-          <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0">
+          <div
+            data-qr-container="true"
+            className="qr-print-container flex flex-col items-center justify-center p-1.5 rounded-xl bg-white border border-slate-200 shrink-0"
+          >
             <div
               dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(verificationPayload, 68),
+                __html: generateQrCodeSvg(verificationPayload, 92),
               }}
             />
-            <span className="text-[9px] font-mono font-bold text-slate-500 mt-1">وثيقة إلكترونية موثقة</span>
+            <span className="text-[8.5px] font-mono font-bold text-slate-600 mt-0.5">وثيقة موثقة رقمياً</span>
           </div>
         </div>
 

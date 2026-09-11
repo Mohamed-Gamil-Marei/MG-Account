@@ -203,6 +203,8 @@ export function sanitizeClonedDocForHtml2Canvas(clonedDoc: Document): void {
 
 export interface CertifiedDocumentData {
   id?: string;
+  title?: string;
+  certificateTypeTitle?: string;
   certificateNumber?: string;
   invoiceNumber?: string;
   clientName?: string;
@@ -218,6 +220,9 @@ export interface CertifiedDocumentData {
   certificateType?: string;
   annualNetIncome?: number;
   certifiedAmount?: number;
+  investedCapitalAmount?: number;
+  totalAmount?: number;
+  amount?: number;
   monthlyNetIncome?: number;
   periodText?: string;
   recipientEntity?: string;
@@ -226,14 +231,25 @@ export interface CertifiedDocumentData {
   customBodyText?: string;
   customPreambleBasis?: string;
   issueDate?: string;
+  breakdownItems?: Array<{
+    source?: string;
+    amount?: number;
+    percentage?: number | string;
+    notes?: string;
+    [key: string]: any;
+  }>;
+  items?: any[];
+  lines?: any[];
   incomeBreakdown?: {
     salaryIncome?: number;
     businessIncome?: number;
     investmentIncome?: number;
     otherIncome?: number;
     notes?: string;
+    [key: string]: any;
   };
   qrPayload?: string;
+  [key: string]: any;
 }
 
 /**
@@ -528,77 +544,175 @@ export function exportDocumentToWord(
   customFilename?: string
 ): boolean {
   try {
+    const isCapital =
+      doc.certificateType === 'INVESTED_CAPITAL' ||
+      String(doc.title || '').includes('رأس المال');
+    const isSolvency =
+      doc.certificateType === 'SOLVENCY_FINANCIAL_STANDING' ||
+      String(doc.title || '').includes('ملاءة');
+    const isAuditorReport =
+      doc.certificateType === 'AUDITOR_REPORT' ||
+      String(doc.title || '').includes('مراقب الحسابات');
+
+    const certTitle =
+      doc.certificateTypeTitle ||
+      (isCapital
+        ? 'شهادة تحديد وتوثيق رأس المال المستثمر المعتمدة'
+        : isSolvency
+        ? 'شهادة الملاءة والمركز المالي المعتمدة'
+        : isAuditorReport
+        ? 'تقرير مراقب الحسابات المستقل'
+        : doc.certificateType || 'شهادة إثبات دخل مهنية معتمدة');
+
+    const primaryAmount =
+      doc.investedCapitalAmount ||
+      doc.certifiedAmount ||
+      doc.annualNetIncome ||
+      doc.totalAmount ||
+      doc.amount ||
+      0;
+
+    let breakdownTableHtml = '';
+    if (doc.breakdownItems && doc.breakdownItems.length > 0) {
+      breakdownTableHtml = `
+        <h4 style="margin-top: 20px; color: #0f172a;">تفاصيل ومكونات رأس المال المستثمر المفحوصة مستندياً:</h4>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <thead>
+            <tr style="background-color: #f1f5f9;">
+              <th style="border: 1px solid #94a3b8; padding: 8px; text-align: center; width: 40px;">م</th>
+              <th style="border: 1px solid #94a3b8; padding: 8px; text-align: right;">عنصر رأس المال / البيان</th>
+              <th style="border: 1px solid #94a3b8; padding: 8px; text-align: center; width: 140px;">القيمة المعتمدة (ج.م)</th>
+              <th style="border: 1px solid #94a3b8; padding: 8px; text-align: center; width: 80px;">النسبة</th>
+              <th style="border: 1px solid #94a3b8; padding: 8px; text-align: right;">السند والملاحظات</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${doc.breakdownItems
+              .map(
+                (item, idx) => `
+              <tr>
+                <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${idx + 1}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${item.source || ''}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold; color: #1e3a8a;">${(item.amount || 0).toLocaleString('ar-EG')}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${item.percentage ? `${item.percentage}%` : '---'}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 6px; font-size: 11px;">${item.notes || 'مستوفى وموثق'}</td>
+              </tr>
+            `
+              )
+              .join('')}
+            <tr style="background-color: #f8fafc; font-weight: bold;">
+              <td colspan="2" style="border: 1px solid #94a3b8; padding: 8px; text-align: center;">إجمالي رأس المال المستثمر المعتمد</td>
+              <td style="border: 1px solid #94a3b8; padding: 8px; text-align: center; color: #047857; font-size: 14px;">${primaryAmount.toLocaleString('ar-EG')} ج.م</td>
+              <td colspan="2" style="border: 1px solid #94a3b8; padding: 8px; font-size: 11px;">فقط وقدره ${primaryAmount.toLocaleString('ar-EG')} جنيهاً مصرياً لا غير</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+    }
+
     const docHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
         <meta charset="utf-8">
-        <title>${doc.certificateType || 'شهادة معتمدة'}</title>
+        <title>${certTitle}</title>
         <style>
+          @page {
+            size: A4 portrait;
+            margin: 20mm 15mm;
+          }
           body {
             font-family: 'Traditional Arabic', 'Arial', sans-serif;
             direction: rtl;
             text-align: right;
-            margin: 20mm;
+            margin: 0;
+            padding: 10px;
             line-height: 1.6;
+            color: #0f172a;
           }
-          h1, h2, h3 { color: #1e3a8a; text-align: center; margin-bottom: 10px; }
-          .header { border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
-          .footer { border-top: 2px solid #000; padding-top: 15px; margin-top: 35px; }
-          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-          th, td { border: 1px solid #999; padding: 8px; text-align: right; }
+          h1, h2, h3, h4 { color: #1e3a8a; text-align: center; margin-bottom: 8px; }
+          .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+          .footer { border-top: 2px solid #0f172a; padding-top: 15px; margin-top: 30px; }
+          table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+          th, td { border: 1px solid #94a3b8; padding: 7px; text-align: right; }
           th { background-color: #f1f5f9; }
-          .highlight { background-color: #eff6ff; font-weight: bold; }
+          .highlight-box {
+            background-color: #f8fafc;
+            border: 2px solid #1e3a8a;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 15px 0;
+            text-align: center;
+          }
         </style>
       </head>
       <body>
         <div class="header">
-          <table style="border: none;">
+          <table style="border: none; margin: 0;">
             <tr style="border: none;">
-              <td style="border: none; width: 60%;">
-                <h3 style="text-align: right; margin: 0;">${officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات'}</h3>
-                <p style="margin: 2px 0;"><strong>${officeProfile?.auditorName || 'محمد جميل مرعي'}</strong></p>
-                <p style="margin: 2px 0; font-size: 12px;">سجل المحاسبين والمراجعين: ${officeProfile?.licenseNumber || 'س.م.م 43122'}</p>
+              <td style="border: none; width: 60%; vertical-align: top;">
+                <h3 style="text-align: right; margin: 0; color: #1e3a8a;">${officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات'}</h3>
+                <p style="margin: 2px 0; font-size: 14px;"><strong>${officeProfile?.auditorName || 'محمد جميل مرعي'}</strong></p>
+                <p style="margin: 2px 0; font-size: 12px; color: #475569;">سجل المحاسبين والمراجعين: ${officeProfile?.licenseNumber || 'س.م.م 43122'}</p>
+                <p style="margin: 2px 0; font-size: 11px; color: #64748b;">هاتف: ${officeProfile?.phone || '01003335360'} | العنوان: ${officeProfile?.address || 'مصر'}</p>
               </td>
-              <td style="border: none; width: 40%; text-align: left;">
-                <p style="margin: 2px 0;"><strong>رقم الشهادة:</strong> ${doc.certificateNumber || doc.invoiceNumber || '2026-001'}</p>
-                <p style="margin: 2px 0;"><strong>التاريخ:</strong> ${doc.issueDate || new Date().toISOString().slice(0, 10)}</p>
+              <td style="border: none; width: 40%; text-align: left; vertical-align: top;">
+                <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; background-color: #f8fafc; display: inline-block; text-align: right;">
+                  <p style="margin: 2px 0; font-size: 12px;"><strong>رقم الشهادة / السيريال:</strong> ${doc.certificateNumber || doc.invoiceNumber || '2026-CERT'}</p>
+                  <p style="margin: 2px 0; font-size: 12px;"><strong>تاريخ التحرير:</strong> ${doc.issueDate || new Date().toISOString().slice(0, 10)}</p>
+                  <p style="margin: 2px 0; font-size: 11px; color: #047857;"><strong>التوثيق:</strong> معتمد برمز التحقق QR</p>
+                </div>
               </td>
             </tr>
           </table>
         </div>
 
-        <h2 style="text-align: center; text-decoration: underline;">${doc.certificateType || 'شهادة إثبات دخل مهنية معتمدة'}</h2>
+        <h2 style="text-align: center; text-decoration: underline; color: #1e3a8a; margin: 15px 0;">${certTitle}</h2>
 
-        <p style="margin-top: 20px;"><strong>السادة / ${doc.recipientEntity || 'من يهمه الأمر'}</strong></p>
-        <p style="text-indent: 30px;">تحية طيبة وبعد ،،،</p>
+        <p style="margin-top: 15px; font-size: 14px;"><strong>السادة / ${doc.recipientEntity || 'من يهمه الأمر'}</strong></p>
+        <p style="text-indent: 25px; margin-bottom: 15px;">تحية طيبة وبعد ،،،</p>
 
-        <p style="text-align: justify; line-height: 1.8;">
-          بناءً على طلب العميل السيد / <strong>${doc.clientName || ''}</strong>، الحامل للرقم القومي (<strong>${doc.nationalId || '---'}</strong>)
-          والذي يعمل بمهنة <strong>${doc.jobTitle || doc.activityName || '---'}</strong>،
-          وبعد الفحص والاطلاع على المستندات والدفاتر المالية والبنكية المقدمة إلينا،
-          <strong>يشهد مكتبنا</strong> بأن صافي الدخل السنوي المحقق يبلغ 
-          <strong style="color: #1e3a8a; font-size: 16px;">${(doc.certifiedAmount || doc.annualNetIncome || 0).toLocaleString('ar-EG')} ج.م</strong>
-          (فقط وقدره ${(doc.certifiedAmount || doc.annualNetIncome || 0).toLocaleString('ar-EG')} جنيهاً مصرياً لا غير)
-          عن الفترة ${doc.periodText || 'العام المالي المنتهي'}.
+        <p style="text-align: justify; line-height: 1.8; font-size: 13px;">
+          بناءً على طلب العميل / المنشأة: <strong>${doc.clientName || ''}</strong>،
+          ${doc.nationalId ? `الرقم القومي: (<strong>${doc.nationalId}</strong>)، ` : ''}
+          ${doc.taxCardNo ? `البطاقة الضريبية: (<strong>${doc.taxCardNo}</strong>)، ` : ''}
+          ${doc.commercialRegNo ? `السجل التجاري: (<strong>${doc.commercialRegNo}</strong>)، ` : ''}
+          والعامل بمهنة أو نشاط: <strong>${doc.jobTitle || doc.activityName || 'النشاط التجاري والمهني'}</strong>.
         </p>
 
-        <p style="text-align: justify;">
-          وقد أعطيت هذه الشهادة للعميل لتقديمها إلى <strong>${doc.recipientEntity || 'الجهات المختصة'}</strong>
-          لغرض <strong>${doc.purpose || 'استيفاء الإجراءات الرسمية'}</strong>، دون أدنى مسؤولية على المكتب تجاه حقوق الغير.
+        <p style="text-align: justify; line-height: 1.8; font-size: 13px;">
+          وبعد الفحص والاطلاع والمراجعة المستندية للدفاتر المحاسبية والقوائم المالية والحسابات البنكية والإيصالات المعتمدة المقدمة للمكتب عن الفترة <strong>${doc.periodText || 'الفترة المالية المنتهية'}</strong>،
+          <strong>يشهد مكتبنا</strong> بأن إجمالي المبلغ المعتمد موضوع هذه الشهادة يبلغ:
         </p>
+
+        <div class="highlight-box">
+          <span style="font-size: 13px; color: #475569; display: block; margin-bottom: 4px;">المبلغ الإجمالي المعتمد والموثق رسمياً</span>
+          <span style="font-size: 20px; font-weight: bold; color: #1e3a8a;">${primaryAmount.toLocaleString('ar-EG')} ج.م</span>
+          <span style="font-size: 12px; color: #0f172a; display: block; margin-top: 4px;">(فقط وقدره ${primaryAmount.toLocaleString('ar-EG')} جنيهاً مصرياً لا غير)</span>
+        </div>
+
+        ${breakdownTableHtml}
+
+        <p style="text-align: justify; font-size: 12px; color: #334155; line-height: 1.7;">
+          وقد صدرت هذه الشهادة الرسمية المعتمدة لتقديمها إلى <strong>${doc.recipientEntity || 'الجهة المختصة'}</strong>
+          لاستخدامها في الغرض المخصص: <strong>${doc.purpose || 'استيفاء الإجراءات الرسمية والبنكية'}</strong>،
+          دون أدنى مسؤولية مدنية أو جنائية على مكتب المحاسب القانوني تجاه التزامات العميل مع الغير.
+        </p>
+
+        ${doc.auditorNotes ? `<p style="background-color: #f1f5f9; padding: 8px; border-right: 3px solid #1e3a8a; font-size: 12px; margin: 10px 0;"><strong>ملاحظات المراجع القانوني:</strong> ${doc.auditorNotes}</p>` : ''}
 
         <div class="footer">
-          <table style="border: none;">
+          <table style="border: none; margin: 0;">
             <tr style="border: none;">
-              <td style="border: none; width: 50%;">
-                <p><strong>المحاسب القانوني ومراقب الحسابات:</strong></p>
-                <p style="font-size: 14px; font-weight: bold;">${officeProfile?.auditorName || 'محمد جميل مرعي'}</p>
-                <p style="font-size: 12px;">سجل المحاسبين: ${officeProfile?.licenseNumber || 'س.م.م 43122'}</p>
+              <td style="border: none; width: 50%; vertical-align: middle;">
+                <p style="margin: 2px 0;"><strong>المحاسب القانوني ومراقب الحسابات:</strong></p>
+                <p style="font-size: 14px; font-weight: bold; margin: 2px 0; color: #1e3a8a;">${officeProfile?.auditorName || 'محمد جميل مرعي'}</p>
+                <p style="font-size: 12px; margin: 2px 0; color: #475569;">سجل المحاسبين والمراجعين: ${officeProfile?.licenseNumber || 'س.م.م 43122'}</p>
+                <p style="font-size: 11px; margin: 2px 0; color: #047857;">عضو جمعية المحاسبين والمراجعين المصرية</p>
               </td>
-              <td style="border: none; width: 50%; text-align: left;">
-                <p><strong>الخاتم والاعتماد المهني:</strong></p>
-                <div style="border: 1px dashed #333; width: 120px; height: 70px; text-align: center; padding-top: 20px; font-size: 10px;">
-                  خاتم الاعتماد
+              <td style="border: none; width: 50%; text-align: left; vertical-align: middle;">
+                <p style="margin: 2px 0;"><strong>خاتم الاعتماد والتوثيق المهني:</strong></p>
+                <div style="border: 2px dashed #94a3b8; width: 140px; height: 75px; text-align: center; padding-top: 24px; font-size: 11px; color: #64748b; display: inline-block; border-radius: 6px;">
+                  خاتم وتوقيع المحاسب القانوني
                 </div>
               </td>
             </tr>
@@ -612,7 +726,7 @@ export function exportDocumentToWord(
       type: 'application/msword;charset=utf-8',
     });
 
-    const filename = customFilename || `شهادة_معتمدة_${doc.clientName || 'عميل'}.doc`;
+    const filename = customFilename || `${certTitle.replace(/\s+/g, '_')}_${doc.clientName || 'معتمد'}.doc`;
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -629,7 +743,7 @@ export function exportDocumentToWord(
 }
 
 /**
- * Export Certified Document to Excel (.xlsx)
+ * Export Certified Document to Excel (.xlsx) with complete RTL formatting and sub-sheets
  */
 export function exportDocumentToExcel(
   doc: CertifiedDocumentData,
@@ -637,28 +751,82 @@ export function exportDocumentToExcel(
   customFilename?: string
 ): boolean {
   try {
+    const isCapital =
+      doc.certificateType === 'INVESTED_CAPITAL' ||
+      String(doc.title || '').includes('رأس المال');
+    const isSolvency =
+      doc.certificateType === 'SOLVENCY_FINANCIAL_STANDING' ||
+      String(doc.title || '').includes('ملاءة');
+
+    const primaryAmount =
+      doc.investedCapitalAmount ||
+      doc.certifiedAmount ||
+      doc.annualNetIncome ||
+      doc.totalAmount ||
+      doc.amount ||
+      0;
+
     const rows = [
-      { 'البيان': 'نوع المستند / الشهادة', 'القيمة': doc.certificateType || 'شهادة معتمدة' },
-      { 'البيان': 'رقم المستند / الشهادة', 'القيمة': doc.certificateNumber || doc.invoiceNumber || '2026-001' },
-      { 'البيان': 'تاريخ الإصدار', 'القيمة': doc.issueDate || new Date().toISOString().slice(0, 10) },
-      { 'البيان': 'اسم العميل / الممول', 'القيمة': doc.clientName || '' },
-      { 'البيان': 'الرقم القومي', 'القيمة': doc.nationalId || '---' },
-      { 'البيان': 'رقم البطاقة الضريبية', 'القيمة': doc.taxCardNo || '---' },
-      { 'البيان': 'السجل التجاري', 'القيمة': doc.commercialRegNo || '---' },
-      { 'البيان': 'المهنة / النشاط', 'القيمة': doc.jobTitle || doc.activityName || '---' },
-      { 'البيان': 'صافي الدخل السنوي المعتمد', 'القيمة': doc.certifiedAmount || doc.annualNetIncome || 0 },
-      { 'البيان': 'متوسط الدخل الشهري المعتمد', 'القيمة': doc.monthlyNetIncome || 0 },
-      { 'البيان': 'الفترة المحاسبية', 'القيمة': doc.periodText || '' },
-      { 'البيان': 'الجهة الموجه إليها المستند', 'القيمة': doc.recipientEntity || 'من يهمه الأمر' },
-      { 'البيان': 'الغرض من المستند', 'القيمة': doc.purpose || 'استيفاء الإجراءات الرسمية' },
-      { 'البيان': 'المحاسب القانوني ومراقب الحسابات', 'القيمة': officeProfile?.auditorName || 'محمد جميل مرعي' },
-      { 'البيان': 'رقم سجل المحاسبين والمراجعين', 'القيمة': officeProfile?.licenseNumber || 'س.م.م 43122' },
-      { 'البيان': 'حالة الاعتماد', 'القيمة': 'معتمد وموثق رسمياً وفق معايير المحاسبة المصرية' },
+      { 'البيان / الحقل الرسمي': 'اسم المنشأة المهنية', 'القيمة / التفاصيل': officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات' },
+      { 'البيان / الحقل الرسمي': 'المحاسب القانوني ومراقب الحسابات', 'القيمة / التفاصيل': officeProfile?.auditorName || 'محمد جميل مرعي' },
+      { 'البيان / الحقل الرسمي': 'رقم القيد بسجل المحاسبين والمراجعين', 'القيمة / التفاصيل': officeProfile?.licenseNumber || 'س.م.م 43122' },
+      { 'البيان / الحقل الرسمي': 'نوع المستند / الشهادة', 'القيمة / التفاصيل': doc.certificateTypeTitle || doc.certificateType || 'شهادة معتمدة' },
+      { 'البيان / الحقل الرسمي': 'رقم الشهادة / السيريال', 'القيمة / التفاصيل': doc.certificateNumber || doc.invoiceNumber || '2026-CERT' },
+      { 'البيان / الحقل الرسمي': 'تاريخ التحرير والإصدار', 'القيمة / التفاصيل': doc.issueDate || new Date().toISOString().slice(0, 10) },
+      { 'البيان / الحقل الرسمي': 'اسم العميل / الممول / الشركة', 'القيمة / التفاصيل': doc.clientName || '' },
+      { 'البيان / الحقل الرسمي': 'الرقم القومي للمسؤول', 'القيمة / التفاصيل': doc.nationalId || '---' },
+      { 'البيان / الحقل الرسمي': 'رقم البطاقة الضريبية', 'القيمة / التفاصيل': doc.taxCardNo || '---' },
+      { 'البيان / الحقل الرسمي': 'رقم السجل التجاري', 'القيمة / التفاصيل': doc.commercialRegNo || '---' },
+      { 'البيان / الحقل الرسمي': 'المهنة / النشاط الاقتصادي', 'القيمة / التفاصيل': doc.jobTitle || doc.activityName || '---' },
+      { 'البيان / الحقل الرسمي': isCapital ? 'إجمالي رأس المال المستثمر المعتمد' : 'المبلغ المالي المعتمد', 'القيمة / التفاصيل': primaryAmount },
+      { 'البيان / الحقل الرسمي': 'متوسط الدخل الشهري المعتمد', 'القيمة / التفاصيل': doc.monthlyNetIncome || 0 },
+      { 'البيان / الحقل الرسمي': 'الفترة المحاسبية المغطاة', 'القيمة / التفاصيل': doc.periodText || '' },
+      { 'البيان / الحقل الرسمي': 'الجهة الموجه إليها المستند', 'القيمة / التفاصيل': doc.recipientEntity || 'من يهمه الأمر' },
+      { 'البيان / الحقل الرسمي': 'الغرض من المستند والاستخدام', 'القيمة / التفاصيل': doc.purpose || 'استيفاء الإجراءات الرسمية والبنكية' },
+      { 'البيان / الحقل الرسمي': 'ملاحظات المراجع القانوني', 'القيمة / التفاصيل': doc.auditorNotes || 'معتمد وموثق' },
+      { 'البيان / الحقل الرسمي': 'رمز التحقق والتشفير الرقمي QR', 'القيمة / التفاصيل': doc.qrPayload || `EAS-CERT|${doc.certificateNumber}|${doc.clientName}` },
+      { 'البيان / الحقل الرسمي': 'حالة الاعتماد والتوثيق', 'القيمة / التفاصيل': 'معتمد وموثق رسمياً وفق معايير المحاسبة والمراجعة المصرية' },
     ];
 
     const wb = XLSX.utils.book_new();
+
+    // 1. Overview Sheet with RTL & Auto Column Widths
     const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'بيانات الشهادة المعتمدة');
+    ws['!views'] = [{ RTL: true }];
+    ws['!cols'] = [{ wch: 36 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws, '1. بيانات الشهادة المعتمدة');
+
+    // 2. Breakdown Items Sheet if available
+    if (doc.breakdownItems && doc.breakdownItems.length > 0) {
+      const bdRows = doc.breakdownItems.map((item, idx) => ({
+        'م': idx + 1,
+        'عنصر رأس المال / البيان': item.source || '',
+        'القيمة المعتمدة (ج.م)': item.amount || 0,
+        'النسبة المئوية (%)': item.percentage ? `${item.percentage}%` : '---',
+        'الإيضاح والسند المستندي': item.notes || 'مستوفى وموثق',
+      }));
+      const wsBreakdown = XLSX.utils.json_to_sheet(bdRows);
+      wsBreakdown['!views'] = [{ RTL: true }];
+      wsBreakdown['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 22 }, { wch: 16 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, wsBreakdown, '2. تفاصيل رأس المال المستثمر');
+    }
+
+    // 3. Invoice Items if available
+    if (doc.items && doc.items.length > 0) {
+      const itemRows = doc.items.map((it: any, idx: number) => ({
+        'م': idx + 1,
+        'بيان الخدمة / الصنف': it.description || it.name || '',
+        'الكمية': it.quantity || 1,
+        'سعر الوحدة (ج.م)': it.unitPrice || it.rate || 0,
+        'الإجمالي قبل الضريبة': it.subtotal || 0,
+        'ضريبة القيمة المضافة': it.vatAmount || 0,
+        'الصافي الإجمالي': it.total || 0,
+      }));
+      const wsItems = XLSX.utils.json_to_sheet(itemRows);
+      wsItems['!views'] = [{ RTL: true }];
+      wsItems['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, wsItems, '2. بنود الفاتورة المعتمدة');
+    }
 
     const filename = customFilename || `شهادة_معتمدة_${doc.clientName || doc.certificateNumber || 'بيانات'}.xlsx`;
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });

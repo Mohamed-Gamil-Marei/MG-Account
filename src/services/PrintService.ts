@@ -14,6 +14,21 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   showPreviewModalByDefault: true,
 };
 
+export interface PrintElementOptions {
+  title?: string;
+  orientation?: 'portrait' | 'landscape';
+  pageSize?: 'A4' | 'A3' | 'Letter' | 'Thermal80mm';
+  margins?: 'DEFAULT' | 'NARROW' | 'NONE';
+  customDelayMs?: number;
+  selectedPages?: number[];
+  resequencePageNumbers?: boolean;
+  showLetterhead?: boolean;
+  showStamp?: boolean;
+  showQr?: boolean;
+  onBeforePrint?: () => void;
+  onAfterPrint?: () => void;
+}
+
 export class PrintService {
   /**
    * Retrieves active print settings from local database preferences
@@ -94,18 +109,12 @@ export class PrintService {
 
   /**
    * Directly prints a DOM element with isolated high-fidelity rendering,
-   * converting inputs to text and preventing blank page bugs.
+   * converting inputs to text, supporting dynamic page filtering and renumbering,
+   * and strictly preventing blank page bugs.
    */
   public static async printElementById(
     elementIdOrSelector: string,
-    options?: {
-      title?: string;
-      orientation?: 'portrait' | 'landscape';
-      pageSize?: 'A4' | 'A3' | 'Letter' | 'Thermal80mm';
-      customDelayMs?: number;
-      onBeforePrint?: () => void;
-      onAfterPrint?: () => void;
-    }
+    options?: PrintElementOptions
   ): Promise<boolean> {
     const targetElement = this.findPrintableElement(elementIdOrSelector);
     if (!targetElement) {
@@ -140,6 +149,75 @@ export class PrintService {
       node.remove();
     });
 
+    // Handle Selective Pages filtering if specified
+    const pageSheets = Array.from(
+      clone.querySelectorAll<HTMLElement>(
+        '[id^="page-sheet-"], [data-page-index], .a4-sheet-canvas, .printable-page, .print-sheet'
+      )
+    );
+
+    if (pageSheets.length > 0 && options?.selectedPages && options.selectedPages.length > 0) {
+      const allowedSet = new Set(options.selectedPages);
+      
+      pageSheets.forEach((sheet, idx) => {
+        const pageIdx = idx + 1;
+        if (!allowedSet.has(pageIdx)) {
+          sheet.remove();
+        }
+      });
+
+      // Handle dynamic resequencing of footers on surviving sheets
+      const survivingSheets = Array.from(
+        clone.querySelectorAll<HTMLElement>(
+          '[id^="page-sheet-"], [data-page-index], .a4-sheet-canvas, .printable-page, .print-sheet'
+        )
+      );
+
+      if (options.resequencePageNumbers !== false) {
+        survivingSheets.forEach((sheet, newIdx) => {
+          const newPageNum = newIdx + 1;
+          const totalNewPages = survivingSheets.length;
+
+          // Replace text inside elements containing 'صفحة X من Y'
+          const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
+          let textNode: Node | null;
+          while ((textNode = walker.nextNode())) {
+            if (textNode.nodeValue && /صفحة\s+\d+\s+من\s+\d+/i.test(textNode.nodeValue)) {
+              textNode.nodeValue = textNode.nodeValue.replace(
+                /صفحة\s+\d+\s+من\s+\d+/i,
+                `صفحة ${newPageNum} من ${totalNewPages}`
+              );
+            }
+          }
+        });
+      }
+
+      // Strictly ensure the last surviving sheet does NOT cause a blank trailing page
+      if (survivingSheets.length > 0) {
+        const lastSheet = survivingSheets[survivingSheets.length - 1];
+        lastSheet.style.pageBreakAfter = 'avoid';
+        lastSheet.style.breakAfter = 'avoid';
+        lastSheet.style.marginBottom = '0';
+      }
+    } else if (pageSheets.length > 0) {
+      // Prevent blank page on the very last sheet of standard multi-page documents
+      const lastSheet = pageSheets[pageSheets.length - 1];
+      lastSheet.style.pageBreakAfter = 'avoid';
+      lastSheet.style.breakAfter = 'avoid';
+      lastSheet.style.marginBottom = '0';
+    }
+
+    // Toggle specific elements if requested
+    if (options?.showLetterhead === false) {
+      clone.querySelectorAll('.official-header, .injected-official-print-header, [data-letterhead="true"]').forEach((n) => n.remove());
+    }
+    if (options?.showStamp === false) {
+      clone.querySelectorAll('.official-stamp, [data-stamp="true"]').forEach((n) => n.remove());
+    }
+    if (options?.showQr === false) {
+      clone.querySelectorAll('.qr-verification, [data-qr="true"]').forEach((n) => n.remove());
+    }
+
     // Determine page geometry
     const orient = options?.orientation || 'portrait';
     const pSize = options?.pageSize || 'A4';
@@ -148,6 +226,11 @@ export class PrintService {
     else if (pSize === 'A3') sizeCss = `A3 ${orient}`;
     else if (pSize === 'Letter') sizeCss = `letter ${orient}`;
     else if (pSize === 'Thermal80mm') sizeCss = '80mm auto';
+
+    const marginsMode = options?.margins || 'DEFAULT';
+    let marginsCss = '8mm 8mm 8mm 8mm';
+    if (marginsMode === 'NARROW') marginsCss = '5mm 5mm 5mm 5mm';
+    else if (marginsMode === 'NONE') marginsCss = '0mm 0mm 0mm 0mm';
 
     const documentTitle = options?.title || document.title || 'مستند محاسبي معتمد';
 
@@ -182,7 +265,7 @@ export class PrintService {
           <style>
             @page {
               size: ${sizeCss};
-              margin: 8mm 8mm 10mm 8mm;
+              margin: ${marginsCss};
             }
             *, *::before, *::after {
               -webkit-print-color-adjust: exact !important;
@@ -261,9 +344,23 @@ export class PrintService {
               page-break-inside: avoid !important;
               break-inside: avoid !important;
             }
-            .page-break-always {
+            .a4-sheet-canvas, [id^="page-sheet-"], .printable-page {
               page-break-after: always !important;
               break-after: page !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              margin-bottom: 8mm !important;
+              box-shadow: none !important;
+              border: none !important;
+            }
+            /* Strictly eliminate blank trailing pages */
+            .a4-sheet-canvas:last-child,
+            [id^="page-sheet-"]:last-child,
+            .printable-page:last-child,
+            .print-document-wrapper > *:last-child {
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+              margin-bottom: 0 !important;
             }
           </style>
         </head>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Award,
   Printer,
@@ -29,19 +29,47 @@ import {
   Sparkles,
   RefreshCw,
   Hash,
+  Landmark,
+  PieChart,
+  Sliders,
+  CheckSquare,
+  Square,
+  ArrowRight,
+  Shield,
+  HelpCircle,
+  MessageSquare,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
-import { formatEgyptianCurrency, generateQrCodeSvg, generateCode128Svg, buildVerificationUrl, buildVerificationQrText, VerificationPayloadData } from '../utils/qrCodeGenerator';
-import { numberToArabicWords } from '../utils/numberToWordsArabic';
-import { ProfessionalCertificate, CertificateBeneficiaryType, CertificateTemplateType } from '../types';
+import {
+  formatEgyptianCurrency,
+  generateQrCodeSvg,
+  generateCode128Svg,
+  buildVerificationUrl,
+  buildVerificationQrText,
+  VerificationPayloadData,
+} from '../utils/qrCodeGenerator';
+import { numberToArabicWords, cleanArabicTafqeet } from '../utils/numberToWordsArabic';
+import { PrintService } from '../services/PrintService';
+import {
+  ProfessionalCertificate,
+  CertificateBeneficiaryType,
+  CertificateTemplateType,
+} from '../types';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { PrintPreviewModal } from './common/PrintPreviewModal';
 import { CertifiedDocumentExportMenu } from './common/CertifiedDocumentExportMenu';
-import { CertifiedDocumentData } from '../utils/certifiedDocumentExporter';
 import { DocumentVerificationModal } from './common/DocumentVerificationModal';
+import { DirectWhatsAppProcedureModal } from './common/DirectWhatsAppProcedureModal';
 
 interface CertificatesGeneratorViewProps {
   state: DatabaseState;
+}
+
+interface BreakdownRow {
+  source: string;
+  amount: number;
+  monthlyEquivalent?: number;
+  notes?: string;
 }
 
 export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps> = ({ state }) => {
@@ -52,102 +80,241 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   // Tab mode: 'CREATE' or 'ARCHIVE'
   const [activeTab, setActiveTab] = useState<'CREATE' | 'ARCHIVE'>('CREATE');
 
+  // Currently editing certificate ID (null for new certificate)
+  const [editingCertId, setEditingCertId] = useState<string | null>(null);
+
   // Form states
-  const [beneficiaryType, setBeneficiaryType] = useState<CertificateBeneficiaryType>('NATURAL_PERSON');
-  const [certType, setCertType] = useState<CertificateTemplateType>('FREELANCE_INCOME');
+  const [beneficiaryType, setBeneficiaryType] = useState<CertificateBeneficiaryType>('LEGAL_ENTITY');
+  const [certType, setCertType] = useState<CertificateTemplateType>('INVESTED_CAPITAL');
   
+  // Custom Certificate Title
+  const [customHeading, setCustomHeading] = useState<string>('');
+
   // Selected client for quick autofill
   const [selectedClientId, setSelectedClientId] = useState<string>('');
 
   // Beneficiary details (Person vs Entity)
   const [beneficiaryGender, setBeneficiaryGender] = useState<'MALE' | 'FEMALE'>('MALE');
-  const [beneficiaryTitle, setBeneficiaryTitle] = useState<string>('السيد /');
-  const [beneficiaryName, setBeneficiaryName] = useState<string>('د. سامح عبد العزيز النجار');
-  const [nationalId, setNationalId] = useState<string>('27805120101948');
-  const [jobTitle, setJobTitle] = useState<string>('طبيب استشاري جراحة العظام والمفاصل');
-  const [address, setAddress] = useState<string>('14 شارع النصر - المعادي - القاهرة');
+  const [beneficiaryTitle, setBeneficiaryTitle] = useState<string>('السادة /');
+  const [beneficiaryName, setBeneficiaryName] = useState<string>('شركة النيل للصناعات الهندسية والتجارة (ش.م.م)');
+  const [nationalId, setNationalId] = useState<string>('');
+  const [jobTitle, setJobTitle] = useState<string>('رئيس مجلس الإدارة والعضو المنتدب');
+  const [address, setAddress] = useState<string>('القطعة 44 - المنطقة الصناعية - بياض العرب - بني سويف');
   
   // Entity / Business specifics
-  const [commercialRegNo, setCommercialRegNo] = useState<string>('');
-  const [taxCardNo, setTaxCardNo] = useState<string>('');
-  const [activityName, setActivityName] = useState<string>('عيادة النجار التخصصية');
+  const [commercialRegNo, setCommercialRegNo] = useState<string>('148293');
+  const [taxCardNo, setTaxCardNo] = useState<string>('302-819-402');
+  const [activityName, setActivityName] = useState<string>('صناعة وتجارة الهياكل والمعدات الهندسية');
 
   // Examination basis preset & customized text (flexible phrasing)
-  const [examinationBasisType, setExaminationBasisType] = useState<string>('GENERAL_DOCS'); // 'GENERAL_DOCS' | 'BANK_STATEMENTS' | 'TAX_RETURNS' | 'CUSTOM'
-  const [customPreambleBasis, setCustomPreambleBasis] = useState<string>('بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والمصروفات');
+  const [examinationBasisType, setExaminationBasisType] = useState<string>('INVESTED_CAPITAL_EXAM');
+  const [customPreambleBasis, setCustomPreambleBasis] = useState<string>(
+    'بناءً على الفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، والشهادات البنكية لإيداع رأس المال، ومحاضر الجمعيات العمومية غير العادية المعتمدة'
+  );
   const [customIntroText, setCustomIntroText] = useState<string>('');
   const [customBodyText, setCustomBodyText] = useState<string>('');
-
-  // Certificate specifications
-  const [recipientOrganization, setRecipientOrganization] = useState<string>('السادة / بنك مصر - قطاع التمويل العقاري والائتمان');
-  const [purpose, setPurpose] = useState<string>('لتقديمها للبنك بناءً على طلب العميل للحصول على تمويل عقاري لشراء وحدة سكنية ومهنية');
-  const [certifiedAmount, setCertifiedAmount] = useState<number>(900000);
-  const [monthlyAmount, setMonthlyAmount] = useState<number>(75000);
-  const [periodText, setPeriodText] = useState<string>('عن متوسط الدخل السنوي والشهري لعام 2025');
-  const [issueDate, setIssueDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [auditorNotes, setAuditorNotes] = useState<string>(
-    'بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المؤيدة لمصادر الدخل المحققة.'
+  const [customDeclarationPhrase, setCustomDeclarationPhrase] = useState<string>(
+    'بأن إجمالي رأس المال المستثمر وحجم الأعمال للمنشأة هو:'
   );
 
-  // Income Breakdown items (for natural persons with multiple sources)
-  const [incomeSources, setIncomeSources] = useState<{ source: string; amount: number }[]>([
-    { source: 'صافي إيرادات العيادة والنشاط المهني المستقل', amount: 680000 },
-    { source: 'استشارات طبية وجراحات المستشفيات الخاصة', amount: 220000 },
+  // Certificate specifications
+  const [recipientOrganization, setRecipientOrganization] = useState<string>('السادة / الهيئة العامة للاستثمار والمناطق الحرة (GAFI) والبنك الأهلي المصري');
+  const [purpose, setPurpose] = useState<string>('لتقديمها للجهات الرسمية والمصرفية لإثبات حجم رأس المال المستثمر والملاءة التمويلية');
+  const [certifiedAmount, setCertifiedAmount] = useState<number>(5000000);
+  const [monthlyAmount, setMonthlyAmount] = useState<number>(0);
+  const [periodText, setPeriodText] = useState<string>('عن السنة المالية المنتهية في 31 ديسمبر 2025');
+  const [issueDate, setIssueDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [auditorNotes, setAuditorNotes] = useState<string>(
+    'تم التحقق من إيداع رأس المال كاملاً بموجب الشهادة البنكية الصادرة وقيد الاستثمارات بالدفاتر المحاسبية للمنشأة.'
+  );
+
+  // Invested Capital & Business Size Specific Parameters
+  const [paidCapitalAmount, setPaidCapitalAmount] = useState<number>(5000000);
+  const [authorizedCapitalAmount, setAuthorizedCapitalAmount] = useState<number>(20000000);
+  const [annualTurnoverAmount, setAnnualTurnoverAmount] = useState<number>(18500000);
+  const [fixedAssetsValue, setFixedAssetsValue] = useState<number>(3200000);
+  const [workingCapitalAmount, setWorkingCapitalAmount] = useState<number>(1800000);
+  const [shareholdersEquity, setShareholdersEquity] = useState<number>(6400000);
+  const [bankDepositBank, setBankDepositBank] = useState<string>('البنك الأهلي المصري - فرع المهندسين');
+  const [bankDepositAccount, setBankDepositAccount] = useState<string>('شهادة إيداع بنكية رقم 984210 / حساب 10098234');
+
+  // Financial Solvency Specific Parameters
+  const [totalAssets, setTotalAssets] = useState<number>(8500000);
+  const [totalLiabilities, setTotalLiabilities] = useState<number>(2100000);
+  const [currentRatio, setCurrentRatio] = useState<number>(2.4);
+  const [netProfitAmount, setNetProfitAmount] = useState<number>(1250000);
+
+  // Table options & Breakdown flexibility
+  const [showBreakdownTable, setShowBreakdownTable] = useState<boolean>(true);
+  const [breakdownTableTitle, setBreakdownTableTitle] = useState<string>('جدول عناصر ومكونات رأس المال المستثمر وهيكل التمويل:');
+  const [breakdownColumnName, setBreakdownColumnName] = useState<string>('عنصر رأس المال / المكون الاستثماري المؤيد مستندياً');
+  const [breakdownAmountName, setBreakdownAmountName] = useState<string>('القيمة بالجنيه المصري (ج.م)');
+  const [breakdownNoteName, setBreakdownNoteName] = useState<string>('النسبة / البيان الإيضاحي');
+  const [showMonthlyInTable, setShowMonthlyInTable] = useState<boolean>(false);
+
+  // Breakdown items
+  const [breakdownItems, setBreakdownItems] = useState<BreakdownRow[]>([
+    { source: 'رأس المال النقدي المدفوع والمودع بالبنك', amount: 3000000, notes: '60% - شهادة بنكية معتمدة' },
+    { source: 'صافي الأصول والآلات والمعدات الإنتاجية المستثمرة', amount: 1500000, notes: '30% - فواتير وإفراجات جمركية' },
+    { source: 'مخزون التشغيل ورأس المال العامل الدوار', amount: 500000, notes: '10% - جرد معتمد ومقيد بالدفاتر' },
   ]);
 
-  // Selected certificate from archive to view/print
+  // Display toggles
+  const [showFinancialMetricsCards, setShowFinancialMetricsCards] = useState<boolean>(true);
+
+  // Selected certificate from archive to view
   const [selectedCertForView, setSelectedCertForView] = useState<ProfessionalCertificate | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [verifyModalData, setVerifyModalData] = useState<VerificationPayloadData | null>(null);
+  const [whatsAppCert, setWhatsAppCert] = useState<ProfessionalCertificate | any | null>(null);
 
-  // Barcode & Security Verification mode (Option 2: Code 128 Linear Barcode default for 100% scanning accuracy)
+  // Barcode & Security Verification mode
   const [verificationBarcodeType, setVerificationBarcodeType] = useState<'BARCODE_128' | 'QR_CODE' | 'DUAL'>('BARCODE_128');
 
-  // Generated dynamic cert number for draft
-  const certNumber = selectedCertForView 
-    ? selectedCertForView.certificateNumber 
-    : `CERT-${new Date().getFullYear()}-${String(certificates.length + 1).padStart(4, '0')}`;
+  // Title helper
+  const getDefaultHeading = (type: CertificateTemplateType, benType: CertificateBeneficiaryType) => {
+    if (benType === 'NATURAL_PERSON') {
+      switch (type) {
+        case 'FREELANCE_INCOME':
+          return 'شهـادة إثبـات صـافـي دخـل مهـن حـرة وأنشطـة فـرديـة';
+        case 'INCOME_PROOF':
+          return 'شهـادة إثبـات صـافـي الـدخـل السنـوي والشهـري للأفـراد';
+        case 'EMPLOYEE_ADDITIONAL_INC':
+          return 'شهـادة إثبـات دخـل إضـافـي واستثمـارات للأفـراد';
+        case 'REAL_ESTATE_INCOME':
+          return 'شهـادة إثبـات إيـرادات عقـاريـة واستثمـاريـة للممـول';
+        case 'INVESTED_CAPITAL':
+          return 'شهـادة رأس المـال المستثمـر للنشـاط الفـردي';
+        case 'FINANCIAL_SOLVENCY':
+          return 'شهـادة مـلاءة مـاليـة وثـروة للأشخـاص الطبيعييـن';
+        default:
+          return 'شهـادة محاسبيـة ومهنيـة معتمـدة';
+      }
+    } else {
+      switch (type) {
+        case 'INVESTED_CAPITAL':
+          return 'شهـادة رأس المـال المستثمـر وحجـم الأعمـال للمنشـأة';
+        case 'INCOME_PROOF':
+          return 'شهـادة إثبـات صـافـي دخـل وأربـاح سنـويـة للشركـات';
+        case 'FINANCIAL_SOLVENCY':
+          return 'شهـادة مـلاءة مـاليـة وجودة ائتمانية للشركات';
+        case 'AUDIT_COMPLIANCE':
+          return 'شهـادة فحـص ومراجعـة حسـابـات وقوائم مالية';
+        default:
+          return 'شهـادة محاسبيـة ومهنيـة معتمـدة للشركـات';
+      }
+    }
+  };
+
+  // Declaration helper
+  const getDefaultDeclaration = (type: CertificateTemplateType) => {
+    switch (type) {
+      case 'INVESTED_CAPITAL':
+        return 'بأن إجمالي رأس المال المستثمر وحجم الأعمال للمنشأة هو:';
+      case 'FINANCIAL_SOLVENCY':
+        return 'بأن صافي الملاءة المالية والمركز المالي هو:';
+      case 'AUDIT_COMPLIANCE':
+        return 'بأن القوائم المالية تعبر بعدالة عن المركز المالي وصافي الأرباح البالغة:';
+      case 'REAL_ESTATE_INCOME':
+        return 'بأن إجمالي الإيرادات العقارية والاستثمارية المحققة هو:';
+      case 'EMPLOYEE_ADDITIONAL_INC':
+        return 'بأن إجمالي الدخل الإضافي والاستثماري السنوي المحقق هو:';
+      case 'FREELANCE_INCOME':
+        return 'بأن صافي الدخل السنوي المحقق من النشاط المهني هو:';
+      default:
+        return 'بأن صافي الدخل السنوي المحقق هو:';
+    }
+  };
+
+  // Helper when certificate template type changes
+  const handleCertTypeChange = (newType: CertificateTemplateType) => {
+    setCertType(newType);
+    setCustomHeading(''); // Reset to default for new type
+    setCustomDeclarationPhrase(getDefaultDeclaration(newType));
+
+    if (newType === 'INVESTED_CAPITAL') {
+      setShowBreakdownTable(true);
+      setBreakdownTableTitle('جدول عناصر ومكونات رأس المال المستثمر وهيكل التمويل:');
+      setBreakdownColumnName('عنصر رأس المال / المكون الاستثماري المؤيد مستندياً');
+      setBreakdownAmountName('القيمة بالجنيه المصري (ج.م)');
+      setBreakdownNoteName('النسبة / البيان الإيضاحي');
+      setShowMonthlyInTable(false);
+      setBreakdownItems([
+        { source: 'رأس المال النقدي المدفوع والمودع بالبنك', amount: 3000000, notes: '60% - شهادة بنكية معتمدة' },
+        { source: 'صافي الأصول والآلات والمعدات الإنتاجية المستثمرة', amount: 1500000, notes: '30% - فواتير وإفراجات جمركية' },
+        { source: 'مخزون التشغيل ورأس المال العامل الدوار', amount: 500000, notes: '10% - جرد معتمد ومقيد بالدفاتر' },
+      ]);
+      setCertifiedAmount(5000000);
+      setMonthlyAmount(0);
+      setExaminationBasisType('INVESTED_CAPITAL_EXAM');
+      setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، والشهادات البنكية لإيداع رأس المال، ومحاضر الجمعيات العمومية');
+      setAuditorNotes('تم التحقق من إيداع رأس المال كاملاً بموجب الشهادة البنكية الصادرة وقيد الزيادة والاستثمارات بالدفاتر المحاسبية للمنشأة.');
+    } else if (newType === 'FINANCIAL_SOLVENCY') {
+      setShowBreakdownTable(true);
+      setBreakdownTableTitle('جدول بيان عناصر الأصول والالتزامات والملاءة المالية:');
+      setBreakdownColumnName('بند المركز المالي / الأصول والملاءة');
+      setBreakdownAmountName('القيمة التقديرية (ج.م)');
+      setBreakdownNoteName('طبيعة البند والتقييم');
+      setShowMonthlyInTable(false);
+      setBreakdownItems([
+        { source: 'إجمالي الأصول العقارية والأراضي المملوكة', amount: 5000000, notes: 'أصول ثابتة مسجلة' },
+        { source: 'أرصدة نقدية وشهادات واستثمارات بنكية', amount: 2000000, notes: 'سيولة نقدية وشبه نقدية' },
+        { source: 'أصول تجارية وحصص في شركات قائمة', amount: 1500000, notes: 'استثمارات مباشرة' },
+      ]);
+      setCertifiedAmount(8500000);
+      setMonthlyAmount(0);
+      setExaminationBasisType('FULL_AUDIT');
+      setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي لسندات الملكية، والشهادات البنكية، والقوائم المالية المعتمدة');
+      setAuditorNotes('بناءً على فحص الأصول والممتلكات ومستندات الملكية والشهادات البنكية المؤيدة للملاءة المالية.');
+    } else {
+      // Income proof or freelance
+      setShowBreakdownTable(true);
+      setBreakdownTableTitle('جدول بيان تفصيلي بمصادر الدخل المحققة والمؤيدة مستندياً:');
+      setBreakdownColumnName('مصدر الدخل والنشاط المؤيد مستندياً');
+      setBreakdownAmountName('الإيراد السنوي (ج.م)');
+      setBreakdownNoteName('المعادل الشهري');
+      setShowMonthlyInTable(true);
+      setBreakdownItems([
+        { source: 'صافي إيرادات النشاط المهني / التجاري المستقل', amount: 720000, monthlyEquivalent: 60000, notes: '60,000 ج.م/شهر' },
+        { source: 'استشارات وعوائد استثمارات وأعمال متنوعة', amount: 180000, monthlyEquivalent: 15000, notes: '15,000 ج.م/شهر' },
+      ]);
+      setCertifiedAmount(900000);
+      setMonthlyAmount(75000);
+      setExaminationBasisType('GENERAL_DOCS');
+      setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والدخل');
+      setAuditorNotes('بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المؤيدة لمصادر الدخل المحققة.');
+    }
+  };
 
   // Quick handler when beneficiary type changes
   const handleBeneficiaryTypeChange = (type: CertificateBeneficiaryType) => {
     setBeneficiaryType(type);
     if (type === 'NATURAL_PERSON') {
       setBeneficiaryTitle('السيد /');
-      setCertType('FREELANCE_INCOME');
+      setBeneficiaryGender('MALE');
       setBeneficiaryName('م. إيهاب عادل عبد السلام النشار');
       setNationalId('28608200103492');
       setJobTitle('مهندس استشاري ومستثمر عقاري');
       setActivityName('استشارات هندسية ودخل استثماري وتأجيري');
       setTaxCardNo('412-890-123');
       setCommercialRegNo('');
-      setCertifiedAmount(720000);
-      setMonthlyAmount(60000);
-      setPeriodText('عن متوسط الدخل السنوي والشهري لعام 2025');
+      setAddress('14 شارع النصر - المعادي - القاهرة');
       setPurpose('لتقديمها للبنك للحصول على تمويل شخصي واستثماري');
-      setRecipientOrganization('السادة / البنك التجاري الدولي (CIB) - قطاع الائتمان');
-      setAuditorNotes('تم التحقق ومراجعة كشوف الحسابات البنكية ومستندات التعاقد ومصادر الدخل المحققة.');
-      setIncomeSources([
-        { source: 'صافي الراتب والبدلات الوظيفية والاستشارية', amount: 420000 },
-        { source: 'عوائد وإيجارات وحدات عقارية مؤجرة', amount: 200000 },
-        { source: 'توزيعات أرباح وأوراق مالية', amount: 100000 },
-      ]);
+      setRecipientOrganization('السادة / البنك التجاري الدولي (CIB) - قطاع الائتمان والتمويل');
+      handleCertTypeChange('FREELANCE_INCOME');
     } else {
       setBeneficiaryTitle('السادة /');
-      setCertType('INCOME_PROOF');
       setBeneficiaryName('شركة النيل للصناعات الهندسية والتجارة (ش.م.م)');
       setNationalId('');
       setJobTitle('رئيس مجلس الإدارة والعضو المنتدب');
-      setActivityName('شركة النيل للصناعات الهندسية والتجارة (ش.م.م)');
+      setActivityName('صناعة وتجارة الهياكل والمعدات الهندسية');
       setTaxCardNo('302-819-402');
       setCommercialRegNo('148293');
-      setCertifiedAmount(3850000);
-      setMonthlyAmount(320833);
-      setPeriodText('عن السنة المالية المنتهية في 31 ديسمبر 2025');
-      setPurpose('لتقديمها للبنك بناءً على طلب المنشأة للحصول على تسهيلات ائتمانية');
-      setRecipientOrganization('السادة / بنك مصر - قطاع تمويل الشركات والائتمان');
-      setAuditorNotes('بناءً على الفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة وميزان المراجعة النهائي والإقرارات الضريبية المعتمدة.');
-      setIncomeSources([]);
+      setAddress('القطعة 44 - المنطقة الصناعية - بياض العرب - بني سويف');
+      setPurpose('لتقديمها للجهات الرسمية والمصرفية لإثبات حجم رأس المال المستثمر والملاءة التمويلية');
+      setRecipientOrganization('السادة / الهيئة العامة للاستثمار والمناطق الحرة (GAFI) والبنك الأهلي المصري');
+      handleCertTypeChange('INVESTED_CAPITAL');
     }
   };
 
@@ -177,44 +344,137 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
     }
   };
 
-  // Handle Amount change and sync monthly
+  // Handle Amount change and sync monthly if income
   const handleAmountChange = (amt: number) => {
     setCertifiedAmount(amt);
-    setMonthlyAmount(Math.round(amt / 12));
-  };
-
-  // Income sources handlers
-  const handleAddIncomeSource = () => {
-    setIncomeSources([...incomeSources, { source: '', amount: 0 }]);
-  };
-
-  const handleRemoveIncomeSource = (idx: number) => {
-    const updated = incomeSources.filter((_, i) => i !== idx);
-    setIncomeSources(updated);
-    const sum = updated.reduce((s, it) => s + (it.amount || 0), 0);
-    if (sum > 0) {
-      setCertifiedAmount(sum);
-      setMonthlyAmount(Math.round(sum / 12));
+    if (certType !== 'INVESTED_CAPITAL' && certType !== 'FINANCIAL_SOLVENCY') {
+      setMonthlyAmount(Math.round(amt / 12));
     }
   };
 
-  const handleIncomeSourceChange = (idx: number, field: 'source' | 'amount', value: any) => {
-    const updated = [...incomeSources];
-    updated[idx] = { ...updated[idx], [field]: field === 'amount' ? Number(value) : value };
-    setIncomeSources(updated);
-    if (field === 'amount') {
-      const sum = updated.reduce((s, it) => s + (it.amount || 0), 0);
-      if (sum > 0) {
-        setCertifiedAmount(sum);
+  // Breakdown items handlers
+  const handleAddBreakdownItem = () => {
+    setBreakdownItems([...breakdownItems, { source: '', amount: 0, notes: '' }]);
+  };
+
+  const handleRemoveBreakdownItem = (idx: number) => {
+    const updated = breakdownItems.filter((_, i) => i !== idx);
+    setBreakdownItems(updated);
+    const sum = updated.reduce((s, it) => s + (it.amount || 0), 0);
+    if (sum > 0) {
+      setCertifiedAmount(sum);
+      if (certType !== 'INVESTED_CAPITAL' && certType !== 'FINANCIAL_SOLVENCY') {
         setMonthlyAmount(Math.round(sum / 12));
       }
     }
   };
 
+  const handleBreakdownItemChange = (idx: number, field: keyof BreakdownRow, value: any) => {
+    const updated = [...breakdownItems];
+    const updatedRow = { ...updated[idx], [field]: field === 'amount' ? Number(value) : value };
+    if (field === 'amount' && showMonthlyInTable) {
+      updatedRow.monthlyEquivalent = Math.round(Number(value) / 12);
+    }
+    updated[idx] = updatedRow;
+    setBreakdownItems(updated);
+    if (field === 'amount') {
+      const sum = updated.reduce((s, it) => s + (it.amount || 0), 0);
+      if (sum > 0) {
+        setCertifiedAmount(sum);
+        if (certType !== 'INVESTED_CAPITAL' && certType !== 'FINANCIAL_SOLVENCY') {
+          setMonthlyAmount(Math.round(sum / 12));
+        }
+      }
+    }
+  };
+
+  // Load Certificate into Editor for editing
+  const handleEditCertificateFromArchive = (cert: ProfessionalCertificate) => {
+    setEditingCertId(cert.id);
+    setSelectedCertForView(null);
+    setActiveTab('CREATE');
+
+    setBeneficiaryType(cert.beneficiaryType);
+    setBeneficiaryGender(cert.beneficiaryGender || 'MALE');
+    setBeneficiaryTitle(cert.beneficiaryTitle || (cert.beneficiaryType === 'NATURAL_PERSON' ? 'السيد /' : 'السادة /'));
+    setBeneficiaryName(cert.clientName);
+    setNationalId(cert.nationalId || '');
+    setJobTitle(cert.jobTitle || '');
+    setAddress(cert.address || '');
+    setCommercialRegNo(cert.commercialRegNo || '');
+    setTaxCardNo(cert.taxCardNo || '');
+    setActivityName(cert.activityName || '');
+    setCertType(cert.certificateType);
+    setCustomHeading(cert.customCertificateHeading || '');
+    setRecipientOrganization(cert.recipientEntity);
+    setPurpose(cert.purpose);
+    setPeriodText(cert.periodText);
+    setIssueDate(cert.issueDate);
+    setCertifiedAmount(cert.certifiedAmount);
+    setMonthlyAmount(cert.monthlyAmount || 0);
+    setAuditorNotes(cert.auditorNotes);
+    setCustomPreambleBasis(cert.customPreambleBasis || '');
+    setCustomIntroText(cert.customIntroText || '');
+    setCustomBodyText(cert.customBodyText || '');
+    setCustomDeclarationPhrase(cert.customDeclarationPhrase || getDefaultDeclaration(cert.certificateType));
+
+    // Invested Capital specifics
+    setPaidCapitalAmount(cert.paidCapitalAmount || cert.investedCapitalAmount || cert.certifiedAmount);
+    setAuthorizedCapitalAmount(cert.authorizedCapitalAmount || 0);
+    setAnnualTurnoverAmount(cert.annualTurnoverAmount || 0);
+    setFixedAssetsValue(cert.fixedAssetsValue || 0);
+    setWorkingCapitalAmount(cert.workingCapitalAmount || 0);
+    setShareholdersEquity(cert.shareholdersEquity || 0);
+    setBankDepositBank(cert.bankDepositBank || '');
+    setBankDepositAccount(cert.bankDepositAccount || '');
+
+    // Financial Solvency specifics
+    setTotalAssets(cert.totalAssets || 0);
+    setTotalLiabilities(cert.totalLiabilities || 0);
+    setCurrentRatio(cert.currentRatio || 0);
+    setNetProfitAmount(cert.netProfitAmount || 0);
+
+    // Table settings
+    setShowBreakdownTable(cert.showBreakdownTable !== false);
+    setBreakdownTableTitle(cert.breakdownTableTitle || 'جدول التحليل والتفصيل:');
+    setBreakdownColumnName(cert.breakdownColumnName || 'البند / المصدر');
+    setBreakdownAmountName(cert.breakdownAmountName || 'القيمة (ج.م)');
+    setBreakdownNoteName(cert.breakdownNoteName || 'البيان / النسبة');
+    setShowFinancialMetricsCards(cert.showFinancialMetricsCards !== false);
+
+    if (cert.incomeBreakdown && cert.incomeBreakdown.length > 0) {
+      setBreakdownItems(cert.incomeBreakdown);
+    }
+  };
+
+  // Clone/Duplicate certificate
+  const handleDuplicateCertificate = (cert: ProfessionalCertificate) => {
+    handleEditCertificateFromArchive(cert);
+    setEditingCertId(null); // Fresh new certificate ID
+  };
+
+  // Delete certificate from DB
+  const handleDeleteCertificate = (cert: ProfessionalCertificate) => {
+    if (confirm(`هل أنت متأكد من حذف الشهادة رقم (${cert.certificateNumber}) للعميل (${cert.clientName}) من السجل؟`)) {
+      db.deleteCertificate(cert.id);
+      if (selectedCertForView?.id === cert.id) {
+        setSelectedCertForView(null);
+      }
+    }
+  };
+
+  // Generated dynamic cert number for draft
+  const certNumber = selectedCertForView
+    ? selectedCertForView.certificateNumber
+    : editingCertId
+    ? certificates.find((c) => c.id === editingCertId)?.certificateNumber || `CERT-${new Date().getFullYear()}-0001`
+    : `CERT-${new Date().getFullYear()}-${String(certificates.length + 1).padStart(4, '0')}`;
+
   // Save Certificate to DB
   const handleSaveCertificate = () => {
-    const newCert = db.addCertificate({
+    const certPayloadData = {
       certificateType: certType,
+      customCertificateHeading: customHeading.trim() || undefined,
       beneficiaryType: beneficiaryType,
       beneficiaryGender: beneficiaryGender,
       issueDate: issueDate,
@@ -231,23 +491,57 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
       purpose: purpose,
       periodText: periodText,
       certifiedAmount: certifiedAmount,
-      monthlyAmount: monthlyAmount,
-      incomeBreakdown: incomeSources.filter((s) => s.source.trim() && s.amount > 0),
-      monthlyNetIncome: monthlyAmount,
-      annualNetIncome: certifiedAmount,
-      solvencyNetWorth: certType === 'FINANCIAL_SOLVENCY' ? certifiedAmount : undefined,
+      monthlyAmount: monthlyAmount > 0 ? monthlyAmount : undefined,
+      
+      // Invested Capital specifics
       investedCapitalAmount: certType === 'INVESTED_CAPITAL' ? certifiedAmount : undefined,
+      paidCapitalAmount: paidCapitalAmount > 0 ? paidCapitalAmount : undefined,
+      authorizedCapitalAmount: authorizedCapitalAmount > 0 ? authorizedCapitalAmount : undefined,
+      annualTurnoverAmount: annualTurnoverAmount > 0 ? annualTurnoverAmount : undefined,
+      fixedAssetsValue: fixedAssetsValue > 0 ? fixedAssetsValue : undefined,
+      workingCapitalAmount: workingCapitalAmount > 0 ? workingCapitalAmount : undefined,
+      shareholdersEquity: shareholdersEquity > 0 ? shareholdersEquity : undefined,
+      bankDepositBank: bankDepositBank.trim() || undefined,
+      bankDepositAccount: bankDepositAccount.trim() || undefined,
+
+      // Financial Solvency & Audit specifics
+      totalAssets: totalAssets > 0 ? totalAssets : undefined,
+      totalLiabilities: totalLiabilities > 0 ? totalLiabilities : undefined,
+      currentRatio: currentRatio > 0 ? currentRatio : undefined,
+      netProfitAmount: netProfitAmount > 0 ? netProfitAmount : undefined,
+      solvencyNetWorth: certType === 'FINANCIAL_SOLVENCY' ? certifiedAmount : undefined,
+
+      // Table options
+      showBreakdownTable: showBreakdownTable,
+      breakdownTableTitle: breakdownTableTitle.trim() || undefined,
+      breakdownColumnName: breakdownColumnName.trim() || undefined,
+      breakdownAmountName: breakdownAmountName.trim() || undefined,
+      breakdownNoteName: breakdownNoteName.trim() || undefined,
+      incomeBreakdown: breakdownItems.filter((s) => s.source.trim() && s.amount > 0),
+
+      showFinancialMetricsCards: showFinancialMetricsCards,
       auditorNotes: auditorNotes,
       customIntroText: customIntroText.trim() || undefined,
       customBodyText: customBodyText.trim() || undefined,
       customPreambleBasis: customPreambleBasis.trim() || undefined,
+      customDeclarationPhrase: customDeclarationPhrase.trim() || undefined,
       qrPayload: `EGY-CERT|${certNumber}|43122|${beneficiaryType}|${beneficiaryName}|${certifiedAmount}_EGP|VALID`,
       securityHash: `${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
       printedCount: 1,
-    });
+    };
 
-    setSelectedCertForView(newCert);
-    alert(`تم حفظ وتوثيق الشهادة رقم (${newCert.certificateNumber}) بنجاح في سجل الشهادات المهنية المعتمدة للمكتب.`);
+    if (editingCertId) {
+      const updated = db.updateCertificate(editingCertId, certPayloadData);
+      if (updated) {
+        setSelectedCertForView(updated);
+        alert(`تم حفظ وتحديث كافة بيانات الشهادة رقم (${updated.certificateNumber}) بنجاح.`);
+      }
+    } else {
+      const newCert = db.addCertificate(certPayloadData);
+      setSelectedCertForView(newCert);
+      setEditingCertId(newCert.id);
+      alert(`تم حفظ وتوثيق الشهادة رقم (${newCert.certificateNumber}) بنجاح في سجل الشهادات المهنية المعتمدة للمكتب.`);
+    }
   };
 
   // Filtered certificates in archive
@@ -261,12 +555,14 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
     return matchSearch && matchType;
   });
 
-  // Current view values
+  // Current active view values (either from selected archived cert or live form)
   const activeBeneficiaryType = selectedCertForView ? selectedCertForView.beneficiaryType : beneficiaryType;
   const activeBeneficiaryGender = selectedCertForView?.beneficiaryGender || beneficiaryGender;
   const activeCertType = selectedCertForView ? selectedCertForView.certificateType : certType;
   const activeBeneficiaryName = selectedCertForView ? selectedCertForView.clientName : beneficiaryName;
-  const activeBeneficiaryTitle = selectedCertForView ? (selectedCertForView.beneficiaryTitle || (activeBeneficiaryGender === 'FEMALE' ? 'السيدة /' : 'السيد /')) : beneficiaryTitle;
+  const activeBeneficiaryTitle = selectedCertForView
+    ? (selectedCertForView.beneficiaryTitle || (activeBeneficiaryGender === 'FEMALE' ? 'السيدة /' : 'السيد /'))
+    : beneficiaryTitle;
   const activeNationalId = selectedCertForView ? selectedCertForView.nationalId : nationalId;
   const activeJobTitle = selectedCertForView ? selectedCertForView.jobTitle : jobTitle;
   const activeAddress = selectedCertForView ? selectedCertForView.address : address;
@@ -280,17 +576,39 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   const activePurpose = selectedCertForView ? selectedCertForView.purpose : purpose;
   const activeIssueDate = selectedCertForView ? selectedCertForView.issueDate : issueDate;
   const activeAuditorNotes = selectedCertForView ? selectedCertForView.auditorNotes : auditorNotes;
-  const activeIncomeBreakdown = selectedCertForView ? (selectedCertForView.incomeBreakdown || []) : incomeSources;
-  const activeCustomIntroText = selectedCertForView ? selectedCertForView.customIntroText : customIntroText;
+  const activeBreakdownItems = selectedCertForView ? (selectedCertForView.incomeBreakdown || []) : breakdownItems;
   const activeCustomBodyText = selectedCertForView ? selectedCertForView.customBodyText : customBodyText;
   const activeCustomPreambleBasis = selectedCertForView ? (selectedCertForView.customPreambleBasis || customPreambleBasis) : customPreambleBasis;
+  const activeCustomHeading = selectedCertForView
+    ? (selectedCertForView.customCertificateHeading || getDefaultHeading(selectedCertForView.certificateType, selectedCertForView.beneficiaryType))
+    : (customHeading.trim() || getDefaultHeading(certType, beneficiaryType));
+  const activeCustomDeclaration = selectedCertForView
+    ? (selectedCertForView.customDeclarationPhrase || getDefaultDeclaration(selectedCertForView.certificateType))
+    : (customDeclarationPhrase.trim() || getDefaultDeclaration(certType));
 
+  const activeShowBreakdown = selectedCertForView ? (selectedCertForView.showBreakdownTable !== false) : showBreakdownTable;
+  const activeBreakdownTitle = selectedCertForView ? (selectedCertForView.breakdownTableTitle || 'جدول التحليل والتفصيل:') : breakdownTableTitle;
+  const activeColumnName = selectedCertForView ? (selectedCertForView.breakdownColumnName || 'عنصر رأس المال / المصدر') : breakdownColumnName;
+  const activeAmountName = selectedCertForView ? (selectedCertForView.breakdownAmountName || 'القيمة (ج.م)') : breakdownAmountName;
+  const activeNoteName = selectedCertForView ? (selectedCertForView.breakdownNoteName || 'البيان / النسبة') : breakdownNoteName;
+  const activeShowMetrics = selectedCertForView ? (selectedCertForView.showFinancialMetricsCards !== false) : showFinancialMetricsCards;
+
+  // Invested Capital Active values
+  const activePaidCapital = selectedCertForView ? (selectedCertForView.paidCapitalAmount || selectedCertForView.investedCapitalAmount || selectedCertForView.certifiedAmount) : paidCapitalAmount;
+  const activeAuthorizedCapital = selectedCertForView ? (selectedCertForView.authorizedCapitalAmount || 0) : authorizedCapitalAmount;
+  const activeAnnualTurnover = selectedCertForView ? (selectedCertForView.annualTurnoverAmount || 0) : annualTurnoverAmount;
+  const activeFixedAssets = selectedCertForView ? (selectedCertForView.fixedAssetsValue || 0) : fixedAssetsValue;
+  const activeWorkingCapital = selectedCertForView ? (selectedCertForView.workingCapitalAmount || 0) : workingCapitalAmount;
+  const activeEquity = selectedCertForView ? (selectedCertForView.shareholdersEquity || 0) : shareholdersEquity;
+  const activeDepositBank = selectedCertForView ? (selectedCertForView.bankDepositBank || '') : bankDepositBank;
+  const activeDepositAccount = selectedCertForView ? (selectedCertForView.bankDepositAccount || '') : bankDepositAccount;
 
   // Certificate Payload for Direct Document Preview and Printing
   const activeCertificatePayload = useMemo(() => {
     return {
-      id: selectedCertForView?.id || 'ACTIVE-CERT-DOC',
+      id: selectedCertForView?.id || editingCertId || 'ACTIVE-CERT-DOC',
       certificateNumber: certNumber,
+      customCertificateHeading: activeCustomHeading,
       beneficiaryType: activeBeneficiaryType,
       beneficiaryGender: activeBeneficiaryGender,
       clientName: activeBeneficiaryName,
@@ -305,19 +623,37 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
       annualNetIncome: activeCertifiedAmount,
       certifiedAmount: activeCertifiedAmount,
       monthlyNetIncome: activeMonthlyAmount,
+      investedCapitalAmount: activeCertType === 'INVESTED_CAPITAL' ? activeCertifiedAmount : undefined,
+      paidCapitalAmount: activePaidCapital,
+      authorizedCapitalAmount: activeAuthorizedCapital,
+      annualTurnoverAmount: activeAnnualTurnover,
+      fixedAssetsValue: activeFixedAssets,
+      workingCapitalAmount: activeWorkingCapital,
+      shareholdersEquity: activeEquity,
+      bankDepositBank: activeDepositBank,
+      bankDepositAccount: activeDepositAccount,
       periodText: activePeriodText,
       recipientEntity: activeRecipient,
       purpose: activePurpose,
       auditorNotes: activeAuditorNotes,
       customBodyText: activeCustomBodyText,
       customPreambleBasis: activeCustomPreambleBasis,
+      customDeclarationPhrase: activeCustomDeclaration,
       issueDate: activeIssueDate,
-      incomeBreakdown: activeIncomeBreakdown,
+      incomeBreakdown: activeBreakdownItems,
+      showBreakdownTable: activeShowBreakdown,
+      breakdownTableTitle: activeBreakdownTitle,
+      breakdownColumnName: activeColumnName,
+      breakdownAmountName: activeAmountName,
+      breakdownNoteName: activeNoteName,
+      showFinancialMetricsCards: activeShowMetrics,
       qrPayload: `CERTIFICATE|${certNumber}|${activeBeneficiaryName}|${activeNationalId || activeCommercialRegNo || ''}|${activeCertifiedAmount}|${profile?.auditorName || 'محمد جميل مرعي'}|${profile?.phone || '01003335360'}`,
     };
   }, [
     selectedCertForView,
+    editingCertId,
     certNumber,
+    activeCustomHeading,
     activeBeneficiaryType,
     activeBeneficiaryGender,
     activeBeneficiaryName,
@@ -331,104 +667,43 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
     activeCertType,
     activeCertifiedAmount,
     activeMonthlyAmount,
+    activePaidCapital,
+    activeAuthorizedCapital,
+    activeAnnualTurnover,
+    activeFixedAssets,
+    activeWorkingCapital,
+    activeEquity,
+    activeDepositBank,
+    activeDepositAccount,
     activePeriodText,
     activeRecipient,
     activePurpose,
     activeAuditorNotes,
     activeCustomBodyText,
     activeCustomPreambleBasis,
+    activeCustomDeclaration,
     activeIssueDate,
-    activeIncomeBreakdown,
+    activeBreakdownItems,
+    activeShowBreakdown,
+    activeBreakdownTitle,
+    activeColumnName,
+    activeAmountName,
+    activeNoteName,
+    activeShowMetrics,
     profile,
   ]);
 
   const [isDirectPreviewOpen, setIsDirectPreviewOpen] = useState(false);
 
-  // Direct print function for certificate
+  // Direct print function for certificate using robust isolated iframe PrintService
   const handlePrintCertificateDirect = () => {
-    const styleId = 'egypt-cpa-cert-print-style';
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement;
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      document.head.appendChild(styleEl);
-    }
-
-    styleEl.innerHTML = `
-      @page {
-        size: A4 portrait;
-        margin: 10mm 12mm;
-      }
-      @media print {
-        html, body {
-          margin: 0 !important;
-          padding: 0 !important;
-          background: white !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        body * {
-          visibility: hidden !important;
-        }
-        #official-certificate-document, #official-certificate-document * {
-          visibility: visible !important;
-        }
-        #official-certificate-document {
-          position: fixed !important;
-          left: 0 !important;
-          top: 0 !important;
-          right: 0 !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-          margin: 0 auto !important;
-          padding: 24px 28px !important;
-          min-height: 275mm !important;
-          background: white !important;
-          box-shadow: none !important;
-          border: 2.5px solid #064e3b !important;
-          border-radius: 6px !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          display: flex !important;
-          flex-direction: column !important;
-          justify-content: space-between !important;
-        }
-      }
-    `;
-
-    setTimeout(() => {
-      window.print();
-    }, 150);
-  };
-
-  // Title helper
-  const getCertificateHeading = (type: CertificateTemplateType, benType: CertificateBeneficiaryType) => {
-    if (benType === 'NATURAL_PERSON') {
-      switch (type) {
-        case 'FREELANCE_INCOME':
-          return 'شهـادة إثبـات صـافـي دخـل مهـن حـرة وأنشطـة فـرديـة';
-        case 'EMPLOYEE_ADDITIONAL_INC':
-          return 'شهـادة إثبـات دخـل إضـافـي واستثمـارات للأفـراد';
-        case 'REAL_ESTATE_INCOME':
-          return 'شهـادة إثبـات إيـرادات عقـاريـة واستثمـاريـة للممـول';
-        case 'FINANCIAL_SOLVENCY':
-          return 'شهـادة مـلاءة مـاليـة وثـروة للأشخـاص الطبيعييـن';
-        default:
-          return 'شهـادة إثبـات صـافـي الـدخـل السنـوي والشهـري للأفـراد';
-      }
-    } else {
-      switch (type) {
-        case 'INVESTED_CAPITAL':
-          return 'شهـادة رأس المـال المستثمـر وحجـم الأعمـال للمنشـأة';
-        case 'FINANCIAL_SOLVENCY':
-          return 'شهـادة مـلاءة مـاليـة وجودة ائتمانية للشركات';
-        case 'AUDIT_COMPLIANCE':
-          return 'شهـادة فحـص ومراجعـة حسـابـات وقوائم مالية';
-        default:
-          return 'شهـادة إثبـات صـافـي دخـل وأرباح سنـويـة للشركـات';
-      }
-    }
+    PrintService.printElementById('official-certificate-document', {
+      title: activeCustomHeading || 'شهادة محاسبية معتمدة',
+      orientation: 'portrait',
+      pageSize: 'A4',
+      margins: 'DEFAULT',
+      resequencePageNumbers: true,
+    });
   };
 
   return (
@@ -437,15 +712,15 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-amber-800 text-white flex items-center justify-center shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-700 to-emerald-950 text-white flex items-center justify-center shadow-xs">
               <Award className="w-6 h-6" />
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-900">
-                منظومة إصدار الشهادات المحاسبية والمهنية المعتمدة (QR Certificates)
+                منظومة إصدار وتوثيق الشهادات المحاسبية والمهنية المعتمدة
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                إصدار وتوثيق شهادات الدخل والملاءة للأشخاص الطبيعيين (الأفراد / المهن الحرة) والاعتباريين (الشركات) بالختم الإلكتروني المعتمد (س.م.م 43122).
+                إصدار شهادات رأس المال المستثمر، إثبات الدخل، الملاءة المالية، وفحص القوائم بمرونة صياغة وتحكم كامل في البنود والجداول.
               </p>
             </div>
           </div>
@@ -465,7 +740,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>إصدار شهادة جديدة</span>
+              <span>{editingCertId ? 'تعديل الشهادة الحالية' : 'إصدار شهادة جديدة'}</span>
             </button>
 
             <button
@@ -495,8 +770,8 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-indigo-600" />
-              <h3 className="font-bold text-sm text-slate-900">سجل الشهادات المهنية الموثقة بالمكتب</h3>
+              <FileText className="w-5 h-5 text-emerald-700" />
+              <h3 className="font-bold text-sm text-slate-900">سجل وأرشيف الشهادات المهنية الموثقة بالمكتب</h3>
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -504,7 +779,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="بحث باسم العميل، الرقم القومي، رقم الشهادة..."
+                  placeholder="بحث باسم العميل، الرقم القومي، السجل، رقم الشهادة..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-3 pr-9 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
@@ -530,17 +805,17 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   <th className="p-3">رقم وتاريخ الشهادة</th>
                   <th className="p-3">نوع المستفيد</th>
                   <th className="p-3">اسم المستفيد / الرقم القومي أو السجل</th>
-                  <th className="p-3">نوع الشهادة والغرض</th>
+                  <th className="p-3">نوع الشهادة ومسماها</th>
                   <th className="p-3">الجهة الموجه إليها</th>
                   <th className="p-3 text-left">المبلغ المعتمد</th>
-                  <th className="p-3 text-center">إجراءات</th>
+                  <th className="p-3 text-center">إجراءات التحكم</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCerts.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-400">
-                      لا توجد شهادات مطابقة للبحث
+                      لا توجد شهادات مطابقة للبحث في السجل
                     </td>
                   </tr>
                 ) : (
@@ -573,7 +848,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                       </td>
                       <td className="p-3">
                         <div className="font-semibold text-slate-800">
-                          {getCertificateHeading(cert.certificateType, cert.beneficiaryType)}
+                          {cert.customCertificateHeading || getDefaultHeading(cert.certificateType, cert.beneficiaryType)}
                         </div>
                         <div className="text-[11px] text-slate-500 line-clamp-1">{cert.purpose}</div>
                       </td>
@@ -582,23 +857,60 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                       </td>
                       <td className="p-3 text-left font-mono font-bold text-emerald-800">
                         {formatEgyptianCurrency(cert.certifiedAmount || 0)}
-                        {cert.monthlyAmount && (
+                        {cert.monthlyAmount && cert.monthlyAmount > 0 && cert.certificateType !== 'INVESTED_CAPITAL' && (
                           <div className="text-[10px] text-slate-500 font-normal">
                             (شهري: {formatEgyptianCurrency(cert.monthlyAmount)})
                           </div>
                         )}
                       </td>
                       <td className="p-3 text-center">
-                        <button
-                          onClick={() => {
-                            setSelectedCertForView(cert);
-                            setActiveTab('CREATE');
-                          }}
-                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold rounded-lg border border-emerald-200 transition-all cursor-pointer inline-flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>عرض وطباعة</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setWhatsAppCert(cert)}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                            title="إرسال إشعار الشهادة عبر كود الواتساب المباشر"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
+                            <span>واتساب</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedCertForView(cert);
+                              setActiveTab('CREATE');
+                            }}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold rounded-lg border border-emerald-200 transition-all cursor-pointer inline-flex items-center gap-1"
+                            title="معاينة المستند والطباعة"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>معاينة</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleEditCertificateFromArchive(cert)}
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold rounded-lg border border-blue-200 transition-all cursor-pointer inline-flex items-center gap-1"
+                            title="تعديل كافة بيانات الشهادة"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>تعديل</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDuplicateCertificate(cert)}
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-lg border border-amber-200 transition-all cursor-pointer inline-flex items-center gap-1"
+                            title="استنساخ كشهادة جديدة"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteCertificate(cert)}
+                            className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-lg border border-red-200 transition-all cursor-pointer inline-flex items-center gap-1"
+                            title="حذف من السجل"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -612,10 +924,31 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
       {/* Mode 2: Form & Certificate Generator */}
       {activeTab === 'CREATE' && (
         <div className="space-y-6">
+          {/* Editing Alert Banner if editing existing certificate */}
+          {editingCertId && (
+            <div className="p-3.5 bg-blue-50 border border-blue-300 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-950 font-bold">
+              <div className="flex items-center gap-2">
+                <Edit className="w-4 h-4 text-blue-700" />
+                <span>أنت الآن في وضع تعديل الشهادة رقم ({certNumber}) للعميل: {beneficiaryName}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCertId(null);
+                  setSelectedCertForView(null);
+                  handleBeneficiaryTypeChange(beneficiaryType);
+                }}
+                className="text-xs bg-white text-blue-900 px-3 py-1 rounded-lg border border-blue-300 hover:bg-blue-100 cursor-pointer"
+              >
+                إلغاء التعديل والبدء كشهادة جديدة
+              </button>
+            </div>
+          )}
+
           {/* Certificate Editor Controls */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4 text-xs">
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-5 text-xs">
             {/* Quick Entity Type Selector */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-gradient-to-r from-slate-50 to-emerald-50/50 rounded-xl border border-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-slate-50 to-emerald-50/50 rounded-xl border border-slate-200">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-slate-800">نوع الكيان المستفيد من الشهادة:</span>
               </div>
@@ -649,7 +982,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               </div>
             </div>
 
-            {/* Quick Client Autofill */}
+            {/* Quick Client Autofill & Template Type */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">
@@ -670,11 +1003,11 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               </div>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1">نوع الشهادة المهنية</label>
+                <label className="block text-slate-700 font-bold mb-1">نوع نموذج الشهادة</label>
                 <select
                   value={certType}
-                  onChange={(e) => setCertType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-emerald-950"
+                  onChange={(e) => handleCertTypeChange(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-emerald-50 border border-emerald-400 rounded-xl font-bold text-emerald-950"
                 >
                   {beneficiaryType === 'NATURAL_PERSON' ? (
                     <>
@@ -682,14 +1015,17 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                       <option value="INCOME_PROOF">2. شهادة إثبات صافي دخل شهري / سنوي للأفراد</option>
                       <option value="EMPLOYEE_ADDITIONAL_INC">3. شهادة إثبات دخول إضافية واستثمارات متنوعة</option>
                       <option value="REAL_ESTATE_INCOME">4. شهادة إثبات إيرادات عقارية وتأجيرية</option>
-                      <option value="FINANCIAL_SOLVENCY">5. شهادة ملاءة مالية وثروة للأشخاص الطبيعيين</option>
+                      <option value="INVESTED_CAPITAL">5. شهادة رأس مال مستثمر لنشاط فردي</option>
+                      <option value="FINANCIAL_SOLVENCY">6. شهادة ملاءة مالية وثروة للأشخاص الطبيعيين</option>
+                      <option value="CUSTOM_CERTIFICATE">7. شهادة محاسبية عامة مخصصة الصياغة</option>
                     </>
                   ) : (
                     <>
-                      <option value="INCOME_PROOF">1. شهادة إثبات صافي أرباح ودخل سنوي للشركات</option>
-                      <option value="INVESTED_CAPITAL">2. شهادة رأس مال مستثمر وحجم أعمال</option>
+                      <option value="INVESTED_CAPITAL">1. شهادة رأس مال مستثمر وحجم أعمال للمنشأة</option>
+                      <option value="INCOME_PROOF">2. شهادة إثبات صافي أرباح ودخل سنوي للشركات</option>
                       <option value="FINANCIAL_SOLVENCY">3. شهادة ملاءة مالية وجودة ائتمانية للشركات</option>
                       <option value="AUDIT_COMPLIANCE">4. شهادة فحص ومراجعة حسابات وقوائم مالية</option>
+                      <option value="CUSTOM_CERTIFICATE">5. شهادة محاسبية مهنية مخصصة الصياغة</option>
                     </>
                   )}
                 </select>
@@ -706,8 +1042,38 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               </div>
             </div>
 
+            {/* Custom Certificate Heading (Flexibility for ALL Certificates) */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-300 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-800 font-bold text-xs flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-700" />
+                  <span>عنوان ومسمى الشهادة المطبوع بأعلى الصفحة (مرن وقابل للتعديل بالكامل):</span>
+                </label>
+                {customHeading && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomHeading('')}
+                    className="text-[11px] text-emerald-800 hover:underline cursor-pointer"
+                  >
+                    استعادة العنوان الافتراضي
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={customHeading}
+                placeholder={getDefaultHeading(certType, beneficiaryType)}
+                onChange={(e) => setCustomHeading(e.target.value)}
+                className="w-full px-3.5 py-2 bg-white border border-emerald-400 rounded-xl font-bold text-emerald-950 text-sm focus:ring-2 focus:ring-emerald-500/20"
+              />
+              <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                <span>المسمى الفعلي الحالي: <strong>{activeCustomHeading}</strong></span>
+                <span className="text-emerald-700">يمكنك تعديل المسمى بحرية لأي جهة أو غرض (مثل: شهادة رأس مال مدفوع، شهادة ملاءة مصرفية، إلخ)</span>
+              </div>
+            </div>
+
             {/* Beneficiary Details Form */}
-            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200 space-y-3">
+            <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="font-bold text-slate-800 flex items-center gap-1.5">
                   {beneficiaryType === 'NATURAL_PERSON' ? <User className="w-4 h-4 text-blue-600" /> : <Building className="w-4 h-4 text-purple-600" />}
@@ -761,7 +1127,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     type="text"
                     value={beneficiaryTitle}
                     onChange={(e) => setBeneficiaryTitle(e.target.value)}
-                    placeholder={beneficiaryGender === 'FEMALE' ? 'السيدة / السيدة الدكتورة / الآنسة' : 'السيد / السيد المهندس / الدكتور'}
+                    placeholder={beneficiaryGender === 'FEMALE' ? 'السيدة / السيدة الدكتورة / الآنسة' : 'السيد / السيد المهندس / الدكتور / السادة'}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800"
                   />
                 </div>
@@ -806,7 +1172,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 ) : (
                   <>
                     <div>
-                      <label className="block text-slate-600 font-bold mb-1">رقم السجل التجاري *</label>
+                      <label className="block text-slate-600 font-bold mb-1">رقم السجل التجاري</label>
                       <input
                         type="text"
                         value={commercialRegNo}
@@ -839,14 +1205,14 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     type="text"
                     value={activityName}
                     onChange={(e) => setActivityName(e.target.value)}
-                    placeholder="عيادة خاصة / مكتب استشارات / نشاط حر..."
+                    placeholder="عيادة خاصة / مكتب استشارات / صناعة وتجارة..."
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
                   />
                 </div>
 
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">
-                    {beneficiaryType === 'NATURAL_PERSON' ? 'البطاقة الضريبية (اتركه فارغاً إن لم يوجد)' : 'عنوان المقر الرئيسي'}
+                    {beneficiaryType === 'NATURAL_PERSON' ? 'البطاقة الضريبية (اتركه فارغاً إن لم يوجد)' : 'عنوان المقر الرئيسي / المصنع'}
                   </label>
                   <input
                     type="text"
@@ -855,7 +1221,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                       if (beneficiaryType === 'NATURAL_PERSON') setTaxCardNo(e.target.value);
                       else setAddress(e.target.value);
                     }}
-                    placeholder={beneficiaryType === 'NATURAL_PERSON' ? 'اتركه فارغاً إن لم يوجد' : 'المعادي - القاهرة'}
+                    placeholder={beneficiaryType === 'NATURAL_PERSON' ? 'اتركه فارغاً إن لم يوجد' : 'المنطقة الصناعية - بني سويف'}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
                   />
                 </div>
@@ -873,6 +1239,229 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Special Section: Invested Capital Specific Parameters (شهادة رأس المال المستثمر) */}
+            {certType === 'INVESTED_CAPITAL' && (
+              <div className="p-4 bg-emerald-50/80 rounded-xl border-2 border-emerald-400/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-emerald-950 text-sm">
+                    <Landmark className="w-5 h-5 text-emerald-800" />
+                    <span>تفاصيل وبيانات رأس المال المستثمر وهيكل التمويل (مرونة كاملة):</span>
+                  </div>
+                  <span className="text-[11px] text-emerald-800 font-semibold bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                    نموذج رأس المال المستثمر المعتمد
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">
+                      إجمالي رأس المال المستثمر (المبلغ الرئيسي المعتمد) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1000"
+                      step="1000"
+                      value={certifiedAmount}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setCertifiedAmount(val);
+                        setPaidCapitalAmount(val);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-emerald-400 rounded-xl font-mono font-bold text-emerald-950 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">رأس المال المصدر والمدفوع (ج.م)</label>
+                    <input
+                      type="number"
+                      value={paidCapitalAmount}
+                      onChange={(e) => setPaidCapitalAmount(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">رأس المال المرخص به (إن وجد)</label>
+                    <input
+                      type="number"
+                      value={authorizedCapitalAmount || ''}
+                      placeholder="مثال: 20000000"
+                      onChange={(e) => setAuthorizedCapitalAmount(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">حجم الأعمال والتعاملات السنوية (ج.م)</label>
+                    <input
+                      type="number"
+                      value={annualTurnoverAmount || ''}
+                      placeholder="مثال: 18500000"
+                      onChange={(e) => setAnnualTurnoverAmount(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">صافي الأصول الثابتة والتجهيزات (ج.م)</label>
+                    <input
+                      type="number"
+                      value={fixedAssetsValue || ''}
+                      onChange={(e) => setFixedAssetsValue(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">رأس المال العامل المستثمر (ج.م)</label>
+                    <input
+                      type="number"
+                      value={workingCapitalAmount || ''}
+                      onChange={(e) => setWorkingCapitalAmount(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">صافي حقوق الملكية والشركاء (ج.م)</label>
+                    <input
+                      type="number"
+                      value={shareholdersEquity || ''}
+                      onChange={(e) => setShareholdersEquity(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">بيانات بنك الإيداع والشهادة البنكية</label>
+                    <input
+                      type="text"
+                      value={bankDepositBank}
+                      placeholder="البنك الأهلي المصري - فرع المهندسين"
+                      onChange={(e) => setBankDepositBank(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">رقم شهادة الإيداع البنكية أو الحساب البنكي</label>
+                  <input
+                    type="text"
+                    value={bankDepositAccount}
+                    placeholder="شهادة إيداع بنكية رقم 984210 / حساب رقم 10098234"
+                    onChange={(e) => setBankDepositAccount(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* General Financial Parameters (for non-invested capital certificates) */}
+            {certType !== 'INVESTED_CAPITAL' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    إجمالي المبلغ المعتمد بالشهادة (سنوياً / القيمة الإجمالية) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    step="1000"
+                    value={certifiedAmount}
+                    onChange={(e) => handleAmountChange(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-xl font-mono font-bold text-emerald-950 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    المعادل الشهري لصافي الدخل (ج.م / شهر)
+                  </label>
+                  <input
+                    type="number"
+                    value={monthlyAmount}
+                    onChange={(e) => setMonthlyAmount(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">الجهة الموجه إليها الشهادة *</label>
+                  <input
+                    type="text"
+                    value={recipientOrganization}
+                    onChange={(e) => setRecipientOrganization(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">الفترة الزمنية المعتمدة</label>
+                  <input
+                    type="text"
+                    value={periodText}
+                    onChange={(e) => setPeriodText(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Recipient and Period if Invested Capital */}
+            {certType === 'INVESTED_CAPITAL' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">الجهة الموجه إليها الشهادة *</label>
+                  <input
+                    type="text"
+                    value={recipientOrganization}
+                    onChange={(e) => setRecipientOrganization(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">الفترة الزمنية أو تاريخ الفحص المعتمد</label>
+                  <input
+                    type="text"
+                    value={periodText}
+                    onChange={(e) => setPeriodText(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Custom Declaration Phrase (عبارة الإقرار المرنة) */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-300 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-800 font-bold text-xs flex items-center gap-1.5">
+                  <FileBadge className="w-4 h-4 text-emerald-700" />
+                  <span>عبارة الإقرار الرئيسية بالشهادة ("نشهد ونقر نحن المحاسب القانوني..."):</span>
+                </label>
+                {customDeclarationPhrase && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomDeclarationPhrase(getDefaultDeclaration(certType))}
+                    className="text-[11px] text-emerald-800 hover:underline cursor-pointer"
+                  >
+                    استعادة العبارة الافتراضية
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={customDeclarationPhrase}
+                onChange={(e) => setCustomDeclarationPhrase(e.target.value)}
+                placeholder={getDefaultDeclaration(certType)}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs"
+              />
             </div>
 
             {/* Examination Basis & Wording Flexibility Selector */}
@@ -893,7 +1482,6 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   type="button"
                   onClick={() => {
                     setExaminationBasisType('GENERAL_DOCS');
-                    const isF = beneficiaryGender === 'FEMALE';
                     setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والدخل');
                     setAuditorNotes('بناءً على الفحص المستندي للوثائق والمستندات والعقود المقدمة من العميل والمؤيدة لمصادر الدخل المحقق.');
                   }}
@@ -904,7 +1492,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   }`}
                 >
                   <div className="font-bold text-xs flex items-center justify-between">
-                    <span>1. مستندي عام (بدون كشوف أو ضرائب)</span>
+                    <span>1. مستندي عام (بدون بنك أو ضرائب)</span>
                     {examinationBasisType === 'GENERAL_DOCS' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
@@ -915,22 +1503,22 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 <button
                   type="button"
                   onClick={() => {
-                    setExaminationBasisType('CONTRACTS_RECEIPTS');
-                    setCustomPreambleBasis('بناءً على الاطلاع على عقود العمل والاستشارات وإيصالات المعاملات وإفادات جهة العمل المؤيدة للدخل');
-                    setAuditorNotes('بناءً على الاطلاع على عقود العمل ومستندات الإيرادات وإيصالات التحصيل المقدمة.');
+                    setExaminationBasisType('INVESTED_CAPITAL_EXAM');
+                    setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، والشهادات البنكية لإيداع رأس المال، ومحاضر الجمعيات العمومية');
+                    setAuditorNotes('تم التحقق من إيداع رأس المال كاملاً بموجب الشهادة البنكية وقيد الاستثمارات بالدفاتر المحاسبية.');
                   }}
                   className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
-                    examinationBasisType === 'CONTRACTS_RECEIPTS'
+                    examinationBasisType === 'INVESTED_CAPITAL_EXAM'
                       ? 'bg-amber-100/90 border-amber-600 text-amber-950 font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="font-bold text-xs flex items-center justify-between">
-                    <span>2. عقود وإفادات دخل</span>
-                    {examinationBasisType === 'CONTRACTS_RECEIPTS' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
+                    <span>2. فحص رأس مال واستثمار</span>
+                    {examinationBasisType === 'INVESTED_CAPITAL_EXAM' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
-                    الاستناد إلى عقود الاستشارات، العمل، وإفادات الدخل والإيراد.
+                    فحص شهادات الإيداع البنكي وسجلات الأصول ورأس المال المستثمر.
                   </div>
                 </button>
 
@@ -938,7 +1526,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   type="button"
                   onClick={() => {
                     setExaminationBasisType('FULL_AUDIT');
-                    setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للسجلات المحاسبية المنتظمة، وكشوف الحسابات المصرفية، والإقرارات الضريبية المعتمدة');
+                    setCustomPreambleBasis('بناءً على الفحص المكتبي والمستندي للسجلات المحاسبية المنتظمة، وكشوف الحسابات المصرفية، والإقرارات الضريبية والقوائم المالية المعتمدة');
                     setAuditorNotes('بناءً على الفحص المكتبي لكشوف الحسابات البنكية والسجلات والدفاتر المحاسبية والإقرارات الضريبية.');
                   }}
                   className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
@@ -987,114 +1575,144 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     setCustomPreambleBasis(e.target.value);
                     setExaminationBasisType('CUSTOM');
                   }}
-                  placeholder="اكتب عبارة الفحص هنا (مثال: بناءً على المستندات والعقود المؤيدة للإيراد...)"
+                  placeholder="اكتب عبارة الفحص هنا..."
                   className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-amber-50/30"
                 />
               </div>
             </div>
 
-
-            {/* Financial Parameters & Recipient */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">
-                  إجمالي المبلغ المعتمد بالشهادة (سنوياً / القيمة الإجمالية) *
-                </label>
-                <input
-                  type="number"
-                  min="1000"
-                  step="1000"
-                  value={certifiedAmount}
-                  onChange={(e) => handleAmountChange(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-xl font-mono font-bold text-emerald-950 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">
-                  المعادل الشهري لصافي الدخل (ج.م / شهر)
-                </label>
-                <input
-                  type="number"
-                  value={monthlyAmount}
-                  onChange={(e) => setMonthlyAmount(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">الجهة الموجه إليها الشهادة *</label>
-                <input
-                  type="text"
-                  value={recipientOrganization}
-                  onChange={(e) => setRecipientOrganization(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">الفترة الزمنية المعتمدة</label>
-                <input
-                  type="text"
-                  value={periodText}
-                  onChange={(e) => setPeriodText(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800"
-                />
-              </div>
-            </div>
-
-            {/* Breakdown for Natural Persons with Multi-Sources */}
-            {beneficiaryType === 'NATURAL_PERSON' && (
-              <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-bold text-blue-950">
-                    <Layers className="w-4 h-4 text-blue-700" />
-                    <span>تفصيل وتحليل مصادر الدخل السنوية المعتمدة (اختياري لتعزيز قبول البنوك والجهات)</span>
-                  </div>
+            {/* Flexible Breakdown Table Builder for ALL certificates */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-300 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleAddIncomeSource}
-                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer"
+                    onClick={() => setShowBreakdownTable(!showBreakdownTable)}
+                    className="flex items-center gap-1.5 text-slate-800 font-bold text-xs cursor-pointer hover:text-emerald-800"
+                  >
+                    {showBreakdownTable ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-700" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                    <span>إظهار جدول التحليل والتفصيل في الشهادة</span>
+                  </button>
+                  <span className="text-[11px] text-slate-500">
+                    ({showBreakdownTable ? 'مفعل' : 'معطل - إخفاء الجدول في الطباعة'})
+                  </span>
+                </div>
+
+                {showBreakdownTable && (
+                  <button
+                    type="button"
+                    onClick={handleAddBreakdownItem}
+                    className="px-3 py-1 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer self-start sm:self-auto"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>إضافة مصدر دخل</span>
+                    <span>إضافة بند بالجدول</span>
                   </button>
-                </div>
+                )}
+              </div>
 
-                <div className="space-y-2">
-                  {incomeSources.map((src, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
+              {showBreakdownTable && (
+                <div className="space-y-3 pt-2 border-t border-slate-200">
+                  {/* Table Titles and Column Headers Customizer */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-0.5">عنوان الجدول المطبوع:</label>
                       <input
                         type="text"
-                        placeholder="مصدر الدخل (مثال: صافي إيرادات العيادة / إيجارات عقارية / أرباح استثمارات)"
-                        value={src.source}
-                        onChange={(e) => handleIncomeSourceChange(idx, 'source', e.target.value)}
-                        className="flex-1 px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
+                        value={breakdownTableTitle}
+                        onChange={(e) => setBreakdownTableTitle(e.target.value)}
+                        placeholder="جدول عناصر رأس المال / مصادر الدخل"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
                       />
-                      <div className="w-40 relative">
-                        <input
-                          type="number"
-                          placeholder="المبلغ السنوي"
-                          value={src.amount || ''}
-                          onChange={(e) => handleIncomeSourceChange(idx, 'amount', e.target.value)}
-                          className="w-full px-3 py-1.5 bg-white border border-blue-200 rounded-lg font-mono font-bold text-xs text-blue-900"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveIncomeSource(idx)}
-                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"
-                        title="حذف المصدر"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Purpose, Custom Text and Auditor Notes */}
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-0.5">تسمية عمود البند:</label>
+                      <input
+                        type="text"
+                        value={breakdownColumnName}
+                        onChange={(e) => setBreakdownColumnName(e.target.value)}
+                        placeholder="عنصر رأس المال / مصدر الدخل"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-0.5">تسمية عمود المبلغ:</label>
+                      <input
+                        type="text"
+                        value={breakdownAmountName}
+                        onChange={(e) => setBreakdownAmountName(e.target.value)}
+                        placeholder="القيمة المستثمرة / الإيراد السنوي"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-0.5">تسمية عمود الملاحظة / النسبة:</label>
+                      <input
+                        type="text"
+                        value={breakdownNoteName}
+                        onChange={(e) => setBreakdownNoteName(e.target.value)}
+                        placeholder="النسبة / المعادل / البيان"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Rows editor */}
+                  <div className="space-y-2">
+                    {breakdownItems.map((item, idx) => (
+                      <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2 bg-white rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-1 text-slate-400 font-mono text-xs w-6 text-center">
+                          {idx + 1}
+                        </div>
+
+                        <input
+                          type="text"
+                          placeholder="اسم البند (مثال: رأس المال النقدي المدفوع / إيرادات النشاط المهني)"
+                          value={item.source}
+                          onChange={(e) => handleBreakdownItemChange(idx, 'source', e.target.value)}
+                          className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                        />
+
+                        <div className="w-full sm:w-44">
+                          <input
+                            type="number"
+                            placeholder="المبلغ (ج.م)"
+                            value={item.amount || ''}
+                            onChange={(e) => handleBreakdownItemChange(idx, 'amount', e.target.value)}
+                            className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-xs text-emerald-950"
+                          />
+                        </div>
+
+                        <input
+                          type="text"
+                          placeholder="البيان / النسبة (مثال: 60% شهادة بنكية)"
+                          value={item.notes || ''}
+                          onChange={(e) => handleBreakdownItemChange(idx, 'notes', e.target.value)}
+                          className="w-full sm:w-56 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBreakdownItem(idx)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer self-end sm:self-center"
+                          title="حذف البند"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Purpose and Auditor Notes */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">الغرض من إصدار الشهادة</label>
@@ -1102,7 +1720,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   rows={2}
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
                 />
               </div>
 
@@ -1112,7 +1730,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   rows={2}
                   value={auditorNotes}
                   onChange={(e) => setAuditorNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
                 />
               </div>
             </div>
@@ -1141,7 +1759,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs leading-relaxed"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                عند ترك هذا الحقل فارغاً، يتم استخدام الصياغة الرسمية الذكية المعتمدة تلقائياً بناءً على النوع (ذكر / أنثى) وسند الفحص المختار.
+                عند ترك هذا الحقل فارغاً، يتم استخدام الصياغة الرسمية الذكية المعتمدة تلقائياً بناءً على النوع (ذكر / أنثى / شركة) ونموذج الشهادة المختار.
               </p>
             </div>
 
@@ -1153,7 +1771,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   <span>طريقة التوثيق والتحقق الأمني المعتمدة في تذييل الشهادة:</span>
                 </div>
                 <span className="text-[11px] text-emerald-700 font-semibold">
-                  (الخيار 2 مفعل تلقائياً لضمان القراءة الفورية 100% على الورق المطبوع)
+                  (الباركود الخطي Code 128 مفعل تلقائياً لضمان القراءة الفورية 100% على الورق المطبوع)
                 </span>
               </div>
 
@@ -1219,10 +1837,10 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               <button
                 type="button"
                 onClick={handleSaveCertificate}
-                className="px-5 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
               >
                 <FileCheck2 className="w-4 h-4 text-emerald-300" />
-                <span>حفظ وتوثيق الشهادة في السجل العام للمكتب</span>
+                <span>{editingCertId ? 'تحديث وحفظ التعديلات على الشهادة' : 'حفظ وتوثيق الشهادة في السجل العام للمكتب'}</span>
               </button>
             </div>
           </div>
@@ -1240,7 +1858,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   معاينة وطباعة المستند الرسمي المعتمد للشهادة
                 </div>
                 <div className="text-[10px] text-emerald-300">
-                  شهادة معتمدة بالباركود المصرفي (Code 128) والختم الرسمي وهاتف المكتب (01003335360)
+                  شهادة معتمدة بالباركود المصرفي (Code 128) والختم الرسمي وهاتف المكتب ({profile?.phone || '01003335360'})
                 </div>
               </div>
             </div>
@@ -1249,34 +1867,44 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               <CertifiedDocumentExportMenu
                 documentData={{
                   certificateNumber: certNumber,
-                  clientName: beneficiaryName,
-                  beneficiaryTitle,
-                  beneficiaryType,
-                  beneficiaryGender,
-                  nationalId,
-                  jobTitle,
-                  address,
-                  taxCardNo,
-                  commercialRegNo,
-                  activityName,
-                  certificateType: certType,
-                  certifiedAmount,
-                  monthlyNetIncome: monthlyAmount,
-                  periodText,
-                  recipientEntity: recipientOrganization,
-                  purpose,
-                  auditorNotes,
-                  customBodyText,
-                  customPreambleBasis,
-                  issueDate,
+                  clientName: activeBeneficiaryName,
+                  beneficiaryTitle: activeBeneficiaryTitle,
+                  beneficiaryType: activeBeneficiaryType,
+                  beneficiaryGender: activeBeneficiaryGender,
+                  nationalId: activeNationalId,
+                  jobTitle: activeJobTitle,
+                  address: activeAddress,
+                  taxCardNo: activeTaxCardNo,
+                  commercialRegNo: activeCommercialRegNo,
+                  activityName: activeActivityName,
+                  certificateType: activeCertType,
+                  certifiedAmount: activeCertifiedAmount,
+                  monthlyNetIncome: activeMonthlyAmount,
+                  periodText: activePeriodText,
+                  recipientEntity: activeRecipient,
+                  purpose: activePurpose,
+                  auditorNotes: activeAuditorNotes,
+                  customBodyText: activeCustomBodyText,
+                  customPreambleBasis: activeCustomPreambleBasis,
+                  issueDate: activeIssueDate,
                   incomeBreakdown: {
-                    notes: auditorNotes,
+                    notes: activeAuditorNotes,
                   },
                 }}
                 targetElementId="official-certificate-document"
                 profile={profile}
                 buttonLabel="تصدير بجميع الصيغ"
               />
+
+              <button
+                type="button"
+                onClick={() => setWhatsAppCert(activeCertificatePayload)}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+                title="إرسال الشهادة للعميل مباشرة عبر كود الواتساب"
+              >
+                <MessageSquare className="w-4 h-4 text-emerald-200" />
+                <span>إرسال واتساب مباشر</span>
+              </button>
 
               <button
                 type="button"
@@ -1295,7 +1923,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 title="طباعة الشهادة الرسمية فوراً"
               >
                 <Printer className="w-4 h-4 text-emerald-800" />
-                <span>طباعة الشهادة</span>
+                <span>طباعة الشهادة A4</span>
               </button>
             </div>
           </div>
@@ -1305,11 +1933,12 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
           {/* ========================================================================= */}
           <div
             id="official-certificate-document"
-            className="bg-white rounded-xl border-2 border-emerald-900 shadow-lg p-7 sm:p-10 print:p-6 space-y-4 print:space-y-4 text-slate-900 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-2 print:border-emerald-950 print:max-w-full"
+            style={{ breakInside: 'avoid', pageBreakInside: 'avoid', pageBreakAfter: 'avoid', breakAfter: 'avoid' }}
+            className="bg-white rounded-xl border-2 border-emerald-900 shadow-lg p-7 sm:p-9 print:p-5 space-y-4 print:space-y-3.5 text-slate-900 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-2 print:border-emerald-950 print:max-w-full"
           >
             {/* Letterhead Header */}
-            <div className="border-b-2 border-emerald-900 pb-3.5 flex items-center justify-between">
-              <div className="space-y-1 text-right">
+            <div className="border-b-2 border-emerald-900 pb-3 flex items-center justify-between">
+              <div className="space-y-0.5 text-right">
                 <h1 className="text-base sm:text-lg font-black text-slate-900">{profile.firmName}</h1>
                 <div className="text-sm font-bold text-emerald-900">{profile.auditorName}</div>
                 <div className="text-xs text-slate-600 font-semibold">{profile.title}</div>
@@ -1320,15 +1949,15 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               <div className="text-left font-mono text-[11px] text-slate-700 space-y-1 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-200/70">
                 <div>رقم الشهادة: <strong className="text-emerald-950 font-bold">{certNumber}</strong></div>
                 <div>تاريخ الإصدار: <strong>{activeIssueDate}</strong></div>
-                <div>نوع الكيان: <strong>{activeBeneficiaryType === 'NATURAL_PERSON' ? (activeBeneficiaryGender === 'FEMALE' ? 'شخص طبيعي (أنثى)' : 'شخص طبيعي (ذكر)') : 'شخص اعتباري'}</strong></div>
+                <div>نوع الكيان: <strong>{activeBeneficiaryType === 'NATURAL_PERSON' ? (activeBeneficiaryGender === 'FEMALE' ? 'شخص طبيعي (أنثى)' : 'شخص طبيعي (ذكر)') : 'شخص اعتباري (منشأة)'}</strong></div>
               </div>
             </div>
 
             {/* Certificate Title Badge */}
-            <div className="text-center py-1">
-              <div className="inline-block px-6 sm:px-9 py-2.5 rounded-xl bg-emerald-50/90 border-2 border-emerald-800 shadow-2xs">
+            <div className="text-center py-0.5">
+              <div className="inline-block px-6 sm:px-9 py-2 rounded-xl bg-emerald-50/90 border-2 border-emerald-800 shadow-2xs">
                 <h2 className="text-sm sm:text-base font-black text-emerald-950">
-                  {getCertificateHeading(activeCertType, activeBeneficiaryType)}
+                  {activeCustomHeading}
                 </h2>
               </div>
             </div>
@@ -1342,7 +1971,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
             </div>
 
             {/* Body Text */}
-            <div className="space-y-3.5 text-right text-slate-800 leading-6 sm:leading-7 text-xs sm:text-sm">
+            <div className="space-y-3 text-right text-slate-800 leading-6 sm:leading-7 text-xs sm:text-sm">
               {activeCustomBodyText ? (
                 /* USER CUSTOM BODY OVERRIDE */
                 <p className="whitespace-pre-line leading-7 font-normal">
@@ -1356,7 +1985,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     <> - بطاقة الرقم القومي رقم (<strong className="font-mono">{activeNationalId}</strong>)</>
                   )}
                   {activeJobTitle && (
-                    <> - {activeBeneficiaryGender === 'FEMALE' ? 'والمهنة / الوظيفة' : 'والمهنة / الوظيفة'}: <strong>{activeJobTitle}</strong></>
+                    <> - المهنة / الوظيفة: <strong>{activeJobTitle}</strong></>
                   )}
                   {activeAddress && (
                     <> - {activeBeneficiaryGender === 'FEMALE' ? 'المقيمة في' : 'المقيم في'}: <strong>{activeAddress}</strong></>
@@ -1367,7 +1996,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   {activeActivityName && (
                     <> - ونشاط: <strong>{activeActivityName}</strong></>
                   )}
-                  ، و{activeCustomPreambleBasis || 'بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والدخل'}:
+                  ، و{activeCustomPreambleBasis || (activeCertType === 'INVESTED_CAPITAL' ? 'بناءً على الفحص المكتبي والمستندي للوثائق والسجلات وشهادات الإيداع البنكية المؤيدة لعناصر رأس المال وحجم الأعمال' : 'بناءً على الفحص المكتبي والمستندي للوثائق والمستندات المقدمة المؤيدة للإيرادات والدخل')}:
                 </p>
               ) : (
                 /* LEGAL ENTITY BODY TEMPLATE */
@@ -1382,20 +2011,18 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   {activeAddress && (
                     <> - الكائن مقرها في: <strong>{activeAddress}</strong></>
                   )}
-                  ، وبصفتنا المحاسب القانوني ومراقب الحسابات للنشاط المذكور أعلاه، و{activeCustomPreambleBasis || 'بناءً على المراجعة والفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، وموازين المراجعة، والقوائم المالية والإقرارات الضريبية المعتمدة'}:
+                  {activeActivityName && (
+                    <> - ونشاط: <strong>{activeActivityName}</strong></>
+                  )}
+                  ، وبصفتنا المحاسب القانوني ومراقب الحسابات للنشاط المذكور أعلاه، و{activeCustomPreambleBasis || (activeCertType === 'INVESTED_CAPITAL' ? 'بناءً على المراجعة والفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، وشهادات الإيداع البنكية لرأس المال، ومحاضر الجمعيات العمومية' : 'بناءً على المراجعة والفحص المكتبي والمستندي للسجلات والدفاتر المحاسبية المنتظمة، والشهادات البنكية، والقوائم المالية المعتمدة')}:
                 </p>
               )}
 
-              {/* Highlighted Certified Amount & Income Statement Box */}
-              <div className="p-4 sm:p-5 rounded-xl bg-slate-50/90 border-2 border-emerald-800/40 space-y-2.5">
+              {/* Highlighted Certified Amount Box */}
+              <div className="p-4 sm:p-4.5 rounded-xl bg-slate-50/90 border-2 border-emerald-800/40 space-y-2.5">
                 <div className="font-bold text-slate-900 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                   <span className="text-slate-900 font-black">
-                    نشهد ونقر نحن المحاسب القانوني بأن{' '}
-                    {activeCertType === 'INVESTED_CAPITAL'
-                      ? 'رأس المال المستثمر وحجم الأعمال'
-                      : activeCertType === 'FINANCIAL_SOLVENCY'
-                      ? 'صافي الملاءة المالية والمركز المالي'
-                      : 'صافي الدخل السنوي المحقق'} هو:
+                    نشهد ونقر نحن المحاسب القانوني ومراقب الحسابات {activeCustomDeclaration}
                   </span>
                   {activeMonthlyAmount && activeMonthlyAmount > 0 && activeCertType !== 'INVESTED_CAPITAL' && (
                     <span className="text-xs text-emerald-950 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-300 font-black self-start sm:self-auto font-mono">
@@ -1408,59 +2035,94 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   {formatEgyptianCurrency(activeCertifiedAmount)}
                 </div>
 
-                {/* Correct Arabic Tafqeet without repetitive phrasing */}
+                {/* Correct Arabic Tafqeet */}
                 <div className="font-bold text-slate-800 bg-white p-2.5 rounded-lg border border-slate-300 text-xs sm:text-sm">
-                  فقط وقدره {numberToArabicWords(activeCertifiedAmount)} لا غير.
+                  {cleanArabicTafqeet(numberToArabicWords(activeCertifiedAmount))}
                 </div>
 
                 <div className="text-xs text-slate-700 font-semibold">
                   وذلك <strong>{activePeriodText}</strong>.
                 </div>
 
-                {/* Formal Accounting Breakdown Table */}
-                {activeIncomeBreakdown && activeIncomeBreakdown.length > 0 && (
+                {/* Invested Capital Financial Metrics Cards (if enabled and present) */}
+                {activeCertType === 'INVESTED_CAPITAL' && activeShowMetrics && (
+                  <div className="pt-2 border-t border-slate-200/90 grid grid-cols-2 sm:grid-cols-4 gap-2 text-right">
+                    {activePaidCapital > 0 && (
+                      <div className="bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="text-[10px] text-slate-500 font-bold">رأس المال المدفوع:</div>
+                        <div className="text-xs font-mono font-black text-emerald-950">{formatEgyptianCurrency(activePaidCapital)}</div>
+                      </div>
+                    )}
+
+                    {activeAnnualTurnover > 0 && (
+                      <div className="bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="text-[10px] text-slate-500 font-bold">حجم الأعمال السنوي:</div>
+                        <div className="text-xs font-mono font-black text-slate-900">{formatEgyptianCurrency(activeAnnualTurnover)}</div>
+                      </div>
+                    )}
+
+                    {activeFixedAssets > 0 && (
+                      <div className="bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="text-[10px] text-slate-500 font-bold">صافي الأصول الثابتة:</div>
+                        <div className="text-xs font-mono font-bold text-slate-800">{formatEgyptianCurrency(activeFixedAssets)}</div>
+                      </div>
+                    )}
+
+                    {activeEquity > 0 && (
+                      <div className="bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="text-[10px] text-slate-500 font-bold">صافي حقوق الملكية:</div>
+                        <div className="text-xs font-mono font-bold text-slate-800">{formatEgyptianCurrency(activeEquity)}</div>
+                      </div>
+                    )}
+
+                    {activeDepositBank && (
+                      <div className="bg-white p-2 rounded-lg border border-slate-200 col-span-2 sm:col-span-4 text-[10px] text-slate-700">
+                        <strong>البنك المودع به رأس المال:</strong> {activeDepositBank} {activeDepositAccount ? ` - ${activeDepositAccount}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Formal Flexible Breakdown Table */}
+                {activeShowBreakdown && activeBreakdownItems && activeBreakdownItems.length > 0 && (
                   <div className="pt-3 border-t border-slate-200/90">
                     <div className="text-xs font-bold text-slate-800 mb-2 flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>جدول بيان تفصيلي بمصادر الدخل المحققة والمؤيدة مستندياً:</span>
+                      <span>{activeBreakdownTitle}</span>
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white">
                       <table className="w-full text-right border-collapse text-[11px]">
                         <thead>
                           <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
                             <th className="py-2 px-2.5 text-center w-8">م</th>
-                            <th className="py-2 px-2.5">مصدر الدخل والنشاط المؤيد مستندياً</th>
-                            <th className="py-2 px-2.5 text-center font-mono w-32">الإيراد السنوي</th>
-                            <th className="py-2 px-2.5 text-center font-mono w-32">المعادل الشهري</th>
-                            <th className="py-2 px-2.5 text-center font-mono w-24">نسبة المساهمة</th>
+                            <th className="py-2 px-2.5">{activeColumnName}</th>
+                            <th className="py-2 px-2.5 text-center font-mono w-36">{activeAmountName}</th>
+                            <th className="py-2 px-2.5 text-center font-mono w-40">{activeNoteName}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                          {activeIncomeBreakdown.map((item, idx) => {
-                            const annual = Number(item.amount) || 0;
-                            const monthly = annual / 12;
-                            const percentage = activeCertifiedAmount > 0 ? (annual / activeCertifiedAmount) * 100 : 0;
+                          {activeBreakdownItems.map((item, idx) => {
+                            const val = Number(item.amount) || 0;
+                            const percentage = activeCertifiedAmount > 0 ? (val / activeCertifiedAmount) * 100 : 0;
+                            const noteText = item.notes || (percentage > 0 ? `${percentage.toFixed(1)}% من الإجمالي` : '');
+
                             return (
                               <tr key={idx} className="hover:bg-slate-50/80">
                                 <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-600">{idx + 1}</td>
                                 <td className="py-2 px-2.5 font-medium text-slate-800">{item.source}</td>
-                                <td className="py-2 px-2.5 text-center font-mono font-bold text-emerald-900">{formatEgyptianCurrency(annual)}</td>
-                                <td className="py-2 px-2.5 text-center font-mono text-slate-700">{formatEgyptianCurrency(monthly)}</td>
-                                <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-700">{percentage.toFixed(1)}%</td>
+                                <td className="py-2 px-2.5 text-center font-mono font-bold text-emerald-900">{formatEgyptianCurrency(val)}</td>
+                                <td className="py-2 px-2.5 text-center font-mono text-slate-700 text-[10px]">{noteText}</td>
                               </tr>
                             );
                           })}
                           <tr className="bg-emerald-50/70 font-bold border-t-2 border-slate-300 text-slate-900">
                             <td colSpan={2} className="py-2 px-2.5 text-right font-black">
-                              الإجمالي السنوي المحقق والمعتمد:
+                              الإجمالي المعتمد والمطابق:
                             </td>
                             <td className="py-2 px-2.5 text-center font-mono font-black text-emerald-950 text-xs">
                               {formatEgyptianCurrency(activeCertifiedAmount)}
                             </td>
-                            <td className="py-2 px-2.5 text-center font-mono font-black text-slate-900 text-xs">
-                              {formatEgyptianCurrency(activeMonthlyAmount)}
-                            </td>
-                            <td className="py-2 px-2.5 text-center font-mono font-black text-slate-900 text-xs">
+                            <td className="py-2 px-2.5 text-center font-mono font-black text-emerald-900 text-xs">
                               100%
                             </td>
                           </tr>
@@ -1482,7 +2144,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
             </div>
 
             {/* Official Closing, Sign-off, Barcode & Stamp Footer */}
-            <div className="pt-4.5 print:pt-4 border-t-2 border-emerald-900 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="pt-4 print:pt-3 border-t-2 border-emerald-900 flex flex-col sm:flex-row items-center justify-between gap-4">
               {/* Auditor Details */}
               <div className="space-y-0.5 text-center sm:text-right">
                 <div className="text-xs text-slate-500 font-bold">المحاسب القانوني ومراقب الحسابات:</div>
@@ -1503,7 +2165,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   <div
                     onClick={() => {
                       const verificationPayload: VerificationPayloadData = {
-                        docType: 'شهادة إثبات دخل وملاءة مالية معتمدة',
+                        docType: activeCustomHeading,
                         docNumber: certNumber,
                         clientName: `${activeBeneficiaryTitle} ${activeBeneficiaryName}`.trim(),
                         nationalId: activeNationalId || undefined,
@@ -1514,21 +2176,21 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                         licenseNumber: profile.licenseNumber || 'س.م.م 43122',
                         date: activeIssueDate,
                         recipient: activeRecipient,
-                        purpose: purpose,
+                        purpose: activePurpose,
                         firmName: profile.firmName,
                       };
                       setVerifyModalData(verificationPayload);
                     }}
-                    className="cursor-pointer group text-center bg-white p-2 rounded-lg border border-slate-300 shadow-2xs hover:border-emerald-600 transition-all"
+                    data-barcode-container="true"
+                    className="barcode-print-container cursor-pointer group text-center bg-white p-2 rounded-lg border border-slate-300 shadow-2xs hover:border-emerald-600 transition-all inline-block"
                     title="الباركود الخطي المصرفي المعتمد (Code 128) - انقر لمعاينة التحقق الأمني"
                   >
                     <div
-                      className="overflow-hidden flex items-center justify-center"
                       dangerouslySetInnerHTML={{
-                        __html: generateCode128Svg(certNumber, { height: 38, moduleWidth: 1.5, showText: true }),
+                        __html: generateCode128Svg(certNumber, { height: 42, moduleWidth: 1.8, showText: true }),
                       }}
                     />
-                    <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1">
+                    <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1 no-print">
                       <span>كود التحقق: {certNumber}</span>
                       <span className="text-emerald-800 font-bold group-hover:underline">🔍 تحقق</span>
                     </div>
@@ -1538,7 +2200,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 {/* QR Code Verification if enabled */}
                 {(verificationBarcodeType === 'QR_CODE' || verificationBarcodeType === 'DUAL') && (() => {
                   const verificationPayload: VerificationPayloadData = {
-                    docType: 'شهادة إثبات دخل وملاءة مالية معتمدة',
+                    docType: activeCustomHeading,
                     docNumber: certNumber,
                     clientName: `${activeBeneficiaryTitle} ${activeBeneficiaryName}`.trim(),
                     nationalId: activeNationalId || undefined,
@@ -1549,7 +2211,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     licenseNumber: profile.licenseNumber || 'س.م.م 43122',
                     date: activeIssueDate,
                     recipient: activeRecipient,
-                    purpose: purpose,
+                    purpose: activePurpose,
                     firmName: profile.firmName,
                   };
                   const qrText = buildVerificationQrText(verificationPayload);
@@ -1557,27 +2219,28 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   return (
                     <div
                       onClick={() => setVerifyModalData(verificationPayload)}
-                      className="cursor-pointer group relative transition-transform hover:scale-105"
+                      data-qr-container="true"
+                      className="qr-print-container cursor-pointer group relative transition-transform hover:scale-105 inline-block text-center bg-white p-1 rounded-lg border border-slate-200"
                       title="رمز QR للتحقق السريع عبر كاميرا الهاتف"
                     >
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: generateQrCodeSvg(qrText, 76),
+                          __html: generateQrCodeSvg(qrText, 96),
                         }}
                       />
-                      <span className="block text-[8px] font-bold text-center text-emerald-800 mt-0.5 group-hover:underline">
-                        🔍 QR تحقق
+                      <span className="block text-[8.5px] font-bold text-center text-emerald-900 mt-0.5 group-hover:underline">
+                        رمز التحقق الرقمي
                       </span>
                     </div>
                   );
                 })()}
 
                 {/* Official Certified Stamp & Signature Space */}
-                <div className="w-24 h-24 rounded-full border-2 border-dashed border-emerald-800 flex flex-col items-center justify-center text-[8.5px] font-bold text-emerald-950 p-1 text-center shadow-2xs bg-emerald-50/20">
-                  <span>مكتب المحاسب القانوني</span>
-                  <span className="text-emerald-800 font-black text-[10px]">{profile.auditorName}</span>
-                  <span className="font-mono text-[8px]">{profile.licenseNumber?.includes('س.م.م') ? profile.licenseNumber.split('-')[0].trim() : 'س.م.م 43122'}</span>
-                  <span className="text-[8.5px] text-emerald-700 font-bold">ختم الاعتماد الرسمي</span>
+                <div className="w-26 h-26 rounded-full border-2 border-dashed border-emerald-800 flex flex-col items-center justify-center text-[9px] font-bold text-emerald-950 p-1.5 text-center shadow-2xs bg-emerald-50/25 leading-tight space-y-0.5">
+                  <div className="text-[8px] text-slate-700">مكتب المحاسب القانوني</div>
+                  <div className="text-emerald-900 font-black text-[10px] px-1">{profile.auditorName}</div>
+                  <div className="font-mono text-[8.5px] text-slate-800">{profile.licenseNumber?.includes('س.م.م') ? profile.licenseNumber.split('-')[0].trim() : 'س.م.م 43122'}</div>
+                  <div className="text-[8px] text-emerald-800 font-bold border-t border-emerald-300/80 pt-0.5 mt-0.5">ختم الاعتماد الرسمي</div>
                 </div>
               </div>
             </div>
@@ -1598,11 +2261,37 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
         isOpen={isDirectPreviewOpen}
         onClose={() => setIsDirectPreviewOpen(false)}
         modelType="CERTIFICATES"
-        title="الشهادة المهنية المعتمدة"
+        title={activeCustomHeading || 'الشهادة المهنية المعتمدة'}
+        targetElementId="official-certificate-document"
         customDocument={activeCertificatePayload}
         initialPageSize="A4"
         initialOrientation="portrait"
       />
+
+      {/* Direct In-App WhatsApp Procedure Modal */}
+      {whatsAppCert && (
+        <DirectWhatsAppProcedureModal
+          isOpen={Boolean(whatsAppCert)}
+          onClose={() => setWhatsAppCert(null)}
+          initialContext={{
+            procedureType:
+              whatsAppCert.certificateType === 'INVESTED_CAPITAL'
+                ? 'CERTIFICATE_CAPITAL'
+                : whatsAppCert.certificateType === 'SOLVENCY_FINANCIAL_STANDING'
+                ? 'CERTIFICATE_SOLVENCY'
+                : 'CERTIFICATE_INCOME',
+            title: whatsAppCert.customCertificateHeading || whatsAppCert.purpose || 'شهادة مهنية معتمدة',
+            clientName: whatsAppCert.clientName,
+            referenceCode: whatsAppCert.certificateNumber,
+            amount: whatsAppCert.certifiedAmount || whatsAppCert.investedCapitalAmount || 0,
+            periodOrDate: whatsAppCert.issueDate || whatsAppCert.date,
+            recipientEntity: whatsAppCert.recipientEntity || 'إلى من يهمه الأمر',
+            customNotes: whatsAppCert.purpose ? `الغرض: ${whatsAppCert.purpose}` : '',
+            verificationCode: whatsAppCert.verificationCode || `VER-${whatsAppCert.certificateNumber}`,
+          }}
+          state={state}
+        />
+      )}
     </div>
   );
 };

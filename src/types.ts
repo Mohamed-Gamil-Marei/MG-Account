@@ -394,13 +394,15 @@ export type CertificateTemplateType =
   | 'EMPLOYEE_ADDITIONAL_INC' // إثبات دخول إضافية واستثمارات للأفراد
   | 'INVESTED_CAPITAL'        // رأس مال مستثمر وحجم أعمال
   | 'FINANCIAL_SOLVENCY'      // ملاءة مالية وثروة
-  | 'AUDIT_COMPLIANCE'        // فحص ومراجعة حسابات
-  | 'REAL_ESTATE_INCOME';     // إثبات إيرادات عقارية واستثمارية
+  | 'AUDIT_COMPLIANCE'        // فحص ومراجعة حسابات وقوائم مالية
+  | 'REAL_ESTATE_INCOME'      // إثبات إيرادات عقارية واستثمارية
+  | 'CUSTOM_CERTIFICATE';     // شهادة مهنية عامة مخصصة الصياغة
 
 export interface ProfessionalCertificate {
   id: string;
   certificateNumber: string; // e.g. "CERT-2026-089"
   certificateType: CertificateTemplateType;
+  customCertificateHeading?: string; // عنوان مخصص للشهادة (بدل العنوان الافتراضي)
   beneficiaryType: CertificateBeneficiaryType; // نوع المستفيد (شخص طبيعي أو اعتباري)
   issueDate: string;
   clientId?: string;
@@ -410,6 +412,7 @@ export interface ProfessionalCertificate {
   customIntroText?: string; // صيغة مخصصة للديباجة ومقدمة الشهادة
   customBodyText?: string; // صيغة مخصصة لمتن الشهادة
   customPreambleBasis?: string; // صيغة الفحص والاستناد المخصصة
+  customDeclarationPhrase?: string; // عبارة الإقرار المخصصة (نشهد ونقر بأن...)
 
   nationalId?: string; // الرقم القومي (14 رقم) للأشخاص الطبيعيين
   jobTitle?: string; // المهنة / الوظيفة الحالية للأشخاص الطبيعيين
@@ -420,16 +423,42 @@ export interface ProfessionalCertificate {
   recipientEntity: string; // e.g. "بنك مصر - قطاع التمويل العقاري والائتمان", "سفارة...", "الهيئة العامة للاستثمار"
   purpose: string;
   periodText: string; // e.g. "عن السنة المالية المنتهية في 31 ديسمبر 2025" أو "عن متوسط الدخل الشهري لعام 2025"
-  certifiedAmount: number; // المبلغ المعتمد
+  certifiedAmount: number; // المبلغ المعتمد الرئيسي
   monthlyAmount?: number; // المعادل الشهري إن وجد
-  incomeBreakdown?: { source: string; amount: number }[]; // تفصيل مصادر الدخل (مرتب، استشارات، أرباح أسهم، إيجارات)
-  // Key financial parameters
-  monthlyNetIncome?: number;
-  annualNetIncome?: number;
-  investedCapitalAmount?: number;
-  workingCapitalAmount?: number;
-  currentRatio?: number;
-  solvencyNetWorth?: number;
+  annualNetIncome?: number; // صافي الدخل السنوي
+  monthlyNetIncome?: number; // صافي الدخل الشهري
+  
+  // Invested Capital & Business Size specifics
+  investedCapitalAmount?: number; // إجمالي رأس المال المستثمر
+  paidCapitalAmount?: number; // رأس المال المصدر والمدفوع
+  authorizedCapitalAmount?: number; // رأس المال المرخص به
+  annualTurnoverAmount?: number; // حجم الأعمال / الإيرادات السنوية
+  fixedAssetsValue?: number; // صافي الأصول الثابتة المستثمرة
+  workingCapitalAmount?: number; // رأس المال العامل
+  bankDepositBank?: string; // اسم البنك المودع به رأس المال
+  bankDepositAccount?: string; // رقم الحساب أو الشهادة البنكية
+  shareholdersEquity?: number; // صافي حقوق الملكية
+
+  // Financial Solvency & Audit Compliance specifics
+  solvencyNetWorth?: number; // صافي الثروة / الملاءة
+  totalAssets?: number; // إجمالي الأصول
+  totalLiabilities?: number; // إجمالي الالتزامات
+  currentRatio?: number; // نسبة التداول
+  netProfitAmount?: number; // صافي الربح السنوي
+
+  // Table options & Breakdown
+  showBreakdownTable?: boolean; // إظهار أو إخفاء جدول التحليل والتفصيل
+  breakdownTableTitle?: string; // عنوان جدول التحليل (مثال: بيان عناصر رأس المال المستثمر)
+  breakdownColumnName?: string; // تسمية عمود البند (مثال: عنصر رأس المال / مصدر الدخل)
+  breakdownAmountName?: string; // تسمية عمود المبلغ (مثال: القيمة المستثمرة / الإيراد السنوي)
+  breakdownNoteName?: string; // تسمية عمود البيان أو النسبة
+  incomeBreakdown?: { source: string; amount: number; monthlyEquivalent?: number; notes?: string }[]; // تفصيل عناصر الدخل أو رأس المال
+
+  // Display toggles
+  showFinancialMetricsCards?: boolean; // إظهار كروت المؤشرات الفرعية في الشهادة
+  showTaxId?: boolean; // إظهار البطاقة الضريبية
+  showCommercialReg?: boolean; // إظهار السجل التجاري
+
   auditorNotes: string;
   qrPayload: string;
   securityHash: string;

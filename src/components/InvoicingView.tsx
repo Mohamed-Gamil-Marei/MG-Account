@@ -28,6 +28,7 @@ import {
   ChevronDown,
   Sparkles,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react';
 import { Invoice, InvoiceItem, EtaReceiverType, EtaDocumentType } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -47,6 +48,7 @@ import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { ActionMenu } from './common/ActionMenu';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { PostingEngineService } from '../services/PostingEngineService';
+import { DirectWhatsAppProcedureModal } from './common/DirectWhatsAppProcedureModal';
 
 interface InvoicingViewProps {
   state: DatabaseState;
@@ -62,6 +64,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
   const [isEtaSettingsOpen, setIsEtaSettingsOpen] = useState(false);
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
   const [etaSubmissionInvoice, setEtaSubmissionInvoice] = useState<Invoice | null>(null);
+  const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null);
   const [activeExportDropdownId, setActiveExportDropdownId] = useState<string | null>(null);
   const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
 
@@ -1002,9 +1005,15 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                               onClick: () => setSelectedInvoice(inv),
                             },
                             {
+                              label: 'إرسال إشعار واتساب مباشر',
+                              icon: MessageSquare,
+                              variant: 'success',
+                              onClick: () => setWhatsAppInvoice(inv),
+                            },
+                            {
                               label: 'إرسال لمصلحة الضرائب (ETA)',
                               preset: 'send',
-                              variant: 'success',
+                              variant: 'secondary',
                               onClick: () => setEtaSubmissionInvoice(inv),
                             },
                             {
@@ -1178,8 +1187,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                   )}
                 </div>
                 <div
+                  data-qr-container="true"
+                  className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
                   dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(selectedInvoice.qrPayload || 'VALID_INVOICE', 75),
+                    __html: generateQrCodeSvg(selectedInvoice.qrPayload || `INV|${selectedInvoice.invoiceNumber}|${selectedInvoice.date}|${selectedInvoice.grandTotal}`, 100),
                   }}
                 />
               </div>
@@ -1246,6 +1257,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                 >
                   <Printer className="w-4 h-4" />
                   <span>طباعة رسمية</span>
+                </button>
+                <button
+                  onClick={() => setWhatsAppInvoice(selectedInvoice)}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="إرسال الفاتورة عبر كود الواتساب المباشر"
+                >
+                  <MessageSquare className="w-4 h-4 text-emerald-200" />
+                  <span>إرسال واتساب مباشر</span>
                 </button>
                 <button
                   onClick={() => setSelectedInvoice(null)}
@@ -1730,6 +1749,25 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         description={`يرجى إدخال الرقم السري لتعديل الفاتورة رقم [${invoiceToEdit?.invoiceNumber || ''}]`}
         actionType="EDIT_RECORD"
       />
+
+      {/* Direct In-App WhatsApp Procedure Modal */}
+      {whatsAppInvoice && (
+        <DirectWhatsAppProcedureModal
+          isOpen={Boolean(whatsAppInvoice)}
+          onClose={() => setWhatsAppInvoice(null)}
+          initialContext={{
+            procedureType: whatsAppInvoice.isReceipt ? 'TREASURY_RECEIPT' : 'INVOICE_CLAIM',
+            title: whatsAppInvoice.isReceipt ? 'إيصال استلام نقدية' : `فاتورة إلكترونية #${whatsAppInvoice.invoiceNumber}`,
+            clientName: whatsAppInvoice.receiverName,
+            referenceCode: whatsAppInvoice.invoiceNumber,
+            amount: whatsAppInvoice.totalAmount,
+            periodOrDate: whatsAppInvoice.dateTimeIssued?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            customNotes: whatsAppInvoice.items?.map((it) => `${it.description} (${formatEgyptianCurrency(it.total)})`).join('، '),
+          }}
+          state={state}
+        />
+      )}
     </UnifiedScreenCard>
   );
 };

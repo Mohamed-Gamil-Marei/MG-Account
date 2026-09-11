@@ -38,6 +38,8 @@ import {
   LogOut,
   Bot,
   Play,
+  Users,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { db, DatabaseState } from '../../db/localDatabase';
 import { ClientArchiveRecord } from '../../types';
@@ -52,10 +54,13 @@ import {
   WhatsAppApiSessionStatus,
 } from '../../services/whatsappApiService';
 import { WhatsAppLiveChatPanel } from './WhatsAppLiveChatPanel';
+import { WhatsAppTemplatesManager } from './WhatsAppTemplatesManager';
+import { WhatsAppClientPhonesDirectory } from './WhatsAppClientPhonesDirectory';
 
 interface WhatsAppBusinessApiViewProps {
   state: DatabaseState;
   initialClientId?: string;
+  initialTab?: string;
   onNavigateToArchive?: (clientId?: string) => void;
 }
 
@@ -153,9 +158,25 @@ const QUOTATION_PRESETS: QuotationPreset[] = [
 export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = ({
   state,
   initialClientId,
+  initialTab,
   onNavigateToArchive,
 }) => {
-  const [activeTab, setActiveTab] = useState<'FREE_GATEWAY' | 'LIVE_CHAT' | 'QUOTATIONS' | 'CERTIFIED_REPORTS' | 'API_CONFIG' | 'LOGS'>('LIVE_CHAT');
+  const resolveInitialTab = (tab?: string) => {
+    if (tab === 'TEMPLATES') return 'TEMPLATES';
+    if (tab === 'CLIENT_PHONES') return 'CLIENT_PHONES';
+    if (tab === 'QUOTATIONS') return 'QUOTATIONS';
+    if (tab === 'CERTIFIED_REPORTS') return 'CERTIFIED_REPORTS';
+    if (tab === 'GATEWAY_SETTINGS' || tab === 'FREE_GATEWAY' || tab === 'API_CONFIG' || tab === 'LOGS') return 'GATEWAY_SETTINGS';
+    return 'LIVE_CHAT';
+  };
+
+  const [activeTab, setActiveTab] = useState<
+    'LIVE_CHAT' | 'QUOTATIONS' | 'CERTIFIED_REPORTS' | 'TEMPLATES' | 'CLIENT_PHONES' | 'GATEWAY_SETTINGS' | 'FREE_GATEWAY' | 'API_CONFIG' | 'LOGS'
+  >(resolveInitialTab(initialTab));
+
+  const [gatewaySubTab, setGatewaySubTab] = useState<'QR_GATEWAY' | 'META_API' | 'LOGS'>(
+    initialTab === 'API_CONFIG' ? 'META_API' : initialTab === 'LOGS' ? 'LOGS' : 'QR_GATEWAY'
+  );
 
   // Client Selection
   const [selectedClientId, setSelectedClientId] = useState<string>(
@@ -273,19 +294,25 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
     loadServerData();
   }, []);
 
-  // Poll session status automatically when Free Gateway tab is active
+  // Polite session status check: only when Gateway settings tab is active and not connected, every 20s, paused when hidden
   useEffect(() => {
     let interval: any = null;
-    if (activeTab === 'FREE_GATEWAY') {
+    const isGatewayActive = activeTab === 'GATEWAY_SETTINGS' || activeTab === 'FREE_GATEWAY';
+    if (isGatewayActive && sessionStatus?.status !== 'CONNECTED') {
       interval = setInterval(async () => {
-        const sess = await WhatsAppApiService.getSessionStatus();
-        if (sess) setSessionStatus(sess);
-      }, 3000);
+        if (typeof document !== 'undefined' && document.hidden) return;
+        try {
+          const sess = await WhatsAppApiService.getSessionStatus();
+          if (sess) setSessionStatus(sess);
+        } catch {
+          // quiet
+        }
+      }, 20000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [activeTab]);
+  }, [activeTab, sessionStatus?.status]);
 
   const loadServerData = async () => {
     try {
@@ -601,37 +628,36 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
 
   return (
     <div className="space-y-4">
-      {/* Top Banner & Quick Stats */}
-      <div className="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 rounded-3xl p-5 text-white border border-emerald-900/60 shadow-md">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="p-2 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-                <Smartphone className="w-5 h-5" />
-              </span>
-              <h2 className="text-lg font-black text-white">بوابة ربط WhatsApp Business API المباشرة</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950 flex items-center gap-1 shadow-xs">
-                <Zap className="w-3 h-3" />
-                <span>إرسال مباشر بدون تطبيقات خارجية</span>
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-emerald-300 border border-white/15">
-                {serverConfig.hasToken ? 'متصل بـ Meta Cloud API الرسمي' : 'خادم الإرسال والردود السحابي نشط'}
-              </span>
+      {/* Top Banner & Calm Header */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+              <Smartphone className="w-5 h-5" />
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
-              واجهة برمجية متكاملة تسمح بإرسال عروض الأسعار والأتعاب، وتقارير المراجعة والقوائم المالية المعتمدة برمز QR
-              مباشرة من النظام إلى هواتف العملاء عبر خوادم WhatsApp Business دون الحاجة لفتح برامج خارجية أو متصفحات وسيطة.
-            </p>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  مركز المراسلات وواتساب الأعمال المعتمد
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300">
+                  {sessionStatus?.status === 'CONNECTED' ? 'متصل بجلسة نشطة' : 'جاهز للإرسال المباشر'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                إرسال وتوثيق عروض الأسعار، التقارير المعتمدة، التذكيرات الضريبية، ومحادثات العملاء الحية.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={loadServerData}
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/15 flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer"
               title="تحديث حالة الاتصال وسجل الإرسال"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
               <span>تحديث الحالة</span>
             </button>
           </div>
@@ -640,20 +666,20 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
         {/* Global Feedback Banner */}
         {sendAlert && (
           <div
-            className={`mt-4 p-3.5 rounded-2xl border flex items-start gap-3 text-xs animate-in fade-in slide-in-from-top-2 ${
+            className={`mt-3 p-3 rounded-xl border flex items-start gap-2.5 text-xs transition-all ${
               sendAlert.type === 'SUCCESS'
-                ? 'bg-emerald-950/90 border-emerald-500/80 text-emerald-100 shadow-md'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
                 : sendAlert.type === 'ERROR'
-                ? 'bg-red-950/90 border-red-500/80 text-red-100 shadow-md'
-                : 'bg-blue-950/90 border-blue-500/80 text-blue-100'
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+                : 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100'
             }`}
           >
             {sendAlert.type === 'SUCCESS' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             ) : sendAlert.type === 'ERROR' ? (
-              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             ) : (
-              <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             )}
             <div className="min-w-0 flex-1">
               <p className="font-bold">{sendAlert.message}</p>
@@ -661,7 +687,7 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
             </div>
             <button
               onClick={() => setSendAlert(null)}
-              className="text-white/60 hover:text-white text-xs px-2 py-0.5 rounded cursor-pointer"
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs px-2 py-0.5 rounded cursor-pointer"
             >
               ✕
             </button>
@@ -669,180 +695,213 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
         )}
 
         {/* Sub Navigation Bar */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 pt-4 border-t border-emerald-900/60 mt-4">
-          <button
-            type="button"
-            onClick={() => setActiveTab('FREE_GATEWAY')}
-            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
-              activeTab === 'FREE_GATEWAY'
-                ? 'bg-white text-slate-900 shadow-md font-bold'
-                : 'bg-white/10 text-emerald-100 hover:bg-white/15'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
-              <div className="min-w-0">
-                <span className="text-xs font-bold block truncate">1. ربط الواتساب</span>
-                <span className="text-[10px] opacity-75 font-normal truncate block">كود QR مجاني</span>
-              </div>
-            </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold shrink-0">
-              {sessionStatus?.status === 'CONNECTED' ? 'متصل ✅' : 'QR'}
-            </span>
-          </button>
-
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 pt-3 border-t border-slate-200 dark:border-slate-800 mt-3">
           <button
             type="button"
             onClick={() => setActiveTab('LIVE_CHAT')}
-            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
+            className={`p-2.5 rounded-xl text-right transition-all flex items-center justify-between cursor-pointer border ${
               activeTab === 'LIVE_CHAT'
-                ? 'bg-white text-slate-900 shadow-md font-bold'
-                : 'bg-white/10 text-emerald-100 hover:bg-white/15 ring-1 ring-emerald-400/30'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-bold'
+                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
             }`}
           >
             <div className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-emerald-600 shrink-0" />
               <div className="min-w-0">
-                <span className="text-xs font-bold block truncate">2. شات وردود العملاء</span>
-                <span className="text-[10px] opacity-75 font-normal truncate block">محادثات وردود حية</span>
+                <span className="text-xs block truncate">1. شات ومحادثات العملاء</span>
+                <span className="text-[10px] text-slate-400 font-normal truncate block">ردود وتواصل حي</span>
               </div>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500 text-white font-mono font-bold shrink-0 animate-pulse">
-              حي 💬
-            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('QUOTATIONS')}
-            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
+            className={`p-2.5 rounded-xl text-right transition-all flex items-center justify-between cursor-pointer border ${
               activeTab === 'QUOTATIONS'
-                ? 'bg-white text-slate-900 shadow-md font-bold'
-                : 'bg-white/10 text-emerald-100 hover:bg-white/15'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-bold'
+                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
             }`}
           >
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
               <div className="min-w-0">
-                <span className="text-xs font-bold block truncate">3. عروض الأسعار</span>
-                <span className="text-[10px] opacity-75 font-normal truncate block">تسعير الإجراءات</span>
+                <span className="text-xs block truncate">2. عروض الأسعار</span>
+                <span className="text-[10px] text-slate-400 font-normal truncate block">تسعير الإجراءات</span>
               </div>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold shrink-0">
-              عرض
-            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('CERTIFIED_REPORTS')}
-            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
+            className={`p-2.5 rounded-xl text-right transition-all flex items-center justify-between cursor-pointer border ${
               activeTab === 'CERTIFIED_REPORTS'
-                ? 'bg-white text-slate-900 shadow-md font-bold'
-                : 'bg-white/10 text-emerald-100 hover:bg-white/15'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-bold'
+                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
             }`}
           >
             <div className="flex items-center gap-2">
               <Award className="w-4 h-4 text-blue-600 shrink-0" />
               <div className="min-w-0">
-                <span className="text-xs font-bold block truncate">4. التقارير المعتمدة</span>
-                <span className="text-[10px] opacity-75 font-normal truncate block">قوائم وشهادات QR</span>
+                <span className="text-xs block truncate">3. التقارير والقوائم</span>
+                <span className="text-[10px] text-slate-400 font-normal truncate block">اعتماد وباركود QR</span>
               </div>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-mono font-bold shrink-0">
-              QR
-            </span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('LOGS')}
-            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
-              activeTab === 'LOGS'
-                ? 'bg-white text-slate-900 shadow-md font-bold'
-                : 'bg-white/10 text-emerald-100 hover:bg-white/15'
+            onClick={() => setActiveTab('TEMPLATES')}
+            className={`p-2.5 rounded-xl text-right transition-all flex items-center justify-between cursor-pointer border ${
+              activeTab === 'TEMPLATES'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-bold'
+                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
             }`}
           >
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-purple-600 shrink-0" />
+              <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
               <div className="min-w-0">
-                <span className="text-xs font-bold block truncate">5. سجل الرسائل</span>
-                <span className="text-[10px] opacity-75 font-normal truncate block">حالة التسليم</span>
+                <span className="text-xs block truncate">4. قوالب الرسائل</span>
+                <span className="text-[10px] text-slate-400 font-normal truncate block">نصوص ضريبية ومالية</span>
               </div>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-mono font-bold shrink-0">
-              {logs.length}
-            </span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('API_CONFIG')}
-            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
-              activeTab === 'API_CONFIG'
-                ? 'bg-white text-slate-900 shadow-md font-bold'
-                : 'bg-white/10 text-emerald-100 hover:bg-white/15'
+            onClick={() => setActiveTab('CLIENT_PHONES')}
+            className={`p-2.5 rounded-xl text-right transition-all flex items-center justify-between cursor-pointer border ${
+              activeTab === 'CLIENT_PHONES'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-bold'
+                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
             }`}
           >
             <div className="flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-indigo-600 shrink-0" />
+              <Users className="w-4 h-4 text-purple-600 shrink-0" />
               <div className="min-w-0">
-                <span className="text-xs font-bold block truncate">6. إعدادات Meta</span>
-                <span className="text-[10px] opacity-75 font-normal truncate block">Cloud API</span>
+                <span className="text-xs block truncate">5. هواتف العملاء</span>
+                <span className="text-[10px] text-slate-400 font-normal truncate block">دليل الأرقام والمسؤولين</span>
               </div>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono font-bold shrink-0">
-              Meta
-            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('GATEWAY_SETTINGS');
+              setGatewaySubTab('QR_GATEWAY');
+            }}
+            className={`p-2.5 rounded-xl text-right transition-all flex items-center justify-between cursor-pointer border ${
+              activeTab === 'GATEWAY_SETTINGS' || (activeTab as any) === 'FREE_GATEWAY' || (activeTab as any) === 'API_CONFIG' || (activeTab as any) === 'LOGS'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-bold'
+                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs block truncate">6. الربط وكود QR</span>
+                <span className="text-[10px] text-slate-400 font-normal truncate block">إعدادات API وسجل</span>
+              </div>
+            </div>
           </button>
         </div>
       </div>
 
-      {/* Central Target Client Picker */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center border border-blue-200/60 shrink-0">
-            <Building2 className="w-4 h-4" />
+      {/* Central Target Client Picker - shown for contextual document sending */}
+      {(activeTab === 'LIVE_CHAT' || activeTab === 'QUOTATIONS' || activeTab === 'CERTIFIED_REPORTS') && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center border border-blue-200/60 shrink-0">
+              <Building2 className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block">
+                العميل / الشركة المستهدفة:
+              </span>
+              <span className="text-[11px] text-slate-500">
+                تحديد ملف الشركة لتعبئة أرقام الواتساب والبيانات المالية والضريبية تلقائياً
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block">
-              العميل / الشركة المستهدفة بالإرسال:
-            </span>
-            <span className="text-[11px] text-slate-500">
-              تحديد ملف الشركة لتعبئة أرقام الواتساب والبيانات المالية والضريبية آلياً
-            </span>
+
+          <div className="flex items-center gap-2 min-w-[280px]">
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="w-full text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {state.clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.phone ? `(${c.phone})` : '(بدون رقم)'}
+                </option>
+              ))}
+            </select>
+            {onNavigateToArchive && (
+              <button
+                type="button"
+                onClick={() => onNavigateToArchive(selectedClientId)}
+                className="px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold shrink-0 cursor-pointer"
+                title="فتح ملف العميل بالأرشيف"
+              >
+                الملف
+              </button>
+            )}
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 min-w-[280px]">
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            className="w-full text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {state.clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} {c.phone ? `(${c.phone})` : '(بدون رقم)'}
-              </option>
-            ))}
-          </select>
-          {onNavigateToArchive && (
+      {/* Gateway Subtabs Bar */}
+      {(activeTab === 'GATEWAY_SETTINGS' || activeTab === 'FREE_GATEWAY' || activeTab === 'API_CONFIG' || activeTab === 'LOGS') && (
+        <div className="flex items-center justify-between gap-2 p-2 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-semibold">
             <button
               type="button"
-              onClick={() => onNavigateToArchive(selectedClientId)}
-              className="px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold shrink-0 cursor-pointer"
-              title="فتح ملف العميل بالأرشيف"
+              onClick={() => { setActiveTab('GATEWAY_SETTINGS'); setGatewaySubTab('QR_GATEWAY'); }}
+              className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1.5 ${
+                (activeTab === 'FREE_GATEWAY' || (activeTab === 'GATEWAY_SETTINGS' && gatewaySubTab === 'QR_GATEWAY'))
+                  ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
             >
-              الملف
+              <QrCode className="w-3.5 h-3.5" />
+              <span>ربط كود QR المباشر (Baileys)</span>
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('GATEWAY_SETTINGS'); setGatewaySubTab('META_API'); }}
+              className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1.5 ${
+                (activeTab === 'API_CONFIG' || (activeTab === 'GATEWAY_SETTINGS' && gatewaySubTab === 'META_API'))
+                  ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>إعدادات Meta Cloud API الرسمي</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('GATEWAY_SETTINGS'); setGatewaySubTab('LOGS'); }}
+              className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1.5 ${
+                (activeTab === 'LOGS' || (activeTab === 'GATEWAY_SETTINGS' && gatewaySubTab === 'LOGS'))
+                  ? 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-400 shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>سجل الرسائل والعمليات ({logs.length})</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ========================================================= */}
       {/* VIEW 0: FREE GATEWAY (BAILEYS QR CODE MULTI-DEVICE)       */}
       {/* ========================================================= */}
-      {activeTab === 'FREE_GATEWAY' && (
+      {(activeTab === 'FREE_GATEWAY' || (activeTab === 'GATEWAY_SETTINGS' && gatewaySubTab === 'QR_GATEWAY')) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Column: QR Code & Pairing Console (7 cols) */}
           <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
@@ -1892,9 +1951,26 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
       )}
 
       {/* ========================================================= */}
+      {/* VIEW: MESSAGE TEMPLATES MANAGER                          */}
+      {/* ========================================================= */}
+      {activeTab === 'TEMPLATES' && (
+        <WhatsAppTemplatesManager />
+      )}
+
+      {/* ========================================================= */}
+      {/* VIEW: CLIENT PHONES DIRECTORY                            */}
+      {/* ========================================================= */}
+      {activeTab === 'CLIENT_PHONES' && (
+        <WhatsAppClientPhonesDirectory
+          state={state}
+          onNavigateToArchive={onNavigateToArchive}
+        />
+      )}
+
+      {/* ========================================================= */}
       {/* VIEW 3: API CONFIGURATION & WEBHOOK CONSOLE               */}
       {/* ========================================================= */}
-      {activeTab === 'API_CONFIG' && (
+      {(activeTab === 'API_CONFIG' || (activeTab === 'GATEWAY_SETTINGS' && gatewaySubTab === 'META_API')) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -2051,7 +2127,7 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
       {/* ========================================================= */}
       {/* VIEW 4: LIVE TRANSMISSION LOGS                            */}
       {/* ========================================================= */}
-      {activeTab === 'LOGS' && (
+      {(activeTab === 'LOGS' || (activeTab === 'GATEWAY_SETTINGS' && gatewaySubTab === 'LOGS')) && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>

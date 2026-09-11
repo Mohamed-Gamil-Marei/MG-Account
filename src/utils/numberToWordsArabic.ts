@@ -101,3 +101,17 @@ export function numberToArabicWords(amount: number, currency: string = 'جنيه
 
   return finalOutput;
 }
+
+/**
+ * Sanitizes Arabic financial tafqeet strings to guarantee no duplicates of
+ * "فقط وقدره" at the start or "لا غير" at the end.
+ */
+export function cleanArabicTafqeet(text: string): string {
+  if (!text) return '';
+  let res = text.trim();
+  // Strip duplicate or repeated "فقط وقدره" / "فقط"
+  res = res.replace(/^(فقط\s*(وقدره)?\s*)+/g, 'فقط وقدره ');
+  // Strip duplicate "لا غير"
+  res = res.replace(/(\s*لا غير\.?)+$/g, ' لا غير.');
+  return res.trim();
+}

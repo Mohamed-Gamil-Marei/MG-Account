@@ -134,7 +134,7 @@
     .app-container,
     div[class*="overflow-y-auto"],
     div[class*="overflow-x-auto"],
-    div[class*="overflow-hidden"],
+    div[class*="overflow-hidden"]:not(.barcode-print-container):not(.qr-print-container):not([data-barcode-container="true"]):not([data-qr-container="true"]),
     div[class*="h-screen"],
     div[class*="min-h-screen"] {
       width: 100% !important;
@@ -150,6 +150,76 @@
       overflow: visible !important;
       position: static !important;
       float: none !important;
+    }
+
+    /* Optical Barcode and QR Code Print Fidelity & Laser Scanner Compliance (ISO 15417 / ISO 18004) */
+    .barcode-print-container,
+    .qr-print-container,
+    [data-barcode-container="true"],
+    [data-qr-container="true"] {
+      display: inline-block !important;
+      visibility: visible !important;
+      width: auto !important;
+      max-width: none !important;
+      min-width: auto !important;
+      height: auto !important;
+      margin: 0 auto !important;
+      padding: 4px 6px !important;
+      background-color: #ffffff !important;
+      background: #ffffff !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 6px !important;
+      box-shadow: none !important;
+      overflow: visible !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      text-align: center !important;
+    }
+
+    .barcode-print-container svg,
+    .qr-print-container svg,
+    [data-barcode-container="true"] svg,
+    [data-qr-container="true"] svg,
+    svg.barcode-128-svg,
+    svg.qr-code-svg {
+      display: block !important;
+      visibility: visible !important;
+      max-width: 100% !important;
+      height: auto !important;
+      margin: 0 auto !important;
+      shape-rendering: crispEdges !important;
+      image-rendering: pixelated !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+
+    .barcode-print-container svg rect,
+    .qr-print-container svg rect,
+    svg.barcode-128-svg rect,
+    svg.qr-code-svg rect {
+      fill: #ffffff !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .barcode-print-container svg rect[fill="#000000"],
+    svg.barcode-128-svg rect[fill="#000000"],
+    .qr-print-container svg path,
+    svg.qr-code-svg path {
+      fill: #000000 !important;
+      shape-rendering: crispEdges !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .barcode-print-container text,
+    svg.barcode-128-svg text {
+      fill: #000000 !important;
+      font-family: 'Courier New', Courier, monospace !important;
+      font-weight: 700 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
 
     /* Multi-Page Financial Tables Handling (Balance Sheet, Income Statement, Ledgers, Assets) */

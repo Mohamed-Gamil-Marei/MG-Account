@@ -14,6 +14,8 @@ import {
   Settings,
   Sparkles,
   ShieldCheck,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import { ModelType, ExportFormat, exportModelData, importModelData } from '../../utils/dataImportExport';
 import { exportElementToPdf, exportElementToImage } from '../../utils/certifiedDocumentExporter';
@@ -23,6 +25,11 @@ import { PrintService } from '../../services/PrintService';
 import { ActionButton, ActionDropdownItem } from './ActionButton';
 import { ActionMenu, ActionMenuItem } from './ActionMenu';
 import { AutoArchiverService } from '../../services/AutoArchiver';
+import { DirectWhatsAppProcedureModal } from './DirectWhatsAppProcedureModal';
+import {
+  ProcedureWhatsAppType,
+  ProcedureWhatsAppContext,
+} from '../../utils/procedureWhatsAppTemplates';
 
 export type PageSizeOption = 'A4' | 'A3' | 'Letter' | 'Thermal80mm' | 'Default';
 export type PageOrientationOption = 'portrait' | 'landscape';
@@ -50,6 +57,9 @@ interface ScreenActionToolbarProps {
   showExport?: boolean;
   showImport?: boolean;
   showPreview?: boolean;
+  showWhatsApp?: boolean; // Direct in-app WhatsApp sender
+  whatsAppContext?: Partial<ProcedureWhatsAppContext>;
+  whatsAppProcedureType?: ProcedureWhatsAppType;
   compact?: boolean;
   className?: string;
 }
@@ -70,6 +80,9 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
   showExport = true,
   showImport = true,
   showPreview = true,
+  showWhatsApp = true,
+  whatsAppContext,
+  whatsAppProcedureType,
   compact = true,
   className = '',
 }) => {
@@ -78,6 +91,7 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [pageSize, setPageSize] = useState<PageSizeOption>('A4');
   const [orientation, setOrientation] = useState<PageOrientationOption>('portrait');
   const [isExporting, setIsExporting] = useState(false);
@@ -90,6 +104,47 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
   const showFeedback = (type: 'success' | 'error', text: string) => {
     setFeedback({ type, text });
     setTimeout(() => setFeedback(null), 4000);
+  };
+
+  // Derive Procedure Type from Model Type or Document
+  const deriveProcedureType = (): ProcedureWhatsAppType => {
+    if (whatsAppProcedureType) return whatsAppProcedureType;
+    if (whatsAppContext?.procedureType) return whatsAppContext.procedureType;
+
+    const mt = String(effectiveModelType).toUpperCase();
+    if (mt.includes('INVOICE') || mt.includes('BILLING')) return 'INVOICE_CLAIM';
+    if (mt.includes('TREASURY')) return 'TREASURY_RECEIPT';
+    if (mt.includes('CERTIFICATE')) {
+      if (customDocument?.certificateType === 'INVESTED_CAPITAL') return 'CERTIFICATE_CAPITAL';
+      if (customDocument?.certificateType === 'SOLVENCY_FINANCIAL_STANDING') return 'CERTIFICATE_SOLVENCY';
+      if (customDocument?.certificateType === 'AUDITOR_REPORT') return 'CERTIFICATE_AUDITOR';
+      return 'CERTIFICATE_INCOME';
+    }
+    if (mt.includes('TAX') || mt.includes('ETA')) return 'TAX_DECLARATION';
+    if (mt.includes('FINANCIAL_STATEMENT')) return 'FINANCIAL_STATEMENTS';
+    if (mt.includes('AUDIT')) return 'AUDIT_REPORT';
+    if (mt.includes('PAYROLL') || mt.includes('SALARY')) return 'PAYROLL_INSURANCE';
+    if (mt.includes('FEASIBILITY')) return 'FEASIBILITY_STUDY';
+    if (mt.includes('CUSTOMS') || mt.includes('IMPORT')) return 'IMPORT_CUSTOMS';
+    return 'GENERAL_NOTICE';
+  };
+
+  const getDerivedWhatsAppContext = (): Partial<ProcedureWhatsAppContext> => {
+    const derivedType = deriveProcedureType();
+    let clientName = customDocument?.clientName || customDocument?.client || customDocument?.companyName || '';
+    let refCode = customDocument?.certificateNumber || customDocument?.invoiceNumber || customDocument?.referenceNumber || customDocument?.receiptNumber || customDocument?.id || '';
+    let amt = customDocument?.amount || customDocument?.totalAmount || customDocument?.certifiedAmount || customDocument?.investedCapitalAmount || 0;
+
+    return {
+      procedureType: derivedType,
+      title: effectiveTitle || customDocument?.title || '',
+      clientName: clientName || whatsAppContext?.clientName || '',
+      referenceCode: refCode || whatsAppContext?.referenceCode || '',
+      amount: amt || whatsAppContext?.amount || 0,
+      recipientEntity: customDocument?.recipientEntity || whatsAppContext?.recipientEntity || '',
+      customNotes: customDocument?.notes || whatsAppContext?.customNotes || '',
+      ...whatsAppContext,
+    };
   };
 
   const handleExport = async (format: ExportFormat | 'PDF' | 'IMAGE_PNG' | 'IMAGE_JPEG') => {
@@ -455,6 +510,18 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
         </div>
       )}
 
+      {/* 3. Direct In-App WhatsApp Notification Button */}
+      {showWhatsApp && (
+        <button
+          onClick={() => setIsWhatsAppModalOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-lg font-bold text-xs shadow-2xs border border-emerald-500/40 transition-all cursor-pointer active:scale-95"
+          title="إرسال إشعار واتساب مباشر من داخل البرنامج"
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
+          <span>واتساب مباشر</span>
+        </button>
+      )}
+
       {/* Live Inline Feedback Bubble */}
       {feedback && (
         <div
@@ -467,6 +534,18 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
           <span>{feedback.type === 'success' ? '✓' : '⚠️'}</span>
           <span>{feedback.text}</span>
         </div>
+      )}
+
+      {/* Direct In-App WhatsApp Procedure Modal */}
+      {isWhatsAppModalOpen && (
+        <DirectWhatsAppProcedureModal
+          isOpen={isWhatsAppModalOpen}
+          onClose={() => setIsWhatsAppModalOpen(false)}
+          initialContext={getDerivedWhatsAppContext()}
+          onSuccess={(res) => {
+            showFeedback('success', `تم إرسال إشعار الواتساب بنجاح عبر كود المحرك الداخلي إلى: ${res.phone}`);
+          }}
+        />
       )}
 
       {/* Fullscreen Interactive Print Preview Modal */}

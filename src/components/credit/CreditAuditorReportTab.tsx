@@ -197,6 +197,8 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
             </div>
 
             <div
+              data-qr-container="true"
+              className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
               dangerouslySetInnerHTML={{
                 __html: generateQrCodeSvg(
                   buildAuditorReportQrText({
@@ -207,7 +209,7 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
                     opinion: opinionType === 'CLEAN' ? 'رأي نظيف' : 'رأي متحفظ',
                     refNumber: `CREDIT-AUD-${selectedYear}-991`,
                   }),
-                  85
+                  100
                 ),
               }}
             />

@@ -92,6 +92,8 @@ import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu } from './common/ActionMenu';
 import { ClientArchiveRecord } from '../types';
 import * as XLSX from 'xlsx';
+import { SmartCreditSuite } from './credit/SmartCreditSuite';
+import { CreditExcelBridgeModal } from './credit/CreditExcelBridgeModal';
 
 interface CreditFinancialsSimulatorProps {
   state: DatabaseState;
@@ -252,6 +254,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
   // Print Dialog State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [isExcelBridgeModalOpen, setIsExcelBridgeModalOpen] = useState<boolean>(false);
+  const [isSmartSuiteVisible, setIsSmartSuiteVisible] = useState<boolean>(true);
   const [printScope, setPrintScope] = useState<CreditPrintScope>('ALL_YEARS_BATCH');
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [pageRangeConfig, setPageRangeConfig] = useState<PageRangeConfig>({
@@ -1479,6 +1483,95 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     XLSX.writeFile(wb, `الملف_الائتماني_المتكامل_والقوائم_المالية_${selectedYear}.xlsx`);
   };
 
+  // Handler for Reverse Engineering / Smart Suite updates
+  const handleApplyEngineeredNumbers = (engineeredData: Record<number, Partial<FiscalYearData>>) => {
+    setYearsData((prev) => {
+      const next = { ...prev };
+      Object.entries(engineeredData).forEach(([yrStr, data]) => {
+        const yr = parseInt(yrStr, 10);
+        if (next[yr]) {
+          next[yr] = { ...next[yr], ...data };
+        } else {
+          next[yr] = {
+            year: yr,
+            sales: 20000000,
+            cogsRatio: 65,
+            adminExpRatio: 8,
+            sellingExpRatio: 0,
+            financeExpRatio: 1,
+            taxRate: 22.5,
+            cashRatio: 5,
+            receivablesRatio: 20,
+            inventoryRatio: 25,
+            fixedAssetsRatio: 50,
+            suppliersRatio: 10,
+            shortLoansRatio: 15,
+            longLoansRatio: 10,
+            ...data,
+          };
+        }
+      });
+      return next;
+    });
+  };
+
+  // Handler for Excel Import Success
+  const handleImportExcelSuccess = (importedData: {
+    yearsDetected: number[];
+    parsedYearsData: Record<number, Partial<FiscalYearData>>;
+    clientMetadata?: any;
+  }) => {
+    if (importedData.yearsDetected && importedData.yearsDetected.length > 0) {
+      setYearsList(importedData.yearsDetected);
+      setBatchSelectedYears(importedData.yearsDetected);
+      if (!importedData.yearsDetected.includes(selectedYear)) {
+        setSelectedYear(importedData.yearsDetected[importedData.yearsDetected.length - 1]);
+      }
+    }
+
+    if (importedData.parsedYearsData) {
+      setYearsData((prev) => {
+        const next = { ...prev };
+        Object.entries(importedData.parsedYearsData).forEach(([yrStr, data]) => {
+          const yr = parseInt(yrStr, 10);
+          if (next[yr]) {
+            next[yr] = { ...next[yr], ...data };
+          } else {
+            next[yr] = {
+              year: yr,
+              sales: data.sales || 20000000,
+              cogsRatio: 65,
+              adminExpRatio: 8,
+              sellingExpRatio: 0,
+              financeExpRatio: 1,
+              taxRate: 22.5,
+              cashRatio: 5,
+              receivablesRatio: 20,
+              inventoryRatio: 25,
+              fixedAssetsRatio: 50,
+              suppliersRatio: 10,
+              shortLoansRatio: 15,
+              longLoansRatio: 10,
+              ...data,
+            };
+          }
+        });
+        return next;
+      });
+    }
+
+    if (importedData.clientMetadata) {
+      setClientProfile((prev) => ({
+        ...prev,
+        companyName: importedData.clientMetadata.companyName || prev.companyName,
+        commercialRegNo: importedData.clientMetadata.commercialRegNo || prev.commercialRegNo,
+        taxRegNo: importedData.clientMetadata.taxRegNo || prev.taxRegNo,
+        legalForm: importedData.clientMetadata.legalForm || prev.legalForm,
+        activity: importedData.clientMetadata.activity || prev.activity,
+      }));
+    }
+  };
+
   const navTabs: { id: SimulatorTab; label: string; icon: any }[] = [
     { id: 'STATEMENTS', label: '1. القوائم المالية المقارنة (المركز والدخل والتدفقات)', icon: Scale },
     { id: 'PROFIT_DIST', label: '2. مشروع ومذكرة توزيع الأرباح', icon: Award },
@@ -1510,6 +1603,16 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 }
               }}
             />
+
+            <button
+              type="button"
+              onClick={() => setIsExcelBridgeModalOpen(true)}
+              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+              title="تنزيل نموذج إكسيل أو استيراد ملف"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="hidden sm:inline">جسر الإكسيل (تنزيل / استيراد)</span>
+            </button>
 
             <button
               type="button"
@@ -1557,6 +1660,13 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                   label: 'بيانات المنشأة والضرائب',
                   icon: Building,
                   onClick: () => setIsClientModalOpen(true),
+                },
+                {
+                  id: 'excel-bridge',
+                  label: 'جسر الإكسيل: تنزيل نموذج مدعوم / استيراد أرقام',
+                  icon: FileSpreadsheet,
+                  variant: 'success',
+                  onClick: () => setIsExcelBridgeModalOpen(true),
                 },
                 {
                   id: 'export-excel',
@@ -1795,6 +1905,30 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         onSectorChange={handleSectorChange}
         onApplyPresetToAllYears={handleApplyPresetToAllYears}
       />
+
+      {/* Smart Credit Suite (الهندسة الائتمانية العكسية، محاكي شروط البنوك، ومطابقة حركة كشف الحساب) */}
+      <div className="no-print space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={() => setIsSmartSuiteVisible(!isSmartSuiteVisible)}
+            className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <span>{isSmartSuiteVisible ? 'إخفاء جناح التحليل الائتماني المتقدم' : 'إظهار جناح التحليل الائتماني المتقدم (الهندسة العكسية / محاكي البنوك)'}</span>
+          </button>
+        </div>
+
+        {isSmartSuiteVisible && (
+          <SmartCreditSuite
+            yearsList={yearsList}
+            yearsData={yearsData}
+            computedData={computedData}
+            activeYear={selectedYear}
+            clientName={clientProfile.companyName}
+            onApplyEngineeredNumbers={handleApplyEngineeredNumbers}
+          />
+        )}
+      </div>
 
       {/* Navigation Sub-Tabs */}
       <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60 overflow-x-auto no-print">
@@ -2980,6 +3114,16 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         onPurgeComplete={() => {
           handleResetSimulatorDefaults();
         }}
+      />
+
+      {/* Excel 2-Way Bridge Modal */}
+      <CreditExcelBridgeModal
+        isOpen={isExcelBridgeModalOpen}
+        onClose={() => setIsExcelBridgeModalOpen(false)}
+        yearsList={yearsList}
+        yearsData={yearsData}
+        clientName={clientProfile.companyName}
+        onImportSuccess={handleImportExcelSuccess}
       />
     </div>
   );

@@ -3850,8 +3850,14 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                 </div>
               </div>
               <div
+                data-qr-container="true"
+                className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
                 dangerouslySetInnerHTML={{
-                  __html: generateQrCodeSvg(selectedEntryForView.qrPayload || 'VALID', 56),
+                  __html: generateQrCodeSvg(
+                    selectedEntryForView.qrPayload ||
+                      `JV|${selectedEntryForView.entryNumber}|${selectedEntryForView.date}|${selectedEntryForView.totalDebit}`,
+                    80
+                  ),
                 }}
               />
             </div>

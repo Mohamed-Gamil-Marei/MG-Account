@@ -58,7 +58,8 @@ export function encodeCode128B(text: string): { widths: number[]; checksum: numb
 }
 
 /**
- * Generates an SVG string of a Code 128 barcode
+ * Generates an SVG string of a Code 128 barcode compliant with ISO/IEC 15417
+ * Built with sharp edges, quiet zones, and integer/high-precision scaling for standard optical laser scanners and phone cameras.
  * @param text The string to encode (e.g. CERT-2026-0001)
  * @param options Styling options
  */
@@ -76,8 +77,8 @@ export function generateCode128Svg(
   } = {}
 ): string {
   const {
-    height = 42,
-    moduleWidth = 1.6,
+    height = 44,
+    moduleWidth = 1.8,
     showText = true,
     barColor = '#000000',
     bgColor = '#FFFFFF',
@@ -85,12 +86,14 @@ export function generateCode128Svg(
     quietZone = true,
   } = options;
 
-  const { widths } = encodeCode128B(text || 'CERT-2026-0001');
+  const rawText = (text || 'CERT-2026-0001').trim();
+  const { widths } = encodeCode128B(rawText);
 
   const totalModules = widths.reduce((a, b) => a + b, 0);
-  const quietModules = quietZone ? 10 : 2;
+  // ISO/IEC 15417 specifies minimum 10 modules quiet zone on both sides for laser scan margins
+  const quietModules = quietZone ? 10 : 4;
   const totalWidthUnits = (totalModules + quietModules * 2) * moduleWidth;
-  const totalHeightUnits = height + (showText ? fontSize + 4 : 0);
+  const totalHeightUnits = height + (showText ? fontSize + 6 : 0);
 
   let currentX = quietModules * moduleWidth;
   let isBar = true;
@@ -99,22 +102,22 @@ export function generateCode128Svg(
   for (let i = 0; i < widths.length; i++) {
     const w = widths[i] * moduleWidth;
     if (isBar) {
-      rectsSvg += `<rect x="${currentX.toFixed(2)}" y="2" width="${w.toFixed(2)}" height="${height}" fill="${barColor}" />`;
+      rectsSvg += `<rect x="${currentX.toFixed(2)}" y="0" width="${w.toFixed(2)}" height="${height}" fill="${barColor}" shape-rendering="crispEdges" />`;
     }
     currentX += w;
     isBar = !isBar;
   }
 
   const textSvg = showText
-    ? `<text x="${(totalWidthUnits / 2).toFixed(2)}" y="${(height + fontSize + 2).toFixed(
+    ? `<text x="${(totalWidthUnits / 2).toFixed(2)}" y="${(height + fontSize + 3).toFixed(
         2
-      )}" text-anchor="middle" font-family="monospace, Courier, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${barColor}" letter-spacing="1.5">${text}</text>`
+      )}" text-anchor="middle" font-family="'Courier New', Courier, monospace, sans-serif" font-size="${fontSize}" font-weight="bold" fill="${barColor}">${rawText}</text>`
     : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidthUnits.toFixed(2)} ${totalHeightUnits.toFixed(
     2
-  )}" width="100%" height="${totalHeightUnits}" style="max-width: ${totalWidthUnits.toFixed(2)}px; display: inline-block;">
-    <rect width="100%" height="100%" fill="${bgColor}" />
+  )}" width="${totalWidthUnits.toFixed(0)}" height="${totalHeightUnits.toFixed(0)}" shape-rendering="crispEdges" class="barcode-128-svg inline-block" style="max-width: 100%; height: auto; display: block; margin: 0 auto; image-rendering: pixelated; shape-rendering: crispEdges;">
+    <rect width="${totalWidthUnits.toFixed(2)}" height="${totalHeightUnits.toFixed(2)}" fill="${bgColor}" />
     ${rectsSvg}
     ${textSvg}
   </svg>`;

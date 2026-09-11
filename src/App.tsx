@@ -36,6 +36,7 @@ import {
   Settings,
   Smartphone,
   Monitor,
+  QrCode,
 } from 'lucide-react';
 
 // Lazy-loaded views and hubs for instant initial load and peak performance
@@ -997,6 +998,25 @@ export default function App() {
                         >
                           <Play className="w-4 h-4 text-amber-500" />
                           <span>{!isRtl ? 'MG Office Identity & Promo' : 'برومو وهوية المكتب MG'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsToolsMenuOpen(false);
+                            setVerificationData({
+                              docNumber: `AUD-DOC-${selectedFiscalYear}-${Date.now().toString().slice(-4)}`,
+                              docType: 'FINANCIAL_REPORT',
+                              clientName: state.activeClientContext?.companyName || 'شركة مساهمة مصرية',
+                              auditorName: state.officeProfile?.auditorName || 'محاسب قانوني معتمد',
+                              licenseNo: state.officeProfile?.licenseNumber || '998877',
+                              amount: 0,
+                              date: new Date().toISOString().slice(0, 10),
+                            });
+                          }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-right cursor-pointer"
+                        >
+                          <QrCode className="w-4 h-4 text-emerald-500" />
+                          <span>{!isRtl ? 'Digital Verification & QR Seal' : 'بوابة التوثيق والتحقق الرقمي (QR)'}</span>
                         </button>
                       </div>
 

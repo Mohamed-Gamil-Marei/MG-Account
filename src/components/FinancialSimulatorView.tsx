@@ -1515,16 +1515,16 @@ export const FinancialSimulatorView: React.FC<FinancialSimulatorViewProps> = ({
                     };
                     setVerifyModalData(verificationPayload);
                   }}
-                  className="cursor-pointer text-center bg-white p-2 rounded-lg border border-slate-300 shadow-2xs hover:border-emerald-600 transition-all"
+                  className="barcode-print-container cursor-pointer text-center bg-white p-2 rounded-lg border border-slate-300 shadow-2xs hover:border-emerald-600 transition-all inline-block"
+                  data-barcode-container="true"
                   title="الباركود الخطي المصرفي المعتمد (Code 128)"
                 >
                   <div
-                    className="overflow-hidden flex items-center justify-center"
                     dangerouslySetInnerHTML={{
-                      __html: generateCode128Svg(reportDocNumber, { height: 36, moduleWidth: 1.4, showText: true }),
+                      __html: generateCode128Svg(reportDocNumber, { height: 42, moduleWidth: 1.8, showText: true }),
                     }}
                   />
-                  <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1">
+                  <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1 no-print">
                     <span>كود: {reportDocNumber}</span>
                     <span className="text-emerald-800 font-bold">🔍 تحقق</span>
                   </div>

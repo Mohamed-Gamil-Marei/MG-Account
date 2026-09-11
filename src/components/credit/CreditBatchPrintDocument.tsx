@@ -283,7 +283,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
       notes: `معتمد وموثق - صافي أصول: ${formatEgyptianCurrency(computedData[year]?.totalAssets || 0)}`,
     };
 
-    const qrSvg = generateQrCodeSvg(buildVerificationUrl(payload), 88);
+    const qrSvg = generateQrCodeSvg(buildVerificationUrl(payload), 96);
 
     const showPhones = officeProfile.showOfficePhones !== false;
     const phone = officeProfile.phone || '01003335360';
@@ -304,7 +304,8 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
           </div>
 
           <div
-            className="bg-white p-1 rounded border border-slate-300 shadow-xs"
+            data-qr-container="true"
+            className="qr-print-container bg-white p-1 rounded border border-slate-300"
             dangerouslySetInnerHTML={{ __html: qrSvg }}
             title="مسح رمز التحقق الرقمي المعتمد"
           />
@@ -1799,6 +1800,8 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
           const displayPageNum = shouldResequence ? index + 1 : page.originalPageNumber;
           const displayTotal = effectiveTotalCount;
 
+          const isLastPage = index === filteredPages.length - 1;
+
           return (
             <div
               key={page.id}
@@ -1831,8 +1834,8 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
 
               {/* Realistic Authentic A4 Paper Sheet */}
               <div
-                className="a4-sheet-canvas bg-white text-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.16)] print:shadow-none border border-slate-300/80 print:border-none w-[210mm] min-h-[297mm] p-[14mm] sm:p-[16mm] print:p-[10mm] flex flex-col justify-between overflow-hidden box-border print:page-break-after-always"
-                style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
+                className={`a4-sheet-canvas bg-white text-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.16)] print:shadow-none border border-slate-300/80 print:border-none w-[210mm] min-h-[297mm] p-[14mm] sm:p-[16mm] print:p-[10mm] flex flex-col justify-between overflow-hidden box-border ${isLastPage ? 'print:page-break-after-avoid' : 'print:page-break-after-always'}`}
+                style={{ pageBreakAfter: isLastPage ? 'avoid' : 'always', breakAfter: isLastPage ? 'avoid' : 'page' }}
               >
                 {page.render(displayPageNum, displayTotal)}
               </div>

@@ -687,6 +687,30 @@ export class LocalDatabase {
     return entry;
   }
 
+  public postBatchJournalEntries(ids: string[]): number {
+    let count = 0;
+    const now = new Date().toISOString();
+    ids.forEach((id) => {
+      const entry = this.state.journalEntries.find((e) => e.id === id);
+      if (entry && !entry.isPosted) {
+        entry.isPosted = true;
+        entry.updatedAt = now;
+        entry.auditTrail.unshift({
+          timestamp: now.replace('T', ' ').substring(0, 19),
+          user: this.state.officeProfile.auditorName,
+          action: 'POST',
+          details: 'ترحيل دفعة قيود آلياً عبر المراجع الذكي',
+        });
+        count++;
+      }
+    });
+    if (count > 0) {
+      this.logAudit('POST', `ترحيل دفعة قيود (${count} قيد) آلياً عبر فحص التدقيق`);
+      this.saveState();
+    }
+    return count;
+  }
+
   // --- Clients CRUD ---
   public addClient(client: Omit<ClientArchiveRecord, 'id' | 'createdAt' | 'updatedAt'>): ClientArchiveRecord {
     const now = new Date().toISOString();

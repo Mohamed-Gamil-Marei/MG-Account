@@ -21,6 +21,8 @@ import { CashFlowPredictorView } from '../financial/CashFlowPredictorView';
 import { BudgetPlannerView } from '../financial/BudgetPlannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
 import { ClientSelector } from '../common/ClientSelector';
+import { AuditConsistencySentinelModal } from '../audit/AuditConsistencySentinelModal';
+import { ShieldCheck } from 'lucide-react';
 
 export type FinancialReportingSubTab =
   | 'FINANCIAL_STATEMENTS'
@@ -44,6 +46,7 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
   fiscalYear = 2026,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<FinancialReportingSubTab>(initialSubTab);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialSubTab) {
@@ -130,6 +133,13 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 self-end sm:self-auto">
+            <button
+              onClick={() => setIsAuditModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>فحص الاتساق والنزاهة</span>
+            </button>
             <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 font-semibold text-[11px]">
               السنة المالية: {fiscalYear}
             </span>
@@ -205,6 +215,14 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
           <CreditFinancialsSimulator state={state} />
         )}
       </div>
+
+      {/* Audit Consistency Sentinel Modal */}
+      <AuditConsistencySentinelModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        state={state}
+        fiscalYear={fiscalYear}
+      />
     </div>
   );
 };

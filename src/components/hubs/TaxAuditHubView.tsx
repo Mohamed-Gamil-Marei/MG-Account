@@ -20,10 +20,12 @@ import { PayrollInsuranceEngineView } from '../PayrollInsuranceEngineView';
 import { AuditWorkingPapersView } from '../AuditWorkingPapersView';
 import { JournalAuditScannerView } from '../audit/JournalAuditScannerView';
 import { FraudAuditSentinelView } from '../audit/FraudAuditSentinelView';
+import { AuditConsistencySentinelView } from '../audit/AuditConsistencySentinelView';
 import { ClientSelector } from '../common/ClientSelector';
 import { runAutomatedJournalAudit } from '../../services/journalAuditEngine';
 
 export type TaxAuditSubTab =
+  | 'AUDIT_CONSISTENCY_SENTINEL'
   | 'TAX_TRACKER'
   | 'TAX_PENALTY_SIMULATOR'
   | 'JOURNAL_AUDIT_SCANNER'
@@ -40,7 +42,7 @@ interface TaxAuditHubViewProps {
 
 export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
   state,
-  initialSubTab = 'TAX_TRACKER',
+  initialSubTab = 'AUDIT_CONSISTENCY_SENTINEL',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<TaxAuditSubTab>(initialSubTab);
 
@@ -70,6 +72,13 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
     badge?: string;
     badgeColor?: string;
   }[] = [
+    {
+      id: 'AUDIT_CONSISTENCY_SENTINEL',
+      label: 'المراجع الآلي للاتساق',
+      icon: Sparkles,
+      badge: 'فحص فوري',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+    },
     {
       id: 'TAX_TRACKER',
       label: 'الإقرارات الضريبية',
@@ -192,6 +201,12 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
 
       {/* Render Active Sub-View */}
       <div>
+        {activeSubTab === 'AUDIT_CONSISTENCY_SENTINEL' && (
+          <AuditConsistencySentinelView
+            state={state}
+            fiscalYear={state.activeClientContext?.selectedFiscalYear || 2026}
+          />
+        )}
         {activeSubTab === 'TAX_TRACKER' && <TaxTrackerView state={state} />}
         {activeSubTab === 'TAX_PENALTY_SIMULATOR' && <TaxPenaltySimulatorView state={state} />}
         {activeSubTab === 'FRAUD_AUDIT_SENTINEL' && <FraudAuditSentinelView state={state} />}

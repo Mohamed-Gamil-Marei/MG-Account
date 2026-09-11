@@ -73,30 +73,61 @@ export function getSystemVerificationBaseUrl(): string {
 }
 
 /**
+ * Format any raw or legacy pipe-delimited payload into an official HTTP verification link
+ * Ensures that smartphone cameras (iOS, Android, Google Lens) recognize the QR code as a clickable link.
+ */
+export function formatPayloadAsVerificationUrl(raw: string): string {
+  if (!raw || raw.trim() === '') return `${getSystemVerificationBaseUrl()}/#verify`;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+
+  const origin = getSystemVerificationBaseUrl();
+  const parts = raw.split('|');
+  if (parts.length >= 2) {
+    const code = parts[1] || parts[0];
+    const amt = parts.find((p) => /^\d+(\.\d+)?$/.test(p));
+    const date = parts.find((p) => /^\d{4}-\d{2}-\d{2}$/.test(p));
+    let t = 'CERT';
+    if (raw.includes('INV') || code.startsWith('INV')) t = 'INV';
+    else if (raw.includes('AUD') || code.startsWith('AUD')) t = 'AUD';
+    else if (raw.includes('ETA') || raw.includes('TAX')) t = 'TAX';
+    else if (raw.includes('FEASIBILITY') || code.startsWith('FS')) t = 'FS';
+    else if (raw.includes('JV') || raw.includes('ACC')) t = 'JV';
+
+    const amtParam = amt ? `&amt=${amt}` : '';
+    const dateParam = date ? `&d=${date}` : '';
+    return `${origin}/#verify?id=${encodeURIComponent(code)}&t=${t}${amtParam}${dateParam}`;
+  }
+  return `${origin}/#verify?id=${encodeURIComponent(raw)}`;
+}
+
+/**
  * Builds a direct verification URL with document ID and parameters
- * Starts with http/https so smartphone cameras (iOS, Android, Google Lens) immediately detect it as a clickable web link
+ * Keeps the URL concise and compact (under 140 chars) to prevent QR matrix bloat on paper prints
  */
 export function buildVerificationUrl(data: VerificationPayloadData, customBaseUrl?: string): string {
   const docId = data.docNumber || `CERT-${Date.now().toString().slice(-6)}`;
   const origin = (customBaseUrl && customBaseUrl.trim()) ? customBaseUrl.trim().replace(/\/+$/, '') : getSystemVerificationBaseUrl();
 
   const secHash = data.securityHash || generateDocumentSecurityHash(docId, data.clientName || 'عميل معتمد', data.amount, data.date);
-  const typeParam = encodeURIComponent(data.docType || 'شهادة مهنية معتمدة');
-  const clientParam = encodeURIComponent(data.clientName || 'عميل معتمد');
-  const licParam = encodeURIComponent(data.licenseNumber || 'س.م.م 43122');
+
+  // Short type identifier to keep QR module count low
+  let shortType = 'CERT';
+  const rawType = data.docType || '';
+  if (rawType.includes('فاتورة') || docId.startsWith('INV')) shortType = 'INV';
+  else if (rawType.includes('تقرير') || rawType.includes('مراقب') || docId.startsWith('AUD')) shortType = 'AUD';
+  else if (rawType.includes('ضريب') || rawType.includes('إقرار') || docId.startsWith('TAX')) shortType = 'TAX';
+  else if (rawType.includes('قوائم') || rawType.includes('مركز') || docId.startsWith('FS')) shortType = 'FS';
+  else if (rawType.includes('دراسة') || docId.startsWith('FS')) shortType = 'FS';
+
   const amtParam = data.amount !== undefined ? `&amt=${encodeURIComponent(data.amount.toString())}` : '';
-  const mAmountParam = data.monthlyAmount !== undefined ? `&m_amt=${encodeURIComponent(data.monthlyAmount.toString())}` : '';
   const dateParam = data.date ? `&d=${encodeURIComponent(data.date)}` : '';
-  const yrParam = data.fiscalYear ? `&yr=${encodeURIComponent(data.fiscalYear.toString())}` : '';
-  const toParam = data.recipient ? `&to=${encodeURIComponent(data.recipient)}` : '';
-  const pParam = data.purpose ? `&p=${encodeURIComponent(data.purpose)}` : '';
-  const tcParam = data.taxCardNo ? `&tc=${encodeURIComponent(data.taxCardNo)}` : '';
-  const crParam = data.commercialRegNo ? `&cr=${encodeURIComponent(data.commercialRegNo)}` : '';
-  const nidParam = data.nationalId ? `&nid=${encodeURIComponent(data.nationalId)}` : '';
-  const audParam = data.auditorName ? `&a=${encodeURIComponent(data.auditorName)}` : '';
-  const modeParam = data.mode ? `&mode=${encodeURIComponent(data.mode)}` : '&mode=encrypted_pdf';
-  
-  return `${origin}/#verify?id=${encodeURIComponent(docId)}&t=${typeParam}&c=${clientParam}&lic=${licParam}${amtParam}${mAmountParam}${dateParam}${yrParam}${toParam}${pParam}${tcParam}${crParam}${nidParam}${audParam}&hash=${encodeURIComponent(secHash)}${modeParam}`;
+  const hashClean = secHash.replace(/^EAS-/, '').slice(0, 9);
+  const hashParam = `&h=${encodeURIComponent(hashClean)}`;
+
+  // Short client snippet (max 20 chars) to maintain small QR matrix
+  const clientSnippet = data.clientName ? `&c=${encodeURIComponent(data.clientName.trim().slice(0, 20))}` : '';
+
+  return `${origin}/#verify?id=${encodeURIComponent(docId)}&t=${shortType}${clientSnippet}${amtParam}${dateParam}${hashParam}`;
 }
 
 /**
@@ -267,14 +298,81 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
       return null;
     }
 
-    const docNumber = params.get('id') || params.get('no') ? decodeURIComponent((params.get('id') || params.get('no'))!) : 'CERT-OFFICIAL';
+    const rawDocNumber = params.get('id') || params.get('no') || params.get('code') ? decodeURIComponent((params.get('id') || params.get('no') || params.get('code'))!) : 'CERT-OFFICIAL';
+    const docNumber = rawDocNumber.trim();
+    const rawType = params.get('t') ? decodeURIComponent(params.get('t')!) : 'شهادة مهنية معتمدة';
+    let docType = rawType;
+    if (rawType === 'CERT') docType = 'شهادة مهنية معتمدة';
+    else if (rawType === 'INV') docType = 'فاتورة أتعاب مهنية معتمدة';
+    else if (rawType === 'AUD') docType = 'تقرير مراقب الحسابات المستقل';
+    else if (rawType === 'TAX') docType = 'إقرار وفحص ضريبي معتمد';
+    else if (rawType === 'FS') docType = 'قوائم ومركز مالي معتمد';
+
     const clientName = params.get('c') ? decodeURIComponent(params.get('c')!) : 'العميل المعتمد';
     const amount = params.get('amt') ? parseFloat(params.get('amt')!) : undefined;
     const date = params.get('d') ? decodeURIComponent(params.get('d')!) : new Date().toISOString().slice(0, 10);
-    const secHash = params.get('hash') ? decodeURIComponent(params.get('hash')!) : generateDocumentSecurityHash(docNumber, clientName, amount, date);
+    const hashParam = params.get('h') || params.get('hash');
+    const secHash = hashParam ? decodeURIComponent(hashParam) : generateDocumentSecurityHash(docNumber, clientName, amount, date);
+
+    // Attempt rich lookup from local database if document is registered locally
+    try {
+      const state = (db as any)?.getState?.();
+      if (state) {
+        // 1. Check certificates
+        const cert = state.certificates?.find((item: any) =>
+          item.certificateNumber === docNumber || item.id === docNumber
+        );
+        if (cert) {
+          return {
+            docType: cert.customHeading || docType,
+            docNumber: cert.certificateNumber || docNumber,
+            clientName: cert.beneficiaryName || clientName,
+            nationalId: cert.nationalId,
+            commercialRegNo: cert.commercialRegNo,
+            taxCardNo: cert.taxCardNo,
+            auditorName: cert.auditorName || state.officeProfile?.auditorName || 'محمد جميل مرعي',
+            licenseNumber: cert.licenseNumber || state.officeProfile?.licenseNumber || 'س.م.م 43122',
+            amount: cert.certifiedAmount !== undefined ? cert.certifiedAmount : amount,
+            monthlyAmount: cert.monthlyAmount || (cert.certifiedAmount ? Math.round(cert.certifiedAmount / 12) : undefined),
+            date: cert.issueDate || date,
+            recipient: cert.recipient || 'الجهات الرسمية والمصرفية',
+            purpose: cert.purpose || 'إثبات واعتماد مالي ورسمي',
+            fiscalYear: cert.fiscalYear,
+            securityHash: cert.securityHash || secHash,
+            firmName: cert.firmName || state.officeProfile?.firmName,
+            mode: 'encrypted_pdf',
+          };
+        }
+
+        // 2. Check invoices
+        const inv = state.invoices?.find((item: any) =>
+          item.invoiceNumber === docNumber || item.id === docNumber
+        );
+        if (inv) {
+          return {
+            docType: 'فاتورة أتعاب مهنية معتمدة',
+            docNumber: inv.invoiceNumber,
+            clientName: inv.partnerName || clientName,
+            taxCardNo: inv.taxId,
+            commercialRegNo: inv.commercialRegister,
+            auditorName: state.officeProfile?.auditorName || 'محمد جميل مرعي',
+            licenseNumber: state.officeProfile?.licenseNumber || 'س.م.م 43122',
+            amount: inv.grandTotal !== undefined ? inv.grandTotal : amount,
+            date: inv.date || date,
+            recipient: 'مصلحة الضرائب المصرية والجهات المعنية',
+            purpose: 'أتعاب محاسبة ومراجعة قانونية',
+            securityHash: secHash,
+            firmName: state.officeProfile?.firmName,
+            mode: 'encrypted_pdf',
+          };
+        }
+      }
+    } catch {
+      // Fallback to URL parameters
+    }
 
     return {
-      docType: params.get('t') ? decodeURIComponent(params.get('t')!) : 'شهادة مهنية معتمدة',
+      docType,
       docNumber,
       clientName,
       nationalId: params.get('nid') ? decodeURIComponent(params.get('nid')!) : undefined,
@@ -299,21 +397,26 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
 
 /**
  * Generate standard, crisp ISO/IEC 18004 SVG string synchronously using QRCode library
- * Standard integer coordinates + quiet zone for guaranteed scanning across all devices and paper prints.
+ * Compliant with international scanning standards: 4-module quiet zone, pure vector crispness,
+ * and automatic URL normalization for 1-tap phone camera detection.
  */
 export function generateQrCodeSvg(text: string, sizePx: number = 100): string {
-  if (!text || text.trim() === '') {
-    text = getSystemVerificationBaseUrl();
+  let targetText = (text || '').trim();
+  if (!targetText) {
+    targetText = `${getSystemVerificationBaseUrl()}/#verify`;
+  } else if (!targetText.startsWith('http://') && !targetText.startsWith('https://')) {
+    targetText = formatPayloadAsVerificationUrl(targetText);
   }
 
   try {
-    const qrData = QRCode.create(text, {
+    const qrData = QRCode.create(targetText, {
       errorCorrectionLevel: 'M', // 15% error recovery for reliable screen & paper scanning
     });
 
     const modules = qrData.modules;
     const size = modules.size;
-    const margin = 2; // Standard 2-module quiet zone per ISO/IEC 18004
+    // ISO/IEC 18004 standard quiet zone: 4 modules of pure white space
+    const margin = 4;
     const totalUnits = size + margin * 2;
 
     let path = '';
@@ -325,13 +428,13 @@ export function generateQrCodeSvg(text: string, sizePx: number = 100): string {
       }
     }
 
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalUnits} ${totalUnits}" width="${sizePx}" height="${sizePx}" shape-rendering="crispEdges" class="bg-white rounded-lg border border-slate-300 shadow-xs inline-block" style="image-rendering: pixelated; display: inline-block;">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalUnits} ${totalUnits}" width="${sizePx}" height="${sizePx}" shape-rendering="crispEdges" class="qr-code-svg bg-white inline-block" style="image-rendering: pixelated; display: block; margin: 0 auto; shape-rendering: crispEdges;">
       <rect width="${totalUnits}" height="${totalUnits}" fill="#FFFFFF" />
-      <path d="${path}" fill="#000000" />
+      <path d="${path}" fill="#000000" shape-rendering="crispEdges" />
     </svg>`;
   } catch (err) {
     console.error('QR code generation error:', err);
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${sizePx}" height="${sizePx}" class="bg-white rounded-lg border border-slate-300">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${sizePx}" height="${sizePx}" class="bg-white">
       <rect width="100" height="100" fill="#FFFFFF" />
       <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="#000000" font-weight="bold">QR VERIFIED</text>
     </svg>`;

@@ -280,6 +280,8 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
             </div>
 
             <div
+              data-qr-container="true"
+              className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
               dangerouslySetInnerHTML={{
                 __html: generateQrCodeSvg(
                   buildTaxDeclarationQrText({
@@ -290,7 +292,7 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
                     netTaxDue: 0,
                     auditorName: officeProfile.auditorName,
                   }),
-                  85
+                  100
                 ),
               }}
             />

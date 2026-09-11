@@ -1474,8 +1474,10 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </div>
 
             <div
+              data-qr-container="true"
+              className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
               dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(qrPayload, 90),
+                __html: generateQrCodeSvg(qrPayload, 105),
               }}
             />
           </div>

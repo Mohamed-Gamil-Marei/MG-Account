@@ -15,6 +15,7 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
+  MessageSquare,
 } from 'lucide-react';
 import { OfficeTreasuryTransaction, ClientArchiveRecord } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -23,6 +24,7 @@ import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
+import { DirectWhatsAppProcedureModal } from './common/DirectWhatsAppProcedureModal';
 
 interface OfficeTreasuryViewProps {
   state: DatabaseState;
@@ -33,6 +35,7 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
   const [filterType, setFilterType] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedTxForPrint, setSelectedTxForPrint] = useState<OfficeTreasuryTransaction | null>(null);
+  const [whatsAppTx, setWhatsAppTx] = useState<OfficeTreasuryTransaction | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -340,6 +343,12 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
                             variant: 'primary',
                             onClick: () => setSelectedTxForPrint(tx),
                           },
+                          {
+                            label: 'إرسال إشعار وسند واتساب مباشر',
+                            icon: MessageSquare,
+                            variant: 'success',
+                            onClick: () => setWhatsAppTx(tx),
+                          },
                         ]}
                       />
                     </td>
@@ -439,6 +448,14 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer"
               >
                 إغلاق
+              </button>
+              <button
+                onClick={() => setWhatsAppTx(selectedTxForPrint)}
+                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="إرسال سند الخزنة عبر كود الواتساب المباشر"
+              >
+                <MessageSquare className="w-4 h-4 text-emerald-200" />
+                <span>إرسال واتساب مباشر</span>
               </button>
               <button
                 onClick={() => {
@@ -659,6 +676,23 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
             </form>
           </div>
         </div>
+      )}
+      {/* Direct In-App WhatsApp Procedure Modal */}
+      {whatsAppTx && (
+        <DirectWhatsAppProcedureModal
+          isOpen={Boolean(whatsAppTx)}
+          onClose={() => setWhatsAppTx(null)}
+          initialContext={{
+            procedureType: 'TREASURY_RECEIPT',
+            title: `سند خزينة (${whatsAppTx.type === 'INCOME_FEES' ? 'قبض أتعاب' : 'صرف'}) #${whatsAppTx.id}`,
+            clientName: whatsAppTx.clientName || 'العميل المستلم',
+            referenceCode: whatsAppTx.id,
+            amount: whatsAppTx.amount,
+            periodOrDate: whatsAppTx.date,
+            customNotes: `${whatsAppTx.category} - ${whatsAppTx.description || ''} (طريقة السداد: ${whatsAppTx.paymentMethod})`,
+          }}
+          state={state}
+        />
       )}
     </>
   );

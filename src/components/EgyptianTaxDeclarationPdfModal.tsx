@@ -293,10 +293,11 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
                 {/* Left: QR Code and Serial */}
                 <div className="text-left flex flex-col items-end space-y-1">
                   <div
+                    data-qr-container="true"
                     dangerouslySetInnerHTML={{
-                      __html: generateQrCodeSvg(qrPayload, 75),
+                      __html: generateQrCodeSvg(qrPayload, 96),
                     }}
-                    className="border border-slate-300 p-1 rounded-lg bg-white shadow-2xs"
+                    className="qr-print-container border border-slate-300 p-1 rounded-lg bg-white shadow-2xs"
                   />
                   <span className="font-mono text-[9px] text-slate-500 font-bold">
                     ETA-REF-{currentDeclaration?.id.slice(-6).toUpperCase() || '2026-X'}

@@ -19,8 +19,6 @@ import { ClientsArchiveView } from '../ClientsArchiveView';
 import { OfficeTreasuryView } from '../OfficeTreasuryView';
 import { CertificatesGeneratorView } from '../CertificatesGeneratorView';
 import { FeasibilityStudyView } from '../FeasibilityStudyView';
-import { WhatsAppBotView } from '../WhatsAppBotView';
-import { WhatsAppSettingsView } from '../WhatsAppSettingsView';
 import { CreditDossierRegistryView } from '../CreditDossierRegistryView';
 import { PracticeManagementHubView } from '../practice/PracticeManagementHubView';
 import { WhatsAppBusinessApiView } from '../practice/WhatsAppBusinessApiView';
@@ -86,20 +84,10 @@ export const OfficePracticeHubView: React.FC<OfficePracticeHubViewProps> = ({
     },
     {
       id: 'WHATSAPP_BUSINESS_API',
-      label: 'واتس آب بيزنس API (عروض وتقارير)',
+      label: 'مركز المراسلات والواتساب',
       icon: Smartphone,
-      badge: 'API مباشر',
+      badge: 'متصل ومباشر',
       badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold',
-    },
-    {
-      id: 'WHATSAPP_SETTINGS',
-      label: 'إعدادات المراسلات',
-      icon: Settings,
-    },
-    {
-      id: 'WHATSAPP_BOT',
-      label: 'المراسلات الآلية',
-      icon: MessageSquare,
     },
     {
       id: 'OFFICE_TREASURY',
@@ -217,12 +205,19 @@ export const OfficePracticeHubView: React.FC<OfficePracticeHubViewProps> = ({
           />
         )}
         {activeSubTab === 'WHATSAPP_SETTINGS' && (
-          <WhatsAppSettingsView
+          <WhatsAppBusinessApiView
+            state={state}
+            initialTab="TEMPLATES"
             onNavigateToArchive={() => setActiveSubTab('CLIENTS_ARCHIVE')}
-            onNavigateToBot={() => setActiveSubTab('WHATSAPP_BOT')}
           />
         )}
-        {activeSubTab === 'WHATSAPP_BOT' && <WhatsAppBotView />}
+        {activeSubTab === 'WHATSAPP_BOT' && (
+          <WhatsAppBusinessApiView
+            state={state}
+            initialTab="LIVE_CHAT"
+            onNavigateToArchive={() => setActiveSubTab('CLIENTS_ARCHIVE')}
+          />
+        )}
         {activeSubTab === 'OFFICE_TREASURY' && (
           canAccessTreasury ? (
             <OfficeTreasuryView state={state} />

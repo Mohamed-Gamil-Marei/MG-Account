@@ -267,8 +267,10 @@ export const FeasibilityStudyView: React.FC<FeasibilityStudyViewProps> = ({ stat
             </div>
           </div>
           <div
+            data-qr-container="true"
+            className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
             dangerouslySetInnerHTML={{
-              __html: generateQrCodeSvg(`FEASIBILITY|FS-2026-088|${projectName}|${totalNPV.toFixed(2)}|${profile.auditorName}`, 85),
+              __html: generateQrCodeSvg(`FEASIBILITY|FS-2026-088|${projectName}|${totalNPV.toFixed(2)}|${profile.auditorName}`, 96),
             }}
           />
         </div>

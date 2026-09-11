@@ -98,18 +98,26 @@ export const WhatsAppBotView: React.FC<WhatsAppBotViewProps> = ({
 
   const botSettings = db.getWhatsAppBotSettings();
 
-  // Sync real-time WhatsApp server messages and incoming client replies
+  const messagesRef = useRef(state.whatsappMessages);
+  useEffect(() => {
+    messagesRef.current = state.whatsappMessages;
+  }, [state.whatsappMessages]);
+
+  // Polite sync of WhatsApp server messages for the selected client: every 20s, paused when hidden
   useEffect(() => {
     if (!selectedClient?.phone) return;
     const phone = selectedClient.phone;
+    const clientId = selectedClient.id;
+    const clientName = selectedClient.name;
 
     const syncServerMessages = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const serverMsgs = await WhatsAppApiService.getChatMessages(phone);
         if (serverMsgs && serverMsgs.length > 0) {
           const currentLocalTexts = new Set(
-            state.whatsappMessages
-              .filter((m) => m.clientId === selectedClient.id)
+            (messagesRef.current || [])
+              .filter((m) => m.clientId === clientId)
               .map((m) => m.text.trim())
           );
 
@@ -125,26 +133,27 @@ export const WhatsAppBotView: React.FC<WhatsAppBotViewProps> = ({
                   : 'GENERAL';
 
               db.sendWhatsAppMessage({
-                clientId: selectedClient.id,
-                clientName: selectedClient.name,
-                phone: selectedClient.phone || '',
+                clientId,
+                clientName,
+                phone,
                 direction: sMsg.direction === 'INCOMING' ? 'INCOMING' : 'OUTGOING',
                 sender: sMsg.sender === 'CLIENT' ? 'CLIENT' : sMsg.sender === 'BOT' ? 'OFFICE_BOT' : 'AUDITOR',
                 text: sMsg.text,
                 category: mappedCategory,
               });
+              currentLocalTexts.add(sMsg.text.trim());
             }
           }
         }
-      } catch (err) {
-        // silent sync
+      } catch {
+        // quiet sync
       }
     };
 
     syncServerMessages();
-    const interval = setInterval(syncServerMessages, 3500);
+    const interval = setInterval(syncServerMessages, 20000);
     return () => clearInterval(interval);
-  }, [selectedClient?.id, selectedClient?.phone, state.whatsappMessages]);
+  }, [selectedClient?.id, selectedClient?.phone]);
 
   // Filter clients list
   const filteredClients = (state.clients || []).filter((c) => {

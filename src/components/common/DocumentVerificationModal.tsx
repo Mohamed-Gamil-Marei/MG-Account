@@ -425,9 +425,10 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
                     </div>
 
                     <div
-                      className="p-1.5 bg-white border border-slate-300 rounded-xl shrink-0 shadow-xs"
+                      data-qr-container="true"
+                      className="qr-print-container p-1.5 bg-white border border-slate-300 rounded-xl shrink-0 shadow-xs"
                       dangerouslySetInnerHTML={{
-                        __html: generateQrCodeSvg(verificationUrl || 'https://cpa-egypt.tax.gov.eg', 70),
+                        __html: generateQrCodeSvg(verificationUrl || 'https://cpa-egypt.tax.gov.eg', 96),
                       }}
                     />
                   </div>
