@@ -23,6 +23,7 @@ export type ProcedureWhatsAppType =
   | 'IMPORT_CUSTOMS'         // الاعتماد المستندي والإفراج الجمركي (ACID)
   | 'PAYROLL_INSURANCE'      // مسير الرواتب والأجور والتأمينات الاجتماعية
   | 'FEASIBILITY_STUDY'      // دراسة الجدوى الاقتصادية المعتمدة
+  | 'VERIFICATION_CODE'      // إرسال كود تحقق وتوثيق واعتماد رقمي من داخل البرنامج
   | 'GENERAL_NOTICE';        // إشعار مهني وتذكير مخصص
 
 export interface ProcedureWhatsAppContext {
@@ -177,6 +178,14 @@ export const PROCEDURE_TEMPLATES_METADATA: ProcedureTemplateMetadata[] = [
     defaultDescription: 'إشعار اكتمال دراسة الجدوى والتحليل المالي للمشروع.',
   },
   {
+    type: 'VERIFICATION_CODE',
+    label: 'إرسال كود تحقق وتوثيق رقمي',
+    category: 'GENERAL',
+    iconName: 'KeyRound',
+    defaultTitle: 'كود تحقق واعتماد رقمي معتمد',
+    defaultDescription: 'إرسال رمز تحقق OTP أو كود توثيق مستند أو اعتماد مهني صادر من المنظومة.',
+  },
+  {
     type: 'GENERAL_NOTICE',
     label: 'إشعار وتذكير مهني مخصص',
     category: 'GENERAL',
@@ -192,7 +201,7 @@ export const PROCEDURE_TEMPLATES_METADATA: ProcedureTemplateMetadata[] = [
 export function buildProcedureWhatsAppMessage(ctx: ProcedureWhatsAppContext): string {
   const firm = ctx.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
   const auditor = ctx.auditorName || 'أ/ محمد جميل مرعي';
-  const phone = ctx.officePhone || '0237654321 / 01003335360';
+  const phone = ctx.officePhone || '01003335360';
   const refCode = ctx.referenceCode || `REF-${Date.now().toString().slice(-6)}`;
   const dateStr = ctx.periodOrDate || new Date().toISOString().slice(0, 10);
   const client = ctx.clientName || 'عميل المكتب المحترم';
@@ -358,6 +367,23 @@ ${ctx.customNotes ? `\n📝 *ملاحظات:* ${ctx.customNotes}` : ''}`;
 ${amt > 0 ? `💰 *إجمالي التكاليف الاستثمارية التقديرية:* *${amountStr}*${amountWordsStr}\n` : ''}📊 تتضمن الدراسة: الجدوى التسويقية، الجدوى الفنية، القوائم المالية التقديرية ومعدل العائد الداخلي (IRR) وفترة الاسترداد.
 ${ctx.customNotes ? `\n📝 *ملاحظات:* ${ctx.customNotes}` : ''}`;
       break;
+
+    case 'VERIFICATION_CODE': {
+      const code = ctx.verificationCode || refCode;
+      body = `نرسل لسيادتكم كود التحقق والاعتماد الرقمي المعتمد الصادر من داخل المنظومة المحاسبية:
+
+🏢 *الشركة / العميل:* ${client}
+🔐 *كود التحقق والاعتماد:*
+👉 *${code}* 👈
+
+📋 *نوع وبيان الكود:* ${ctx.title || 'كود تحقق واعتماد رقمي معتمد'}
+🔢 *الرقم المرجعي:* #${refCode}
+📅 *تاريخ ووقت الإصدار:* ${dateStr}
+⏳ *مدة الصلاحية:* ${ctx.dueDate ? `صالح حتى ${ctx.dueDate}` : 'صالح للاستخدام والاعتماد الرسمي'}
+${ctx.recipientEntity ? `🏛️ *الجهة المعنية:* ${ctx.recipientEntity}\n` : ''}${ctx.customNotes ? `📝 *بيان الغرض والتفاصيل:* ${ctx.customNotes}\n` : ''}
+⚠️ *تنبيه أمني:* يرجى استخدام هذا الرمز لتأكيد الإجراء أو إبرازه للجهات المعنية عند طلب التحقق.`;
+      break;
+    }
 
     case 'GENERAL_NOTICE':
     default:

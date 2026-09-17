@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BookOpen,
   Search,
@@ -10,6 +10,7 @@ import {
   ArrowUpDown,
   Building2,
   Users,
+  Send,
 } from 'lucide-react';
 import { Account, JournalEntry } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -17,16 +18,35 @@ import { computeAccountBalances, CalculatedAccount } from '../utils/accountingCa
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
 
 interface GeneralLedgerViewProps {
   state: DatabaseState;
 }
 
 export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) => {
+  const activeYear = state.activeClientContext?.selectedFiscalYear || 2026;
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
-  const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
-  const [startDate, setStartDate] = useState<string>('2026-01-01');
-  const [endDate, setEndDate] = useState<string>('2026-12-31');
+  const [selectedClientId, setSelectedClientId] = useState<string>(
+    state.activeClientContext?.clientId || 'ALL'
+  );
+  const [startDate, setStartDate] = useState<string>(`${activeYear}-01-01`);
+  const [endDate, setEndDate] = useState<string>(`${activeYear}-12-31`);
+  const [isWhatsAppShareOpen, setIsWhatsAppShareOpen] = useState(false);
+
+  useEffect(() => {
+    if (state.activeClientContext?.clientId) {
+      setSelectedClientId(state.activeClientContext.clientId);
+    }
+  }, [state.activeClientContext?.clientId]);
+
+  useEffect(() => {
+    if (state.activeClientContext?.selectedFiscalYear) {
+      const yr = state.activeClientContext.selectedFiscalYear;
+      setStartDate(`${yr}-01-01`);
+      setEndDate(`${yr}-12-31`);
+    }
+  }, [state.activeClientContext?.selectedFiscalYear]);
 
   const calculatedAccounts = useMemo(() => {
     return computeAccountBalances(state.accounts, state.journalEntries);
@@ -89,11 +109,24 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
       subtitle="General & Sub-Ledgers • حركة الحسابات والعملاء والموردين"
       icon={BookOpen}
       actionsSlot={
-        <ScreenActionToolbar
-          modelType="JOURNAL"
-          title="دفتر الأستاذ العام وحركات الحسابات"
-          count={accountsToDisplay.length}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            id="btn-ledger-whatsapp-share"
+            onClick={() => setIsWhatsAppShareOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            title="إرسال كشف الحساب عبر WhatsApp للعميل"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">إرسال كشف الحساب للواتساب</span>
+            <span className="sm:hidden">واتساب</span>
+          </button>
+          <ScreenActionToolbar
+            modelType="JOURNAL"
+            title="دفتر الأستاذ العام وحركات الحسابات"
+            count={accountsToDisplay.length}
+          />
+        </div>
       }
     >
       <div className="space-y-4">
@@ -287,6 +320,26 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
           })}
         </div>
       </div>
+
+      {/* WhatsApp Statement Sharing Modal */}
+      {isWhatsAppShareOpen && (
+        <WhatsAppDocumentShareModal
+          isOpen={isWhatsAppShareOpen}
+          onClose={() => setIsWhatsAppShareOpen(false)}
+          client={
+            selectedClientId !== 'ALL'
+              ? state.clients.find((c) => c.id === selectedClientId) || null
+              : state.clients.find((c) => c.id === state.activeClientContext?.clientId) || state.clients[0] || null
+          }
+          state={state}
+          initialShareType="ACCOUNT_STATEMENT"
+          initialAccountStatement={{
+            accountId: selectedAccountId !== 'ALL' ? selectedAccountId : undefined,
+            startDate,
+            endDate,
+          }}
+        />
+      )}
     </UnifiedScreenCard>
   );
 };

@@ -89,8 +89,8 @@ export const ClientSelectionReportModal: React.FC<ClientSelectionReportModalProp
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase().trim();
     return (
-      c.name.toLowerCase().includes(term) ||
-      c.clientCode.toLowerCase().includes(term) ||
+      (c.name || '').toLowerCase().includes(term) ||
+      (c.clientCode || '').toLowerCase().includes(term) ||
       (c.taxCardNo && c.taxCardNo.includes(term)) ||
       (c.commercialRegistrationNo && c.commercialRegistrationNo.includes(term)) ||
       (c.activityType && c.activityType.toLowerCase().includes(term))

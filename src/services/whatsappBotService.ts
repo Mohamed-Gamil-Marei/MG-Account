@@ -57,15 +57,15 @@ export class WhatsAppBotService {
    * Builds the official greeting header for client messages
    */
   public static getHeader(client: ClientArchiveRecord): string {
-    const contact = client.contactPerson ? `عناية: ${client.contactPerson}` : 'الإدارة المالية الموقرة';
-    return `🏢 *${client.name}*\n${contact}\nتحية طيبة وبعد،،\n\n`;
+    const contact = client.contactPerson ? ` (${client.contactPerson})` : '';
+    return `مكتب المحاسب القانوني / محمد جميل مرعي\nالسادة / *${client.name}*${contact}\nتحية طيبة،،\n\n`;
   }
 
   /**
-   * Builds the certified office footer signature
+   * Builds the certified office footer signature with distinct numbers
    */
-  public static getFooter(officeProfile: OfficeProfile): string {
-    return `\n\n━━━━━━━━━━━━━━━━━━━━\n📌 *${officeProfile.firmName}*\nالمحاسب القانوني: *أ/ ${officeProfile.auditorName}*\nرقم القيد والترخيص: ${officeProfile.licenseNumber}\n📞 هاتف المكتب: ${officeProfile.phone || officeProfile.mobile || '01003335360'}\n🌐 المنظومة المحاسبية المعتمدة (EAS 2026)`;
+  public static getFooter(officeProfile?: OfficeProfile): string {
+    return `\n\n━━━━━━━━━━━━━━━━━━━━\n💬 واتساب: 0552777332 | 📞 اتصال: 01003335360\nمكتب المحاسب القانوني ومراقب الحسابات`;
   }
 
   /**
@@ -78,20 +78,13 @@ export class WhatsAppBotService {
   ): string {
     const header = this.getHeader(client);
     const footer = this.getFooter(officeProfile);
-    const verificationUrl = `${window.location.origin}/#verify=INV&code=${invoice.invoiceNumber}`;
 
     return (
       header +
-      `🧾 *إشعار إصدار فاتورة أتعاب مهنية معتمدة*\n\n` +
-      `نحيط سيادتكم علماً بأنه تم إصدار فاتورة ضريبية رسمية للخدمات المحاسبية والاستشارية المقدمة لشركتكم:\n\n` +
-      `🔹 *رقم الفاتورة:* ${invoice.invoiceNumber}\n` +
-      `🔹 *تاريخ الإصدار:* ${invoice.date}\n` +
-      `🔹 *تاريخ الاستحقاق:* ${invoice.dueDate || invoice.date}\n` +
-      `🔹 *إجمالي القيمة:* *${(invoice.grandTotal || 0).toLocaleString('en-US')} ج.م*\n` +
-      `🔹 *ضريبة القيمة المضافة (14%):* ${(invoice.totalVat || 0).toLocaleString('en-US')} ج.م\n` +
-      `🔹 *حالة الفاتورة:* ${invoice.status === 'PAID' ? '✅ مسددة بالكامل' : '⏳ قيد الاستحقاق'}\n\n` +
-      `🔍 *رابط الفحص والتحقق الإلكتروني (QR Code):*\n${verificationUrl}\n\n` +
-      `يرجى التكرم بتوجيه الإدارة المالية للمطابقة والسداد.` +
+      `مرفق مطالبة أتعاب مهنية رقم *${invoice.invoiceNumber}* بقيمة *${(invoice.grandTotal || 0).toLocaleString('ar-EG')} ج.م*.\n` +
+      `الحالة: ${invoice.status === 'PAID' ? 'مسددة بنجاح ✅' : 'مستحقة للسداد ⏳'}\n` +
+      `تاريخ الاستحقاق: ${invoice.dueDate || invoice.date}\n` +
+      `شاكرين حسن تعاونكم وحرصكم الدائم.` +
       footer
     );
   }
@@ -107,24 +100,11 @@ export class WhatsAppBotService {
     const header = this.getHeader(client);
     const footer = this.getFooter(officeProfile);
 
-    const paymentMethodMap: Record<string, string> = {
-      CASH: 'نقداً بالخزنة',
-      BANK_TRANSFER: 'تحويل بنكي رسمي',
-      INSTAPAY: 'إنستاباي (InstaPay)',
-      CHEQUE: 'شيك بنكي',
-    };
-
     return (
       header +
-      `💰 *إشعار سند قبض مالي رسمي (إيصال استلام أتعاب)*\n\n` +
-      `تم بحمد الله استلام وتسجيل دفعة أتعاب في خزينة المكتب وقيدها في حسابكم:\n\n` +
-      `🔹 *رقم سند القبض:* ${tx.voucherNumber}\n` +
-      `🔹 *تاريخ الاستلام:* ${tx.date}\n` +
-      `🔹 *المبلغ المحصل:* *${tx.amount.toLocaleString('en-US')} ج.م*\n` +
-      `🔹 *طريقة السداد:* ${paymentMethodMap[tx.paymentMethod] || tx.paymentMethod}\n` +
-      `🔹 *البيان والتفاصيل:* ${tx.description}\n` +
-      `🔹 *المستلم المسؤول:* ${tx.recordedBy}\n\n` +
-      `✅ تم تحديث كشف الحساب الخاص بسيادتكم بالمنظومة.` +
+      `تم استلام وتوريد *${(tx.amount || 0).toLocaleString('ar-EG')} ج.م* بالخزينة بموجب سند قبض رقم *${tx.voucherNumber}* بتاريخ ${tx.date}.\n` +
+      `البيان: ${tx.description}\n` +
+      `تم قيد الدفعة وتحديث كشف حسابكم بالمنظومة.` +
       footer
     );
   }
@@ -141,26 +121,23 @@ export class WhatsAppBotService {
     const footer = this.getFooter(officeProfile);
 
     const typeTitles: Record<string, string> = {
-      VAT_10: 'إقرار ضريبة القيمة المضافة (نموذج 10)',
-      INCOME_27_CORP: 'إقرار ضريبة الدخل - أرباح الأشخاص الاعتبارية (نموذج 27)',
-      INCOME_28_INDIV: 'إقرار ضريبة الدخل - الأشخاص الطبيعيين (نموذج 28)',
-      PAYROLL_4: 'إقرار ضريبة المرتبات وما في حكمها (نموذج 4 مرتبات)',
-      WHT_41: 'نموذج 41 الخصم والتحصيل تحت حساب الضريبة',
-      ANNUAL_PAYROLL_SETTLEMENT: 'التسوية السنوية لضريبة كسب العمل',
+      VAT_10: 'إقرار القيمة المضافة',
+      INCOME_27_CORP: 'إقرار أرباح الشركات',
+      INCOME_28_INDIV: 'إقرار الدخل للأفراد',
+      PAYROLL_4: 'إقرار المرتبات والأجور',
+      WHT_41: 'نموذج 41 خصم وتحصيل',
+      ANNUAL_PAYROLL_SETTLEMENT: 'التسوية السنوية للمرتبات',
     };
 
     const declTitle = typeTitles[tax.declarationType] || tax.declarationType;
+    const taxDue = tax.netVatPayable || tax.netTaxPayable || 0;
 
     return (
       header +
-      `📑 *إشعار اعتماد وتقديم الإقرار الضريبي الرسمي*\n\n` +
-      `تم بنجاح تقديم إقراركم الضريبي عبر البوابة الإلكترونية لمصلحة الضرائب المصرية (ETA):\n\n` +
-      `🔹 *نوع الإقرار:* ${declTitle}\n` +
-      `🔹 *الفترة الضريبية:* ${tax.period} (سنة ${tax.taxYear})\n` +
-      `🔹 *تاريخ التقديم:* ${tax.submissionDate || new Date().toISOString().slice(0, 10)}\n` +
-      `🔹 *رقم إشعار البوابة / السداد:* *${tax.receiptNumber || 'معتمد رسمياً'}*\n` +
-      `🔹 *الضريبة واجبة السداد:* ${(tax.netVatPayable || tax.netTaxPayable || 0).toLocaleString('en-US')} ج.م\n\n` +
-      `📁 صورة الإقرار وإيصال السداد الإلكتروني مؤرشفة وجاهزة للتحميل طرفنا.` +
+      `تم بنجاح اعتماد وتقديم *${declTitle}* عن فترة *${tax.period}* بمصلحة الضرائب المصرية.\n` +
+      `رقم الإشعار: ${tax.receiptNumber || 'معتمد'}\n` +
+      `الضريبة واجبة السداد: *${taxDue.toLocaleString('ar-EG')} ج.م*.\n` +
+      `المستند مؤرشف بملفكم طرفنا.` +
       footer
     );
   }
@@ -178,12 +155,8 @@ export class WhatsAppBotService {
 
     return (
       header +
-      `⏰ *تنبيه ودي: اقتراب الموعد النهائي للإقرار الضريبي*\n\n` +
-      `نود تذكير سيادتكم بقرب انتهاء المهلة القانونية لتقديم إقرار:\n\n` +
-      `🔹 *الإقرار:* ${tax.declarationType}\n` +
-      `🔹 *الفترة:* ${tax.period}\n` +
-      `🔹 *تاريخ الاستحقاق الأخير:* *${tax.dueDate}*\n\n` +
-      `⚠️ يرجى التكرم بسرعة موافاة المكتب بفواتير المبيعات والمشتريات ومسيرات الأجور لاستيفاء الفحص والمطابقة في الموعد القانوني تفادياً لأي غرامات تأخير.` +
+      `تذكير ودي بقرب الموعد القانوني لتقديم إقرار *${tax.declarationType}* عن فترة *${tax.period}* (آخر موعد: ${tax.dueDate}).\n` +
+      `يرجى التكرم بتجهيز وموافاتنا بالمستندات اللازمة لاستيفاء الفحص.` +
       footer
     );
   }
@@ -198,19 +171,12 @@ export class WhatsAppBotService {
   ): string {
     const header = this.getHeader(client);
     const footer = this.getFooter(officeProfile);
-    const qrVerifyUrl = `${window.location.origin}/#verify=CERT&code=${cert.certificateNumber}`;
 
     return (
       header +
-      `📜 *إشعار اعتماد وتوثيق شهادة محاسبية رسمية*\n\n` +
-      `يسرنا إحاطة سيادتكم بأنه تم الانتهاء من مراجعة واعتماد الشهادة المهنية الخاصة بكم:\n\n` +
-      `🔹 *رقم الشهادة المعتمد:* ${cert.certificateNumber}\n` +
-      `🔹 *الجهة الموجه إليها:* ${cert.recipientEntity || 'من يهمه الأمر'}\n` +
-      `🔹 *الغرض:* ${cert.purpose}\n` +
-      `🔹 *المبلغ المعتمد:* *${(cert.certifiedAmount || 0).toLocaleString('en-US')} ج.م*\n` +
-      `🔹 *تاريخ الاعتماد:* ${cert.issueDate}\n\n` +
-      `🔒 *التحقق الرقمي الفوري عبر الـ QR Code:* \n${qrVerifyUrl}\n\n` +
-      `الشهادة مختومة وموقعة رسمياً وجاهزة للاستلام بمقر المكتب.` +
+      `تم اعتماد شهادتكم المهنية رقم *${cert.certificateNumber}* بغرض: ${cert.purpose} لصالح: ${cert.recipientEntity || 'الجهة المختصة'}.\n` +
+      `المبلغ المعتمد: *${(cert.certifiedAmount || 0).toLocaleString('ar-EG')} ج.م*.\n` +
+      `الشهادة مختومة وموثقة برمز QR وجاهزة للاستلام والتسليم.` +
       footer
     );
   }
@@ -227,23 +193,19 @@ export class WhatsAppBotService {
     const footer = this.getFooter(officeProfile);
 
     const statusMap: Record<string, string> = {
-      COMPLETED: '✅ تم الإنجاز والاعتماد بنجاح',
-      IN_PROGRESS: '⚙️ جاري العمل والتنفيذ',
-      AT_AUTHORITY: '🏛️ مقدم ومقيد لدى الجهة الحكومية المختصة',
-      PENDING_CLIENT_DOCS: '⏳ بانتظار موافاتنا بالمستندات المطلوبة',
-      PENDING: '📝 قيد التجهيز والدراسة',
+      COMPLETED: 'مكتمل بنجاح ✅',
+      IN_PROGRESS: 'قيد التنفيذ ⏳',
+      AT_AUTHORITY: 'مقدم للجهة الحكومية 🏛️',
+      PENDING_CLIENT_DOCS: 'بانتظار مستنداتكم',
+      PENDING: 'قيد الدراسة والتجهيز',
     };
 
     return (
       header +
-      `📌 *إشعار بمستجدات الإجراء الإداري والمحاسبي*\n\n` +
-      `إحاطة سيادتكم بآخر تطورات الإجراء رقم (*${proc.procedureCode}*):\n\n` +
-      `🔹 *الموضوع:* ${proc.title}\n` +
-      `🔹 *الموقف الحالي:* *${statusMap[proc.status] || proc.status}*\n` +
-      `🔹 *نسبة الإنجاز:* ${proc.progressPercent}%\n` +
-      `🔹 *المحاسب المسؤول:* ${proc.assignedTo}\n` +
-      (proc.notes ? `🔹 *ملاحظات وتوجيهات:* ${proc.notes}\n` : '') +
-      `\nنحن على تواصل مستمر لإحاطتكم بأي مستجدات جديدة فور صدورها.` +
+      `إحاطتكم بمستجدات معاملة: *${proc.title}* (كود: ${proc.procedureCode}).\n` +
+      `الموقف الحالي: *${statusMap[proc.status] || proc.status}* (إنجاز: ${proc.progressPercent}%).\n` +
+      (proc.notes ? `ملاحظة: ${proc.notes}\n` : '') +
+      `شاكرين ثقتكم الكريمة.` +
       footer
     );
   }
@@ -278,7 +240,7 @@ export class WhatsAppBotService {
     client: ClientArchiveRecord,
     state: DatabaseState
   ): { text: string; category: WhatsAppEventCategory } {
-    const text = incomingText.trim().toLowerCase();
+    const text = (incomingText || '').trim().toLowerCase();
     const office = state.officeProfile;
 
     // Option 1: Invoices and Fees

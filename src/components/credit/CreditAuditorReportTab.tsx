@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileCheck2, ShieldCheck, CheckCircle2, Award, Printer } from 'lucide-react';
 import { formatEgyptianCurrency, generateQrCodeSvg, buildAuditorReportQrText } from '../../utils/qrCodeGenerator';
 import { OfficialReportHeader } from '../common/OfficialReportHeader';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 
 interface CreditAuditorReportTabProps {
   yearsList: number[];
@@ -42,23 +43,17 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-700">السنة المالية:</label>
-            <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
-              {yearsList.map((y) => (
-                <button
-                  key={y}
-                  type="button"
-                  onClick={() => setSelectedYear(y)}
-                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                    selectedYear === y
-                      ? 'bg-blue-700 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {y}
-                </button>
-              ))}
-            </div>
+            <UnifiedSelectDropdown<number>
+              id="auditor-report-year-dropdown"
+              label="سنة التقرير"
+              value={selectedYear}
+              options={yearsList.map((y) => ({
+                id: y,
+                label: `تقرير سنة ${y}`,
+                sublabel: `معايير المراجعة المصرية للسنة المالية ${y}`,
+              }))}
+              onChange={(y) => setSelectedYear(y)}
+            />
           </div>
         </div>
 
@@ -85,15 +80,31 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
 
           <div>
             <label className="block text-slate-700 font-bold mb-1">نوع الرأي المهني الصادر:</label>
-            <select
+            <UnifiedSelectDropdown<'CLEAN' | 'QUALIFIED' | 'EMPHASIS'>
+              id="auditor-opinion-dropdown"
+              label="الرأي المهني"
               value={opinionType}
-              onChange={(e) => setOpinionType(e.target.value as any)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800"
-            >
-              <option value="CLEAN">رأي غير متحفظ نظيف (Unqualified Opinion)</option>
-              <option value="EMPHASIS">رأي غير متحفظ مع فقرة لفت انتباه (Emphasis of Matter)</option>
-              <option value="QUALIFIED">رأي متحفظ مهني (Qualified Opinion)</option>
-            </select>
+              menuWidth="w-full"
+              className="w-full"
+              options={[
+                {
+                  id: 'CLEAN',
+                  label: 'رأي غير متحفظ نظيف (Unqualified Opinion)',
+                  sublabel: 'تعبر بعدالة ووضوح في كافة جوانبها الجوهرية',
+                },
+                {
+                  id: 'EMPHASIS',
+                  label: 'رأي غير متحفظ مع فقرة لفت انتباه (Emphasis of Matter)',
+                  sublabel: 'لفت انتباه دون تعديل في جوهر الرأي النظيف',
+                },
+                {
+                  id: 'QUALIFIED',
+                  label: 'رأي متحفظ مهني (Qualified Opinion)',
+                  sublabel: 'باستثناء أثر الأمر الموضح بفقرة أساس الرأي المتحفظ',
+                },
+              ]}
+              onChange={(val) => setOpinionType(val)}
+            />
           </div>
         </div>
       </div>

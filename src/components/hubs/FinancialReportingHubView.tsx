@@ -62,16 +62,35 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
     badgeColor?: string;
   }[] = [
     {
+      id: 'CREDIT_SIMULATOR',
+      label: 'ملف الائتمان والقوائم البنكية المعتمدة',
+      icon: TrendingUp,
+      badge: 'مسار معتمد',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+    },
+    {
       id: 'FINANCIAL_STATEMENTS',
-      label: 'القوائم المالية',
+      label: 'القوائم المالية الداخلية والمقارنة',
       icon: FileSpreadsheet,
+    },
+    {
+      id: 'AUDITOR_REPORT',
+      label: 'تقرير مراقب الحسابات (ESA)',
+      icon: FileCheck2,
+    },
+    {
+      id: 'FINANCIAL_NOTES',
+      label: 'الإيضاحات المتممة',
+      icon: FileText,
+      badge: 'معيار 1',
+      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
     },
     {
       id: 'CURRENCY_RATES',
       label: 'أسعار الصرف والعملات (EAS 13)',
       icon: DollarSign,
       badge: 'متعدد العملات',
-      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+      badgeColor: 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-800',
     },
     {
       id: 'BUDGET_PLANNER',
@@ -87,23 +106,6 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       id: 'FINANCIAL_SIMULATOR',
       label: 'محاكي القوائم والنسب',
       icon: Sliders,
-    },
-    {
-      id: 'FINANCIAL_NOTES',
-      label: 'الإيضاحات المتممة',
-      icon: FileText,
-      badge: 'معيار 1',
-      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
-    },
-    {
-      id: 'AUDITOR_REPORT',
-      label: 'تقرير مراقب الحسابات',
-      icon: FileCheck2,
-    },
-    {
-      id: 'CREDIT_SIMULATOR',
-      label: 'الائتمان وتوزيع الأرباح',
-      icon: TrendingUp,
     },
   ];
 
@@ -226,3 +228,6 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
     </div>
   );
 };
+
+export default React.memo(FinancialReportingHubView);
+

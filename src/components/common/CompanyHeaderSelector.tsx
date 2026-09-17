@@ -42,12 +42,14 @@ export const CompanyHeaderSelector: React.FC<CompanyHeaderSelectorProps> = ({
   const currentClientId = selectedClientId !== undefined ? selectedClientId : state.activeClientContext?.clientId;
   const activeClient = state.clients.find((c) => c.id === currentClientId);
 
+  const q = (searchTerm || '').toLowerCase().trim();
   const filteredClients = (state.clients || []).filter(
     (c) =>
-      (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      !q ||
+      (c.name || '').toLowerCase().includes(q) ||
       (c.taxCardNo && c.taxCardNo.includes(searchTerm)) ||
-      (c.clientCode && c.clientCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (c.activity && c.activity.toLowerCase().includes(searchTerm.toLowerCase()))
+      (c.clientCode && c.clientCode.toLowerCase().includes(q)) ||
+      (c.activity && c.activity.toLowerCase().includes(q))
   );
 
   const handleSelect = (client: ClientArchiveRecord | null) => {

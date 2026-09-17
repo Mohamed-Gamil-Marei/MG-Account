@@ -22,6 +22,8 @@ import { SimpleRichTextEditor } from '../common/SimpleRichTextEditor';
 import { FixedAssetCategoryItem } from './CreditFixedAssetsTab';
 import { AdminExpenseItem } from './CreditAdminExpensesTab';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
+import { ActionMenu } from '../common/ActionMenu';
 import * as XLSX from 'xlsx';
 
 export interface NoteBreakdownRow {
@@ -52,6 +54,7 @@ interface CreditNotesTabProps {
   periodStartDate?: string;
   periodEndDate?: string;
   periodLabel?: string;
+  isolatedYear?: number;
 }
 
 export const DEFAULT_SUPPLEMENTARY_NOTES: SupplementaryNoteItem[] = [
@@ -309,7 +312,16 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
   periodStartDate,
   periodEndDate,
   periodLabel,
+  isolatedYear,
 }) => {
+  const [selectedDisplayYear, setSelectedDisplayYear] = useState<number | 'ALL'>(
+    isolatedYear || 'ALL'
+  );
+  const displayYears =
+    selectedDisplayYear === 'ALL'
+      ? yearsList
+      : yearsList.filter((y) => y === selectedDisplayYear);
+
   const [localNotes, setLocalNotes] = useState<SupplementaryNoteItem[]>(DEFAULT_SUPPLEMENTARY_NOTES);
   const activeNotes = propNotesList || localNotes;
 
@@ -556,37 +568,61 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Action Controls - Unified Dropdown Design */}
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIsAddingNewNote(true)}
-            className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            إضافة إيضاح متمم جديد
-          </button>
+          {/* Year Filter Unified Dropdown */}
+          <UnifiedSelectDropdown<string | number>
+            id="notes-year-filter-dropdown"
+            label="عرض إيضاحات"
+            value={selectedDisplayYear}
+            menuWidth="w-56"
+            options={[
+              {
+                id: 'ALL',
+                label: 'جميع السنوات المقارنة',
+                sublabel: 'عرض كامل لكافة السنوات',
+              },
+              ...yearsList.map((yr) => ({
+                id: yr,
+                label: `سنة ${yr}`,
+                sublabel: `إيضاحات وأرقام سنة ${yr}`,
+              })),
+            ]}
+            onChange={(val) => setSelectedDisplayYear(val as any)}
+          />
 
-          <button
-            type="button"
-            onClick={handleExportNotesExcel}
-            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            تصدير الإيضاحات (Excel)
-          </button>
-
-          {onResetNotes && (
-            <button
-              type="button"
-              onClick={onResetNotes}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-              title="استعادة الإيضاحات النموذجية المعتمدة"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              استعادة الافتراضي
-            </button>
-          )}
+          {/* Action Menu */}
+          <ActionMenu
+            id="notes-actions-menu"
+            label="خيارات وإجراءات"
+            triggerVariant="primary"
+            align="left"
+            items={[
+              {
+                id: 'add-note-action',
+                label: 'إضافة إيضاح متمم جديد',
+                icon: Plus,
+                onClick: () => setIsAddingNewNote(true),
+              },
+              {
+                id: 'export-notes-excel',
+                label: 'تصدير الإيضاحات (Excel)',
+                icon: Download,
+                variant: 'success',
+                onClick: handleExportNotesExcel,
+              },
+              ...(onResetNotes
+                ? [
+                    {
+                      id: 'reset-notes',
+                      label: 'استعادة الإيضاحات النموذجية المعتمدة',
+                      icon: RefreshCw,
+                      onClick: onResetNotes,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 
@@ -808,7 +844,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {yearsList.map((yr) => {
+                        {displayYears.map((yr) => {
                           const netFixed = computedData[yr]?.netFixedAssets || 0;
                           const depExp = computedData[yr]?.depreciation || 0;
                           const estCost = Math.round(netFixed * 1.35);
@@ -856,7 +892,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                       <thead>
                         <tr className="bg-slate-100 text-slate-700 font-bold">
                           <th className="py-2 px-3">بند المصروف الإداري</th>
-                          {yearsList.map((yr) => (
+                          {displayYears.map((yr) => (
                             <th key={yr} className="py-2 px-3 text-center">
                               سنة {yr}
                             </th>
@@ -869,7 +905,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                             <td className="py-1.5 px-3 font-medium text-slate-800">
                               {item.name}
                             </td>
-                            {yearsList.map((yr) => (
+                            {displayYears.map((yr) => (
                               <td key={yr} className="py-1.5 px-3 text-center font-mono font-bold text-slate-700">
                                 {formatEgyptianCurrency(item.valuesByYear[yr] || 0)}
                               </td>
@@ -881,7 +917,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                             <td className="py-1.5 px-3">
                               + {adminExpenses.length - 6} بنود أخرى مفصلة في جدول المصروفات...
                             </td>
-                            {yearsList.map((yr) => (
+                            {displayYears.map((yr) => (
                               <td key={yr} className="py-1.5 px-3 text-center font-mono">
                                 ...
                               </td>
@@ -892,7 +928,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                           <td className="py-2 px-3 font-black">
                             إجمالي المصروفات الإدارية والعمومية
                           </td>
-                          {yearsList.map((yr) => {
+                          {displayYears.map((yr) => {
                             const tot = adminExpenses.reduce(
                               (sum, i) => sum + (i.valuesByYear[yr] || 0),
                               0
@@ -981,7 +1017,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                         <thead>
                           <tr className="bg-slate-100 text-slate-700 font-bold">
                             <th className="py-2 px-3">البيان</th>
-                            {yearsList.map((yr) => (
+                            {displayYears.map((yr) => (
                               <th key={yr} className="py-2 px-3 text-center">
                                 سنة {yr} (ج.م)
                               </th>
@@ -995,7 +1031,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                               <td className="py-1.5 px-3 font-medium text-slate-800">
                                 {row.label}
                               </td>
-                              {yearsList.map((yr) => (
+                              {displayYears.map((yr) => (
                                 <td key={yr} className="py-1.5 px-3 text-center">
                                   <AccountingNumberInput
                                     value={row.valuesByYear[yr] || 0}
@@ -1030,7 +1066,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                           {/* Breakdown Total */}
                           <tr className="bg-slate-100 font-black text-slate-900 border-t border-slate-200">
                             <td className="py-2 px-3">الإجمالي التفصيلي للبند</td>
-                            {yearsList.map((yr) => {
+                            {displayYears.map((yr) => {
                               const tot = (note.customBreakdownRows || []).reduce(
                                 (sum, r) => sum + (r.valuesByYear[yr] || 0),
                                 0

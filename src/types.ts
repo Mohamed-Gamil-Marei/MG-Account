@@ -693,6 +693,8 @@ export interface OfficeProfile {
   logoUrl?: string;
   stampUrl?: string;
   publicDomainUrl?: string; // رابط النطاق العام للتحقق المباشر من الـ QR
+  systemSerial?: string; // سريال المنظومة الرئيسي المشفر
+  activationKey?: string; // كود التفعيل والترخيص الرقمي
   notes?: string;
 }
 
@@ -919,12 +921,14 @@ export type NavigationTab =
   | 'BANK_RECONCILIATION'
   | 'OCR_INVOICE_SCANNER'
   | 'FINANCIAL_STATEMENTS'
+  | 'BUDGET_PLANNER'
   | 'FINANCIAL_NOTES'
   | 'AUDITOR_REPORT'
   | 'FINANCIAL_SIMULATOR'
   | 'AUDIT_WORKING_PAPERS'
   | 'JOURNAL_AUDIT_SCANNER'
   | 'FRAUD_AUDIT_SENTINEL'
+  | 'AUDIT_CONSISTENCY_SENTINEL'
   | 'CASH_FLOW_PREDICTOR'
   | 'CREDIT_SIMULATOR'
   | 'TAX_EXPOSURE_SIMULATOR'
@@ -941,7 +945,8 @@ export type NavigationTab =
   | 'INVOICING'
   | 'CUSTOMS_SHIPMENTS'
   | 'SAP_ERP'
-  | 'AUDIT_TRAIL';
+  | 'AUDIT_TRAIL'
+  | 'EXCEL_AUDIT_SENTINEL';
 
 // Bank Reconciliation Interfaces
 export interface BankStatementLine {
@@ -1154,6 +1159,7 @@ export type WhatsAppEventCategory =
   | 'TAX_DEADLINE_REMINDER'
   | 'CERTIFICATE'
   | 'PROCEDURE_UPDATE'
+  | 'SECURITY_VERIFICATION'
   | 'INTERACTIVE_BOT_MENU'
   | 'BOT_AUTO_REPLY';
 
@@ -1197,7 +1203,7 @@ export interface WhatsAppBotSettings {
   welcomeGreeting: string;
   botName: string;
   includeQrVerification: boolean;
-  apiDispatchMode?: 'DIRECT_WEB_API' | 'META_CLOUD_API' | 'CUSTOM_GATEWAY';
+  apiDispatchMode?: 'DIRECT_WEB_API' | 'META_CLOUD_API' | 'CUSTOM_GATEWAY' | 'INTERNAL_BAILEYS_QR';
   customApiBaseUrl?: string; // e.g. 'https://api.whatsapp.com/send' or 'https://wa.me'
   defaultCountryCode?: string; // e.g. '20'
   autoFormatEgyptianNumbers?: boolean;
@@ -1225,7 +1231,9 @@ export interface SystemUser {
   role: UserRole;
   roleTitleArabic: string; // "مدير النظام والشريك المسؤول", "مراقب حسابات / مراجع أول", "محاسب مالي / مسجل قيود", "سكرتارية واستقبال"
   pinCode?: string; // e.g. "1234"
+  password?: string;
   avatarInitials?: string;
+  isActive?: boolean;
   canAccessTreasury: boolean;
   canAccessAuditTrail: boolean;
   canAccessCreditFiles?: boolean;
@@ -1423,5 +1431,135 @@ export interface HsTariffCode {
   regulatoryAuthority?: string;
   category: string;
 }
+
+// ============================================================================
+// AI Smart Excel Audit & Unsupervised Anomaly Sentinel (مختبر المراجعة والتدقيق الذكي للإكسيل)
+// ============================================================================
+
+export type ExcelAuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type ExcelAnomalyCategory =
+  | 'BENFORD_DEVIATION'
+  | 'ISOLATION_OUTLIER'
+  | 'EXACT_DUPLICATE'
+  | 'FUZZY_DUPLICATE'
+  | 'STRUCTURING_THRESHOLD'
+  | 'ROUND_NUMBER'
+  | 'WEEKEND_OFF_HOURS'
+  | 'RELATIVE_SIZE_SPIKE'
+  | 'SEQUENCE_GAP'
+  | 'IRREGULAR_ACCOUNT_DEBIT';
+
+export interface ColumnMappingConfidence {
+  detectedColumn: string | null;
+  confidence: number; // 0 to 100%
+  isManualOverride: boolean;
+}
+
+export interface ColumnMappingConfig {
+  dateCol: ColumnMappingConfidence;
+  amountCol: ColumnMappingConfidence;
+  debitCol: ColumnMappingConfidence;
+  creditCol: ColumnMappingConfidence;
+  descriptionCol: ColumnMappingConfidence;
+  docNoCol: ColumnMappingConfidence;
+  accountCol: ColumnMappingConfidence;
+  entityCol: ColumnMappingConfidence;
+  categoryCol: ColumnMappingConfidence;
+}
+
+export interface ExcelAuditRow {
+  id: string;
+  rowIndex: number;
+  originalRowData: Record<string, any>;
+  date: string;
+  docNo: string;
+  description: string;
+  account: string;
+  entity: string;
+  amount: number;
+  debit: number;
+  credit: number;
+  category: string;
+  hasWarnings?: boolean;
+}
+
+export interface BenfordDigitMetric {
+  digit: number;
+  actualCount: number;
+  actualPercentage: number;
+  expectedPercentage: number; // Benford Log10(1 + 1/d)
+  deviation: number;
+  zScore: number;
+  isAnomalous: boolean;
+}
+
+export interface BenfordAnalysisResult {
+  digitStats: BenfordDigitMetric[];
+  totalEvaluatedAmounts: number;
+  meanAbsoluteDeviation: number; // MAD
+  conformityLevel: 'CLOSE' | 'ACCEPTABLE' | 'MARGINAL' | 'NON_CONFORMING';
+  chiSquareStatistic: number;
+  isSignificantDistortion: boolean;
+  distortedDigits: number[];
+}
+
+export interface UnsupervisedMlAnomaly {
+  id: string;
+  rowIndex: number;
+  row: ExcelAuditRow;
+  score: number; // 0 to 100 anomaly intensity
+  severity: ExcelAuditSeverity;
+  category: ExcelAnomalyCategory;
+  title: string;
+  mathematicalReason: string; // Quantitative XAI explanation
+  auditingInterpretation: string; // ESA 240 / EAS / Egyptian Law reference
+  mandatoryManualAuditStep: string; // Substantive verification action
+  isManuallyVerified?: boolean;
+  auditorNotes?: string;
+  verificationVerdict?: 'CONFIRMED_ERROR' | 'JUSTIFIED_LEGITIMATE' | 'PENDING_DOCUMENTATION' | 'UNCHECKED';
+}
+
+export interface AuditClusterSummary {
+  clusterName: string;
+  clusterLabelAr: string;
+  count: number;
+  minAmount: number;
+  maxAmount: number;
+  totalSum: number;
+  meanAmount: number;
+  outliersCount: number;
+}
+
+export interface ExcelAuditDatasetSummary {
+  fileName: string;
+  sheetName: string;
+  totalRows: number;
+  validRowsCount: number;
+  skippedRowsCount: number;
+  totalGrossAmount: number;
+  meanAmount: number;
+  medianAmount: number;
+  stdDeviation: number;
+  minAmount: number;
+  maxAmount: number;
+  mappedColumns: { key: string; labelAr: string; column: string; confidence: number }[];
+  anomaliesCount: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  benfordResult: BenfordAnalysisResult;
+  clusters: AuditClusterSummary[];
+  overallRiskScore: number; // 0 (Prism Safe) to 100 (High Risk / Material Misstatement Danger)
+  aiExecutiveMemo?: string;
+  aiSuggestedAuditProcedures?: string[];
+  auditDate: string;
+  auditorName: string;
+  firmName: string;
+}
+
 
 

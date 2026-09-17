@@ -27,6 +27,9 @@ import {
 
 export type CreditPrintScope =
   | 'SELECTED_YEAR'
+  | 'SELECTED_YEAR_STANDALONE'
+  | 'SELECTED_YEAR_WITH_COMPARISON'
+  | 'CUSTOM_YEARS_MATRIX'
   | 'ALL_YEARS_BATCH'
   | 'CUSTOM_RANGE_BATCH'
   | 'AUDITOR_ONLY'
@@ -56,6 +59,8 @@ export interface ClientProfileData {
 export interface CreditBatchPrintDocumentProps {
   printScope: CreditPrintScope;
   selectedYear: number;
+  comparisonYear?: number | null;
+  includeComparisonColumn?: boolean;
   yearsList: number[];
   customYearsList?: number[];
   yearsData: Record<number, FiscalYearData>;
@@ -96,14 +101,28 @@ export function getDossierPageMetas(
   printScope: CreditPrintScope,
   selectedYear: number,
   yearsList: number[],
-  customYearsList?: number[]
+  customYearsList?: number[],
+  comparisonYear?: number | null,
+  includeComparisonColumn?: boolean
 ): PrintablePageMeta[] {
   const metas: PrintablePageMeta[] = [];
   let pageNum = 1;
 
   if (printScope === 'COMPLETE_DOSSIER') {
     metas.push({ id: 'cover', pageNumber: pageNum++, title: 'الغلاف الرسمي للملف الائتماني والمالي' });
-    metas.push({ id: `statements-${selectedYear}`, pageNumber: pageNum++, title: `القوائم المالية لسنة ${selectedYear} (المركز والدخل والتدفقات)` });
+    if (includeComparisonColumn && comparisonYear) {
+      metas.push({
+        id: `statements-${selectedYear}-comparison`,
+        pageNumber: pageNum++,
+        title: `القوائم المالية لسنة ${selectedYear} مقارنة بسنة ${comparisonYear}`,
+      });
+    } else {
+      metas.push({
+        id: `statements-${selectedYear}-standalone`,
+        pageNumber: pageNum++,
+        title: `القوائم المالية لسنة ${selectedYear} (مستقلة معتمدة)`,
+      });
+    }
     metas.push({ id: 'auditor-report', pageNumber: pageNum++, title: 'تقرير مراقب الحسابات المستقل' });
     metas.push({ id: 'profit-distribution', pageNumber: pageNum++, title: 'مشروع وتوزيع الأرباح المقترح' });
     metas.push({ id: 'fixed-assets', pageNumber: pageNum++, title: 'جدول حركة وإهلاك الأصول الثابتة' });
@@ -114,6 +133,32 @@ export function getDossierPageMetas(
     metas.push({ id: 'credit-analysis', pageNumber: pageNum++, title: 'تقرير التحليل المالي ومؤشرات السيولة والربحية' });
     metas.push({ id: 'credit-memo', pageNumber: pageNum++, title: 'تقييم الجدارة ومذكرة التوصية الائتمانية المصرفية' });
     return metas;
+  }
+
+  if (printScope === 'SELECTED_YEAR_STANDALONE' || (printScope === 'SELECTED_YEAR' && includeComparisonColumn === false)) {
+    return [{
+      id: `statements-${selectedYear}-standalone`,
+      pageNumber: 1,
+      title: `القوائم المالية لسنة ${selectedYear} مستقلة (بدون سنة مقارنة)`,
+    }];
+  }
+
+  if (printScope === 'SELECTED_YEAR_WITH_COMPARISON' || (printScope === 'SELECTED_YEAR' && includeComparisonColumn === true)) {
+    const compYr = comparisonYear || (selectedYear > 2000 ? selectedYear - 1 : 2025);
+    return [{
+      id: `statements-${selectedYear}-comparison`,
+      pageNumber: 1,
+      title: `القوائم المالية المقارنة: سنة ${selectedYear} مقابل سنة ${compYr}`,
+    }];
+  }
+
+  if (printScope === 'CUSTOM_YEARS_MATRIX') {
+    const list = customYearsList && customYearsList.length > 0 ? customYearsList : yearsList;
+    return [{
+      id: 'statements-custom-matrix',
+      pageNumber: 1,
+      title: `مصفوفة القوائم المالية المقارنة للسنوات المختارة (${list.join(' - ')})`,
+    }];
   }
 
   if (printScope === 'ALL_YEARS_BATCH') {
@@ -170,6 +215,8 @@ export function getDossierPageMetas(
 export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> = ({
   printScope,
   selectedYear,
+  comparisonYear,
+  includeComparisonColumn = true,
   yearsList,
   customYearsList,
   yearsData,
@@ -202,6 +249,20 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
   creditRatioNames = {},
   hiddenCreditRatioIds = [],
 }) => {
+  const resolvedComparisonYear =
+    comparisonYear !== undefined && comparisonYear !== null
+      ? comparisonYear
+      : yearsList.filter((y) => y < selectedYear).length > 0
+      ? Math.max(...yearsList.filter((y) => y < selectedYear))
+      : selectedYear > 2000
+      ? selectedYear - 1
+      : null;
+
+  const matrixYearsToPrint =
+    customYearsList && customYearsList.length > 0
+      ? customYearsList
+      : yearsList;
+
   const yearsToPrint =
     printScope === 'CUSTOM_RANGE_BATCH' && customYearsList && customYearsList.length > 0
       ? customYearsList
@@ -269,7 +330,13 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
     currentPageNum?: number,
     totalCount?: number
   ) => {
-    const docNumber = `EGY-CRD-${year}-${Math.floor(Math.random() * 900000 + 100000)}`;
+    // Deterministic verification code so QR and number remain rock-solid across re-renders
+    const hash = Math.abs(
+      `${clientProfile.taxRegNo || '492817'}-${year}-${currentPageNum || 1}`
+        .split('')
+        .reduce((acc, char) => acc + char.charCodeAt(0), 0) * 8191
+    ) % 900000 + 100000;
+    const docNumber = `EGY-CRD-${year}-${hash}`;
     const payload: VerificationPayloadData = {
       docNumber,
       docType: documentType,
@@ -438,144 +505,600 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
     });
   }
 
-  // 1. Financial Statements Pages for each year in scope
-  if (
-    printScope === 'SELECTED_YEAR' ||
-    printScope === 'ALL_YEARS_BATCH' ||
-    printScope === 'CUSTOM_RANGE_BATCH' ||
-    printScope === 'COMPLETE_DOSSIER'
-  ) {
+  // 1. Financial Statements Pages for each year in scope / standalone / comparative / matrix
+  // Helper for Standalone Year Page (بدون سنة مقارنة)
+  const renderStandalonePage = (yr: number, pageNum: number, total: number) => {
+    const d = computedData[yr] || {};
+    const totalAssets = d.totalAssets || 1;
+    const sales = d.sales || 1;
+
+    return (
+      <div
+        key={`fs-standalone-${yr}`}
+        data-page-number={pageNum}
+        className="page-content flex-1 flex flex-col justify-between space-y-3.5 w-full"
+      >
+        {renderOfficialHeader('القوائم المالية المدققة المستقلة (سنة منفردة)', yr)}
+
+        <div className="space-y-3.5 flex-1">
+          <div className="bg-amber-50 border border-amber-200 rounded p-1.5 flex items-center justify-between text-[10px] text-amber-950 font-bold">
+            <span>نطاق القوائم المالية: سنة مالية مستقلة ومعتمدة (بدون سنة مقارنة)</span>
+            <span className="font-mono">معايير المحاسبة المصرية (EAS 1)</span>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5 flex justify-between items-center">
+              <span>1. قائمة المركز المالي المستقلة {periodEndDate ? `كما في ${periodEndDate}` : `كما في 31 ديسمبر ${yr}`}</span>
+              <span className="text-[10px] font-normal text-slate-500 font-mono">القيم بالجنيه المصري</span>
+            </h4>
+            <table className="w-full text-[10.5px] border border-slate-300 divide-y divide-slate-300">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 text-[10px] font-bold">
+                  <th className="p-1 text-right">بيان البند المحاسبي</th>
+                  <th className="p-1 text-center w-14">الإيضاح</th>
+                  <th className="p-1 text-left w-28 font-mono">القيمة الحالية (ج.م)</th>
+                  <th className="p-1 text-left w-20 font-mono">الوزن النسبي %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                <tr>
+                  <td className="p-1 font-bold">الأصول غير المتداولة (صافي الأصول الثابتة)</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(3)</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.totalNonCurrentAssets || 0)}</td>
+                  <td className="p-1 text-left font-mono text-slate-600">{(((d.totalNonCurrentAssets || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1 font-bold">الأصول المتداولة (المخزون والعملاء والنقدية)</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(4-6)</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.totalCurrentAssets || 0)}</td>
+                  <td className="p-1 text-left font-mono text-slate-600">{(((d.totalCurrentAssets || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-slate-100 font-black">
+                  <td className="p-1">إجمالي الأصول المعتمدة</td>
+                  <td className="p-1 text-center">-</td>
+                  <td className="p-1 text-left font-mono text-emerald-900">{formatEgyptianCurrency(d.totalAssets || 0)}</td>
+                  <td className="p-1 text-left font-mono font-bold text-emerald-900">100.0%</td>
+                </tr>
+                <tr>
+                  <td className="p-1">الالتزامات المتداولة (الموردون والتسهيلات قصيرة الأجل)</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(8-9)</td>
+                  <td className="p-1 text-left font-mono text-red-700">{formatEgyptianCurrency(d.totalCurrentLiabilities || 0)}</td>
+                  <td className="p-1 text-left font-mono text-slate-600">{(((d.totalCurrentLiabilities || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1">الالتزامات غير المتداولة (قروض طويلة الأجل)</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(10)</td>
+                  <td className="p-1 text-left font-mono text-red-700">{formatEgyptianCurrency(d.longLoans || 0)}</td>
+                  <td className="p-1 text-left font-mono text-slate-600">{(((d.longLoans || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-slate-50 font-bold">
+                  <td className="p-1">إجمالي الالتزامات</td>
+                  <td className="p-1 text-center">-</td>
+                  <td className="p-1 text-left font-mono text-red-900">{formatEgyptianCurrency(d.totalLiabilities || 0)}</td>
+                  <td className="p-1 text-left font-mono text-red-900">{(((d.totalLiabilities || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1 font-bold">رأس المال المصدر والمدفوع</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(11)</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.paidUpCapital || 0)}</td>
+                  <td className="p-1 text-left font-mono text-slate-600">{(((d.paidUpCapital || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1 font-bold">الاحتياطيات والأرباح المرحلة وجاري الشركاء</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(12)</td>
+                  <td className="p-1 text-left font-mono">
+                    {formatEgyptianCurrency((d.legalReserve || 0) + (d.retainedEarningsAndProfit || 0), true)}
+                  </td>
+                  <td className="p-1 text-left font-mono text-slate-600">
+                    {((((d.legalReserve || 0) + (d.retainedEarningsAndProfit || 0)) / totalAssets) * 100).toFixed(1)}%
+                  </td>
+                </tr>
+                <tr className="bg-blue-50 font-black text-blue-950">
+                  <td className="p-1">إجمالي حقوق الملكية</td>
+                  <td className="p-1 text-center">-</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.totalEquity || 0, true)}</td>
+                  <td className="p-1 text-left font-mono font-bold text-blue-900">{(((d.totalEquity || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-slate-900 text-white font-black">
+                  <td className="p-1">إجمالي الالتزامات وحقوق الملكية (مطابق)</td>
+                  <td className="p-1 text-center">-</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.totalEquityAndLiabilities || 0)}</td>
+                  <td className="p-1 text-left font-mono font-bold text-emerald-400">100.0%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5 flex justify-between items-center">
+              <span>2. قائمة الدخل الشامل المستقلة {periodStartDate && periodEndDate ? `عن الفترة من ${periodStartDate} إلى ${periodEndDate}` : `عن السنة المنتهية في 31 ديسمبر ${yr}`}</span>
+              <span className="text-[10px] font-normal text-slate-500 font-mono">النسب من المبيعات</span>
+            </h4>
+            <table className="w-full text-[10.5px] border border-slate-300 divide-y divide-slate-300">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 text-[10px] font-bold">
+                  <th className="p-1 text-right">بيان الإيرادات والتكاليف</th>
+                  <th className="p-1 text-center w-14">الإيضاح</th>
+                  <th className="p-1 text-left w-28 font-mono">القيمة (ج.م)</th>
+                  <th className="p-1 text-left w-20 font-mono">النسبة %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                <tr>
+                  <td className="p-1 font-bold">صافي المبيعات والإيرادات التشغيلية</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(13)</td>
+                  <td className="p-1 text-left font-mono font-bold text-blue-900">{formatEgyptianCurrency(d.sales || 0)}</td>
+                  <td className="p-1 text-left font-mono font-bold text-blue-900">100.0%</td>
+                </tr>
+                <tr>
+                  <td className="p-1 text-red-700">يخصم: تكلفة المبيعات المباشرة</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(14)</td>
+                  <td className="p-1 text-left font-mono text-red-700">({formatEgyptianCurrency(d.cogs || 0)})</td>
+                  <td className="p-1 text-left font-mono text-red-700">{(((d.cogs || 0) / sales) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-slate-50 font-bold">
+                  <td className="p-1">مجمل الربح التجاري / الصناعي</td>
+                  <td className="p-1 text-center">-</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.grossProfit || 0)}</td>
+                  <td className="p-1 text-left font-mono font-bold text-emerald-800">{(((d.grossProfit || 0) / sales) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1">المصروفات الإدارية والعمومية والبيعية</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(15)</td>
+                  <td className="p-1 text-left font-mono">({formatEgyptianCurrency((d.adminExp || 0) + (d.sellingExp || 0))})</td>
+                  <td className="p-1 text-left font-mono text-slate-600">{((((d.adminExp || 0) + (d.sellingExp || 0)) / sales) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1">أعباء التمويل والفوائد البنكية</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(16)</td>
+                  <td className="p-1 text-left font-mono text-purple-900">({formatEgyptianCurrency(d.financeExp || 0)})</td>
+                  <td className="p-1 text-left font-mono text-purple-900">{(((d.financeExp || 0) / sales) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr>
+                  <td className="p-1">ضريبة الدخل المستحقة (22.5%)</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(17)</td>
+                  <td className="p-1 text-left font-mono text-red-700">({formatEgyptianCurrency(d.tax || 0)})</td>
+                  <td className="p-1 text-left font-mono text-red-700">{(((d.tax || 0) / sales) * 100).toFixed(1)}%</td>
+                </tr>
+                <tr className={(d.netProfit || 0) >= 0 ? "bg-emerald-50 font-black text-emerald-950" : "bg-rose-50 font-black text-rose-950"}>
+                  <td className="p-1">
+                    {(d.netProfit || 0) >= 0 ? 'صافي ربح العام بعد الضريبة' : 'صافي خسارة العام بعد الضريبة (عجز)'}
+                  </td>
+                  <td className="p-1 text-center">-</td>
+                  <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.netProfit || 0, true)}</td>
+                  <td className="p-1 text-left font-mono font-bold">{(((d.netProfit || 0) / sales) * 100).toFixed(1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2 text-[10px] text-center font-mono bg-slate-50 p-2 rounded border border-slate-200">
+            <div>
+              <span className="text-slate-500 font-sans block">نسبة التداول العام:</span>
+              <strong className="text-blue-900 font-bold">{d.currentRatio?.toFixed(2)}x</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-sans block">هامش صافي الربح:</span>
+              <strong className="text-emerald-900 font-bold">{d.netMargin?.toFixed(1)}%</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-sans block">تغطية الفوائد ICR:</span>
+              <strong className="text-indigo-900 font-bold">{d.icr?.toFixed(2)}x</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-sans block">العائد على الملكية ROE:</span>
+              <strong className="text-purple-900 font-bold">{d.roe?.toFixed(1)}%</strong>
+            </div>
+          </div>
+        </div>
+
+        {renderOfficialFooter('قوائم مالية مستقلة معتمدة', yr, pageNum, total)}
+      </div>
+    );
+  };
+
+  // Helper for Comparative Year Page (سنة محددة مع سنة مقارنة مخصصة)
+  const renderComparativePage = (yr: number, compYr: number, pageNum: number, total: number) => {
+    const cur = computedData[yr] || {};
+    const prev = computedData[compYr] || {};
+
+    const calcVar = (valCur: number, valPrev: number) => {
+      const diff = valCur - valPrev;
+      const pct = valPrev !== 0 ? (diff / Math.abs(valPrev)) * 100 : 0;
+      return { diff, pct };
+    };
+
+    return (
+      <div
+        key={`fs-comp-${yr}-${compYr}`}
+        data-page-number={pageNum}
+        className="page-content flex-1 flex flex-col justify-between space-y-3.5 w-full"
+      >
+        {renderOfficialHeader(`القوائم المالية المقارنة المعتمدة (${yr} / ${compYr})`, yr)}
+
+        <div className="space-y-3.5 flex-1">
+          <div className="bg-blue-50 border border-blue-200 rounded p-1.5 flex items-center justify-between text-[10px] text-blue-950 font-bold">
+            <span>القوائم المالية المقارنة: سنة الأساس ({yr}) مقارنة بالسنة السابقة ({compYr})</span>
+            <span className="font-mono">معايير المحاسبة المصرية (EAS 1)</span>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5 flex justify-between items-center">
+              <span>1. قائمة المركز المالي المقارنة كما في 31 ديسمبر {yr} و {compYr}</span>
+              <span className="text-[10px] font-normal text-slate-500 font-mono">القيم بالجنيه المصري</span>
+            </h4>
+            <table className="w-full text-[10px] border border-slate-300 divide-y divide-slate-300">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold">
+                  <th className="p-1 text-right">بيان البند المحاسبي</th>
+                  <th className="p-1 text-center w-10">إيضاح</th>
+                  <th className="p-1 text-left w-24 font-mono">{yr}</th>
+                  <th className="p-1 text-left w-24 font-mono">{compYr}</th>
+                  <th className="p-1 text-left w-24 font-mono">التغير (ج.م)</th>
+                  <th className="p-1 text-left w-16 font-mono">% النمو</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {[
+                  { label: 'الأصول غير المتداولة (الأصول الثابتة بالصافي)', note: '(3)', k: 'totalNonCurrentAssets' },
+                  { label: 'الأصول المتداولة (المخزون والعملاء والنقدية)', note: '(4-6)', k: 'totalCurrentAssets' },
+                  { label: 'إجمالي الأصول', note: '-', k: 'totalAssets', isTotal: true, color: 'text-emerald-900' },
+                  { label: 'الالتزامات المتداولة (الموردون والتسهيلات قصيرة الأجل)', note: '(8-9)', k: 'totalCurrentLiabilities', isLiab: true },
+                  { label: 'الالتزامات غير المتداولة (قروض طويلة الأجل)', note: '(10)', k: 'longLoans', isLiab: true },
+                  { label: 'إجمالي الالتزامات', note: '-', k: 'totalLiabilities', isSubtotal: true, color: 'text-red-900' },
+                  { label: 'رأس المال المصدر والمدفوع', note: '(11)', k: 'paidUpCapital' },
+                  { label: 'الاحتياطيات والأرباح وجاري الشركاء', note: '(12)', k: 'retainedSum' },
+                  { label: 'إجمالي حقوق الملكية', note: '-', k: 'totalEquity', isSubtotal: true, color: 'text-blue-900' },
+                  { label: 'إجمالي الالتزامات وحقوق الملكية (مطابق)', note: '-', k: 'totalEquityAndLiabilities', isTotalDark: true },
+                ].map((row, idx) => {
+                  const valCur = row.k === 'retainedSum'
+                    ? (cur.legalReserve || 0) + (cur.retainedEarningsAndProfit || 0)
+                    : (cur[row.k] || 0);
+                  const valPrev = row.k === 'retainedSum'
+                    ? (prev.legalReserve || 0) + (prev.retainedEarningsAndProfit || 0)
+                    : (prev[row.k] || 0);
+                  const v = calcVar(valCur, valPrev);
+
+                  const trClass = row.isTotalDark
+                    ? 'bg-slate-900 text-white font-black'
+                    : row.isTotal
+                    ? 'bg-slate-100 font-black'
+                    : row.isSubtotal
+                    ? 'bg-slate-50 font-bold'
+                    : '';
+
+                  return (
+                    <tr key={idx} className={trClass}>
+                      <td className="p-1 font-semibold">{row.label}</td>
+                      <td className="p-1 text-center font-mono text-slate-500">{row.note}</td>
+                      <td className={`p-1 text-left font-mono ${row.color || ''}`}>{formatEgyptianCurrency(valCur)}</td>
+                      <td className="p-1 text-left font-mono text-slate-600">{formatEgyptianCurrency(valPrev)}</td>
+                      <td className={`p-1 text-left font-mono ${v.diff >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {v.diff >= 0 ? `+${formatEgyptianCurrency(v.diff)}` : formatEgyptianCurrency(v.diff)}
+                      </td>
+                      <td className={`p-1 text-left font-mono font-bold ${v.pct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {v.pct >= 0 ? `+${v.pct.toFixed(1)}%` : `${v.pct.toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5 flex justify-between items-center">
+              <span>2. قائمة الدخل الشامل المقارنة عن السنوات المالية {yr} و {compYr}</span>
+              <span className="text-[10px] font-normal text-slate-500 font-mono">القيم بالجنيه المصري</span>
+            </h4>
+            <table className="w-full text-[10px] border border-slate-300 divide-y divide-slate-300">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold">
+                  <th className="p-1 text-right">بيان الإيرادات والمصروفات</th>
+                  <th className="p-1 text-center w-10">إيضاح</th>
+                  <th className="p-1 text-left w-24 font-mono">{yr}</th>
+                  <th className="p-1 text-left w-24 font-mono">{compYr}</th>
+                  <th className="p-1 text-left w-24 font-mono">التغير (ج.م)</th>
+                  <th className="p-1 text-left w-16 font-mono">% النمو</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {[
+                  { label: 'صافي المبيعات والإيرادات', note: '(13)', curVal: cur.sales || 0, prevVal: prev.sales || 0, bold: true, color: 'text-blue-900' },
+                  { label: 'يخصم: تكلفة المبيعات', note: '(14)', curVal: cur.cogs || 0, prevVal: prev.cogs || 0, isCost: true },
+                  { label: 'مجمل الربح', note: '-', curVal: cur.grossProfit || 0, prevVal: prev.grossProfit || 0, isSubtotal: true },
+                  { label: 'المصروفات الإدارية والعمومية والبيعية', note: '(15)', curVal: (cur.adminExp || 0) + (cur.sellingExp || 0), prevVal: (prev.adminExp || 0) + (prev.sellingExp || 0) },
+                  { label: 'أعباء التمويل والفوائد البنكية', note: '(16)', curVal: cur.financeExp || 0, prevVal: prev.financeExp || 0, color: 'text-purple-900' },
+                  { label: 'ضريبة الدخل المستحقة (22.5%)', note: '(17)', curVal: cur.tax || 0, prevVal: prev.tax || 0, isCost: true },
+                  { label: 'صافي ربح العام بعد الضريبة', note: '-', curVal: cur.netProfit || 0, prevVal: prev.netProfit || 0, isNetProfit: true },
+                ].map((row, idx) => {
+                  const v = calcVar(row.curVal, row.prevVal);
+                  const trClass = row.isNetProfit
+                    ? (row.curVal >= 0 ? 'bg-emerald-50 font-black text-emerald-950' : 'bg-rose-50 font-black text-rose-950')
+                    : row.isSubtotal
+                    ? 'bg-slate-50 font-bold'
+                    : '';
+
+                  return (
+                    <tr key={idx} className={trClass}>
+                      <td className="p-1 font-semibold">{row.label}</td>
+                      <td className="p-1 text-center font-mono text-slate-500">{row.note}</td>
+                      <td className={`p-1 text-left font-mono ${row.color || ''}`}>
+                        {row.isCost ? `(${formatEgyptianCurrency(row.curVal)})` : formatEgyptianCurrency(row.curVal, true)}
+                      </td>
+                      <td className="p-1 text-left font-mono text-slate-600">
+                        {row.isCost ? `(${formatEgyptianCurrency(row.prevVal)})` : formatEgyptianCurrency(row.prevVal, true)}
+                      </td>
+                      <td className={`p-1 text-left font-mono ${v.diff >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {v.diff >= 0 ? `+${formatEgyptianCurrency(v.diff)}` : formatEgyptianCurrency(v.diff)}
+                      </td>
+                      <td className={`p-1 text-left font-mono font-bold ${v.pct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {v.pct >= 0 ? `+${v.pct.toFixed(1)}%` : `${v.pct.toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2 text-[9.5px] text-center font-mono bg-slate-50 p-2 rounded border border-slate-200">
+            <div>
+              <span className="text-slate-500 font-sans block">نسبة التداول ({yr} / {compYr}):</span>
+              <strong className="text-blue-900">{cur.currentRatio?.toFixed(2)}x</strong>
+              <span className="text-slate-400 mx-1">|</span>
+              <span className="text-slate-600">{prev.currentRatio?.toFixed(2)}x</span>
+            </div>
+            <div>
+              <span className="text-slate-500 font-sans block">هامش صافي الربح:</span>
+              <strong className="text-emerald-900">{cur.netMargin?.toFixed(1)}%</strong>
+              <span className="text-slate-400 mx-1">|</span>
+              <span className="text-slate-600">{prev.netMargin?.toFixed(1)}%</span>
+            </div>
+            <div>
+              <span className="text-slate-500 font-sans block">تغطية الفوائد ICR:</span>
+              <strong className="text-indigo-900">{cur.icr?.toFixed(2)}x</strong>
+              <span className="text-slate-400 mx-1">|</span>
+              <span className="text-slate-600">{prev.icr?.toFixed(2)}x</span>
+            </div>
+            <div>
+              <span className="text-slate-500 font-sans block">العائد على الملكية ROE:</span>
+              <strong className="text-purple-900">{cur.roe?.toFixed(1)}%</strong>
+              <span className="text-slate-400 mx-1">|</span>
+              <span className="text-slate-600">{prev.roe?.toFixed(1)}%</span>
+            </div>
+          </div>
+        </div>
+
+        {renderOfficialFooter(`قوائم مالية مقارنة (${yr} / ${compYr})`, yr, pageNum, total)}
+      </div>
+    );
+  };
+
+  // Helper for Multi-Year Custom Matrix Page (مصفوفة مقارنة متعددة للسنوات المختارة)
+  const renderMatrixPage = (yearsArr: number[], pageNum: number, total: number) => {
+    return (
+      <div
+        key="fs-matrix"
+        data-page-number={pageNum}
+        className="page-content flex-1 flex flex-col justify-between space-y-3.5 w-full"
+      >
+        {renderOfficialHeader(`مصفوفة القوائم المالية المقارنة (${yearsArr.join(' - ')})`, yearsArr[yearsArr.length - 1])}
+
+        <div className="space-y-3.5 flex-1">
+          <div className="bg-indigo-50 border border-indigo-200 rounded p-1.5 flex items-center justify-between text-[10px] text-indigo-950 font-bold">
+            <span>مصفوفة تطور المؤشرات المالية للسنوات المحددة: {yearsArr.join(' | ')}</span>
+            <span className="font-mono">معايير المحاسبة المصرية وإدارات الائتمان</span>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5">
+              1. قائمة المركز المالي المقارنة (القيم بالجنيه المصري)
+            </h4>
+            <table className="w-full text-[9.5px] border border-slate-300 divide-y divide-slate-300">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold">
+                  <th className="p-1 text-right">بيان البند المحاسبي</th>
+                  {yearsArr.map((y) => (
+                    <th key={y} className="p-1 text-left font-mono">{y}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                <tr>
+                  <td className="p-1 font-bold">الأصول غير المتداولة</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">{formatEgyptianCurrency(computedData[y]?.totalNonCurrentAssets || 0)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="p-1 font-bold">الأصول المتداولة</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">{formatEgyptianCurrency(computedData[y]?.totalCurrentAssets || 0)}</td>
+                  ))}
+                </tr>
+                <tr className="bg-slate-100 font-black">
+                  <td className="p-1">إجمالي الأصول</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono text-emerald-900">{formatEgyptianCurrency(computedData[y]?.totalAssets || 0)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="p-1">الالتزامات المتداولة</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono text-red-700">{formatEgyptianCurrency(computedData[y]?.totalCurrentLiabilities || 0)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="p-1">الالتزامات غير المتداولة</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono text-red-700">{formatEgyptianCurrency(computedData[y]?.longLoans || 0)}</td>
+                  ))}
+                </tr>
+                <tr className="bg-slate-50 font-bold">
+                  <td className="p-1">إجمالي الالتزامات</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono text-red-900">{formatEgyptianCurrency(computedData[y]?.totalLiabilities || 0)}</td>
+                  ))}
+                </tr>
+                <tr className="bg-blue-50 font-black text-blue-950">
+                  <td className="p-1">إجمالي حقوق الملكية</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">{formatEgyptianCurrency(computedData[y]?.totalEquity || 0, true)}</td>
+                  ))}
+                </tr>
+                <tr className="bg-slate-900 text-white font-black">
+                  <td className="p-1">إجمالي الالتزامات وحقوق الملكية</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">{formatEgyptianCurrency(computedData[y]?.totalEquityAndLiabilities || 0)}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5">
+              2. قائمة الدخل الشامل المقارنة
+            </h4>
+            <table className="w-full text-[9.5px] border border-slate-300 divide-y divide-slate-300">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold">
+                  <th className="p-1 text-right">بيان الإيرادات والتكاليف</th>
+                  {yearsArr.map((y) => (
+                    <th key={y} className="p-1 text-left font-mono">{y}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                <tr>
+                  <td className="p-1 font-bold">صافي المبيعات والإيرادات</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono font-bold text-blue-900">{formatEgyptianCurrency(computedData[y]?.sales || 0)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="p-1 text-red-700">تكلفة المبيعات</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono text-red-700">({formatEgyptianCurrency(computedData[y]?.cogs || 0)})</td>
+                  ))}
+                </tr>
+                <tr className="bg-slate-50 font-bold">
+                  <td className="p-1">مجمل الربح</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">{formatEgyptianCurrency(computedData[y]?.grossProfit || 0)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="p-1">المصروفات الإدارية والبيعية</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">({formatEgyptianCurrency((computedData[y]?.adminExp || 0) + (computedData[y]?.sellingExp || 0))})</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="p-1">الفوائد التمويلية</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono text-purple-900">({formatEgyptianCurrency(computedData[y]?.financeExp || 0)})</td>
+                  ))}
+                </tr>
+                <tr className="bg-emerald-50 font-black text-emerald-950">
+                  <td className="p-1">صافي ربح العام بعد الضريبة</td>
+                  {yearsArr.map((y) => (
+                    <td key={y} className="p-1 text-left font-mono">{formatEgyptianCurrency(computedData[y]?.netProfit || 0, true)}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border border-slate-200 rounded p-2 bg-slate-50">
+            <h5 className="font-bold text-[10px] text-slate-800 mb-1">المؤشرات والنسب المالية للسنوات المحددة:</h5>
+            <div className="grid grid-cols-4 gap-2 text-[9.5px] font-mono">
+              <div>
+                <span className="text-slate-500 font-sans block">نسبة التداول:</span>
+                {yearsArr.map((y) => (
+                  <div key={y} className="flex justify-between">
+                    <span className="text-slate-600 font-sans">{y}:</span>
+                    <strong className="text-blue-900">{computedData[y]?.currentRatio?.toFixed(2)}x</strong>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans block">هامش صافي الربح:</span>
+                {yearsArr.map((y) => (
+                  <div key={y} className="flex justify-between">
+                    <span className="text-slate-600 font-sans">{y}:</span>
+                    <strong className="text-emerald-900">{computedData[y]?.netMargin?.toFixed(1)}%</strong>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans block">تغطية الفوائد ICR:</span>
+                {yearsArr.map((y) => (
+                  <div key={y} className="flex justify-between">
+                    <span className="text-slate-600 font-sans">{y}:</span>
+                    <strong className="text-indigo-900">{computedData[y]?.icr?.toFixed(2)}x</strong>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <span className="text-slate-500 font-sans block">العائد على الملكية ROE:</span>
+                {yearsArr.map((y) => (
+                  <div key={y} className="flex justify-between">
+                    <span className="text-slate-600 font-sans">{y}:</span>
+                    <strong className="text-purple-900">{computedData[y]?.roe?.toFixed(1)}%</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {renderOfficialFooter('مصفوفة القوائم المالية المقارنة', yearsArr[yearsArr.length - 1], pageNum, total)}
+      </div>
+    );
+  };
+
+  // Route page generation based on printScope:
+  if (printScope === 'COMPLETE_DOSSIER') {
+    if (includeComparisonColumn && resolvedComparisonYear) {
+      allPagesList.push({
+        id: `statements-${selectedYear}-comparison`,
+        title: `القوائم المالية لسنة ${selectedYear} مقارنة بسنة ${resolvedComparisonYear}`,
+        render: (pageNum, total) => renderComparativePage(selectedYear, resolvedComparisonYear, pageNum, total),
+      });
+    } else {
+      allPagesList.push({
+        id: `statements-${selectedYear}-standalone`,
+        title: `القوائم المالية لسنة ${selectedYear} (مستقلة معتمدة)`,
+        render: (pageNum, total) => renderStandalonePage(selectedYear, pageNum, total),
+      });
+    }
+  } else if (printScope === 'SELECTED_YEAR_STANDALONE' || (printScope === 'SELECTED_YEAR' && includeComparisonColumn === false)) {
+    allPagesList.push({
+      id: `statements-${selectedYear}-standalone`,
+      title: `القوائم المالية لسنة ${selectedYear} منفردة (بدون سنة مقارنة)`,
+      render: (pageNum, total) => renderStandalonePage(selectedYear, pageNum, total),
+    });
+  } else if (printScope === 'SELECTED_YEAR_WITH_COMPARISON' || (printScope === 'SELECTED_YEAR' && includeComparisonColumn === true)) {
+    const compYr = resolvedComparisonYear || (selectedYear > 2000 ? selectedYear - 1 : 2025);
+    allPagesList.push({
+      id: `statements-${selectedYear}-comparison`,
+      title: `القوائم المالية المقارنة: سنة ${selectedYear} مقابل سنة ${compYr}`,
+      render: (pageNum, total) => renderComparativePage(selectedYear, compYr, pageNum, total),
+    });
+  } else if (printScope === 'CUSTOM_YEARS_MATRIX') {
+    allPagesList.push({
+      id: 'statements-custom-matrix',
+      title: `مصفوفة القوائم المالية المقارنة للسنوات المختارة (${matrixYearsToPrint.join(' - ')})`,
+      render: (pageNum, total) => renderMatrixPage(matrixYearsToPrint, pageNum, total),
+    });
+  } else if (printScope === 'ALL_YEARS_BATCH' || printScope === 'CUSTOM_RANGE_BATCH') {
     yearsToPrint.forEach((yr) => {
-      const d = computedData[yr] || {};
       allPagesList.push({
         id: `statements-${yr}`,
         title: `القوائم المالية لسنة ${yr} (المركز والدخل والتدفقات)`,
-        render: (pageNum, total) => (
-          <div
-            key={`fs-${yr}`}
-            data-page-number={pageNum}
-            className="page-content flex-1 flex flex-col justify-between space-y-3.5 w-full"
-          >
-            {renderOfficialHeader('القوائم المالية المدققة المعتمدة', yr)}
-
-            <div className="space-y-4 flex-1">
-              <div>
-                <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5">
-                  1. قائمة المركز المالي {periodEndDate ? `كما في ${periodEndDate}` : `كما في 31 ديسمبر ${yr}`}
-                </h4>
-                <table className="w-full text-[11px] border border-slate-300 divide-y divide-slate-300">
-                  <tbody className="divide-y divide-slate-200">
-                    <tr>
-                      <td className="p-1.5 font-bold">الأصول غير المتداولة (الأصول الثابتة بالصافي)</td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.totalNonCurrentAssets || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5 font-bold">الأصول المتداولة (المخزون والعملاء والنقدية)</td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.totalCurrentAssets || 0)}</td>
-                    </tr>
-                    <tr className="bg-slate-100 font-black">
-                      <td className="p-1.5">إجمالي الأصول</td>
-                      <td className="p-1.5 text-left font-mono text-emerald-900">{formatEgyptianCurrency(d.totalAssets || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5">الالتزامات المتداولة (الموردون والتسهيلات قصيرة الأجل)</td>
-                      <td className="p-1.5 text-left font-mono text-red-700">{formatEgyptianCurrency(d.totalCurrentLiabilities || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5">الالتزامات غير المتداولة (قروض طويلة الأجل)</td>
-                      <td className="p-1.5 text-left font-mono text-red-700">{formatEgyptianCurrency(d.longLoans || 0)}</td>
-                    </tr>
-                    <tr className="bg-slate-100 font-black">
-                      <td className="p-1.5">إجمالي الالتزامات</td>
-                      <td className="p-1.5 text-left font-mono text-red-900">{formatEgyptianCurrency(d.totalLiabilities || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5 font-bold">رأس المال المصدر والمدفوع</td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.paidUpCapital || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5 font-bold">الاحتياطيات والأرباح المرحلة (أو الخسائر)</td>
-                      <td className="p-1.5 text-left font-mono">
-                        {formatEgyptianCurrency((d.legalReserve || 0) + (d.retainedEarningsAndProfit || 0), true)}
-                      </td>
-                    </tr>
-                    <tr className="bg-blue-50 font-black text-blue-950">
-                      <td className="p-1.5">إجمالي حقوق الملكية</td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.totalEquity || 0, true)}</td>
-                    </tr>
-                    <tr className="bg-slate-900 text-white font-black">
-                      <td className="p-1.5">إجمالي الالتزامات وحقوق الملكية</td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.totalEquityAndLiabilities || 0)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div>
-                <h4 className="font-black text-xs text-blue-900 mb-1 border-r-2 border-blue-800 pr-1.5">
-                  2. قائمة الدخل الشامل {periodStartDate && periodEndDate ? `عن الفترة من ${periodStartDate} إلى ${periodEndDate}` : `عن السنة المنتهية في 31 ديسمبر ${yr}`}
-                </h4>
-                <table className="w-full text-[11px] border border-slate-300 divide-y divide-slate-300">
-                  <tbody className="divide-y divide-slate-200">
-                    <tr>
-                      <td className="p-1.5 font-bold">صافي المبيعات والإيرادات</td>
-                      <td className="p-1.5 text-left font-mono font-bold text-blue-900">{formatEgyptianCurrency(d.sales || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5 text-red-700">يخصم: تكلفة المبيعات المباشرة</td>
-                      <td className="p-1.5 text-left font-mono text-red-700">({formatEgyptianCurrency(d.cogs || 0)})</td>
-                    </tr>
-                    <tr className="bg-slate-50 font-bold">
-                      <td className="p-1.5">مجمل الربح</td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.grossProfit || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5">المصروفات الإدارية والعمومية والبيعية</td>
-                      <td className="p-1.5 text-left font-mono">({formatEgyptianCurrency((d.adminExp || 0) + (d.sellingExp || 0))})</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5">أعباء التمويل والفوائد البنكية</td>
-                      <td className="p-1.5 text-left font-mono text-purple-900">({formatEgyptianCurrency(d.financeExp || 0)})</td>
-                    </tr>
-                    <tr>
-                      <td className="p-1.5">ضريبة الدخل المستحقة (22.5%)</td>
-                      <td className="p-1.5 text-left font-mono text-red-700">({formatEgyptianCurrency(d.tax || 0)})</td>
-                    </tr>
-                    <tr className={(d.netProfit || 0) >= 0 ? "bg-emerald-50 font-black text-emerald-950" : "bg-rose-50 font-black text-rose-950"}>
-                      <td className="p-1.5">
-                        {(d.netProfit || 0) >= 0
-                          ? 'صافي ربح العام بعد الضريبة'
-                          : 'صافي خسارة العام بعد الضريبة (عجز)'}
-                      </td>
-                      <td className="p-1.5 text-left font-mono">{formatEgyptianCurrency(d.netProfit || 0, true)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2 text-[10px] text-center font-mono bg-slate-50 p-2.5 rounded border border-slate-200">
-                <div>
-                  <span className="text-slate-500 font-sans block">نسبة التداول:</span>
-                  <strong className="text-blue-900">{d.currentRatio?.toFixed(2)}x</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-sans block">هامش الربح:</span>
-                  <strong className="text-emerald-900">{d.netMargin?.toFixed(1)}%</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-sans block">تغطية الفوائد:</span>
-                  <strong className="text-indigo-900">{d.icr?.toFixed(2)}x</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-sans block">العائد على الملكية ROE:</span>
-                  <strong className="text-purple-900">{d.roe?.toFixed(1)}%</strong>
-                </div>
-              </div>
-            </div>
-
-            {renderOfficialFooter('قوائم مالية معتمدة', yr, pageNum, total)}
-          </div>
-        ),
+        render: (pageNum, total) => renderStandalonePage(yr, pageNum, total),
       });
     });
   }
@@ -1834,8 +2357,13 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
 
               {/* Realistic Authentic A4 Paper Sheet */}
               <div
-                className={`a4-sheet-canvas bg-white text-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.16)] print:shadow-none border border-slate-300/80 print:border-none w-[210mm] min-h-[297mm] p-[14mm] sm:p-[16mm] print:p-[10mm] flex flex-col justify-between overflow-hidden box-border ${isLastPage ? 'print:page-break-after-avoid' : 'print:page-break-after-always'}`}
-                style={{ pageBreakAfter: isLastPage ? 'avoid' : 'always', breakAfter: isLastPage ? 'avoid' : 'page' }}
+                className={`a4-sheet-canvas bg-white text-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.16)] print:shadow-none border border-slate-300/80 print:border-none w-[210mm] min-h-[297mm] p-[14mm] sm:p-[16mm] print:p-0 print:m-0 print:w-full print:max-w-none print:min-h-0 print:h-auto flex flex-col justify-between overflow-hidden box-border ${isLastPage ? 'print:page-break-after-avoid' : 'print:page-break-after-always'}`}
+                style={{
+                  pageBreakAfter: isLastPage ? 'avoid' : 'always',
+                  breakAfter: isLastPage ? 'avoid' : 'page',
+                  pageBreakInside: 'avoid',
+                  breakInside: 'avoid',
+                }}
               >
                 {page.render(displayPageNum, displayTotal)}
               </div>

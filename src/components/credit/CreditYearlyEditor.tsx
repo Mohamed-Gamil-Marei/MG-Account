@@ -9,6 +9,7 @@ import {
   Percent,
   Sparkles,
   TrendingUp,
+  Repeat,
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../../utils/numberToWordsArabic';
@@ -52,6 +53,7 @@ export interface FiscalYearData {
   otherCurrentLiab?: number;
   paidUpCapital?: number;
   legalReserve?: number;
+  partnerCurrentAccount?: number;
   retainedEarningsAndProfit?: number;
 }
 
@@ -62,6 +64,8 @@ interface CreditYearlyEditorProps {
   sector: 'COMMERCIAL' | 'INDUSTRIAL' | 'CONTRACTING' | 'SERVICES';
   onSectorChange: (s: 'COMMERCIAL' | 'INDUSTRIAL' | 'CONTRACTING' | 'SERVICES') => void;
   onApplyPresetToAllYears: () => void;
+  onRollForwardFromPreviousYear?: (year: number) => void;
+  onRollForwardAllYears?: () => void;
 }
 
 export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
@@ -71,6 +75,8 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
   sector,
   onSectorChange,
   onApplyPresetToAllYears,
+  onRollForwardFromPreviousYear,
+  onRollForwardAllYears,
 }) => {
   // Collapsed by default for a clean, non-intrusive layout
   const [isExpanded, setIsExpanded] = useState(false);
@@ -112,6 +118,19 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onRollForwardFromPreviousYear && (
+            <button
+              type="button"
+              onClick={() => onRollForwardFromPreviousYear(activeYear)}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800 font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title={`ترحيل الثوابت ومجمع الإهلاك وحقوق الملكية من سنة ${activeYear - 1} إلى ${activeYear}`}
+            >
+              <Repeat className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">ترحيل من ({activeYear - 1})</span>
+              <span className="sm:hidden">ترحيل</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onApplyPresetToAllYears}

@@ -562,13 +562,13 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
 
   // Filtered History
   const filteredQuotations = useMemo(() => {
-    if (!searchHistoryQuery.trim()) return quotations;
-    const q = searchHistoryQuery.toLowerCase();
+    if (!searchHistoryQuery || !searchHistoryQuery.trim()) return quotations;
+    const q = searchHistoryQuery.toLowerCase().trim();
     return quotations.filter(
       (item) =>
-        item.clientName.toLowerCase().includes(q) ||
-        item.quotationNumber.toLowerCase().includes(q) ||
-        item.procedureTitle.toLowerCase().includes(q)
+        (item.clientName || '').toLowerCase().includes(q) ||
+        (item.quotationNumber || '').toLowerCase().includes(q) ||
+        (item.procedureTitle || '').toLowerCase().includes(q)
     );
   }, [quotations, searchHistoryQuery]);
 

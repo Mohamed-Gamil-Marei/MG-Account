@@ -117,14 +117,15 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
   // Filtered shipments
   const filteredShipments = useMemo(() => {
     return shipments.filter((s) => {
+      const q = (searchQuery || '').toLowerCase().trim();
       const matchSearch =
-        !searchQuery ||
-        s.shipmentCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        !q ||
+        (s.shipmentCode || '').toLowerCase().includes(q) ||
+        (s.title || '').toLowerCase().includes(q) ||
         (s.acidNumber && s.acidNumber.includes(searchQuery)) ||
-        (s.blNumber && s.blNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        s.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.foreignExporterName && s.foreignExporterName.toLowerCase().includes(searchQuery.toLowerCase()));
+        (s.blNumber && s.blNumber.toLowerCase().includes(q)) ||
+        (s.clientName || '').toLowerCase().includes(q) ||
+        (s.foreignExporterName && s.foreignExporterName.toLowerCase().includes(q));
 
       const matchType = filterType === 'ALL' || s.shipmentType === filterType;
       const matchStatus = filterStatus === 'ALL' || s.status === filterStatus;
@@ -1846,3 +1847,6 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
     </div>
   );
 };
+
+export default CustomsHubView;
+

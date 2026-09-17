@@ -55,8 +55,8 @@ export const TrialBalanceAutoMapperModal: React.FC<TrialBalanceAutoMapperModalPr
 
   // Smart Category & Nature Classifier based on Arabic & English Keywords
   const guessAccountCategoryAndNature = (name: string, code: string): { category: AccountCategory; nature: AccountNature; standardCode: string } => {
-    const cleanName = name.trim().toLowerCase();
-    const cleanCode = code.trim();
+    const cleanName = (name || '').trim().toLowerCase();
+    const cleanCode = (code || '').trim();
 
     // 1. By Code Prefix if available
     if (cleanCode.startsWith('1')) return { category: 'ASSETS', nature: cleanCode.startsWith('119') ? 'CREDIT' : 'DEBIT', standardCode: cleanCode };

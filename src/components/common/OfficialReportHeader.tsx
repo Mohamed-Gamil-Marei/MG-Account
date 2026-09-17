@@ -102,7 +102,7 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
         <div className="space-y-0.5 text-right flex-1 min-w-[230px]">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-blue-900 shrink-0" />
-            <h1 className="text-sm sm:text-base font-black text-slate-950 tracking-tight">
+            <h1 className="text-sm sm:text-base font-black text-slate-950">
               {firmName}
             </h1>
           </div>

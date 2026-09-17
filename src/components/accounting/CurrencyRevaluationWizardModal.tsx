@@ -81,10 +81,10 @@ export const CurrencyRevaluationWizardModal: React.FC<CurrencyRevaluationWizardM
       // Specifically filter by currency tag or name
       const matchesCurrency =
         acc.currency === selectedCurrency ||
-        acc.name.toLowerCase().includes(selectedCurrency.toLowerCase()) ||
-        (selectedCurrency === 'USD' && (acc.name.includes('دولار') || acc.name.includes('Dollar'))) ||
-        (selectedCurrency === 'EUR' && (acc.name.includes('يورو') || acc.name.includes('Euro'))) ||
-        (selectedCurrency === 'SAR' && (acc.name.includes('ريال') || acc.name.includes('SAR')));
+        (acc.name || '').toLowerCase().includes((selectedCurrency || '').toLowerCase()) ||
+        (selectedCurrency === 'USD' && ((acc.name || '').includes('دولار') || (acc.name || '').includes('Dollar'))) ||
+        (selectedCurrency === 'EUR' && ((acc.name || '').includes('يورو') || (acc.name || '').includes('Euro'))) ||
+        (selectedCurrency === 'SAR' && ((acc.name || '').includes('ريال') || (acc.name || '').includes('SAR')));
 
       if (matchesCurrency || (isBankOrCash && acc.code.endsWith('02'))) {
         const bookEgp = acc.currentBalance || (acc.openingBalanceDebit - acc.openingBalanceCredit) || 250000;

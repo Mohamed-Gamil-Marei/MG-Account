@@ -21,10 +21,12 @@ import { AuditWorkingPapersView } from '../AuditWorkingPapersView';
 import { JournalAuditScannerView } from '../audit/JournalAuditScannerView';
 import { FraudAuditSentinelView } from '../audit/FraudAuditSentinelView';
 import { AuditConsistencySentinelView } from '../audit/AuditConsistencySentinelView';
+import { SmartExcelAuditSentinelView } from '../audit/SmartExcelAuditSentinelView';
 import { ClientSelector } from '../common/ClientSelector';
 import { runAutomatedJournalAudit } from '../../services/journalAuditEngine';
 
 export type TaxAuditSubTab =
+  | 'EXCEL_AUDIT_SENTINEL'
   | 'AUDIT_CONSISTENCY_SENTINEL'
   | 'TAX_TRACKER'
   | 'TAX_PENALTY_SIMULATOR'
@@ -72,6 +74,13 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
     badge?: string;
     badgeColor?: string;
   }[] = [
+    {
+      id: 'EXCEL_AUDIT_SENTINEL',
+      label: 'مختبر مراجعة الإكسيل (XAI)',
+      icon: Sparkles,
+      badge: 'ML & بنفورد',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
+    },
     {
       id: 'AUDIT_CONSISTENCY_SENTINEL',
       label: 'المراجع الآلي للاتساق',
@@ -201,6 +210,7 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
 
       {/* Render Active Sub-View */}
       <div>
+        {activeSubTab === 'EXCEL_AUDIT_SENTINEL' && <SmartExcelAuditSentinelView state={state} />}
         {activeSubTab === 'AUDIT_CONSISTENCY_SENTINEL' && (
           <AuditConsistencySentinelView
             state={state}
@@ -219,3 +229,6 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
     </div>
   );
 };
+
+export default React.memo(TaxAuditHubView);
+

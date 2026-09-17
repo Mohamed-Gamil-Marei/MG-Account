@@ -36,10 +36,12 @@ export const FraudAuditSentinelView: React.FC<FraudAuditSentinelViewProps> = ({ 
 
   const filteredAnomalies = useMemo(() => {
     return forensicResults.anomalies.filter((a) => {
+      const q = (searchQuery || '').toLowerCase().trim();
       const matchQuery =
-        a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.accountName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.description.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.accountName || '').toLowerCase().includes(q) ||
+        (a.description || '').toLowerCase().includes(q);
       if (!matchQuery) return false;
       if (selectedSeverity === 'ALL') return true;
       return a.severity === selectedSeverity;

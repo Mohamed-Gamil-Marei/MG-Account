@@ -237,3 +237,6 @@ export const OfficePracticeHubView: React.FC<OfficePracticeHubViewProps> = ({
   );
 };
 
+export default OfficePracticeHubView;
+
+

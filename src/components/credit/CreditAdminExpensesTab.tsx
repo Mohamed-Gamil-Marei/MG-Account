@@ -17,6 +17,9 @@ import {
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import * as XLSX from 'xlsx';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
+import { SMART_EXPENSE_RATIOS } from '../../services/smartCpaTemplateService';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
+import { ActionMenu } from '../common/ActionMenu';
 
 export interface AdminExpenseItem {
   id: string;
@@ -177,6 +180,27 @@ export const CreditAdminExpensesTab: React.FC<CreditAdminExpensesTabProps> = ({
     onUpdateExpenseItems(updated);
   };
 
+  // Apply CPA standard 14-item breakdown (100% total)
+  const handleApplyCpa14Ratios = () => {
+    const newItems: AdminExpenseItem[] = SMART_EXPENSE_RATIOS.map((item, idx) => {
+      const valuesByYear: Record<number, number> = {};
+      yearsList.forEach((yr) => {
+        const totalExp = computedData[yr]?.operatingExpenses || totalExpensesByYear[yr] || 500000;
+        valuesByYear[yr] = Math.round(totalExp * item.ratio);
+      });
+
+      return {
+        id: `cpa_exp_${item.key}`,
+        name: item.label,
+        category: 'مصروفات عمومية معيارية',
+        valuesByYear,
+        notes: `نسبة معتمدة ${(item.ratio * 100).toFixed(0)}% من إجمالي المصروفات`,
+      };
+    });
+
+    onUpdateExpenseItems(newItems);
+  };
+
   // Start editing item metadata
   const handleStartEdit = (item: AdminExpenseItem) => {
     setEditingId(item.id);
@@ -266,37 +290,59 @@ export const CreditAdminExpensesTab: React.FC<CreditAdminExpensesTabProps> = ({
           </div>
         </div>
 
-        {/* Action buttons */}
+        {/* Action Controls - Unified Dropdown Design */}
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIsAddingNew(true)}
-            className="px-3.5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            إضافة بند مصروف جديد
-          </button>
+          {/* Unified Year Dropdown */}
+          <UnifiedSelectDropdown<number>
+            id="admin-expenses-year-dropdown"
+            label="سنة التحليل"
+            value={selectedYear}
+            options={yearsList.map((yr) => ({
+              id: yr,
+              label: `سنة ${yr}`,
+              sublabel: `المصروفات والنسب لسنة ${yr}`,
+            }))}
+            onChange={(yr) => setSelectedYear(yr)}
+          />
 
-          <button
-            type="button"
-            onClick={handleExportExpensesExcel}
-            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            تصدير جدول المصاريف (Excel)
-          </button>
-
-          {onResetExpenses && (
-            <button
-              type="button"
-              onClick={onResetExpenses}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-              title="استعادة البنود القياسية الافتراضية"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              استعادة الافتراضي
-            </button>
-          )}
+          {/* Action Menu */}
+          <ActionMenu
+            id="admin-expenses-action-menu"
+            label="خيارات وإجراءات"
+            triggerVariant="primary"
+            align="left"
+            items={[
+              {
+                id: 'add-expense-item',
+                label: 'إضافة بند مصروف إداري جديد',
+                icon: Plus,
+                onClick: () => setIsAddingNew(true),
+              },
+              {
+                id: 'apply-cpa-ratios',
+                label: 'تطبيق توزيع نموذج الإكسيل (14 بنداً - 100%)',
+                icon: Sparkles,
+                onClick: handleApplyCpa14Ratios,
+              },
+              {
+                id: 'export-expenses-excel',
+                label: 'تصدير جدول المصاريف (Excel)',
+                icon: Download,
+                variant: 'success',
+                onClick: handleExportExpensesExcel,
+              },
+              ...(onResetExpenses
+                ? [
+                    {
+                      id: 'reset-expenses',
+                      label: 'استعادة البنود القياسية الافتراضية',
+                      icon: RefreshCw,
+                      onClick: onResetExpenses,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 

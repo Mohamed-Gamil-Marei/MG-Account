@@ -5,11 +5,11 @@ const PROMO_KEY = 'official_promo_video';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    if (!window.indexedDB) {
+    if (typeof window === 'undefined' || !window.indexedDB) {
       reject(new Error('IndexedDB not supported'));
       return;
     }
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = window.indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {

@@ -634,11 +634,13 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       matchesType = Boolean(inv.isReceipt);
     }
 
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.partnerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      !q ||
+      (inv.invoiceNumber || '').toLowerCase().includes(q) ||
+      (inv.partnerName || '').toLowerCase().includes(q) ||
       (inv.partnerTaxNo && inv.partnerTaxNo.includes(searchTerm)) ||
-      (inv.etaUuid && inv.etaUuid.toLowerCase().includes(searchTerm.toLowerCase()));
+      (inv.etaUuid && inv.etaUuid.toLowerCase().includes(q));
     return matchesType && matchesSearch;
   });
 
@@ -1771,3 +1773,6 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     </UnifiedScreenCard>
   );
 };
+
+export default InvoicingView;
+

@@ -63,10 +63,12 @@ export const TaxTrackerView: React.FC<TaxTrackerViewProps> = ({ state }) => {
       return false;
     }
     const matchesType = selectedType === 'ALL' || decl.declarationType === selectedType;
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      decl.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      decl.period.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      decl.id.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      (decl.clientName || '').toLowerCase().includes(q) ||
+      (decl.period || '').toLowerCase().includes(q) ||
+      (decl.id || '').toLowerCase().includes(q);
     return matchesType && matchesSearch;
   });
 

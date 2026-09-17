@@ -469,6 +469,76 @@ ${JSON.stringify(sampleEntries, null, 2)}
     }
   });
 
+  // AI Smart Excel Audit & Unsupervised Anomaly Sentinel Endpoint
+  app.post("/api/ai/audit-excel-anomalies", async (req, res) => {
+    try {
+      const { summary, anomaliesSample, benfordStats } = req.body;
+      const ai = getAI();
+      if (!ai) {
+        return res.json({
+          success: false,
+          fallback: true,
+          message: "Gemini API client is not configured, fallback engine active."
+        });
+      }
+
+      const prompt = `أنت شريك رئيسي ومراقب حسابات قانوني مصري وخبير في التدقيق الجنائي المالي (Forensic Accounting) ومعايير المراجعة المصرية (ESA 240, ESA 315, ESA 500, ESA 530) وقانون تنظيم المدفوعات غير النقدية رقم 18 لسنة 2019.
+تم إجراء فحص إلكتروني متقدم لملف إكسيل محاسبي مستخرج من إحدى الشركات بواسطة خوارزميات التعلم الآلي غير الخاضع للإشراف (Unsupervised ML) وقانون بنفورد للأرقام الأولى وتحليل التكرار والشواذ الإحصائية.
+
+إحصائيات الملف المفحوص:
+- اسم الملف: ${summary?.fileName || 'بيانات الشركة'}
+- إجمالي عدد الحركات: ${summary?.totalRows || 0}
+- إجمالي القيمة المالية: ${summary?.totalGrossAmount || 0} ج.م
+- مطابقة قانون بنفورد: ${summary?.benfordConformity || 'غير محدد'} (MAD: ${summary?.benfordMad || '0'})
+- درجة الخطر الرقابي الإجمالي المحسوبة: ${summary?.overallRiskScore || 50} / 100
+- عدد العمليات الحرجة: ${summary?.criticalCount || 0}
+- عدد العمليات المرتفعة الخطورة: ${summary?.highCount || 0}
+
+عينة من أبرز العمليات والشواذ الإحصائية المرصودة:
+${JSON.stringify(anomaliesSample || [], null, 2)}
+
+إحصائيات قانون بنفورد للأرقام 1-9:
+${JSON.stringify(benfordStats || [], null, 2)}
+
+المطلوب صياغة مذكرة مراجعة مهنية رفيعة المستوى بصيغة JSON نقية:
+{
+  "executiveMemo": "مذكرة تفصيلية احترافية من 3-4 فقرات تلخص تقييم بيئة الرقابة الداخلية ومؤشرات الخطر الجوهري، تفسير تشوهات بنفورد وتكرار المدفوعات، وحكم المراجع على مصداقية البيانات",
+  "keyFindings": [
+    "ملاحظة جوهرية 1 مع الإشارة لرقم المستند أو الطرف أو المبلغ",
+    "ملاحظة جوهرية 2",
+    "ملاحظة جوهرية 3",
+    "ملاحظة جوهرية 4"
+  ],
+  "substantiveProcedures": [
+    "إجراء فحص يدوي ومستندي إلزامي 1 (معيار ESA 240 / 500)",
+    "إجراء فحص يدوي 2",
+    "إجراء فحص يدوي 3",
+    "إجراء فحص يدوي 4"
+  ],
+  "legalAndTaxDirectives": [
+    "توجيه قانوني/ضريبي بموجب قانون المدفوعات غير النقدية 18 لسنة 2019 وقانون الإجراءات الضريبية 206 لسنة 2020",
+    "توجيه ضريبي آخر"
+  ],
+  "overallVerdict": "مقبول مع تحفظات / عالي المخاطر يستوجب توسيع نطاق العينة / غير مطابق"
+}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const text = response.text || "{}";
+      const parsed = JSON.parse(text);
+      res.json({ success: true, data: parsed });
+    } catch (err: any) {
+      console.error("AI Excel Audit Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // --- Egyptian Tax Authority (ETA) SDK Middleware API Endpoints ---
 
   // 1. Get/Refresh OAuth2 Access Token
@@ -818,19 +888,18 @@ ${JSON.stringify(sampleEntries, null, 2)}
   app.use(express.static(publicPath));
 
   // Vite middleware in dev or static files in production
-  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(path.join(process.cwd(), "dist", "index.html"));
-  if (isProduction) {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  } else {
+  if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {

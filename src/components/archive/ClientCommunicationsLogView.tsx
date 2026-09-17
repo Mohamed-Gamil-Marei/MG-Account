@@ -51,10 +51,12 @@ export const ClientCommunicationsLogView: React.FC<ClientCommunicationsLogViewPr
   const filteredMessages = useMemo(() => {
     return allMessages
       .filter((msg) => {
+        const q = (searchQuery || '').toLowerCase().trim();
         const matchesSearch =
-          msg.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (msg.mediaPayload?.title && msg.mediaPayload.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (msg.mediaPayload?.referenceCode && msg.mediaPayload.referenceCode.toLowerCase().includes(searchQuery.toLowerCase()));
+          !q ||
+          (msg.text || '').toLowerCase().includes(q) ||
+          (msg.mediaPayload?.title && msg.mediaPayload.title.toLowerCase().includes(q)) ||
+          (msg.mediaPayload?.referenceCode && msg.mediaPayload.referenceCode.toLowerCase().includes(q));
 
         const matchesCategory =
           filterCategory === 'ALL' || msg.category === filterCategory;

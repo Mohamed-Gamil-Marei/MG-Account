@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { FiscalYearData } from './CreditYearlyEditor';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
+import { ActionMenu } from '../common/ActionMenu';
 
 export interface CustomCreditRatioItem {
   id: string;
@@ -774,83 +776,62 @@ export const CreditScoringKpisTab: React.FC<CreditScoringKpisTabProps> = ({
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Action Controls - Unified Dropdown Design */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Sector Model Toggle */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200">
-            <button
-              type="button"
-              onClick={() => updateConfig((prev) => ({ ...prev, modelType: 'NON_MANUFACTURING' }))}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeConfig.modelType === 'NON_MANUFACTURING'
-                  ? 'bg-white text-indigo-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              خدمي / تجاري (Z')
-            </button>
-            <button
-              type="button"
-              onClick={() => updateConfig((prev) => ({ ...prev, modelType: 'MANUFACTURING' }))}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeConfig.modelType === 'MANUFACTURING'
-                  ? 'bg-white text-indigo-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              صناعي وإنتاجي (Z)
-            </button>
-          </div>
+          {/* Sector Model Unified Dropdown */}
+          <UnifiedSelectDropdown<'NON_MANUFACTURING' | 'MANUFACTURING'>
+            id="credit-kpi-model-dropdown"
+            label="نموذج النشاط"
+            value={activeConfig.modelType}
+            options={[
+              {
+                id: 'NON_MANUFACTURING',
+                label: 'خدمي / تجاري (Z\')',
+                sublabel: 'نموذج ألتمان المعدل للأنشطة غير الصناعية والتجارية',
+              },
+              {
+                id: 'MANUFACTURING',
+                label: 'صناعي وإنتاجي (Z)',
+                sublabel: 'نموذج ألتمan الكلاسيكي 5 مؤشرات للشركات الصناعية',
+              },
+            ]}
+            onChange={(val) => updateConfig((prev) => ({ ...prev, modelType: val }))}
+          />
 
-          {/* Direct Cell Edit Mode Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsDirectEditMode(!isDirectEditMode)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-              isDirectEditMode
-                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-300'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-2xs'
-            }`}
-            title="تفعيل وضع التعديل المباشر للأرقام والنسب بالجدول"
-          >
-            {isDirectEditMode ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5 text-slate-400" />}
-            <span>{isDirectEditMode ? 'وضع التعديل مفعل' : 'تعديل الأرقام'}</span>
-          </button>
-
-          {/* Add Custom Ratio Button */}
-          <button
-            type="button"
-            onClick={() => setIsAddRatioModalOpen(true)}
-            className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إضافة مؤشر مخصص</span>
-          </button>
-
-          {/* Policy & Memo Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsPolicyPanelOpen(!isPolicyPanelOpen)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors border ${
-              isPolicyPanelOpen
-                ? 'bg-slate-800 text-white border-slate-900'
-                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-            }`}
-            title="تخصيص سياسة التسهيلات وسقف الاقتراض"
-          >
-            <Settings2 className="w-3.5 h-3.5" />
-            <span>سياسة الائتمان</span>
-          </button>
-
-          {/* Excel Export */}
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-200" />
-            <span>تصدير إكسيل</span>
-          </button>
+          {/* Action Menu for KPIS and Dossier Tools */}
+          <ActionMenu
+            id="credit-kpi-action-menu"
+            label="خيارات وإجراءات"
+            triggerVariant="primary"
+            align="left"
+            items={[
+              {
+                id: 'toggle-edit-mode',
+                label: isDirectEditMode ? 'إيقاف وضع التعديل المباشر للأرقام' : 'تفعيل التعديل المباشر للنسب والأرقام',
+                icon: isDirectEditMode ? Lock : Unlock,
+                onClick: () => setIsDirectEditMode(!isDirectEditMode),
+              },
+              {
+                id: 'add-custom-ratio',
+                label: 'إضافة مؤشر مالي / نسبة مصرفية مخصصة',
+                icon: Plus,
+                onClick: () => setIsAddRatioModalOpen(true),
+              },
+              {
+                id: 'toggle-policy-panel',
+                label: isPolicyPanelOpen ? 'إخفاء سياسة الاقتراض وسقف التسهيلات' : 'تخصيص سياسة الاقتراض وسقف التسهيلات',
+                icon: Settings2,
+                onClick: () => setIsPolicyPanelOpen(!isPolicyPanelOpen),
+              },
+              {
+                id: 'export-kpi-excel',
+                label: 'تصدير الملف الائتماني والمذكرة (Excel)',
+                icon: Download,
+                variant: 'success',
+                onClick: handleExportExcel,
+              },
+            ]}
+          />
         </div>
       </div>
 

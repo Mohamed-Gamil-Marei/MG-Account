@@ -37,12 +37,14 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { OfficialReportHeader } from './common/OfficialReportHeader';
 import { exportElementToPdf, exportElementToImage } from '../utils/certifiedDocumentExporter';
+import { PrintService } from '../services/PrintService';
 import { CreditYearlyEditor, FiscalYearData } from './credit/CreditYearlyEditor';
 import { CreditFinancialStatementsTab, StatementLineItem } from './credit/CreditFinancialStatementsTab';
 import { CreditProfitDistributionTab } from './credit/CreditProfitDistributionTab';
@@ -58,6 +60,7 @@ import {
   AdminExpenseItem,
   DEFAULT_ADMIN_EXPENSES,
 } from './credit/CreditAdminExpensesTab';
+import { SmartCpaTemplateView } from './financial/SmartCpaTemplateView';
 import {
   CreditScoringKpisTab,
   CreditMemoConfig,
@@ -90,18 +93,22 @@ import { CompanyHeaderSelector } from './common/CompanyHeaderSelector';
 import { QuickCompanyModal } from './common/QuickCompanyModal';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu } from './common/ActionMenu';
+import { UnifiedSelectDropdown, UnifiedDropdownOption } from './common/UnifiedSelectDropdown';
 import { ClientArchiveRecord } from '../types';
 import * as XLSX from 'xlsx';
 import { SmartCreditSuite } from './credit/SmartCreditSuite';
 import { CreditExcelBridgeModal } from './credit/CreditExcelBridgeModal';
+import { DedicatedYearWorkspace } from './credit/DedicatedYearWorkspace';
 
 interface CreditFinancialsSimulatorProps {
   state: DatabaseState;
 }
 
 export type SimulatorTab =
+  | 'DEDICATED_YEAR'
   | 'KPIS'
   | 'STATEMENTS'
+  | 'SMART_CPA_MODEL'
   | 'PROFIT_DIST'
   | 'AUDITOR_REPORT'
   | 'TAX_CERT'
@@ -110,7 +117,7 @@ export type SimulatorTab =
   | 'NOTES';
 
 export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps> = ({ state }) => {
-  const [activeTab, setActiveTab] = useState<SimulatorTab>('STATEMENTS');
+  const [activeTab, setActiveTab] = useState<SimulatorTab>('DEDICATED_YEAR');
   const [sector, setSector] = useState<'COMMERCIAL' | 'INDUSTRIAL' | 'CONTRACTING' | 'SERVICES'>('COMMERCIAL');
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [yearsList, setYearsList] = useState<number[]>([2024, 2025, 2026]);
@@ -257,6 +264,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   const [isExcelBridgeModalOpen, setIsExcelBridgeModalOpen] = useState<boolean>(false);
   const [isSmartSuiteVisible, setIsSmartSuiteVisible] = useState<boolean>(true);
   const [printScope, setPrintScope] = useState<CreditPrintScope>('ALL_YEARS_BATCH');
+  const [comparisonYear, setComparisonYear] = useState<number | null>(2025);
+  const [includeComparisonColumn, setIncludeComparisonColumn] = useState<boolean>(true);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [pageRangeConfig, setPageRangeConfig] = useState<PageRangeConfig>({
     mode: 'ALL',
@@ -442,7 +451,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   };
 
   // Dynamic Print Stylesheet Isolation for Clean A4 Output
-  const handlePrintDossier = () => {
+  const handlePrintDossier = async () => {
     const styleId = 'credit-dossier-print-style';
     let styleEl = document.getElementById(styleId) as HTMLStyleElement;
     if (!styleEl) {
@@ -453,13 +462,13 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     styleEl.innerHTML = `
       @page {
         size: A4 portrait;
-        margin: 10mm 10mm 12mm 10mm;
+        margin: 8mm 8mm 8mm 8mm;
       }
       @media print {
         html, body {
           background: #ffffff !important;
           color: #0f172a !important;
-          font-family: 'IBM Plex Sans Arabic', 'Cairo', system-ui, sans-serif !important;
+          font-family: 'Cairo', 'IBM Plex Sans Arabic', system-ui, sans-serif !important;
           height: auto !important;
           min-height: 100% !important;
           overflow: visible !important;
@@ -467,11 +476,35 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           margin: 0 !important;
           padding: 0 !important;
         }
+
+        /* Airtight print isolation: Hide everything outside #credit-printable-dossier */
+        body.printing-credit-dossier-mode * {
+          visibility: hidden !important;
+        }
+
+        body.printing-credit-dossier-mode #credit-printable-dossier,
+        body.printing-credit-dossier-mode #credit-printable-dossier * {
+          visibility: visible !important;
+        }
+
+        body.printing-credit-dossier-mode #credit-printable-dossier {
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+        }
         
-        /* Hide all UI chrome, controls and dialog backdrops */
-        header, nav, aside, #sidebar-navigation, .no-print, [data-no-print="true"], button {
+        /* Hide all UI chrome, controls, toolbars and buttons */
+        header:not(.official-header):not([data-official-header="true"]),
+        nav, aside, #sidebar-navigation, .no-print, [data-no-print="true"], button {
           display: none !important;
           visibility: hidden !important;
+          height: 0 !important;
+          width: 0 !important;
         }
 
         /* Prevent fixed modal wrapper from clipping multi-page output */
@@ -495,41 +528,37 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           max-height: none !important;
         }
 
-        #credit-printable-dossier {
-          display: block !important;
-          visibility: visible !important;
-          position: static !important;
-          width: 100% !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          background: #ffffff !important;
-        }
-
         .print-page, .page-break, .a4-sheet-canvas, [id^="page-sheet-"] {
-          page-break-after: always !important;
-          break-after: page !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          display: block !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: space-between !important;
           width: 100% !important;
-          max-width: none !important;
-          min-height: 0 !important;
+          max-width: 100% !important;
+          min-height: auto !important;
+          height: auto !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
           box-shadow: none !important;
           border: none !important;
-          margin: 0 0 10mm 0 !important;
+          margin: 0 !important;
+          margin-bottom: 0 !important;
           padding: 0 !important;
+          page-break-after: always !important;
+          break-after: page !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
         }
 
+        /* Eliminate blank trailing page on the final document sheet */
         .print-page:last-child, .page-break:last-child, .a4-sheet-canvas:last-child, [id^="page-sheet-"]:last-child {
-          page-break-after: auto !important;
-          break-after: auto !important;
+          page-break-after: avoid !important;
+          break-after: avoid !important;
           margin-bottom: 0 !important;
         }
 
         table {
           width: 100% !important;
+          border-collapse: collapse !important;
           page-break-inside: auto !important;
           break-inside: auto !important;
         }
@@ -540,13 +569,30 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         }
 
         th, td {
-          padding: 4px 6px !important;
+          padding: 3px 5px !important;
         }
       }
     `;
-    setTimeout(() => {
+
+    document.body.classList.add('printing-credit-dossier-mode');
+
+    try {
+      const printed = await PrintService.printElementById('credit-printable-dossier', {
+        pageSize: 'A4',
+        orientation: 'portrait',
+        margins: 'DEFAULT',
+        title: `الملف الائتماني المعتمد - ${clientProfile.companyName || 'الشركة'} - ${selectedYear}`,
+      });
+      if (!printed) {
+        window.print();
+      }
+    } catch {
       window.print();
-    }, 150);
+    } finally {
+      setTimeout(() => {
+        document.body.classList.remove('printing-credit-dossier-mode');
+      }, 2000);
+    }
   };
 
   // Client Identification State
@@ -1080,11 +1126,15 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     const rawPaidUpCapital = note10Sum !== null ? note10Sum : (d.paidUpCapital !== undefined ? d.paidUpCapital : (totalAssets >= baseCapital ? baseCapital : Math.max(100000, baseCapital)));
     const paidUpCapital = hiddenItemIds.includes('paidUpCapital') ? 0 : rawPaidUpCapital;
 
-    const rawLegalReserve = d.legalReserve !== undefined ? d.legalReserve : 1000000;
-    const legalReserve = hiddenItemIds.includes('legalReserve') ? 0 : rawLegalReserve;
-
-    const rawRetained = d.retainedEarningsAndProfit !== undefined ? d.retainedEarningsAndProfit : (totalAssets - totalLiabilities - paidUpCapital - legalReserve);
+    // Retained Earnings & Net Profit: directly derived from Income Statement Net Profit After Tax
+    const rawRetained = d.retainedEarningsAndProfit !== undefined ? d.retainedEarningsAndProfit : netProfit;
     const retainedEarningsAndProfit = hiddenItemIds.includes('retainedEarningsAndProfit') ? 0 : rawRetained;
+
+    // Partner Current Account (جاري الشركاء): plug balancing account
+    const rawPartnerAccount = d.partnerCurrentAccount !== undefined
+      ? d.partnerCurrentAccount
+      : (d.legalReserve !== undefined ? d.legalReserve : (totalAssets - totalLiabilities - paidUpCapital - retainedEarningsAndProfit));
+    const legalReserve = hiddenItemIds.includes('legalReserve') ? 0 : rawPartnerAccount;
 
     // True Equity Sum:
     const totalEquity = paidUpCapital + legalReserve + retainedEarningsAndProfit + customEQ;
@@ -1350,13 +1400,16 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     setHiddenItemIds([]);
   };
 
-  // 1-Click Auto-Balance for a fiscal year (balances Assets with Liabilities & Equity via Retained Earnings)
+  // 1-Click Auto-Balance for a fiscal year (balances Assets with Liabilities & Equity via Partner Current Account - جاري الشركاء)
   const handleAutoBalanceYear = (yr: number) => {
     const cd = computedData[yr];
     if (!cd) return;
-    const currentRetained = yearsData[yr]?.retainedEarningsAndProfit || 0;
-    const newRetained = Math.round((currentRetained + cd.balanceDiff) * 100) / 100;
-    handleUpdateFinancialStatementCell('retainedEarningsAndProfit', yr, newRetained);
+    const currentPartnerAccount = yearsData[yr]?.partnerCurrentAccount !== undefined
+      ? yearsData[yr]?.partnerCurrentAccount!
+      : (yearsData[yr]?.legalReserve || 0);
+    const newPartnerAccount = Math.round((currentPartnerAccount + cd.balanceDiff) * 100) / 100;
+    handleUpdateFinancialStatementCell('partnerCurrentAccount', yr, newPartnerAccount);
+    handleUpdateFinancialStatementCell('legalReserve', yr, newPartnerAccount);
   };
 
   const handleAutoBalanceAllYears = () => {
@@ -1366,6 +1419,83 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         handleAutoBalanceYear(yr);
       }
     });
+  };
+
+  // 1-Click Financial Rollover: Automatically rolls forward constants from year T to year T+1
+  // - Fixed Assets: Cost & Accumulated Depreciation roll into CostStart & AccumStart
+  // - Retained Earnings & Legal Reserve: Cumulative rollover
+  // - Paid-up Capital: Carried forward
+  // - Cash and Cash Equivalents: Closing cash becomes opening reference
+  const handleRollForwardFinancialsFromPreviousYear = (targetYr: number) => {
+    const prevYr = targetYr - 1;
+    if (!yearsList.includes(prevYr)) return;
+
+    // 1. Roll forward Fixed Assets Categories
+    setAssetCategories((prevCats) =>
+      prevCats.map((cat) => {
+        const prevData = cat.valuesByYear?.[prevYr] || {
+          costStart: 0,
+          additions: 0,
+          disposals: 0,
+          accumStart: 0,
+          accumDisposals: 0,
+        };
+        const costEndPrev = (prevData.costStart || 0) + (prevData.additions || 0) - (prevData.disposals || 0);
+        const depPrev =
+          prevData.customDepExpense !== undefined
+            ? prevData.customDepExpense
+            : (cat.depRate > 0 ? Math.round(costEndPrev * (cat.depRate / 100)) : 0);
+        const accumEndPrev = (prevData.accumStart || 0) + depPrev - (prevData.accumDisposals || 0);
+
+        const targetCurrent = cat.valuesByYear?.[targetYr] || {
+          costStart: 0,
+          additions: 0,
+          disposals: 0,
+          accumStart: 0,
+          accumDisposals: 0,
+        };
+
+        return {
+          ...cat,
+          valuesByYear: {
+            ...cat.valuesByYear,
+            [targetYr]: {
+              ...targetCurrent,
+              costStart: costEndPrev,
+              accumStart: accumEndPrev,
+            },
+          },
+        };
+      })
+    );
+
+    // 2. Roll forward Financial Year Data (Capital, Reserves, Retained Earnings)
+    setYearsData((prev) => {
+      const prevData = prev[prevYr];
+      const targetData = prev[targetYr];
+      if (!prevData || !targetData) return prev;
+
+      const prevCapital = prevData.paidUpCapital !== undefined ? prevData.paidUpCapital : (clientProfile.capital || 10000000);
+      const prevCd = computedData[prevYr];
+      const prevNetProfit = prevCd ? prevCd.netProfit : (prevData.sales * 0.1);
+      const prevRetained = prevData.retainedEarningsAndProfit !== undefined ? prevData.retainedEarningsAndProfit : prevNetProfit;
+
+      return {
+        ...prev,
+        [targetYr]: {
+          ...targetData,
+          paidUpCapital: targetData.paidUpCapital ?? prevCapital,
+          retainedEarningsAndProfit: targetData.retainedEarningsAndProfit ?? (prevRetained + (computedData[targetYr]?.netProfit || 0)),
+        },
+      };
+    });
+  };
+
+  const handleRollForwardAllFinancialsYears = () => {
+    const sorted = [...yearsList].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) {
+      handleRollForwardFinancialsFromPreviousYear(sorted[i]);
+    }
   };
 
   // Export Comprehensive Multi-Sheet Excel Workbook
@@ -1402,7 +1532,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       { 'بيان المركز المالي': 'إجمالي الأصول المتداولة', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.totalCurrentAssets }), {}) },
       { 'بيان المركز المالي': 'إجمالي الأصول', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.totalAssets }), {}) },
       { 'بيان المركز المالي': 'رأس المال المدفوع', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.paidUpCapital }), {}) },
-      { 'بيان المركز المالي': 'الاحتياطي القانوني', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.legalReserve }), {}) },
+      { 'بيان المركز المالي': 'جاري الشركاء (اتزان الميزان)', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.legalReserve }), {}) },
       { 'بيان المركز المالي': 'الأرباح المرحلة وصافي ربح العام', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.retainedEarningsAndProfit }), {}) },
       { 'بيان المركز المالي': 'إجمالي حقوق الملكية', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.totalEquity }), {}) },
       { 'بيان المركز المالي': 'قروض وتسهيلات طويلة الأجل', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.longLoans }), {}) },
@@ -1572,15 +1702,17 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     }
   };
 
-  const navTabs: { id: SimulatorTab; label: string; icon: any }[] = [
-    { id: 'STATEMENTS', label: '1. القوائم المالية المقارنة (المركز والدخل والتدفقات)', icon: Scale },
-    { id: 'PROFIT_DIST', label: '2. مشروع ومذكرة توزيع الأرباح', icon: Award },
-    { id: 'AUDITOR_REPORT', label: '3. تقرير مراقب الحسابات المعتمد (ESA)', icon: FileCheck2 },
-    { id: 'TAX_CERT', label: '4. شهادة الموقف الضريبي والتأميني', icon: FileBadge },
-    { id: 'FIXED_ASSETS', label: '5. جدول إهلاك الأصول الثابتة', icon: Building },
-    { id: 'ADMIN_EXPENSES', label: '6. جدول المصروفات الإدارية والعمومية', icon: FileSpreadsheet },
-    { id: 'NOTES', label: '7. الإيضاحات المتممة للقوائم (Rich Text)', icon: BookOpen },
-    { id: 'KPIS', label: '8. الملف الائتماني البنكي ومؤشرات الجدارة والتعثر', icon: ShieldCheck },
+  const navTabs: { id: SimulatorTab; label: string; sublabel?: string; icon: any }[] = [
+    { id: 'DEDICATED_YEAR', label: '⭐ لوحة القوائم المنفصلة لسنة معينة (ملف البنك)', sublabel: 'ملف معزول شامل لسنة مالية مفردة مع كافة الإيضاحات والتحليلات', icon: FileSpreadsheet },
+    { id: 'STATEMENTS', label: '1. القوائم المالية المعتمدة للبنك (المركز والدخل والتدفقات)', sublabel: 'عرض القوائم المالية المعتمدة المقارنة والمطابقة مع متطلبات الائتمان', icon: Scale },
+    { id: 'KPIS', label: '2. التحليل الائتماني البنكي ومؤشرات الجدارة والتعثر', sublabel: 'نموذج التقييم الائتماني البنكي، نسب السيولة، والرافعة، ومؤشرات ألتمن Z-Score', icon: ShieldCheck },
+    { id: 'AUDITOR_REPORT', label: '3. تقرير مراقب الحسابات المستقل المعتمد (ESA)', sublabel: 'مسار الملف المعتمد: رأي مراقب الحسابات وفق معايير المراجعة المصرية للبنك', icon: FileCheck2 },
+    { id: 'TAX_CERT', label: '4. شهادة الموقف الضريبي والتأميني المعتمدة', sublabel: 'مسار الملف المعتمد: شهادة سداد الضرائب والتأمينات الموجهة للبنك', icon: FileBadge },
+    { id: 'PROFIT_DIST', label: '5. مشروع ومذكرة توزيع الأرباح القانونية', sublabel: 'قانون 159 وحساب الاحتياطيات وتوزيعات المساهمين والعاملين', icon: Award },
+    { id: 'SMART_CPA_MODEL', label: '6. نموذج الإكسيل المعياري (Excel CPA)', sublabel: 'شيت الإكسيل الذكي بحسابات النسب التلقائية', icon: Sparkles },
+    { id: 'FIXED_ASSETS', label: '7. جدول حركة وإهلاك الأصول الثابتة (معيار 10)', sublabel: 'بيان حركة الإضافات والاستبعادات وترحيل مجمع الإهلاك السنوي', icon: Building },
+    { id: 'ADMIN_EXPENSES', label: '8. جدول المصروفات الإدارية والعمومية التفصيلي', sublabel: 'تفصيل بنود المصاريف وتوزيع الـ 14 بنداً المعيارية', icon: FileSpreadsheet },
+    { id: 'NOTES', label: '9. الإيضاحات المتممة للقوائم المالية (الملحق الإيضاحي)', sublabel: 'السياسات المحاسبية والإفصاحات المتممة المربوطة بالأرقام', icon: BookOpen },
   ];
 
   return (
@@ -1904,6 +2036,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         sector={sector}
         onSectorChange={handleSectorChange}
         onApplyPresetToAllYears={handleApplyPresetToAllYears}
+        onRollForwardFromPreviousYear={handleRollForwardFinancialsFromPreviousYear}
+        onRollForwardAllYears={handleRollForwardAllFinancialsYears}
       />
 
       {/* Smart Credit Suite (الهندسة الائتمانية العكسية، محاكي شروط البنوك، ومطابقة حركة كشف الحساب) */}
@@ -1930,27 +2064,75 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         )}
       </div>
 
-      {/* Navigation Sub-Tabs */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60 overflow-x-auto no-print">
-        {navTabs.map((t) => {
-          const Icon = t.icon;
-          const isActive = activeTab === t.id;
-          return (
+      {/* Streamlined Unified Navigation Bar - Dropdown & Quick Actions */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 no-print">
+        {/* Main Screen / Module Selector Dropdown */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <UnifiedSelectDropdown<SimulatorTab>
+            id="simulator-main-screen-dropdown"
+            label="الشاشة المعروضة"
+            icon={Layers}
+            value={activeTab}
+            size="lg"
+            variant="default"
+            menuWidth="w-80 sm:w-96"
+            className="w-full sm:w-auto"
+            options={navTabs.map((t) => ({
+              id: t.id,
+              label: t.label,
+              sublabel: t.sublabel,
+              icon: t.icon,
+            }))}
+            onChange={(tab) => setActiveTab(tab)}
+          />
+        </div>
+
+        {/* Quick Context Chips and Controls */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Active Year indicator */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/80 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-300">
+            <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>السنة النشطة:</span>
+            <span className="font-mono text-blue-700 dark:text-blue-200">{selectedYear}</span>
+          </div>
+
+          {/* Quick toggle to Dedicated Year Workspace if not already in it */}
+          {activeTab !== 'DEDICATED_YEAR' ? (
             <button
-              key={t.id}
               type="button"
-              onClick={() => setActiveTab(t.id)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
-                isActive
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
-              }`}
+              onClick={() => setActiveTab('DEDICATED_YEAR')}
+              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+              title="الانتقال إلى لوحة السنة المنفصلة المعزولة"
             >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-              <span>{t.label}</span>
+              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>لوحة السنة المنفصلة</span>
             </button>
-          );
-        })}
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveTab('STATEMENTS')}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+              title="العودة للقوائم المقارنة"
+            >
+              <Scale className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>القوائم المقارنة</span>
+            </button>
+          )}
+
+          {/* Fast Print Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setPrintScope('CURRENT_VIEW');
+              setIsPrintModalOpen(true);
+            }}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
+            title="طباعة الشاشة الحالية"
+          >
+            <Printer className="w-3.5 h-3.5 text-emerald-400 dark:text-blue-200" />
+            <span className="hidden sm:inline">طباعة سريعة</span>
+          </button>
+        </div>
       </div>
 
       {/* ACTIVE TAB CONTENT WRAPPED IN PRINTABLE CONTAINER */}
@@ -1964,8 +2146,12 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           periodEndDate={endDate}
           showHeaderClientBanner={showHeaderClientBanner}
           documentTitle={
-            activeTab === 'STATEMENTS'
+            activeTab === 'DEDICATED_YEAR'
+              ? `لوحة القوائم المالية المستقلة - سنة ${selectedYear}`
+              : activeTab === 'STATEMENTS'
               ? 'القوائم المالية والحسابات الختامية المقارنة'
+              : activeTab === 'SMART_CPA_MODEL'
+              ? 'نموذج وقالب المحاسب القانوني المعتمد (Excel CPA Model)'
               : activeTab === 'PROFIT_DIST'
               ? 'مشروع ومذكرة توزيع الأرباح القانونية المقترحة'
               : activeTab === 'AUDITOR_REPORT'
@@ -1982,6 +2168,36 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           }
           documentSubtitle="مستخرج رسمي معتمد ومطابق لمعايير المحاسبة المصرية (EAS) وقوانين الشركات والضرائب"
         />
+
+        {activeTab === 'DEDICATED_YEAR' && (
+          <DedicatedYearWorkspace
+            yearsData={yearsData}
+            yearsList={yearsList}
+            computedData={computedData}
+            customItems={customItems}
+            itemNames={itemNames}
+            hiddenItemIds={hiddenItemIds}
+            supplementaryNotes={supplementaryNotes}
+            onUpdateNotesList={setSupplementaryNotes}
+            assetCategories={assetCategories}
+            adminExpenses={adminExpenses}
+            officeProfile={officeProfile}
+            onAutoBalanceYear={handleAutoBalanceYear}
+            onAutoBalanceAllYears={handleAutoBalanceAllYears}
+            onRollForwardFromPreviousYear={handleRollForwardFinancialsFromPreviousYear}
+            onUpdateCell={handleUpdateFinancialStatementCell}
+            onUpdateYearData={(yr, partial) => {
+              setYearsData((prev) => ({
+                ...prev,
+                [yr]: { ...(prev[yr] || {}), ...partial },
+              }));
+            }}
+            initialYear={selectedYear}
+            periodStartDate={startDate}
+            periodEndDate={endDate}
+            periodLabel={periodDurationText}
+          />
+        )}
 
         {activeTab === 'STATEMENTS' && (
           <CreditFinancialStatementsTab
@@ -2008,6 +2224,12 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           />
         )}
 
+        {activeTab === 'SMART_CPA_MODEL' && (
+          <div className="pt-2">
+            <SmartCpaTemplateView companyName={clientProfile.companyName} />
+          </div>
+        )}
+
         {activeTab === 'PROFIT_DIST' && (
           <CreditProfitDistributionTab
             yearsList={yearsList}
@@ -2018,6 +2240,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             periodStartDate={startDate}
             periodEndDate={endDate}
             periodLabel={periodDurationText}
+            isolatedYear={selectedYear}
           />
         )}
 
@@ -2083,6 +2306,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             periodStartDate={startDate}
             periodEndDate={endDate}
             periodLabel={periodDurationText}
+            isolatedYear={selectedYear}
           />
         )}
 
@@ -2132,7 +2356,14 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       {/* ADVANCED PRINT & BATCH PRINT MODAL (وحدة الطباعة والتصدير المعتمدة - أوامر جانبية ومعاينة موسعة) */}
       {isPrintModalOpen && (() => {
         // Calculate all page metas dynamically using getDossierPageMetas
-        const allPageMetas = getDossierPageMetas(printScope, selectedYear, yearsList, batchSelectedYears);
+        const allPageMetas = getDossierPageMetas(
+          printScope,
+          selectedYear,
+          yearsList,
+          batchSelectedYears,
+          comparisonYear,
+          includeComparisonColumn
+        );
         const totalPages = allPageMetas.length;
         const selectedPageMetas = allPageMetas.filter((m) =>
           isPageIncluded(m.pageNumber, pageRangeConfig, totalPages)
@@ -2244,23 +2475,25 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
                 {/* Scrollable Settings Sections */}
                 <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-4 space-y-4 text-xs">
-                  {/* SECTION 1: Document Scope */}
-                  <div className="space-y-2">
+                  {/* SECTION 1: Document Scope & Year Selection Options */}
+                  <div className="space-y-3">
                     <label className="font-black text-slate-800 dark:text-slate-200 text-xs flex items-center justify-between">
-                      <span>نطاق الوثائق والمستندات:</span>
-                      <span className="text-[11px] font-normal text-slate-500">Document Scope</span>
+                      <span>نطاق الوثائق وخيارات السنوات:</span>
+                      <span className="text-[11px] font-normal text-slate-500">Document & Year Scope</span>
                     </label>
 
                     <div className="grid grid-cols-1 gap-1.5">
+                      {/* Option 1: Complete Dossier */}
                       <button
                         type="button"
                         onClick={() => {
                           setPrintScope('COMPLETE_DOSSIER');
+                          const metas = getDossierPageMetas('COMPLETE_DOSSIER', selectedYear, yearsList, batchSelectedYears, comparisonYear, includeComparisonColumn);
                           setPageRangeConfig((prev) => ({
                             ...prev,
                             mode: 'ALL',
                             fromPage: 1,
-                            toPage: 11,
+                            toPage: metas.length,
                           }));
                           scrollToPage(1);
                         }}
@@ -2282,15 +2515,113 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                         {printScope === 'COMPLETE_DOSSIER' && <Check className="w-4 h-4 shrink-0" />}
                       </button>
 
+                      {/* Option 2: Selected Year with Comparison Year */}
                       <button
                         type="button"
                         onClick={() => {
-                          setPrintScope('ALL_YEARS_BATCH');
+                          setPrintScope('SELECTED_YEAR_WITH_COMPARISON');
+                          const metas = getDossierPageMetas('SELECTED_YEAR_WITH_COMPARISON', selectedYear, yearsList, batchSelectedYears, comparisonYear, includeComparisonColumn);
                           setPageRangeConfig((prev) => ({
                             ...prev,
                             mode: 'ALL',
                             fromPage: 1,
-                            toPage: yearsList.length,
+                            toPage: metas.length,
+                          }));
+                          scrollToPage(1);
+                        }}
+                        className={`w-full text-right p-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition-all cursor-pointer border ${
+                          printScope === 'SELECTED_YEAR_WITH_COMPARISON'
+                            ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300 dark:ring-emerald-800'
+                            : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <ArrowRightLeft className="w-4 h-4 text-emerald-300 shrink-0" />
+                          <div>
+                            <div>سنة محددة مع سنة مقارنة مخصصة</div>
+                            <div className={`text-[10px] font-normal ${printScope === 'SELECTED_YEAR_WITH_COMPARISON' ? 'text-emerald-200' : 'text-slate-400'}`}>
+                              سنة {selectedYear} مقارنة بـ {comparisonYear || (selectedYear - 1)} (أعمدة المقارنة ونسب التغير)
+                            </div>
+                          </div>
+                        </div>
+                        {printScope === 'SELECTED_YEAR_WITH_COMPARISON' && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+
+                      {/* Option 3: Selected Year Standalone (No comparison) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrintScope('SELECTED_YEAR_STANDALONE');
+                          const metas = getDossierPageMetas('SELECTED_YEAR_STANDALONE', selectedYear, yearsList, batchSelectedYears, comparisonYear, false);
+                          setPageRangeConfig((prev) => ({
+                            ...prev,
+                            mode: 'ALL',
+                            fromPage: 1,
+                            toPage: metas.length,
+                          }));
+                          scrollToPage(1);
+                        }}
+                        className={`w-full text-right p-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition-all cursor-pointer border ${
+                          printScope === 'SELECTED_YEAR_STANDALONE' || printScope === 'SELECTED_YEAR'
+                            ? 'bg-sky-700 text-white border-sky-700 shadow-sm ring-2 ring-sky-300 dark:ring-sky-800'
+                            : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="w-4 h-4 text-sky-300 shrink-0" />
+                          <div>
+                            <div>سنة مالية محددة مستقلة (بدون سنة مقارنة)</div>
+                            <div className={`text-[10px] font-normal ${printScope === 'SELECTED_YEAR_STANDALONE' || printScope === 'SELECTED_YEAR' ? 'text-sky-200' : 'text-slate-400'}`}>
+                              قوائم سنة {selectedYear} منفردة برقم الإيضاح والقيم المعتمدة فقط
+                            </div>
+                          </div>
+                        </div>
+                        {(printScope === 'SELECTED_YEAR_STANDALONE' || printScope === 'SELECTED_YEAR') && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+
+                      {/* Option 4: Custom Years Matrix */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrintScope('CUSTOM_YEARS_MATRIX');
+                          const metas = getDossierPageMetas('CUSTOM_YEARS_MATRIX', selectedYear, yearsList, batchSelectedYears, comparisonYear, includeComparisonColumn);
+                          setPageRangeConfig((prev) => ({
+                            ...prev,
+                            mode: 'ALL',
+                            fromPage: 1,
+                            toPage: metas.length,
+                          }));
+                          scrollToPage(1);
+                        }}
+                        className={`w-full text-right p-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition-all cursor-pointer border ${
+                          printScope === 'CUSTOM_YEARS_MATRIX'
+                            ? 'bg-purple-700 text-white border-purple-700 shadow-sm ring-2 ring-purple-300 dark:ring-purple-800'
+                            : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-purple-300 shrink-0" />
+                          <div>
+                            <div>سنوات محددة مخصصة (مصفوفة مقارنة)</div>
+                            <div className={`text-[10px] font-normal ${printScope === 'CUSTOM_YEARS_MATRIX' ? 'text-purple-200' : 'text-slate-400'}`}>
+                              تحديد أي مجموعة سنوات بالاسم لمقارنتها جنباً إلى جنب
+                            </div>
+                          </div>
+                        </div>
+                        {printScope === 'CUSTOM_YEARS_MATRIX' && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+
+                      {/* Option 5: All Years Batch */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrintScope('ALL_YEARS_BATCH');
+                          const metas = getDossierPageMetas('ALL_YEARS_BATCH', selectedYear, yearsList, batchSelectedYears, comparisonYear, includeComparisonColumn);
+                          setPageRangeConfig((prev) => ({
+                            ...prev,
+                            mode: 'ALL',
+                            fromPage: 1,
+                            toPage: metas.length,
                           }));
                           scrollToPage(1);
                         }}
@@ -2301,46 +2632,147 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <Layers className="w-4 h-4 text-blue-400 shrink-0" />
+                          <Layers className="w-4 h-4 text-blue-300 shrink-0" />
                           <div>
-                            <div>كافة السنوات مجمعة</div>
+                            <div>كافة السنوات مجمعة دفعة واحدة</div>
                             <div className={`text-[10px] font-normal ${printScope === 'ALL_YEARS_BATCH' ? 'text-blue-200' : 'text-slate-400'}`}>
-                              {yearsList.length} سنوات مالية متتالية
+                              مصفوفة شاملة لجميع السنوات المتاحة ({yearsList.join(' ، ')})
                             </div>
                           </div>
                         </div>
                         {printScope === 'ALL_YEARS_BATCH' && <Check className="w-4 h-4 shrink-0" />}
                       </button>
+                    </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPrintScope('SELECTED_YEAR');
-                          setPageRangeConfig((prev) => ({
-                            ...prev,
-                            mode: 'ALL',
-                            fromPage: 1,
-                            toPage: 1,
-                          }));
-                          scrollToPage(1);
-                        }}
-                        className={`w-full text-right p-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition-all cursor-pointer border ${
-                          printScope === 'SELECTED_YEAR'
-                            ? 'bg-sky-700 text-white border-sky-700 shadow-sm ring-2 ring-sky-300 dark:ring-sky-800'
-                            : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <FileSpreadsheet className="w-4 h-4 text-sky-400 shrink-0" />
-                          <div>
-                            <div>قوائم سنة {selectedYear} المالية فقط</div>
-                            <div className={`text-[10px] font-normal ${printScope === 'SELECTED_YEAR' ? 'text-sky-200' : 'text-slate-400'}`}>
-                              المركز المالي والدخل والتدفقات
-                            </div>
+                    {/* DYNAMIC YEAR & COMPARISON CONTROLS PANEL */}
+                    <div className="p-3 bg-slate-100 dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                      <div className="flex items-center justify-between text-[11px] font-black text-slate-800 dark:text-slate-200 pb-1 border-b border-slate-200 dark:border-slate-700">
+                        <span>إعدادات السنة وسنة المقارنة:</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-mono text-[10px]">
+                          {selectedYear} {comparisonYear && printScope !== 'SELECTED_YEAR_STANDALONE' ? `vs ${comparisonYear}` : ''}
+                        </span>
+                      </div>
+
+                      {/* Primary Selected Year Selector */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                            سنة الأساس (المراد طباعتها):
+                          </label>
+                          <select
+                            value={selectedYear}
+                            onChange={(e) => {
+                              const y = Number(e.target.value);
+                              setSelectedYear(y);
+                              const metas = getDossierPageMetas(printScope, y, yearsList, batchSelectedYears, comparisonYear, includeComparisonColumn);
+                              setPageRangeConfig((prev) => ({
+                                ...prev,
+                                toPage: metas.length,
+                              }));
+                            }}
+                            className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-black text-slate-900 dark:text-white cursor-pointer"
+                          >
+                            {yearsList.map((y) => (
+                              <option key={y} value={y}>
+                                سنة {y} المالية
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Comparison Year Selector (Enabled for COMPARISON or COMPLETE_DOSSIER) */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                            سنة المقارنة (بخلاف الأساس):
+                          </label>
+                          <select
+                            value={comparisonYear ?? ''}
+                            disabled={printScope === 'SELECTED_YEAR_STANDALONE'}
+                            onChange={(e) => {
+                              const c = e.target.value ? Number(e.target.value) : null;
+                              setComparisonYear(c);
+                              const metas = getDossierPageMetas(printScope, selectedYear, yearsList, batchSelectedYears, c, includeComparisonColumn);
+                              setPageRangeConfig((prev) => ({
+                                ...prev,
+                                toPage: metas.length,
+                              }));
+                            }}
+                            className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-black text-slate-900 dark:text-white cursor-pointer disabled:opacity-40"
+                          >
+                            <option value="">-- بدون سنة مقارنة --</option>
+                            {yearsList
+                              .filter((y) => y !== selectedYear)
+                              .map((y) => (
+                                <option key={y} value={y}>
+                                  سنة {y} (المقارنة)
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Toggle Comparison Column */}
+                      {printScope !== 'SELECTED_YEAR_STANDALONE' && (
+                        <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={includeComparisonColumn}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setIncludeComparisonColumn(checked);
+                              const metas = getDossierPageMetas(printScope, selectedYear, yearsList, batchSelectedYears, comparisonYear, checked);
+                              setPageRangeConfig((prev) => ({
+                                ...prev,
+                                toPage: metas.length,
+                              }));
+                            }}
+                            className="rounded accent-emerald-700 w-3.5 h-3.5 cursor-pointer"
+                          />
+                          <span>تضمين عمود المقارنة مع نسبة التغير والتطور</span>
+                        </label>
+                      )}
+
+                      {/* Multi-Year Selection Chips when CUSTOM_YEARS_MATRIX is chosen */}
+                      {printScope === 'CUSTOM_YEARS_MATRIX' && (
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block">
+                            اختر السنوات المحددة للمصفوفة المقارنة:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {yearsList.map((y) => {
+                              const isSelected = batchSelectedYears.includes(y);
+                              return (
+                                <button
+                                  key={y}
+                                  type="button"
+                                  onClick={() => {
+                                    let nextYears: number[];
+                                    if (isSelected) {
+                                      if (batchSelectedYears.length <= 1) return; // keep at least 1
+                                      nextYears = batchSelectedYears.filter((item) => item !== y);
+                                    } else {
+                                      nextYears = [...batchSelectedYears, y].sort((a, b) => a - b);
+                                    }
+                                    setBatchSelectedYears(nextYears);
+                                    const metas = getDossierPageMetas(printScope, selectedYear, yearsList, nextYears, comparisonYear, includeComparisonColumn);
+                                    setPageRangeConfig((prev) => ({
+                                      ...prev,
+                                      toPage: metas.length,
+                                    }));
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer border ${
+                                    isSelected
+                                      ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {y} {isSelected ? '✓' : ''}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
-                        {printScope === 'SELECTED_YEAR' && <Check className="w-4 h-4 shrink-0" />}
-                      </button>
+                      )}
                     </div>
 
                     {/* Single Document Selector Dropdown */}
@@ -2350,7 +2782,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                       </label>
                       <select
                         value={
-                          ['COMPLETE_DOSSIER', 'ALL_YEARS_BATCH', 'SELECTED_YEAR'].includes(printScope)
+                          ['COMPLETE_DOSSIER', 'ALL_YEARS_BATCH', 'SELECTED_YEAR', 'SELECTED_YEAR_STANDALONE', 'SELECTED_YEAR_WITH_COMPARISON', 'CUSTOM_YEARS_MATRIX'].includes(printScope)
                             ? ''
                             : printScope
                         }
@@ -2358,7 +2790,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                           if (e.target.value) {
                             const newScope = e.target.value as CreditPrintScope;
                             setPrintScope(newScope);
-                            const metas = getDossierPageMetas(newScope, selectedYear, yearsList, batchSelectedYears);
+                            const metas = getDossierPageMetas(newScope, selectedYear, yearsList, batchSelectedYears, comparisonYear, includeComparisonColumn);
                             setPageRangeConfig((prev) => ({
                               ...prev,
                               mode: 'ALL',
@@ -2884,6 +3316,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                     <CreditBatchPrintDocument
                       printScope={printScope}
                       selectedYear={selectedYear}
+                      comparisonYear={comparisonYear}
+                      includeComparisonColumn={includeComparisonColumn}
                       yearsList={yearsList}
                       customYearsList={batchSelectedYears}
                       yearsData={yearsData}

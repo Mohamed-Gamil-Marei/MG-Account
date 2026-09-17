@@ -192,8 +192,8 @@ export const MobileFieldCompanionView: React.FC<MobileFieldCompanionViewProps> =
     const query = searchTerm.trim().toLowerCase();
     if (!query) return true;
     return (
-      c.name.toLowerCase().includes(query) ||
-      c.clientCode.toLowerCase().includes(query) ||
+      (c.name || '').toLowerCase().includes(query) ||
+      (c.clientCode || '').toLowerCase().includes(query) ||
       (c.phone && c.phone.includes(query)) ||
       (c.commercialRegistrationNo && c.commercialRegistrationNo.includes(query)) ||
       (c.taxOffice && c.taxOffice.toLowerCase().includes(query))
@@ -2136,3 +2136,6 @@ ${opts.authority ? `🏛️ *الجهة الحكومية:* ${opts.authority}\n` 
     </div>
   );
 };
+
+export default MobileFieldCompanionView;
+

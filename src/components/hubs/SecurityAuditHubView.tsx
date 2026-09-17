@@ -428,3 +428,6 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
     </div>
   );
 };
+
+export default SecurityAuditHubView;
+

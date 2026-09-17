@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore,
   doc,
   setDoc,
@@ -77,7 +78,13 @@ class CloudSyncManager {
 
         const appName = `custom-firebase-${Date.now()}`;
         this.appInstance = initializeApp(customAppConfig, appName);
-        this.dbInstance = getFirestore(this.appInstance, customConfig.firestoreDatabaseId || '(default)');
+        try {
+          this.dbInstance = initializeFirestore(this.appInstance, {
+            experimentalForceLongPolling: true,
+          }, customConfig.firestoreDatabaseId || '(default)');
+        } catch {
+          this.dbInstance = getFirestore(this.appInstance, customConfig.firestoreDatabaseId || '(default)');
+        }
         this.updateSyncInfo({
           activeProjectId: customConfig.projectId,
           isCustomProject: true,
@@ -85,7 +92,13 @@ class CloudSyncManager {
         });
       } else {
         this.appInstance = getApps().length === 0 ? initializeApp(defaultFirebaseConfig) : getApp();
-        this.dbInstance = getFirestore(this.appInstance, defaultFirebaseConfig.firestoreDatabaseId);
+        try {
+          this.dbInstance = initializeFirestore(this.appInstance, {
+            experimentalForceLongPolling: true,
+          }, defaultFirebaseConfig.firestoreDatabaseId);
+        } catch {
+          this.dbInstance = getFirestore(this.appInstance, defaultFirebaseConfig.firestoreDatabaseId);
+        }
         this.updateSyncInfo({
           activeProjectId: defaultFirebaseConfig.projectId,
           isCustomProject: false,

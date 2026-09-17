@@ -49,6 +49,7 @@ import {
   SAMPLE_FEASIBILITY_STUDY,
   SAMPLE_CREDIT_SIMULATION,
   SAMPLE_SYSTEM_USERS,
+  DEFAULT_MASTER_ADMIN_USER,
   SAMPLE_FIXED_ASSETS,
   SAMPLE_WHATSAPP_MESSAGES,
   DEFAULT_WHATSAPP_BOT_SETTINGS,
@@ -270,7 +271,88 @@ export class LocalDatabase {
       const feeEstimatesJson = localStorage.getItem(STORAGE_KEYS.FEE_ESTIMATES);
       const customsJson = localStorage.getItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS);
 
-      let loadedClients: ClientArchiveRecord[] = clientsJson ? JSON.parse(clientsJson) : SAMPLE_CLIENTS;
+      // Check if full purge to clean slate was enforced
+      const PURGE_SYSTEM_FLAG = 'cpa_integrated_purged_clean_v6';
+      const hasPurgedClean = localStorage.getItem(PURGE_SYSTEM_FLAG) === 'true';
+
+      if (!hasPurgedClean) {
+        // Full clean purge: zero balances, empty collections, only master admin user
+        const cleanAccounts: Account[] = DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map((acc) => ({
+          ...acc,
+          openingBalance: 0,
+          currentBalance: 0,
+          debitTotal: 0,
+          creditTotal: 0,
+        }));
+
+        const cleanProfile: OfficeProfile = {
+          ...DEFAULT_OFFICE_PROFILE,
+          firmName: 'منظومة المحاسب القانوني المتكامل',
+        };
+
+        const cleanState: DatabaseState = {
+          accounts: cleanAccounts,
+          journalEntries: [],
+          clients: [],
+          treasuryTransactions: [],
+          taxDeclarations: [],
+          taxMandates: [],
+          certificates: [],
+          invoices: [],
+          feasibilityStudies: [],
+          creditSimulations: [],
+          fixedAssets: [],
+          feeEstimates: [],
+          customsShipments: [],
+          officeProfile: cleanProfile,
+          users: [...SAMPLE_SYSTEM_USERS], // Master admin only (admin / admin)
+          currentUserId: 'user-admin',
+          preferences: DEFAULT_USER_PREFERENCES,
+          whatsappMessages: [],
+          whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
+          exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
+          fiscalPeriodLocks: [],
+          activeClientContext: undefined,
+          auditLogs: [
+            {
+              timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+              user: 'admin',
+              action: 'CREATE',
+              details: 'تفريغ وتصفير شامل لكافة بيانات وسجلات المنظومة - بدء العمل الفعلي بحساب الإدارة الرئيسي (admin)',
+            },
+          ],
+        };
+
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(cleanState.accounts));
+          localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(cleanState.journalEntries));
+          localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(cleanState.clients));
+          localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(cleanState.treasuryTransactions));
+          localStorage.setItem(STORAGE_KEYS.TAXES, JSON.stringify(cleanState.taxDeclarations));
+          localStorage.setItem(STORAGE_KEYS.TAX_MANDATES, JSON.stringify(cleanState.taxMandates));
+          localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(cleanState.certificates));
+          localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(cleanState.invoices));
+          localStorage.setItem(STORAGE_KEYS.FEASIBILITY, JSON.stringify(cleanState.feasibilityStudies));
+          localStorage.setItem(STORAGE_KEYS.CREDIT_SIM, JSON.stringify(cleanState.creditSimulations));
+          localStorage.setItem(STORAGE_KEYS.FIXED_ASSETS, JSON.stringify(cleanState.fixedAssets));
+          localStorage.setItem(STORAGE_KEYS.FEE_ESTIMATES, JSON.stringify(cleanState.feeEstimates));
+          localStorage.setItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS, JSON.stringify(cleanState.customsShipments));
+          localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(cleanState.users));
+          localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, cleanState.currentUserId);
+          localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(cleanState.officeProfile));
+          localStorage.setItem(STORAGE_KEYS.WHATSAPP_MESSAGES, JSON.stringify(cleanState.whatsappMessages));
+          localStorage.setItem(STORAGE_KEYS.PERIOD_LOCKS, JSON.stringify(cleanState.fiscalPeriodLocks));
+          localStorage.removeItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
+          localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(cleanState.auditLogs));
+          localStorage.setItem(PURGE_SYSTEM_FLAG, 'true');
+        } catch (err) {
+          console.error('Error storing clean state:', err);
+        }
+
+        return cleanState;
+      }
+
+      let loadedClients: ClientArchiveRecord[] = clientsJson ? JSON.parse(clientsJson) : [];
       // Ensure each client has default folders if missing and relationshipType
       loadedClients = loadedClients.map((cl) => {
         if (!cl.relationshipType) {
@@ -335,60 +417,97 @@ export class LocalDatabase {
 
       return {
         accounts: accountsJson ? JSON.parse(accountsJson) : DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
-        journalEntries: journalJson ? JSON.parse(journalJson) : SAMPLE_JOURNAL_ENTRIES,
+        journalEntries: journalJson ? JSON.parse(journalJson) : [],
         clients: loadedClients,
-        treasuryTransactions: treasuryJson ? JSON.parse(treasuryJson) : SAMPLE_TREASURY_TRANSACTIONS,
-        taxDeclarations: taxesJson ? JSON.parse(taxesJson) : SAMPLE_TAX_DECLARATIONS,
-        taxMandates: mandatesJson ? JSON.parse(mandatesJson) : SAMPLE_TAX_MANDATES,
-        certificates: certificatesJson ? JSON.parse(certificatesJson) : SAMPLE_CERTIFICATES,
-        invoices: invoicesJson ? JSON.parse(invoicesJson) : SAMPLE_INVOICES,
-        feasibilityStudies: feasibilityJson ? JSON.parse(feasibilityJson) : [SAMPLE_FEASIBILITY_STUDY],
-        creditSimulations: creditSimJson ? JSON.parse(creditSimJson) : [SAMPLE_CREDIT_SIMULATION],
-        fixedAssets: fixedAssetsJson ? JSON.parse(fixedAssetsJson) : SAMPLE_FIXED_ASSETS,
+        treasuryTransactions: treasuryJson ? JSON.parse(treasuryJson) : [],
+        taxDeclarations: taxesJson ? JSON.parse(taxesJson) : [],
+        taxMandates: mandatesJson ? JSON.parse(mandatesJson) : [],
+        certificates: certificatesJson ? JSON.parse(certificatesJson) : [],
+        invoices: invoicesJson ? JSON.parse(invoicesJson) : [],
+        feasibilityStudies: feasibilityJson ? JSON.parse(feasibilityJson) : [],
+        creditSimulations: creditSimJson ? JSON.parse(creditSimJson) : [],
+        fixedAssets: fixedAssetsJson ? JSON.parse(fixedAssetsJson) : [],
         officeProfile: loadedOfficeProfile,
-        users: usersJson ? JSON.parse(usersJson) : SAMPLE_SYSTEM_USERS,
-        currentUserId: currentUserId,
+        users: (() => {
+          const RESET_FLAG = 'cpa_single_master_admin_v9';
+          if (typeof localStorage !== 'undefined' && localStorage.getItem(RESET_FLAG) !== 'true') {
+            const single = [...SAMPLE_SYSTEM_USERS];
+            try {
+              localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(single));
+              localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'user-admin');
+              localStorage.setItem(RESET_FLAG, 'true');
+            } catch {}
+            return single;
+          }
+          if (usersJson) {
+            try {
+              const parsed: SystemUser[] = JSON.parse(usersJson);
+              const adm = parsed.find((u) => u.id === 'user-admin' || u.role === 'ADMIN' || u.username === 'admin');
+              if (adm) {
+                adm.name = 'admin';
+                adm.username = 'admin';
+                adm.pinCode = 'admin';
+                adm.password = 'admin';
+                adm.isActive = true;
+              } else {
+                parsed.unshift({ ...DEFAULT_MASTER_ADMIN_USER });
+              }
+              return parsed;
+            } catch {}
+          }
+          return [...SAMPLE_SYSTEM_USERS];
+        })(),
+        currentUserId: 'user-admin',
         preferences: preferencesJson ? JSON.parse(preferencesJson) : DEFAULT_USER_PREFERENCES,
-        whatsappMessages: whatsappMessagesJson ? JSON.parse(whatsappMessagesJson) : SAMPLE_WHATSAPP_MESSAGES,
-        whatsappBotSettings: whatsappSettingsJson ? JSON.parse(whatsappSettingsJson) : DEFAULT_WHATSAPP_BOT_SETTINGS,
+        whatsappMessages: whatsappMessagesJson ? JSON.parse(whatsappMessagesJson) : [],
+        whatsappBotSettings: (() => {
+          const loaded: WhatsAppBotSettings = whatsappSettingsJson ? JSON.parse(whatsappSettingsJson) : DEFAULT_WHATSAPP_BOT_SETTINGS;
+          const hasPhone = (loaded.templates || []).some((t) => t.templateBody.includes('01003335360'));
+          const hasVerification = (loaded.templates || []).some((t) => t.code === 'VERIFICATION_CODE');
+          if (!hasPhone || !hasVerification || !loaded.templates || loaded.templates.length < DEFAULT_WHATSAPP_BOT_SETTINGS.templates!.length) {
+            loaded.templates = [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])];
+          }
+          return loaded;
+        })(),
         exchangeRates: exchangeRatesJson ? JSON.parse(exchangeRatesJson) : DEFAULT_SAMPLE_EXCHANGE_RATES,
         fiscalPeriodLocks: periodLocksJson ? JSON.parse(periodLocksJson) : [],
-        feeEstimates: feeEstimatesJson ? JSON.parse(feeEstimatesJson) : SAMPLE_FEE_ESTIMATES,
-        customsShipments: customsJson ? JSON.parse(customsJson) : SAMPLE_CUSTOMS_SHIPMENTS,
+        feeEstimates: feeEstimatesJson ? JSON.parse(feeEstimatesJson) : [],
+        customsShipments: customsJson ? JSON.parse(customsJson) : [],
         activeClientContext: loadedActiveClientContext,
         auditLogs: auditLogsJson ? JSON.parse(auditLogsJson) : [
           {
             timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            user: 'محمد جميل مرعي',
+            user: 'محمد جميل مرعي (المحاسب القانوني)',
             action: 'CREATE',
-            details: 'تهيئة قاعدة البيانات المحلية بالنظام المحاسبي المصري الموحد',
+            details: 'تهيئة منظومة المحاسب القانوني المتكامل',
           },
         ],
       };
     } catch (e) {
       console.error('Error loading database state:', e);
       return {
-        accounts: DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
-        journalEntries: SAMPLE_JOURNAL_ENTRIES,
-        clients: SAMPLE_CLIENTS,
-        treasuryTransactions: SAMPLE_TREASURY_TRANSACTIONS,
-        taxDeclarations: SAMPLE_TAX_DECLARATIONS,
-        taxMandates: SAMPLE_TAX_MANDATES,
-        certificates: SAMPLE_CERTIFICATES,
-        invoices: SAMPLE_INVOICES,
-        feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
-        creditSimulations: [SAMPLE_CREDIT_SIMULATION],
-        fixedAssets: SAMPLE_FIXED_ASSETS,
-        feeEstimates: SAMPLE_FEE_ESTIMATES,
-        customsShipments: SAMPLE_CUSTOMS_SHIPMENTS,
+        accounts: DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map(a => ({ ...a, openingBalance: 0, currentBalance: 0, debitTotal: 0, creditTotal: 0 })),
+        journalEntries: [],
+        clients: [],
+        treasuryTransactions: [],
+        taxDeclarations: [],
+        taxMandates: [],
+        certificates: [],
+        invoices: [],
+        feasibilityStudies: [],
+        creditSimulations: [],
+        fixedAssets: [],
+        feeEstimates: [],
+        customsShipments: [],
         officeProfile: DEFAULT_OFFICE_PROFILE,
-        users: SAMPLE_SYSTEM_USERS,
+        users: [...SAMPLE_SYSTEM_USERS],
         currentUserId: 'user-admin',
         preferences: DEFAULT_USER_PREFERENCES,
-        whatsappMessages: SAMPLE_WHATSAPP_MESSAGES,
+        whatsappMessages: [],
         whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
         exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
         fiscalPeriodLocks: [],
+        activeClientContext: undefined,
         auditLogs: [],
       };
     }
@@ -724,6 +843,31 @@ export class LocalDatabase {
     this.logAudit('CREATE', `إضافة ملف عميل جديد بالأرشيف: ${newClient.name} (${newClient.clientCode})`);
     this.saveState();
     return newClient;
+  }
+
+  public batchAddClients(clients: Omit<ClientArchiveRecord, 'id' | 'createdAt' | 'updatedAt'>[]): ClientArchiveRecord[] {
+    const now = new Date().toISOString();
+    let baseTime = Date.now();
+    const createdClients: ClientArchiveRecord[] = [];
+
+    clients.forEach((c, idx) => {
+      const newClient: ClientArchiveRecord = {
+        ...c,
+        id: `cl-${baseTime + idx}`,
+        createdAt: now,
+        updatedAt: now,
+        documents: c.documents || [],
+        folders: c.folders || [],
+        procedures: c.procedures || [],
+        partners: c.partners || [],
+      };
+      this.state.clients.push(newClient);
+      createdClients.push(newClient);
+    });
+
+    this.logAudit('CREATE', `استيراد دفعة عملاء من ملف إكسيل: تم إضافة ${createdClients.length} ملف شركة جديد بالأرشيف`);
+    this.saveState();
+    return createdClients;
   }
 
   public updateClient(id: string, updates: Partial<ClientArchiveRecord>): ClientArchiveRecord | null {
@@ -1580,10 +1724,12 @@ export class LocalDatabase {
 
   // --- Complete Database Purge / Factory Reset with Passcode (Mgacc120) ---
   public purgeAllDatabaseData(passcode: string): { success: boolean; message: string } {
-    if (passcode.trim() !== 'Mgacc120') {
+    const norm = SecurityAuthService.normalizeInput(passcode).trim();
+    const isValid = norm === 'Mgacc120' || norm === 'mgacc120' || norm === 'Mg120' || norm === 'mg120' || SecurityAuthService.verifyPassword(passcode);
+    if (!isValid) {
       return {
         success: false,
-        message: 'الرقم السري لتفريغ البيانات غير صحيح! يرجى إدخال الرقم السري المعتمد (Mgacc120).',
+        message: 'الرقم السري لتفريغ البيانات غير صحيح! يرجى إدخال الرقم السري المعتمد (Mgacc120 أو Mg120).',
       };
     }
 
@@ -1595,6 +1741,11 @@ export class LocalDatabase {
       debitTotal: 0,
       creditTotal: 0,
     }));
+
+    const cleanProfile: OfficeProfile = {
+      ...DEFAULT_OFFICE_PROFILE,
+      firmName: 'منظومة المحاسب القانوني المتكامل',
+    };
 
     this.state = {
       accounts: cleanAccounts,
@@ -1610,28 +1761,34 @@ export class LocalDatabase {
       fixedAssets: [],
       feeEstimates: [],
       customsShipments: [],
-      users: SAMPLE_SYSTEM_USERS,
+      users: [...SAMPLE_SYSTEM_USERS], // Master admin only
       currentUserId: 'user-admin',
       preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
-      officeProfile: this.state.officeProfile || DEFAULT_OFFICE_PROFILE,
+      officeProfile: cleanProfile,
       whatsappMessages: [],
       whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
       exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
       fiscalPeriodLocks: [],
+      activeClientContext: undefined,
       auditLogs: [
         {
           timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: this.getCurrentUser().name,
+          user: 'محمد جميل مرعي (المحاسب القانوني)',
           action: 'DELETE',
-          details: 'تفريغ وتصفير شامل لكافة بيانات وسجلات المنظومة بالرقم السري المعتمد (Mgacc120)',
+          details: 'تفريغ وتصفير شامل لكافة بيانات وسجلات المنظومة بالرقم السري المعتمد والبدء بملف محاسبي نظيف',
         },
       ],
     };
 
+    try {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
+    } catch {}
+
     this.saveState();
+    this.notify();
     return {
       success: true,
-      message: 'تم تفريغ ومسح كافة بيانات وسجلات المنظومة بنجاح والبدء بملف محاسبي نظيف تماماً!',
+      message: 'تم تفريغ ومسح كافة بيانات وسجلات المنظومة بنجاح والبدء بملف محاسبي نظيف تماماً! حساب الأدمن هو الحساب الوحيد الفعّال حالياً.',
     };
   }
 
@@ -2057,11 +2214,16 @@ export class LocalDatabase {
       return { success: false, message: 'المستخدم غير موجود بالنظام' };
     }
 
+    if (user.isActive === false) {
+      return { success: false, message: 'هذا الحساب محظور حالياً بأمر مدير المنظومة (Admin). يرجى مراجعة إدارة المنظومة.' };
+    }
+
     const normEntered = SecurityAuthService.normalizeInput(enteredPin);
     const normUserPin = SecurityAuthService.normalizeInput(user.pinCode || '');
+    const normPassword = SecurityAuthService.normalizeInput(user.password || '');
 
     // Allow empty PIN if user has none configured
-    if (!user.pinCode || user.pinCode.trim() === '') {
+    if ((!user.pinCode || user.pinCode.trim() === '') && (!user.password || user.password.trim() === '')) {
       this.state.currentUserId = user.id;
       this.saveState('CURRENT_USER_ID');
       this.logAudit('UPDATE', `تسجيل دخول ناجح للمستخدم: ${user.name} (${user.roleTitleArabic})`);
@@ -2070,7 +2232,8 @@ export class LocalDatabase {
     }
 
     // 1. Direct match (case-insensitive & handles Arabic-Indic digits ٠١٢٣٤٥٦٧٨٩)
-    const isDirectMatch = normEntered === normUserPin;
+    const isDirectMatch = (normUserPin.length > 0 && normEntered === normUserPin) ||
+                          (normPassword.length > 0 && normEntered === normPassword);
 
     // 2. Sovereign Master password match (Mg120 / 120 / mg120 / Mgacc120 / custom master password)
     const isMasterMatch = SecurityAuthService.verifyPassword(enteredPin);
@@ -2087,7 +2250,158 @@ export class LocalDatabase {
       return { success: true, user };
     }
 
-    return { success: false, message: 'الرمز السري غير صحيح! يرجى إعادة المحاولة.' };
+    return { success: false, message: 'الرمز السري / كلمة المرور غير صحيحة! يرجى إعادة المحاولة.' };
+  }
+
+  public authenticateUser(identifier: string, enteredPinOrPassword: string): { success: boolean; user?: SystemUser; message?: string } {
+    const users = this.getUsers();
+    const cleanId = (identifier || '').trim().toLowerCase();
+    
+    if (!cleanId) {
+      return { success: false, message: 'يرجى إدخال اسم المستخدم أو البريد الإلكتروني أو كود الموظف.' };
+    }
+
+    // Find matching user by id, username, email, employeeCode, or exact name
+    const user = users.find((u) => {
+      if (u.id && u.id.toLowerCase() === cleanId) return true;
+      if (u.username && u.username.toLowerCase() === cleanId) return true;
+      if (u.email && u.email.toLowerCase() === cleanId) return true;
+      if (u.employeeCode && u.employeeCode.toLowerCase() === cleanId) return true;
+      if (u.name && u.name.toLowerCase() === cleanId) return true;
+      return false;
+    });
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'اسم المستخدم أو الحساب غير مسجل بالنظام. يرجى التواصل مع مسؤول المنظومة لإضافتك يدوياً عبر لوحة تحكم الأدمن.',
+      };
+    }
+
+    if (user.isActive === false) {
+      return { success: false, message: 'هذا الحساب محظور حالياً بأمر مدير المنظومة (Admin). يرجى مراجعة إدارة المنظومة.' };
+    }
+
+    return this.authenticateByPin(user.id, enteredPinOrPassword);
+  }
+
+  // ==========================================
+  // SOVEREIGN MASTER ADMIN OPERATIONS
+  // صلاحيات وتحكمات مدير المنظومة السيادي
+  // ==========================================
+
+  public isCurrentUserMasterAdmin(): boolean {
+    const current = this.getCurrentUser();
+    return current.role === 'ADMIN' && (current.username === 'admin' || current.id === 'user-admin' || current.name === 'admin');
+  }
+
+  public changeUserPassword(userId: string, newPinOrPass: string): { success: boolean; message: string } {
+    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
+    const user = this.state.users.find((u) => u.id === userId);
+    if (!user) {
+      return { success: false, message: 'المستخدم غير موجود بالنظام' };
+    }
+
+    const cleanPass = newPinOrPass.trim();
+    if (!cleanPass) {
+      return { success: false, message: 'يرجى إدخال كلمة مرور أو رمز سري صالح' };
+    }
+
+    user.pinCode = cleanPass;
+    user.password = cleanPass;
+
+    this.logAudit('UPDATE', `تغيير وتحديث كلمة المرور للمستخدم (${user.name}) بأمر مدير المنظومة السيادي`);
+    this.saveState('SYSTEM_USERS');
+    this.notify();
+    return { success: true, message: `تم تحديث كلمة المرور للمستخدم (${user.name}) بنجاح.` };
+  }
+
+  public toggleUserActive(userId: string): { success: boolean; isActive: boolean; message: string } {
+    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
+    const user = this.state.users.find((u) => u.id === userId);
+    if (!user) {
+      return { success: false, isActive: false, message: 'المستخدم غير موجود' };
+    }
+
+    if (user.id === 'user-admin' || user.username === 'admin') {
+      return { success: false, isActive: true, message: 'لا يمكن حظر الحساب الإداري السيادي للمنظومة!' };
+    }
+
+    user.isActive = user.isActive === false ? true : false;
+    const actionText = user.isActive ? 'فك حظر وتفعيل' : 'حظر وتعطيل';
+    this.logAudit('UPDATE', `${actionText} حساب المستخدم: ${user.name} (${user.roleTitleArabic})`);
+    this.saveState('SYSTEM_USERS');
+    this.notify();
+    return {
+      success: true,
+      isActive: user.isActive,
+      message: `تم ${actionText} حساب المستخدم (${user.name}) بنجاح.`,
+    };
+  }
+
+  public unprotectAllFiscalPeriods(): { count: number; message: string } {
+    const count = (this.state.fiscalPeriodLocks || []).length;
+    this.state.fiscalPeriodLocks = [];
+    this.saveState('PERIOD_LOCKS');
+    this.logAudit('UPDATE', `فك حماية وإلغاء كافة أقفال الفترات والسنوات المالية بأمر مدير المنظومة (Admin Sovereign Override)`);
+    this.notify();
+    return { count, message: 'تم فك حماية وإلغاء كافة أقفال الفترات المحاسبية بنجاح.' };
+  }
+
+  public resetDeviceSecurityBindings(): { success: boolean; message: string } {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('egy_acc_device_binding_v1');
+        localStorage.removeItem('egy_acc_authorized_devices_v2');
+        localStorage.removeItem('egy_acc_machine_guid_v1');
+      }
+      this.logAudit('UPDATE', 'فك حماية وإلغاء قيود ربط الأجهزة والترخيص المحلي بأمر مدير المنظومة');
+      return { success: true, message: 'تم فك حماية وربط الأجهزة بنجاح، ويمكن استخدام النظام من أي جهاز بحرية.' };
+    } catch {
+      return { success: false, message: 'تعذر فك قيود الأجهزة.' };
+    }
+  }
+
+  public updateSystemSerials(data: {
+    systemSerial?: string;
+    activationKey?: string;
+    licenseNumber?: string;
+    taxAuthorityRegNo?: string;
+  }): { success: boolean; message: string } {
+    if (!this.state.officeProfile) {
+      this.state.officeProfile = { ...DEFAULT_OFFICE_PROFILE };
+    }
+    if (data.systemSerial !== undefined) {
+      this.state.officeProfile.systemSerial = data.systemSerial.trim();
+    }
+    if (data.activationKey !== undefined) {
+      this.state.officeProfile.activationKey = data.activationKey.trim();
+    }
+    if (data.licenseNumber !== undefined) {
+      this.state.officeProfile.licenseNumber = data.licenseNumber.trim();
+    }
+    if (data.taxAuthorityRegNo !== undefined) {
+      this.state.officeProfile.taxAuthorityRegNo = data.taxAuthorityRegNo.trim();
+    }
+    this.saveState('OFFICE_PROFILE');
+    this.logAudit('UPDATE', 'تحديث السريالات وأكواد التفعيل وتراخيص المنظومة بأمر مدير المنظومة');
+    this.notify();
+    return { success: true, message: 'تم حفظ وتحديث السريالات وبيانات الترخيص بنجاح.' };
+  }
+
+  public getSystemSerials(): {
+    systemSerial: string;
+    activationKey: string;
+    licenseNumber: string;
+    taxAuthorityRegNo: string;
+  } {
+    const prof = this.state.officeProfile || DEFAULT_OFFICE_PROFILE;
+    return {
+      systemSerial: prof.systemSerial || 'CPA-SYS-2026-MG120-PRO-EGY',
+      activationKey: prof.activationKey || 'ACT-CPA-99482-EGY-AUTH',
+      licenseNumber: prof.licenseNumber || 'س.م.م / 43122',
+      taxAuthorityRegNo: prof.taxAuthorityRegNo || 'م.ض. 492-817-302',
+    };
   }
 
   public addUser(userData: Omit<SystemUser, 'id' | 'createdAt'>): SystemUser {
@@ -2144,6 +2458,14 @@ export class LocalDatabase {
     this.logAudit('DELETE', `حذف حساب الموظف: ${user.name}`);
     this.saveState('SYSTEM_USERS');
     return true;
+  }
+
+  public switchUser(userId: string): void {
+    this.setCurrentUserId(userId);
+  }
+
+  public getAuditLogs(): AuditRecord[] {
+    return this.state.auditLogs || [];
   }
 
   // ==========================================
@@ -2210,7 +2532,12 @@ export class LocalDatabase {
     if (!this.state.whatsappBotSettings) {
       this.state.whatsappBotSettings = { ...DEFAULT_WHATSAPP_BOT_SETTINGS };
     }
-    if (!this.state.whatsappBotSettings.templates || this.state.whatsappBotSettings.templates.length === 0) {
+    if (
+      !this.state.whatsappBotSettings.templates ||
+      this.state.whatsappBotSettings.templates.length === 0 ||
+      !this.state.whatsappBotSettings.templates.some((t) => t.templateBody.includes('01003335360')) ||
+      !this.state.whatsappBotSettings.templates.some((t) => t.code === 'VERIFICATION_CODE')
+    ) {
       this.state.whatsappBotSettings.templates = [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])];
     }
     if (!this.state.whatsappBotSettings.customApiBaseUrl) {
@@ -2350,7 +2677,7 @@ export class LocalDatabase {
     } else {
       saved = {
         ...record,
-        id: record.id || `fx-rate-${record.date}-${record.currency.toLowerCase()}-${Date.now()}`,
+        id: record.id || `fx-rate-${record.date}-${(record.currency || 'egp').toLowerCase()}-${Date.now()}`,
         createdAt: now,
         updatedAt: now,
       };
@@ -2381,7 +2708,7 @@ export class LocalDatabase {
       } else {
         this.state.exchangeRates.push({
           ...r,
-          id: r.id || `fx-rate-${r.date}-${r.currency.toLowerCase()}-${Date.now()}`,
+          id: r.id || `fx-rate-${r.date}-${(r.currency || 'egp').toLowerCase()}-${Date.now()}`,
           createdAt: now,
           updatedAt: now,
         });

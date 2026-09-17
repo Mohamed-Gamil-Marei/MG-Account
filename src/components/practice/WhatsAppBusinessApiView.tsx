@@ -267,7 +267,7 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
     phoneNumberId: '',
     wabaId: '',
     accessToken: '',
-    landlineNumber: '0237654321',
+    landlineNumber: '01003335360',
     officeName: 'مكتب المحاسب القانوني ومراقب الحسابات - محمد جميل مرعي',
     webhookUrl: '/api/whatsapp/webhook',
     verifyToken: 'MOSTAFA_OFFICE_TAX_BOT_SECURE_TOKEN_2026',

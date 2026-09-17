@@ -1,11 +1,10 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { db, DatabaseState } from './db/localDatabase';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar, getParentHub } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { GlobalSearchBar } from './components/GlobalSearchBar';
 import { AccessRestrictedGate } from './components/AccessRestrictedGate';
 import { ThemeToggle } from './components/ThemeToggle';
-import { CompanyHeaderSelector } from './components/common/CompanyHeaderSelector';
 import { SecurityAuthService } from './services/securityAuth';
 import { AppLanguage, NavigationTab, SystemUser, BrandColor, ThemeMode } from './types';
 import {
@@ -30,84 +29,42 @@ import {
   Lock,
   Trash2,
   Maximize2,
-  Minimize2,
   BookOpen,
   Play,
   Settings,
   Smartphone,
   Monitor,
   QrCode,
+  Layers,
+  FileSpreadsheet,
+  Percent,
 } from 'lucide-react';
 
-// Lazy-loaded views and hubs for instant initial load and peak performance
-const AccountingHubView = lazy(() =>
-  import('./components/hubs/AccountingHubView').then((m) => ({ default: m.AccountingHubView }))
-);
-const FinancialReportingHubView = lazy(() =>
-  import('./components/hubs/FinancialReportingHubView').then((m) => ({ default: m.FinancialReportingHubView }))
-);
-const TaxAuditHubView = lazy(() =>
-  import('./components/hubs/TaxAuditHubView').then((m) => ({ default: m.TaxAuditHubView }))
-);
-const OfficePracticeHubView = lazy(() =>
-  import('./components/hubs/OfficePracticeHubView').then((m) => ({ default: m.OfficePracticeHubView }))
-);
-const SecurityAuditHubView = lazy(() =>
-  import('./components/hubs/SecurityAuditHubView').then((m) => ({ default: m.SecurityAuditHubView }))
-);
-const InvoicingView = lazy(() =>
-  import('./components/InvoicingView').then((m) => ({ default: m.InvoicingView }))
-);
-const CustomsHubView = lazy(() =>
-  import('./components/CustomsHubView').then((m) => ({ default: m.CustomsHubView }))
-);
-const SapErpHubView = lazy(() =>
-  import('./components/sap/SapErpHubView').then((m) => ({ default: m.SapErpHubView }))
-);
-const MobileFieldCompanionView = lazy(() =>
-  import('./components/mobile/MobileFieldCompanionView').then((m) => ({ default: m.MobileFieldCompanionView }))
-);
+// Primary views and hubs loaded statically for instant tab switching and zero dynamic fetch failures
+import AccountingHubView from './components/hubs/AccountingHubView';
+import FinancialReportingHubView from './components/hubs/FinancialReportingHubView';
+import TaxAuditHubView from './components/hubs/TaxAuditHubView';
+import OfficePracticeHubView from './components/hubs/OfficePracticeHubView';
+import SecurityAuditHubView from './components/hubs/SecurityAuditHubView';
+import InvoicingView from './components/InvoicingView';
+import CustomsHubView from './components/CustomsHubView';
+import SapErpHubView from './components/sap/SapErpHubView';
+import MobileFieldCompanionView from './components/mobile/MobileFieldCompanionView';
 
-// Lazy-loaded on-demand modals to keep initial bundle lightweight
-const BackupExportModal = lazy(() =>
-  import('./components/BackupExportModal').then((m) => ({ default: m.BackupExportModal }))
-);
-const DesktopAppModal = lazy(() =>
-  import('./components/DesktopAppModal').then((m) => ({ default: m.DesktopAppModal }))
-);
-const UpdateNotificationModal = lazy(() =>
-  import('./components/UpdateNotificationModal').then((m) => ({ default: m.UpdateNotificationModal }))
-);
-const KeyboardShortcutsModal = lazy(() =>
-  import('./components/KeyboardShortcutsModal').then((m) => ({ default: m.KeyboardShortcutsModal }))
-);
-const UserManagementModal = lazy(() =>
-  import('./components/UserManagementModal').then((m) => ({ default: m.UserManagementModal }))
-);
-const PinAuthModal = lazy(() =>
-  import('./components/PinAuthModal').then((m) => ({ default: m.PinAuthModal }))
-);
-const DeviceLockModal = lazy(() =>
-  import('./components/DeviceLockModal').then((m) => ({ default: m.DeviceLockModal }))
-);
-const PurgeDatabaseModal = lazy(() =>
-  import('./components/PurgeDatabaseModal').then((m) => ({ default: m.PurgeDatabaseModal }))
-);
-const DocumentVerificationModal = lazy(() =>
-  import('./components/common/DocumentVerificationModal').then((m) => ({ default: m.DocumentVerificationModal }))
-);
-const SystemManualModal = lazy(() =>
-  import('./components/common/SystemManualModal').then((m) => ({ default: m.SystemManualModal }))
-);
-const MgOfficePromoModal = lazy(() =>
-  import('./components/common/MgOfficePromoModal').then((m) => ({ default: m.MgOfficePromoModal }))
-);
-const AppSettingsModal = lazy(() =>
-  import('./components/AppSettingsModal').then((m) => ({ default: m.AppSettingsModal }))
-);
-const GlobalCommandPalette = lazy(() =>
-  import('./components/common/GlobalCommandPalette').then((m) => ({ default: m.GlobalCommandPalette }))
-);
+// All modals are imported statically to ensure 100% reliable opening without network chunk fetch failures in iframe
+import PinAuthModal from './components/PinAuthModal';
+import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
+import { MgOfficePromoModal } from './components/common/MgOfficePromoModal';
+import { BackupExportModal } from './components/BackupExportModal';
+import { DesktopAppModal } from './components/DesktopAppModal';
+import { UpdateNotificationModal } from './components/UpdateNotificationModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { UserManagementModal } from './components/UserManagementModal';
+import { DeviceLockModal } from './components/DeviceLockModal';
+import { PurgeDatabaseModal } from './components/PurgeDatabaseModal';
+import { DocumentVerificationModal } from './components/common/DocumentVerificationModal';
+import { SystemManualModal } from './components/common/SystemManualModal';
+import { AppSettingsModal } from './components/AppSettingsModal';
 
 import { LanguageToggle } from './components/LanguageToggle';
 import { CloudSyncHeaderWidget } from './components/CloudSyncHeaderWidget';
@@ -295,6 +252,7 @@ export default function App() {
   // Global Keyboard Shortcuts (Ctrl+K, Ctrl+J, etc.)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.key) return;
       const isModifier = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
@@ -494,24 +452,34 @@ export default function App() {
     return true;
   };
 
-  const renderActiveView = () => {
-    if (!isTabAccessible(activeTab)) {
+  const renderViewForTab = (tabToRender: string, onClose?: () => void) => {
+    if (!isTabAccessible(tabToRender)) {
       return (
         <AccessRestrictedGate
-          tabTitle={activeTab}
+          tabTitle={tabToRender}
           currentUser={currentUser}
-          onUnlock={() => handleUnlockTab(activeTab)}
-          onGoBack={() => setActiveTab('DASHBOARD')}
+          onUnlock={() => handleUnlockTab(tabToRender)}
+          onGoBack={() => {
+            if (onClose) {
+              onClose();
+            } else {
+              setActiveTab('DASHBOARD');
+            }
+          }}
         />
       );
     }
 
-    switch (activeTab) {
+    const handleNavigate = (tab: string) => {
+      setActiveTab(tab);
+    };
+
+    switch (tabToRender) {
       case 'DASHBOARD':
         return (
           <Dashboard
             state={state}
-            onNavigate={(tab) => setActiveTab(tab)}
+            onNavigate={handleNavigate}
             fiscalYear={selectedFiscalYear}
             onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
           />
@@ -557,7 +525,9 @@ export default function App() {
 
       // 3. Tax & Audit Hub (الضرائب والمراجعة والامتثال)
       case 'TAX_AUDIT_HUB':
-        return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
+        return <TaxAuditHubView state={state} initialSubTab="EXCEL_AUDIT_SENTINEL" />;
+      case 'EXCEL_AUDIT_SENTINEL':
+        return <TaxAuditHubView state={state} initialSubTab="EXCEL_AUDIT_SENTINEL" />;
       case 'TAX_TRACKER':
         return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
       case 'TAX_PENALTY_SIMULATOR':
@@ -645,14 +615,159 @@ export default function App() {
         return (
           <Dashboard
             state={state}
-            onNavigate={(tab) => setActiveTab(tab)}
+            onNavigate={handleNavigate}
             fiscalYear={selectedFiscalYear}
           />
         );
     }
   };
 
+  const memoizedActiveView = React.useMemo(() => {
+    return renderViewForTab(activeTab);
+  }, [activeTab, state, selectedFiscalYear, currentUser]);
+
+  const renderActiveView = () => memoizedActiveView;
+
   const isDark = themeMode === 'dark';
+
+  const renderCommonModals = () => (
+    <Suspense fallback={null}>
+      {/* Backup & Export Modal */}
+      {isBackupModalOpen && (
+        <BackupExportModal
+          state={state}
+          onClose={() => setIsBackupModalOpen(false)}
+        />
+      )}
+
+      {/* Desktop App Installation / Download Modal */}
+      {isDesktopModalOpen && (
+        <DesktopAppModal
+          state={state}
+          onClose={() => setIsDesktopModalOpen(false)}
+        />
+      )}
+
+      {/* Update Notification Modal */}
+      {isUpdateModalOpen && availableUpdate && (
+        <UpdateNotificationModal
+          versionInfo={availableUpdate}
+          onClose={() => setIsUpdateModalOpen(false)}
+          onOpenDesktopModal={() => {
+            setIsUpdateModalOpen(false);
+            setIsDesktopModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Keyboard Shortcuts Command Palette Modal */}
+      {isShortcutsModalOpen && (
+        <KeyboardShortcutsModal
+          isOpen={isShortcutsModalOpen}
+          onClose={() => setIsShortcutsModalOpen(false)}
+          onNavigate={(tabId) => setActiveTab(tabId)}
+          onOpenBackupModal={() => setIsBackupModalOpen(true)}
+          onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
+          onCheckUpdate={handleManualCheckUpdate}
+        />
+      )}
+
+      {/* User Management & Cloud Sync Modal */}
+      {isUserManagerOpen && (
+        <UserManagementModal
+          isOpen={isUserManagerOpen}
+          onClose={() => setIsUserManagerOpen(false)}
+        />
+      )}
+
+      {/* Complete System Settings & Auditor Profile Modal (Theme, Language, Passwords, EAS) */}
+      {isSettingsModalOpen && (
+        <AppSettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          state={state}
+        />
+      )}
+
+      {/* PIN Authentication & Screen Lock Modal */}
+      {isPinModalOpen && (
+        <PinAuthModal
+          isOpen={isPinModalOpen}
+          allowCancel={allowPinCancel}
+          onSuccess={(user) => {
+            setIsPinModalOpen(false);
+            setAllowPinCancel(true);
+          }}
+          onCancel={() => {
+            if (allowPinCancel) {
+              setIsPinModalOpen(false);
+            }
+          }}
+        />
+      )}
+
+      {/* Anti-Theft Device Lock & Binding Modal */}
+      {(isDeviceModalOpen || isDeviceEnforcedLocked) && (
+        <DeviceLockModal
+          isOpen={isDeviceModalOpen || isDeviceEnforcedLocked}
+          isEnforced={isDeviceEnforcedLocked}
+          onClose={() => {
+            setIsDeviceModalOpen(false);
+            setIsDeviceEnforcedLocked(false);
+          }}
+        />
+      )}
+
+      {/* Complete Data Purge Modal (Protected by Mgacc120) */}
+      {isPurgeModalOpen && (
+        <PurgeDatabaseModal
+          isOpen={isPurgeModalOpen}
+          onClose={() => setIsPurgeModalOpen(false)}
+        />
+      )}
+
+      {/* Document Verification Modal (Triggered by QR Code Scan or Link) */}
+      {verificationData && (
+        <DocumentVerificationModal
+          data={verificationData}
+          onClose={() => {
+            setVerificationData(null);
+            // Clean verification hash if present
+            if (window.location.hash.includes('verify')) {
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+          }}
+        />
+      )}
+
+      {/* Complete Illustrated System Manual PDF Modal */}
+      {isSystemManualOpen && (
+        <SystemManualModal
+          isOpen={isSystemManualOpen}
+          onClose={() => setIsSystemManualOpen(false)}
+        />
+      )}
+
+      {/* MG Office Official Cinematic Promo & Visual Identity Modal */}
+      {isMgPromoModalOpen && (
+        <MgOfficePromoModal
+          isOpen={isMgPromoModalOpen}
+          onClose={() => setIsMgPromoModalOpen(false)}
+          officeProfile={state.officeProfile}
+        />
+      )}
+
+      {/* Global Command Palette (Ctrl + K) */}
+      <GlobalCommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
+        onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
+        onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
+      />
+    </Suspense>
+  );
 
   // If user is in Mobile Field Companion mode or activeTab is MOBILE_COMPANION, render a clean full-screen mobile app
   if (viewMode === 'MOBILE' || activeTab === 'MOBILE_COMPANION') {
@@ -671,10 +786,13 @@ export default function App() {
               onNavigateToFullAppTab={(tab) => handleSwitchToDesktopMode(tab)}
             />
           </Suspense>
+          {renderCommonModals()}
         </div>
       </I18nProvider>
     );
   }
+
+  const currentParentHub = getParentHub(activeTab);
 
   return (
     <I18nProvider language={currentLanguage} onLanguageChange={(l) => db.setLanguage(l)}>
@@ -829,39 +947,26 @@ export default function App() {
                 <span className="md:hidden text-[11px]">ميداني 📱</span>
               </button>
 
-              {/* Combined Context Capsule: Company + Fiscal Year */}
+              {/* CPA Office Practice Badge: Replaces global company/year selector with office multi-client identity */}
               <div
-                className={`hidden lg:flex items-center gap-1.5 p-1 px-2 border rounded-xl shrink-0 ${
-                  isDark ? 'bg-slate-800/90 border-slate-700' : 'bg-slate-50 border-slate-200'
+                className={`hidden xl:flex items-center gap-2 px-3 py-1.5 border rounded-xl shrink-0 transition-colors shadow-2xs ${
+                  isDark ? 'bg-slate-800/80 border-slate-700/70' : 'bg-slate-50 border-slate-200'
                 }`}
+                title={!isRtl ? 'CPA Practice Office Suite • Auditing Multiple Client Companies' : 'منظومة مكتب المحاسب القانوني • مراجعة وتدقيق حسابات الشركات المتعددة'}
               >
-                <CompanyHeaderSelector
-                  state={state}
-                  title=""
-                  allOptionLabel={!isRtl ? 'All Companies' : 'كافة الشركات'}
-                  className="shrink-0"
-                />
-
-                <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-700 shrink-0 mx-0.5"></div>
-
-                {/* Fiscal Year Selector */}
-                <div className="flex items-center gap-1 text-xs shrink-0" title={!isRtl ? 'Active Fiscal Year' : 'السنة المالية النشطة'}>
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <select
-                    value={selectedFiscalYear}
-                    onChange={(e) => {
-                      const yr = Number(e.target.value);
-                      setSelectedFiscalYear(yr);
-                      db.updateActiveClientFiscalYear(yr);
-                    }}
-                    className={`bg-transparent font-bold font-mono focus:outline-none cursor-pointer text-xs ${
-                      isDark ? 'text-white' : 'text-slate-800'
-                    }`}
-                  >
-                    <option value={2026} className={isDark ? 'bg-slate-900 text-white' : ''}>2026</option>
-                    <option value={2025} className={isDark ? 'bg-slate-900 text-white' : ''}>2025</option>
-                    <option value={2024} className={isDark ? 'bg-slate-900 text-white' : ''}>2024</option>
-                  </select>
+                <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20">
+                  <Building className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex flex-col text-right">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">
+                      {!isRtl ? 'CPA Audit Practice' : 'مكتب المحاسبة والمراجعة'}
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title={!isRtl ? 'Active Firm Suite' : 'منظومة مهنية نشطة'}></span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                    {!isRtl ? `${state.clients.length} Registered Clients` : `مراجعة ${state.clients.length} شركة ومنشأة`}
+                  </span>
                 </div>
               </div>
 
@@ -1068,6 +1173,125 @@ export default function App() {
             </div>
           </header>
 
+          {/* ========================================================================= */}
+          {/* THE 3 CORE PRIMARY INTERFACES RIBBON (شريط الواجهات الرئيسية الثلاث)       */}
+          {/* ========================================================================= */}
+          <div
+            id="app-core-three-hubs-bar"
+            className={`px-3 sm:px-5 lg:px-6 py-2 border-b flex items-center justify-between gap-2 sm:gap-3 shrink-0 transition-colors z-20 ${
+              isDark ? 'bg-slate-900/95 border-slate-800 backdrop-blur-xs' : 'bg-white border-slate-200/90 shadow-2xs'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar scrollbar-none py-0.5 min-w-0">
+              <div className="hidden sm:flex items-center gap-1 text-[11px] font-bold text-slate-400 pl-1 shrink-0">
+                <span>{!isRtl ? 'Core Interfaces:' : 'الواجهات الرئيسية:'}</span>
+              </div>
+
+              {/* Hub 1: Accounting & Journals */}
+              <button
+                onClick={() => setActiveTab('ACCOUNTING_HUB')}
+                id="top-nav-accounting-hub"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 border ${
+                  currentParentHub === 'ACCOUNTING_HUB'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : isDark
+                    ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
+                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
+                }`}
+                title={!isRtl ? 'Accounting & Journal Entries Core' : 'الحسابات ودفاتر اليومية والدورة المحاسبية العامة'}
+              >
+                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-black ${
+                  currentParentHub === 'ACCOUNTING_HUB' ? 'bg-black/25 text-white' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                }`}>
+                  1
+                </span>
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span>{!isRtl ? 'General Ledger & Journals' : 'الحسابات وقيود اليومية'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  currentParentHub === 'ACCOUNTING_HUB'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                }`}>
+                  {state.journalEntries.length}
+                </span>
+              </button>
+
+              {/* Hub 2: Financial Reporting */}
+              <button
+                onClick={() => setActiveTab('FINANCIAL_REPORTING_HUB')}
+                id="top-nav-financial-hub"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 border ${
+                  currentParentHub === 'FINANCIAL_REPORTING_HUB'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : isDark
+                    ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
+                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
+                }`}
+                title={!isRtl ? 'Financial Statements & EAS Compliance' : 'القوائم والتقارير المالية المعتمدة (EAS 1)'}
+              >
+                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-black ${
+                  currentParentHub === 'FINANCIAL_REPORTING_HUB' ? 'bg-black/25 text-white' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  2
+                </span>
+                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                <span>{!isRtl ? 'Financial Statements & Reports' : 'القوائم والتقارير المالية'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                  currentParentHub === 'FINANCIAL_REPORTING_HUB'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                }`}>
+                  EAS 1
+                </span>
+              </button>
+
+              {/* Hub 3: Tax & Audit Hub */}
+              <button
+                onClick={() => setActiveTab('TAX_AUDIT_HUB')}
+                id="top-nav-tax-audit-hub"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 border ${
+                  currentParentHub === 'TAX_AUDIT_HUB'
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                    : isDark
+                    ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
+                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
+                }`}
+                title={!isRtl ? 'Tax Declarations & ESA Audit Sentinel' : 'الفحص الضريبي والمراجعة والامتثال المهني'}
+              >
+                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-black ${
+                  currentParentHub === 'TAX_AUDIT_HUB' ? 'bg-black/25 text-white' : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                }`}>
+                  3
+                </span>
+                <Percent className="w-3.5 h-3.5 shrink-0" />
+                <span>{!isRtl ? 'Tax & Audit Sentinel' : 'الفحص الضريبي والمراجعة'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                  currentParentHub === 'TAX_AUDIT_HUB'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
+                }`}>
+                  XAI
+                </span>
+              </button>
+            </div>
+
+            {/* Quick Hub State / Client Context Pill */}
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              <div className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
+                isDark ? 'bg-slate-800/70 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}>
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="truncate max-w-[160px] font-bold">
+                  {state.activeClientContext?.companyName || 'الشركة الحالية'}
+                </span>
+                <span className="text-slate-400">|</span>
+                <span className="font-mono text-slate-500 dark:text-slate-400">
+                  {state.activeClientContext?.selectedFiscalYear || selectedFiscalYear}
+                </span>
+              </div>
+            </div>
+          </div>
+
         {/* Scrollable Main Content Container */}
         <main
           className={`flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-5 lg:p-6 transition-colors min-w-0 ${
@@ -1121,138 +1345,7 @@ export default function App() {
         </footer>
       </div>
 
-      <Suspense fallback={null}>
-        {/* Backup & Export Modal */}
-        {isBackupModalOpen && (
-          <BackupExportModal
-            state={state}
-            onClose={() => setIsBackupModalOpen(false)}
-          />
-        )}
-
-        {/* Desktop App Installation / Download Modal */}
-        {isDesktopModalOpen && (
-          <DesktopAppModal
-            state={state}
-            onClose={() => setIsDesktopModalOpen(false)}
-          />
-        )}
-
-        {/* Update Notification Modal */}
-        {isUpdateModalOpen && availableUpdate && (
-          <UpdateNotificationModal
-            versionInfo={availableUpdate}
-            onClose={() => setIsUpdateModalOpen(false)}
-            onOpenDesktopModal={() => {
-              setIsUpdateModalOpen(false);
-              setIsDesktopModalOpen(true);
-            }}
-          />
-        )}
-
-        {/* Keyboard Shortcuts Command Palette Modal */}
-        {isShortcutsModalOpen && (
-          <KeyboardShortcutsModal
-            isOpen={isShortcutsModalOpen}
-            onClose={() => setIsShortcutsModalOpen(false)}
-            onNavigate={(tabId) => setActiveTab(tabId)}
-            onOpenBackupModal={() => setIsBackupModalOpen(true)}
-            onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
-            onCheckUpdate={handleManualCheckUpdate}
-          />
-        )}
-
-        {/* User Management & Cloud Sync Modal */}
-        {isUserManagerOpen && (
-          <UserManagementModal
-            isOpen={isUserManagerOpen}
-            onClose={() => setIsUserManagerOpen(false)}
-          />
-        )}
-
-        {/* Complete System Settings & Auditor Profile Modal (Theme, Language, Passwords, EAS) */}
-        {isSettingsModalOpen && (
-          <AppSettingsModal
-            isOpen={isSettingsModalOpen}
-            onClose={() => setIsSettingsModalOpen(false)}
-            state={state}
-          />
-        )}
-
-        {/* PIN Authentication & Screen Lock Modal */}
-        {isPinModalOpen && (
-          <PinAuthModal
-            isOpen={isPinModalOpen}
-            allowCancel={allowPinCancel}
-            onSuccess={(user) => {
-              setIsPinModalOpen(false);
-              setAllowPinCancel(true);
-            }}
-            onCancel={() => {
-              if (allowPinCancel) {
-                setIsPinModalOpen(false);
-              }
-            }}
-          />
-        )}
-
-        {/* Anti-Theft Device Lock & Binding Modal */}
-        {(isDeviceModalOpen || isDeviceEnforcedLocked) && (
-          <DeviceLockModal
-            isOpen={isDeviceModalOpen || isDeviceEnforcedLocked}
-            isEnforced={isDeviceEnforcedLocked}
-            onClose={() => {
-              setIsDeviceModalOpen(false);
-              setIsDeviceEnforcedLocked(false);
-            }}
-          />
-        )}
-
-        {/* Complete Data Purge Modal (Protected by Mgacc120) */}
-        {isPurgeModalOpen && (
-          <PurgeDatabaseModal
-            isOpen={isPurgeModalOpen}
-            onClose={() => setIsPurgeModalOpen(false)}
-          />
-        )}
-
-        {/* Document Verification Modal (Triggered by QR Code Scan or Link) */}
-        {verificationData && (
-          <DocumentVerificationModal
-            data={verificationData}
-            onClose={() => {
-              setVerificationData(null);
-              // Clean verification hash if present
-              if (window.location.hash.includes('verify')) {
-                window.history.replaceState(null, '', window.location.pathname + window.location.search);
-              }
-            }}
-          />
-        )}
-
-        {/* Complete Illustrated System Manual PDF Modal */}
-        <SystemManualModal
-          isOpen={isSystemManualOpen}
-          onClose={() => setIsSystemManualOpen(false)}
-        />
-
-        {/* MG Office Official Cinematic Promo & Visual Identity Modal */}
-        <MgOfficePromoModal
-          isOpen={isMgPromoModalOpen}
-          onClose={() => setIsMgPromoModalOpen(false)}
-          officeProfile={state.officeProfile}
-        />
-
-        {/* Global Command Palette (Ctrl + K) */}
-        <GlobalCommandPalette
-          isOpen={isCommandPaletteOpen}
-          onClose={() => setIsCommandPaletteOpen(false)}
-          onNavigateTab={(tab) => setActiveTab(tab)}
-          onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
-          onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
-          onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
-        />
-      </Suspense>
+      {renderCommonModals()}
     </div>
     </I18nProvider>
   );

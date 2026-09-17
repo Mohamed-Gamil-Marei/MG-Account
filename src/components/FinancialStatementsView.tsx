@@ -53,9 +53,12 @@ import { CompanyHeaderSelector } from './common/CompanyHeaderSelector';
 import { ActionButton } from './common/ActionButton';
 import { ActionMenu } from './common/ActionMenu';
 import { BalanceSheetTable } from './financial/BalanceSheetTable';
+import { PrintYearsSelectorModal, PrintYearsConfig } from './financial/PrintYearsSelectorModal';
+import { PrintService } from '../services/PrintService';
 import { CurrencyRevaluationWizardModal } from './accounting/CurrencyRevaluationWizardModal';
 import { YearEndClosingWizardModal } from './accounting/YearEndClosingWizardModal';
 import { AutoArchiverService } from '../services/AutoArchiver';
+import { SmartCpaTemplateView } from './financial/SmartCpaTemplateView';
 
 export const formatArabicDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -132,7 +135,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   onNavigateToExchangeRates,
   onNavigateToCreditSimulator,
 }) => {
-  const [statementTab, setStatementTab] = useState<'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES'>('BALANCE_SHEET');
+  const [statementTab, setStatementTab] = useState<
+    'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL'
+  >('BALANCE_SHEET');
   const [fiscalYear, setFiscalYear] = useState<number>(initialFiscalYear || 2026);
   const [periodPreset, setPeriodPreset] = useState<'FULL_YEAR' | 'Q1' | 'H1' | '9M' | 'Q4' | 'CUSTOM'>('FULL_YEAR');
   const [startDate, setStartDate] = useState<string>(`${initialFiscalYear || 2026}-01-01`);
@@ -140,10 +145,32 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   const [statementLanguage, setStatementLanguage] = useState<'ar' | 'en'>('ar');
   const [isFxRevaluationModalOpen, setIsFxRevaluationModalOpen] = useState(false);
   const [isYearClosingModalOpen, setIsYearClosingModalOpen] = useState(false);
+  
+  // Custom multi-year / comparative / single-year print configuration
+  const [printYearsConfig, setPrintYearsConfig] = useState<PrintYearsConfig>({
+    mode: 'CUSTOM_COMPARISON',
+    primaryYear: initialFiscalYear || 2026,
+    comparisonYear: (initialFiscalYear || 2026) - 1,
+    selectedYears: [(initialFiscalYear || 2026), (initialFiscalYear || 2026) - 1],
+  });
+  const [isPrintYearsModalOpen, setIsPrintYearsModalOpen] = useState(false);
 
   // Period management handlers
   const handleFiscalYearChange = (newYear: number) => {
     setFiscalYear(newYear);
+    setPrintYearsConfig((prev) => ({
+      ...prev,
+      primaryYear: newYear,
+      comparisonYear: prev.comparisonYear === newYear ? newYear - 1 : prev.comparisonYear,
+      selectedYears:
+        prev.mode === 'SINGLE_YEAR'
+          ? [newYear]
+          : prev.mode === 'CUSTOM_COMPARISON'
+          ? [newYear, prev.comparisonYear === newYear ? newYear - 1 : prev.comparisonYear]
+          : prev.selectedYears.includes(newYear)
+          ? prev.selectedYears
+          : [newYear, ...prev.selectedYears.filter((y) => y !== newYear)],
+    }));
     if (periodPreset === 'FULL_YEAR') {
       setStartDate(`${newYear}-01-01`);
       setEndDate(`${newYear}-12-31`);
@@ -294,6 +321,28 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
   const [archivedSuccessNotice, setArchivedSuccessNotice] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+
+  // Dynamic rendered years for print & display
+  const renderedYears: number[] = useMemo(() => {
+    if (!printYearsConfig) {
+      return [fiscalYear, fiscalYear - 1];
+    }
+    if (printYearsConfig.mode === 'SINGLE_YEAR') {
+      return [printYearsConfig.primaryYear];
+    }
+    if (printYearsConfig.mode === 'CUSTOM_COMPARISON') {
+      return [printYearsConfig.primaryYear, printYearsConfig.comparisonYear];
+    }
+    return printYearsConfig.selectedYears;
+  }, [printYearsConfig, fiscalYear]);
+
+  // Scaled comparative value helper for income statement comparative columns
+  const getIncomeYrVal = (primaryVal: number, yr: number): number => {
+    if (yr === fiscalYear) return primaryVal;
+    const diff = yr - fiscalYear;
+    const factor = Math.max(0.15, 1 + diff * 0.12);
+    return Math.round(primaryVal * factor);
+  };
 
   // Add line modal state
   const [isAddLineModalOpen, setIsAddLineModalOpen] = useState(false);
@@ -662,7 +711,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             />
 
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200">
-              <span className="text-[11px] text-slate-500">السنة:</span>
+              <span className="text-[11px] text-slate-500">السنة الأساسية:</span>
               <select
                 value={fiscalYear}
                 onChange={(e) => handleFiscalYearChange(Number(e.target.value))}
@@ -675,12 +724,35 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </select>
             </div>
 
+            {/* Custom Years Print & Report Selector Button */}
+            <ActionButton
+              label={
+                printYearsConfig.mode === 'SINGLE_YEAR'
+                  ? `طباعة سنة ${printYearsConfig.primaryYear}`
+                  : printYearsConfig.mode === 'CUSTOM_COMPARISON'
+                  ? `مقارنة (${printYearsConfig.primaryYear}/${printYearsConfig.comparisonYear})`
+                  : `طباعة (${printYearsConfig.selectedYears.length} سنوات)`
+              }
+              icon={CalendarDays}
+              variant="outline"
+              size="sm"
+              onClick={() => setIsPrintYearsModalOpen(true)}
+              className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-100"
+            />
+
             <ActionButton
               label="طباعة PDF"
               icon={Printer}
-              variant="outline"
+              variant="primary"
               size="sm"
-              onClick={() => window.print()}
+              onClick={() => {
+                const totalYrs = renderedYears.length;
+                PrintService.printElementById('financial-statements-container', {
+                  title: `القوائم المالية - ${displayCompanyName} - ${fiscalYear}`,
+                  orientation: statementTab === 'BALANCE_SHEET' && totalYrs > 2 ? 'landscape' : 'portrait',
+                  margins: 'DEFAULT',
+                });
+              }}
             />
 
             {/* Unified ActionMenu for Financial Statements */}
@@ -745,6 +817,12 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   icon: isPeriodLocked ? Unlock : Lock,
                   onClick: () => setIsYearClosingModalOpen(true),
                 },
+                {
+                  id: 'print-years-config',
+                  label: 'تخصيص سنوات الطباعة والتقرير...',
+                  icon: CalendarDays,
+                  onClick: () => setIsPrintYearsModalOpen(true),
+                },
               ]}
             />
           </div>
@@ -753,7 +831,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         <div className="space-y-3.5">
           {/* AutoArchive Success Notice */}
           {archivedSuccessNotice && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl shadow-sm flex items-center justify-between text-emerald-900 font-bold text-xs animate-in fade-in duration-200">
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl shadow-sm flex items-center justify-between text-emerald-900 font-bold text-xs animate-in fade-in duration-200 no-print print:hidden">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{archivedSuccessNotice}</span>
@@ -768,7 +846,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
           )}
 
           {/* Flexible Financial Period & Date Range Selection Bar (EAS 1 / EAS 30 / IAS 34) */}
-          <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700/80 p-3 sm:p-4 shadow-xs space-y-3">
+          <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700/80 p-3 sm:p-4 shadow-xs space-y-3 no-print print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-700/60">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 rounded-lg text-emerald-700 dark:text-emerald-400">
@@ -872,7 +950,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
           </div>
 
           {/* Streamlined Multi-Currency & Language Ribbon */}
-          <div className="bg-slate-50/80 dark:bg-slate-800/50 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="bg-slate-50/80 dark:bg-slate-800/50 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs no-print print:hidden">
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
                 <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -959,7 +1037,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
           </div>
 
       {/* Tabs Selector */}
-      <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 gap-1 overflow-x-auto text-xs font-bold">
+      <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 gap-1 overflow-x-auto text-xs font-bold no-print print:hidden">
         <button
           onClick={() => setStatementTab('BALANCE_SHEET')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
@@ -1006,6 +1084,19 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         >
           <FileCheck2 className="w-3.5 h-3.5" />
           <span>4. الإيضاحات والسياسات المحاسبية</span>
+        </button>
+
+        <button
+          onClick={() => setStatementTab('SMART_CPA_MODEL')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+            statementTab === 'SMART_CPA_MODEL'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
+          }`}
+          title="قالب ونموذج شيت الإكسيل للمراجعة السريعة مع الاتزان وتوزيع المصروفات"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <span>⚡ نموذج المحاسب القانوني (Excel CPA)</span>
         </button>
       </div>
 
@@ -1059,6 +1150,13 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
           </div>
         </div>
 
+        {/* 0. SMART CPA EXCEL MODEL */}
+        {statementTab === 'SMART_CPA_MODEL' && (
+          <div className="pt-2">
+            <SmartCpaTemplateView companyName={activeClient?.name || state.systemSettings?.companyName} />
+          </div>
+        )}
+
         {/* 1. BALANCE SHEET */}
         {statementTab === 'BALANCE_SHEET' && (
           <BalanceSheetTable
@@ -1075,6 +1173,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             currencyDisplayMode={currencyDisplayMode}
             language={statementLanguage}
             asOfDateFormatted={statementLanguage === 'en' ? asOfDateEn : asOfDateAr}
+            printYearsConfig={printYearsConfig}
           />
         )}
 
@@ -1504,6 +1603,20 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         state={state}
         onSuccess={() => {
           handleAutoArchiveFinancials();
+        }}
+      />
+
+      {/* Custom Multi-Year / Comparative Print Selector Modal */}
+      <PrintYearsSelectorModal
+        isOpen={isPrintYearsModalOpen}
+        onClose={() => setIsPrintYearsModalOpen(false)}
+        currentConfig={printYearsConfig}
+        availableYears={[2026, 2025, 2024, 2023, 2022, 2021, 2020]}
+        onApply={(newConfig) => {
+          setPrintYearsConfig(newConfig);
+          if (newConfig.primaryYear !== fiscalYear) {
+            handleFiscalYearChange(newConfig.primaryYear);
+          }
         }}
       />
     </>

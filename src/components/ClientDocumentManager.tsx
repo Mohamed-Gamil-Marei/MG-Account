@@ -117,12 +117,14 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
         ? !d.folderId
         : d.folderId === selectedFolderId;
 
+    const q = (searchDocQuery || '').toLowerCase().trim();
     const matchesSearch =
-      d.title.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
-      (d.fileName && d.fileName.toLowerCase().includes(searchDocQuery.toLowerCase())) ||
-      (d.tag && d.tag.toLowerCase().includes(searchDocQuery.toLowerCase())) ||
-      (d.notes && d.notes.toLowerCase().includes(searchDocQuery.toLowerCase())) ||
-      (d.folderName && d.folderName.toLowerCase().includes(searchDocQuery.toLowerCase()));
+      !q ||
+      (d.title || '').toLowerCase().includes(q) ||
+      (d.fileName && d.fileName.toLowerCase().includes(q)) ||
+      (d.tag && d.tag.toLowerCase().includes(q)) ||
+      (d.notes && d.notes.toLowerCase().includes(q)) ||
+      (d.folderName && d.folderName.toLowerCase().includes(q));
 
     return matchesFolder && matchesSearch;
   });

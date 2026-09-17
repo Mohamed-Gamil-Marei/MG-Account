@@ -131,7 +131,7 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
       className={`bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden transition-all ${className}`}
     >
       {/* Compact Minimal Header */}
-      <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 bg-slate-50/50 dark:bg-slate-900/50 no-print print:hidden">
         <div className="flex items-center gap-2 min-w-0">
           {Icon && (
             <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-800 flex items-center justify-center shrink-0">
@@ -234,7 +234,7 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
 
       {/* Sub-Header Toolbar (Search and Filter Tabs if present) */}
       {(onSearchChange || (filterTabs && filterTabs.length > 0) || (filterButtons && filterButtons.length > 0)) && (
-        <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3 text-xs no-print print:hidden">
           {onSearchChange && (
             <div className="relative min-w-[240px] max-w-sm flex-1">
               <input

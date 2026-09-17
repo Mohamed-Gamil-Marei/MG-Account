@@ -14,6 +14,7 @@ import {
   UserCheck,
   Clock,
   Briefcase,
+  Calendar,
 } from 'lucide-react';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { ClientArchiveRecord, ClientRelationshipType } from '../../types';
@@ -21,6 +22,8 @@ import { ClientArchiveRecord, ClientRelationshipType } from '../../types';
 interface ClientSelectorProps {
   state: DatabaseState;
   onClientChange?: (clientId: string | null) => void;
+  onFiscalYearChange?: (year: number) => void;
+  showFiscalYearSelector?: boolean;
   showAutoFilterToggle?: boolean;
   variant?: 'compact' | 'expanded' | 'banner';
   className?: string;
@@ -29,6 +32,8 @@ interface ClientSelectorProps {
 export const ClientSelector: React.FC<ClientSelectorProps> = ({
   state,
   onClientChange,
+  onFiscalYearChange,
+  showFiscalYearSelector = true,
   showAutoFilterToggle = true,
   variant = 'banner',
   className = '',
@@ -38,15 +43,17 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
   const [filterType, setFilterType] = useState<'ALL' | 'PERMANENT' | 'TEMPORARY'>('ALL');
 
   const activeContext = state.activeClientContext;
+  const currentFiscalYear = activeContext?.selectedFiscalYear || 2026;
   const activeClient: ClientArchiveRecord | undefined = state.clients.find(
     (c) => c.id === activeContext?.clientId
   );
 
   const filteredClients = state.clients.filter((c) => {
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      !searchTerm ||
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.clientCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      !q ||
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.clientCode || '').toLowerCase().includes(q) ||
       (c.taxCardNo && c.taxCardNo.includes(searchTerm)) ||
       (c.commercialRegistrationNo && c.commercialRegistrationNo.includes(searchTerm));
 
@@ -67,6 +74,13 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
       onClientChange(clientId);
     }
     setIsOpen(false);
+  };
+
+  const handleFiscalYearChange = (year: number) => {
+    db.updateActiveClientFiscalYear(year);
+    if (onFiscalYearChange) {
+      onFiscalYearChange(year);
+    }
   };
 
   const handleToggleAutoFilter = () => {
@@ -168,8 +182,8 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
           </div>
 
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium shrink-0">
-              العميل النشط:
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold shrink-0">
+              الشركة قيد الفحص والمراجعة:
             </span>
             {activeClient ? (
               <>
@@ -186,28 +200,50 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
                       : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
                   }`}
                 >
-                  {isPermanent ? 'دائم' : 'مؤقت'}
+                  {isPermanent ? 'عميل دائم' : 'مهمة فحص مؤقتة'}
                 </span>
                 {activeClient.taxCardNo && (
                   <span className="text-[10px] text-slate-400 font-mono hidden lg:inline-block">
-                    (بطاقة: {activeClient.taxCardNo})
+                    (بطاقة ضريبية: {activeClient.taxCardNo})
                   </span>
                 )}
               </>
             ) : (
-              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
-                عرض شامل (كافة الشركات والقيود)
+              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-900">
+                عرض شامل للمكتب (كافة الشركات والمنشآت المراجعة)
               </span>
             )}
           </div>
         </div>
 
-        {/* Right Section: Actions & Dropdown trigger */}
-        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+        {/* Right Section: Fiscal Year + Actions & Dropdown trigger */}
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap sm:flex-nowrap">
+          {/* In-Screen Fiscal Year Selector */}
+          {showFiscalYearSelector && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs shadow-2xs"
+              title="السنة المالية المحددة لفحص ومراجعة حسابات هذه المنشأة"
+            >
+              <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">السنة المالية:</span>
+              <select
+                value={currentFiscalYear}
+                onChange={(e) => handleFiscalYearChange(Number(e.target.value))}
+                className="bg-transparent font-bold font-mono text-xs focus:outline-none cursor-pointer text-slate-800 dark:text-slate-100 pr-1"
+              >
+                <option value={2026} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">2026</option>
+                <option value={2025} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">2025</option>
+                <option value={2024} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">2024</option>
+                <option value={2023} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">2023</option>
+                <option value={2022} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">2022</option>
+              </select>
+            </div>
+          )}
+
           {showAutoFilterToggle && activeClient && (
             <button
               onClick={handleToggleAutoFilter}
-              title="تصفية تلقائية لعرض القيود والتقارير الخاصة بهذا العميل فقط"
+              title="تصفية تلقائية لعرض القيود والتقارير الخاصة بهذه الشركة فقط"
               className={`text-xs px-2.5 py-1 rounded-lg border flex items-center gap-1.5 transition-colors cursor-pointer ${
                 activeContext?.autoFilterAccountingData
                   ? 'bg-blue-600 text-white border-blue-600 font-semibold shadow-2xs'
@@ -216,7 +252,7 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
             >
               <Filter className="w-3 h-3" />
               <span className="text-[11px]">
-                {activeContext?.autoFilterAccountingData ? 'تصفية مفعلة' : 'عرض الكل'}
+                {activeContext?.autoFilterAccountingData ? 'تصفية مفعلة' : 'تصفية المنشأة'}
               </span>
             </button>
           )}
@@ -227,7 +263,7 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
             >
               <ArrowRightLeft className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-              <span>تغيير</span>
+              <span>اختيار شركة أخرى</span>
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
 
@@ -237,7 +273,7 @@ export const ClientSelector: React.FC<ClientSelectorProps> = ({
                   <div className="flex items-center gap-1.5">
                     <Users className="w-4 h-4 text-indigo-600" />
                     <span className="text-xs font-black text-slate-800 dark:text-slate-200">
-                      اختيار الكيان / العميل من الأرشيف
+                      اختيار المنشأة / العميل من سجل المكتب
                     </span>
                   </div>
                   <button

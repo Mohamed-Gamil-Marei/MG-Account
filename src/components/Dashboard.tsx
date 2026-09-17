@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu, ActionMenuItem } from './common/ActionMenu';
+import { ClientSelector } from './common/ClientSelector';
 import { DatabaseState } from '../db/localDatabase';
 import {
   computeAccountBalances,
@@ -77,10 +78,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<KpiCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 1. Accounting Calculations
+  const currentFiscalYear = state.activeClientContext?.selectedFiscalYear || fiscalYear || 2026;
+  const activeClientId = state.activeClientContext?.clientId;
+  const activeClient = state.clients.find((c) => c.id === activeClientId);
+
+  // Filter journal entries by active client context and fiscal year
+  const filteredEntries = useMemo(() => {
+    return state.journalEntries.filter((e) => {
+      if (activeClientId && e.clientId && e.clientId !== activeClientId) {
+        return false;
+      }
+      if (e.date && !e.date.startsWith(String(currentFiscalYear))) {
+        return false;
+      }
+      return true;
+    });
+  }, [state.journalEntries, activeClientId, currentFiscalYear]);
+
+  // 1. Accounting Calculations based on filtered entries
   const calculatedAccounts = useMemo(() => {
-    return computeAccountBalances(state.accounts, state.journalEntries);
-  }, [state.accounts, state.journalEntries]);
+    return computeAccountBalances(state.accounts, filteredEntries);
+  }, [state.accounts, filteredEntries]);
 
   const incomeData = useMemo(() => {
     return generateIncomeStatement(calculatedAccounts);
@@ -90,20 +108,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return generateBalanceSheet(calculatedAccounts, incomeData);
   }, [calculatedAccounts, incomeData]);
 
-  // Office treasury summary
+  // Office treasury summary (filtered by client if applicable)
   const treasuryIncome = state.treasuryTransactions
-    .filter((t) => t.type === 'INCOME_FEES')
+    .filter((t) => t.type === 'INCOME_FEES' && (!activeClientId || t.clientId === activeClientId))
     .reduce((sum, t) => sum + t.amount, 0);
 
   const treasuryExpense = state.treasuryTransactions
-    .filter((t) => t.type === 'EXPENSE_OFFICE' || t.type === 'PARTNER_DRAWINGS')
+    .filter((t) => (t.type === 'EXPENSE_OFFICE' || t.type === 'PARTNER_DRAWINGS') && (!activeClientId || t.clientId === activeClientId))
     .reduce((sum, t) => sum + t.amount, 0);
 
   const treasuryNetBalance = treasuryIncome - treasuryExpense;
 
   // Tax alerts
   const urgentTaxes = state.taxDeclarations.filter(
-    (t) => t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT'
+    (t) => (!activeClientId || t.clientId === activeClientId) && (t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT')
   );
 
   // Real-Time Liquidity vs Scheduled Tax Liabilities
@@ -580,8 +598,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const matchesCat = selectedCategory === 'ALL' || kpi.category === selectedCategory;
       const matchesSearch =
         !searchQuery ||
-        kpi.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(kpi.value).toLowerCase().includes(searchQuery.toLowerCase());
+        ((kpi.title || '').toLowerCase().includes(searchQuery.toLowerCase())) ||
+        String(kpi.value || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCat && matchesSearch;
     });
   }, [kpis, selectedCategory, searchQuery]);
@@ -654,10 +672,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   ];
 
   return (
-    <UnifiedScreenCard
-      title="لوحة مؤشرات الأداء المالي والمحاسبي"
-      subtitle={`المؤشرات التنفيذية المباشرة • السنة المالية ${fiscalYear}`}
-      icon={Gauge}
+    <div className="space-y-3.5">
+      {/* Central Screen Client & Fiscal Year Context Banner */}
+      <ClientSelector state={state} />
+
+      <UnifiedScreenCard
+        title="لوحة مؤشرات الأداء المالي والمحاسبي"
+        subtitle={
+          activeClient
+            ? `مؤشرات الفحص المالي والمحاسبي لـ (${activeClient.name}) • السنة المالية ${currentFiscalYear}`
+            : `المؤشرات التنفيذية المجمعة للمكتب لكافة الشركات • السنة المالية ${currentFiscalYear}`
+        }
+        icon={Gauge}
       badge={`${filteredKpis.length} مؤشر نشط`}
       badgeVariant="emerald"
       actionMenuItems={dashboardHeaderActions}
@@ -767,6 +793,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
     </UnifiedScreenCard>
+    </div>
   );
 };
 

@@ -37,10 +37,12 @@ export const WhatsAppTemplatesManager: React.FC = () => {
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((tmpl) => {
+      const q = (searchQuery || '').toLowerCase().trim();
       const matchesSearch =
-        tmpl.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tmpl.templateBody.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tmpl.code.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        (tmpl.title || '').toLowerCase().includes(q) ||
+        (tmpl.templateBody || '').toLowerCase().includes(q) ||
+        (tmpl.code || '').toLowerCase().includes(q);
       if (!matchesSearch) return false;
       if (categoryFilter !== 'ALL' && tmpl.category !== categoryFilter) return false;
       return true;
@@ -145,7 +147,7 @@ export const WhatsAppTemplatesManager: React.FC = () => {
                 title: 'قالب إشعار جديد مخصص',
                 category: 'GENERAL',
                 subject: 'إشعار مالي وإداري',
-                templateBody: `السادة / *{CLIENT_NAME}*\nعناية: {CONTACT_PERSON} المحترمين\nتحية طيبة وبعد،،\n\nنحيط سيادتكم علماً بما يلي بخصوص شركتكم:\n\n📋 *البيان:* {DOC_TITLE}\n📅 *التاريخ:* {DATE}`,
+                templateBody: `السادة / *{CLIENT_NAME}*\nعناية: {CONTACT_PERSON} المحترمين\nتحية طيبة وبعد،،\n\nنحيط سيادتكم علماً بما يلي بخصوص شركتكم:\n\n📋 *البيان:* {DOC_TITLE}\n📅 *التاريخ:* {DATE}\n\n📞 هاتف التواصل والاستفسار: 01003335360\nالمحاسب القانوني: أ/ محمد جميل مرعي`,
                 isDefault: false,
                 isActive: true,
               });
@@ -316,6 +318,8 @@ export const WhatsAppTemplatesManager: React.FC = () => {
                     { key: 'DOC_TITLE', label: 'عنوان المعاملة' },
                     { key: 'AMOUNT', label: 'المبلغ' },
                     { key: 'DATE', label: 'التاريخ' },
+                    { key: 'VERIFICATION_CODE', label: 'كود التحقق والاعتماد' },
+                    { key: 'OFFICE_PHONE', label: 'هاتف المكتب 01003335360' },
                     { key: 'SIGNATURE', label: 'توقيع المكتب' },
                   ].map((v) => (
                     <button

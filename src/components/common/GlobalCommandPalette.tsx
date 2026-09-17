@@ -167,6 +167,18 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       },
     },
     {
+      id: 'nav-excel-audit',
+      title: 'مختبر مراجعة الإكسيل الذكي (XAI & Unsupervised ML)',
+      category: 'NAVIGATION',
+      description: 'فحص ملفات إكسيل الشركات، كشف الاحتيال وشذوذ بنفورد وتكرار التوزيع مع تقارير Word/Excel/PDF',
+      shortcut: 'Ctrl+E',
+      icon: Sparkles,
+      action: () => {
+        onNavigateTab('EXCEL_AUDIT_SENTINEL');
+        onClose();
+      },
+    },
+    {
       id: 'nav-customs',
       title: 'الجمارك والتجارة والتكلفة الإنزالية (ACI / Nafeza)',
       category: 'NAVIGATION',
@@ -252,10 +264,10 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
   ];
 
   const filteredCommands = commands.filter((cmd) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
+    if (!searchTerm || !searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase().trim();
     return (
-      cmd.title.toLowerCase().includes(term) ||
+      (cmd.title || '').toLowerCase().includes(term) ||
       (cmd.description && cmd.description.toLowerCase().includes(term)) ||
       (cmd.shortcut && cmd.shortcut.toLowerCase().includes(term))
     );

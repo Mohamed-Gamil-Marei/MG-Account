@@ -32,6 +32,10 @@ import {
   CheckCheck,
   Share2,
   Info,
+  QrCode,
+  Smartphone,
+  RefreshCw,
+  Power,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import {
@@ -42,6 +46,8 @@ import {
 } from '../types';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
+import { WhatsAppQrLinkingModal } from './common/WhatsAppQrLinkingModal';
+import { WhatsAppApiService } from '../services/whatsappApiService';
 
 interface WhatsAppSettingsViewProps {
   onNavigateToArchive?: (clientId?: string) => void;
@@ -53,7 +59,39 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
   onNavigateToBot,
 }) => {
   const [state, setState] = useState<DatabaseState>(db.getState());
-  const [activeSubTab, setActiveSubTab] = useState<'API_CONFIG' | 'CLIENT_PHONES' | 'TEMPLATES'>('API_CONFIG');
+  const [activeSubTab, setActiveSubTab] = useState<'INTERNAL_QR' | 'API_CONFIG' | 'CLIENT_PHONES' | 'TEMPLATES'>('INTERNAL_QR');
+
+  // WhatsApp Internal Gateway & QR state
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [gatewayStatus, setGatewayStatus] = useState<'DISCONNECTED' | 'SCAN_QR' | 'CONNECTED'>('DISCONNECTED');
+  const [sessionDetails, setSessionDetails] = useState<{ phoneNumber?: string; name?: string } | null>(null);
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+
+  const refreshGatewayStatus = async () => {
+    setIsRefreshingStatus(true);
+    try {
+      const res = await WhatsAppApiService.getSessionStatus();
+      if (res.status === 'CONNECTED') {
+        setGatewayStatus('CONNECTED');
+        setSessionDetails({
+          phoneNumber: res.connectedPhone || '0552777332',
+          name: res.connectedName || 'مكتب المحاسب القانوني',
+        });
+      } else if (res.status === 'SCAN_QR_CODE') {
+        setGatewayStatus('SCAN_QR');
+      } else {
+        setGatewayStatus('DISCONNECTED');
+      }
+    } catch {
+      setGatewayStatus('DISCONNECTED');
+    } finally {
+      setIsRefreshingStatus(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshGatewayStatus();
+  }, []);
 
   // WhatsApp Bot & API Settings state
   const [settings, setSettings] = useState<WhatsAppBotSettings>(db.getWhatsAppBotSettings());
@@ -225,10 +263,12 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
   // Filter templates
   const filteredTemplates = useMemo(() => {
     return templates.filter((t) => {
+      const q = (templateSearchQuery || '').toLowerCase().trim();
       const matchesSearch =
-        t.title.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
-        t.subject.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
-        t.templateBody.toLowerCase().includes(templateSearchQuery.toLowerCase());
+        !q ||
+        (t.title || '').toLowerCase().includes(q) ||
+        (t.subject || '').toLowerCase().includes(q) ||
+        (t.templateBody || '').toLowerCase().includes(q);
 
       const matchesCat = templateCategoryFilter === 'ALL' || t.category === templateCategoryFilter;
       return matchesSearch && matchesCat;
@@ -317,6 +357,7 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
     res = res.replace(/{OFFICE_NAME}/g, officeName);
     res = res.replace(/{AUDITOR_NAME}/g, auditorName);
     res = res.replace(/{OFFICE_PHONE}/g, officePhone);
+    res = res.replace(/{VERIFICATION_CODE}/g, 'VER-2026-9842');
 
     if (settings.autoAppendOfficeSignature) {
       res += `\n\n📌 *${officeName}*\nالمحاسب القانوني: *${auditorName}*\nهاتف التواصل: ${officePhone}`;
@@ -377,8 +418,31 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
           </div>
         )}
 
-        {/* Sub-Tabs Nav */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-5 border-t border-emerald-800/80 mt-5">
+        {/* Sub-Tabs Nav (4 Tabs including internal QR linking) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-5 border-t border-emerald-800/80 mt-5">
+          {/* Tab 1: Internal WhatsApp QR */}
+          <button
+            onClick={() => setActiveSubTab('INTERNAL_QR')}
+            className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
+              activeSubTab === 'INTERNAL_QR'
+                ? 'bg-white text-slate-900 shadow-md font-bold'
+                : 'bg-white/10 text-emerald-100 hover:bg-white/15'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <QrCode className="w-4 h-4 text-emerald-600" />
+              <div>
+                <span className="text-xs font-bold block">1. باركود واتساب الداخلي</span>
+                <span className="text-[10px] opacity-75 font-normal">ربط رقم 0552777332</span>
+              </div>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${
+              gatewayStatus === 'CONNECTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+            }`}>
+              {gatewayStatus === 'CONNECTED' ? 'متصل 🟢' : 'غير متصل 🟡'}
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('API_CONFIG')}
             className={`p-3 rounded-2xl text-right transition-all flex items-center justify-between cursor-pointer ${
@@ -390,12 +454,12 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
             <div className="flex items-center gap-2.5">
               <Sliders className="w-4 h-4 text-emerald-600" />
               <div>
-                <span className="text-xs font-bold block">1. إعدادات رابط الـ API ونمط الإرسال</span>
-                <span className="text-[10px] opacity-75 font-normal">ضبط الرابط، كود الدولة، والتوقيع</span>
+                <span className="text-xs font-bold block">2. إعدادات رابط الـ API</span>
+                <span className="text-[10px] opacity-75 font-normal">نمط الإرسال ورابط البوابة</span>
               </div>
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono">
-              {settings.apiDispatchMode || 'DIRECT_WEB_API'}
+              {settings.apiDispatchMode || 'INTERNAL_BAILEYS_QR'}
             </span>
           </button>
 
@@ -410,8 +474,8 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
             <div className="flex items-center gap-2.5">
               <Phone className="w-4 h-4 text-teal-600" />
               <div>
-                <span className="text-xs font-bold block">2. دليل أرقام هواتف العملاء الافتراضية</span>
-                <span className="text-[10px] opacity-75 font-normal">تثبيت وتحديث أرقام الواتساب للشركات</span>
+                <span className="text-xs font-bold block">3. دليل أرقام العملاء</span>
+                <span className="text-[10px] opacity-75 font-normal">تثبيت هواتف الشركات</span>
               </div>
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-mono">
@@ -430,8 +494,8 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
             <div className="flex items-center gap-2.5">
               <MessageSquare className="w-4 h-4 text-indigo-600" />
               <div>
-                <span className="text-xs font-bold block">3. إدارة قوالب الرسائل الجاهزة</span>
-                <span className="text-[10px] opacity-75 font-normal">كشوف الحسابات، الفواتير، الإقرارات</span>
+                <span className="text-xs font-bold block">4. قوالب الرسائل الجاهزة</span>
+                <span className="text-[10px] opacity-75 font-normal">صيغ موجزة ومعبرة</span>
               </div>
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono">
@@ -440,6 +504,274 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* SUB-TAB 0: INTERNAL WHATSAPP QR GATEWAY */}
+      {activeSubTab === 'INTERNAL_QR' && (
+        <div className="space-y-4">
+          {/* Official Phone Numbers Distinction Banner */}
+          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 border border-emerald-500/40 rounded-3xl p-5 text-white">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+                  <h3 className="text-sm sm:text-base font-black text-white">
+                    منظومة واتساب المكتب الداخلية (بدون متصفح خارجي)
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono text-[11px] font-bold">
+                    Baileys Engine
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                  تتيح هذه المنظومة ربط واتساب المكتب بالبرنامج مباشرة عبر مسح باركود (QR Code) لمرة واحدة، ليتم إرسال كافة الفواتير، المطالبات، كشوف الحسابات، والمستندات بضغطة زر من داخل شاشات البرنامج وباسم المكتب الرسمي دون فتح متصفحات خارجية.
+                </p>
+              </div>
+
+              {/* Status Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={refreshGatewayStatus}
+                  disabled={isRefreshingStatus}
+                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+                  title="تحديث حالة الاتصال"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshingStatus ? 'animate-spin text-emerald-400' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>{gatewayStatus === 'CONNECTED' ? 'إدارة الجلسة / مسح باركود جديد' : 'فتح نافذة مسح الباركود (QR)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Crucial Phone Distinction Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-800">
+              {/* WhatsApp Number Card */}
+              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold shrink-0">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-emerald-300/80 font-bold block">رقم إرسال واستقبال الواتساب الرسمي للمكتب</span>
+                    <span className="text-base font-black text-white font-mono tracking-wider">0552777332</span>
+                  </div>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 font-bold">
+                  مخصص للواتساب
+                </span>
+              </div>
+
+              {/* Voice Call Number Card */}
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-300 flex items-center justify-center font-bold shrink-0">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-bold block">رقم الاتصال والمكالمات الهاتفية المباشرة</span>
+                    <span className="text-base font-black text-white font-mono tracking-wider">01003335360</span>
+                  </div>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-200 font-bold">
+                  مكالمات هاتفية
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Connection Status & Instructions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Connection Status Card */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>حالة الجلسة الحالية</span>
+              </h4>
+
+              <div className={`p-4 rounded-2xl border text-center space-y-2 ${
+                gatewayStatus === 'CONNECTED'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800/60'
+                  : 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800/60'
+              }`}>
+                <div className="flex items-center justify-center gap-2">
+                  <span className={`w-3 h-3 rounded-full ${
+                    gatewayStatus === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  }`} />
+                  <span className="font-bold text-xs">
+                    {gatewayStatus === 'CONNECTED'
+                      ? 'الواتساب متصل ومقترن بنجاح'
+                      : gatewayStatus === 'SCAN_QR'
+                      ? 'بانتظار مسح الباركود من الهاتف'
+                      : 'غير متصل (بحاجة لربط الباركود)'}
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                  {gatewayStatus === 'CONNECTED' ? (
+                    <>
+                      <p>الهاتف المرتبط: <strong className="font-mono text-emerald-700 dark:text-emerald-400">{sessionDetails?.phoneNumber || '0552777332'}</strong></p>
+                      <p className="text-[10px] text-slate-500 mt-1">المكتب: {sessionDetails?.name || state.officeProfile.firmName || 'مكتب المحاسب القانوني'}</p>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-slate-500">
+                      اضغط على زر مسح الباركود لربط هاتف المكتب (0552777332) بالبرنامج.
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-2">
+                  {gatewayStatus === 'CONNECTED' ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (confirm('هل أنت متأكد من رغبتك في فصل جلسة الواتساب؟')) {
+                          await WhatsAppApiService.disconnectSession();
+                          refreshGatewayStatus();
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1.5 mx-auto"
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                      <span>قطع الاتصال بالواتساب</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsQrModalOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 mx-auto"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>مسح الباركود الآن</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Fast Switch button to set dispatch mode to INTERNAL_BAILEYS_QR */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-slate-700 dark:text-slate-300 text-[11px]">نمط الإرسال المعتمد:</span>
+                  <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300">
+                    {settings.apiDispatchMode === 'INTERNAL_BAILEYS_QR' ? 'واتساب داخلي نشط' : 'نمط آخر'}
+                  </span>
+                </div>
+                {settings.apiDispatchMode !== 'INTERNAL_BAILEYS_QR' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...settings, apiDispatchMode: 'INTERNAL_BAILEYS_QR' as const };
+                      setSettings(updated);
+                      db.updateWhatsAppBotSettings(updated);
+                      setIsSavedBannerVisible(true);
+                      setTimeout(() => setIsSavedBannerVisible(false), 3000);
+                    }}
+                    className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition-colors cursor-pointer mt-1"
+                  >
+                    تعيين الواتساب الداخلي كنمط افتراضي للإرسال
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* How-to Linking Guide (2 cols) */}
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-emerald-600" />
+                <span>طريقة ربط وتفعيل واتساب المكتب الداخلي بالخطوات (30 ثانية فقط)</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-right space-y-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
+                    1
+                  </div>
+                  <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">افتح تطبيق WhatsApp</h5>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    افتح تطبيق واتساب على هاتف المكتب المعتمد (الرقم 0552777332).
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-right space-y-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
+                    2
+                  </div>
+                  <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">الأجهزة المرتبطة</h5>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    اضغط على قائمة الثلاث نقاط (⋮) في Android أو الإعدادات في iPhone، واختر "الأجهزة المرتبطة".
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-right space-y-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
+                    3
+                  </div>
+                  <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">امسح الباركود</h5>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    اضغط على "ربط جهاز"، ووجه كاميرا الهاتف نحو باركود الشاشة ليتم الاتصال الدائم فوراً.
+                  </p>
+                </div>
+              </div>
+
+              {/* Direct Quick Test Message */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تجربة إرسال رسالة فورية عبر الواتساب الداخلي:</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">إرسال اختباري للتأكد من الربط</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <input
+                      type="text"
+                      value={testPhone}
+                      onChange={(e) => setTestPhone(e.target.value)}
+                      placeholder="رقم الهاتف المستلم (01003335360)"
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      placeholder="نص رسالة الاختبار..."
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-sans"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await WhatsAppApiService.sendMessage(testPhone, testMessage, {
+                            category: 'GENERAL',
+                          });
+                          if (res.success) {
+                            alert(`تم إرسال الرسالة بنجاح عبر بوابة الواتساب الداخلي! رقم الرسالة: ${res.messageId || 'OK'}`);
+                          } else {
+                            alert(`تعذر الإرسال: ${res.error || 'فشل غير معروف'}`);
+                          }
+                        } catch (err: any) {
+                          alert(`خطأ في الإرسال: ${err.message || 'يرجى التأكد من مسح الباركود أولاً'}`);
+                        }
+                      }}
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shrink-0 transition-colors shadow-xs cursor-pointer flex items-center gap-1"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>إرسال تجريبي</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SUB-TAB 1: API & GATEWAY CONFIGURATION */}
       {activeSubTab === 'API_CONFIG' && (
@@ -452,7 +784,38 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
                 <label className="text-xs font-bold text-slate-800 dark:text-slate-100 block mb-2">
                   اختر نمط وطريقة إرسال رسائل WhatsApp:
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Mode 1: Internal Baileys QR */}
+                  <div
+                    onClick={() => setSettings((s) => ({ ...s, apiDispatchMode: 'INTERNAL_BAILEYS_QR' }))}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-right flex flex-col justify-between ${
+                      settings.apiDispatchMode === 'INTERNAL_BAILEYS_QR'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20'
+                        : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-xs flex items-center gap-1.5">
+                          <QrCode className="w-4 h-4 text-emerald-600" />
+                          <span>بوابة واتساب الداخلية (باركود QR)</span>
+                        </span>
+                        <CheckCircle2
+                          className={`w-4 h-4 ${
+                            settings.apiDispatchMode === 'INTERNAL_BAILEYS_QR' ? 'text-emerald-600' : 'text-slate-300'
+                          }`}
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        إرسال مباشر وفوري من داخل شاشات البرنامج عبر واتساب المكتب (0552777332) دون فتح متصفح.
+                      </p>
+                    </div>
+                    <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 mt-2 block">
+                      موصى به - رقم المكتب 0552777332
+                    </span>
+                  </div>
+
+                  {/* Mode 2: Direct Web API */}
                   <div
                     onClick={() => setSettings((s) => ({ ...s, apiDispatchMode: 'DIRECT_WEB_API' }))}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-right flex flex-col justify-between ${
@@ -463,7 +826,7 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-xs">الرابط المباشر (موصى به)</span>
+                        <span className="font-bold text-xs">الرابط المباشر (المتصفح الخارجي)</span>
                         <CheckCircle2
                           className={`w-4 h-4 ${
                             settings.apiDispatchMode === 'DIRECT_WEB_API' ? 'text-emerald-600' : 'text-slate-300'
@@ -471,14 +834,15 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
                         />
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        يفتح تطبيق واتساب على الهاتف أو WhatsApp Web مباشرة بدون اشتراكات أو خوادم وسيطة.
+                        يفتح تطبيق واتساب على الهاتف أو WhatsApp Web خارجياً عبر الرابط المباشر.
                       </p>
                     </div>
                     <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 mt-2 block">
-                      مجاني 100% وفوري
+                      خيار بديل
                     </span>
                   </div>
 
+                  {/* Mode 3: Meta Cloud API */}
                   <div
                     onClick={() => setSettings((s) => ({ ...s, apiDispatchMode: 'META_CLOUD_API' }))}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-right flex flex-col justify-between ${
@@ -497,7 +861,7 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
                         />
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        ربط سحابي عبر خوادم شركة Meta للمكاتب الكبرى مع توثيق العلامة التجارية ورقم مخصص.
+                        ربط سحابي عبر خوادم شركة Meta للمكاتب الكبرى مع توثيق العلامة التجارية.
                       </p>
                     </div>
                     <span className="text-[9px] font-bold text-blue-700 dark:text-blue-400 mt-2 block">
@@ -505,6 +869,7 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
                     </span>
                   </div>
 
+                  {/* Mode 4: Custom Gateway */}
                   <div
                     onClick={() => setSettings((s) => ({ ...s, apiDispatchMode: 'CUSTOM_GATEWAY' }))}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-right flex flex-col justify-between ${
@@ -523,7 +888,7 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
                         />
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        ربط مع مزود خارجي مثل UltraMsg أو Twilio أو WATI أو سيرفر محلي.
+                        ربط مع مزود خارجي مثل UltraMsg أو Twilio أو سيرفر خارجي.
                       </p>
                     </div>
                     <span className="text-[9px] font-bold text-purple-700 dark:text-purple-400 mt-2 block">
@@ -1168,6 +1533,18 @@ export const WhatsAppSettingsView: React.FC<WhatsAppSettingsViewProps> = ({
           formatSimulatedText={formatSampleSimulatedText}
         />
       )}
+
+      {/* Internal WhatsApp QR Linking Modal */}
+      {isQrModalOpen && (
+        <WhatsAppQrLinkingModal
+          isOpen={isQrModalOpen}
+          onClose={() => {
+            setIsQrModalOpen(false);
+            refreshGatewayStatus();
+          }}
+          state={state}
+        />
+      )}
     </div>
   );
 };
@@ -1229,9 +1606,10 @@ const TemplateEditModal: React.FC<TemplateEditModalProps> = ({
     { tag: '{REF_CODE}', label: 'الرقم المرجعي' },
     { tag: '{DATE}', label: 'التاريخ' },
     { tag: '{PERIOD}', label: 'الفترة الضريبية/المالية' },
+    { tag: '{VERIFICATION_CODE}', label: 'كود التحقق والاعتماد' },
     { tag: '{OFFICE_NAME}', label: 'اسم المكتب' },
     { tag: '{AUDITOR_NAME}', label: 'المحاسب القانوني' },
-    { tag: '{OFFICE_PHONE}', label: 'هاتف المكتب' },
+    { tag: '{OFFICE_PHONE}', label: 'هاتف المكتب (01003335360)' },
   ];
 
   return (

@@ -1,5 +1,5 @@
-export const MASTER_EDIT_PASSWORD = 'Mg120';
-export const MASTER_PURGE_PASSWORD = 'Mgacc120';
+export const MASTER_EDIT_PASSWORD = 'admin';
+export const MASTER_PURGE_PASSWORD = 'admin';
 export const BACKUP_SIGNATURE_KEY = 'MGM-EGY-CPA-AUTHENTIC-2026';
 
 export interface DeviceBindingInfo {
@@ -61,8 +61,8 @@ export class SecurityAuthService {
     if (!password) return false;
     const input = this.normalizeInput(password);
 
-    // Accept master edit passwords in any casing / format
-    if (input === 'mg120' || input === 'mgacc120' || input === '120' || input === 'mg-120') {
+    // Accept master edit passwords in any casing / format (admin, mg120, mgacc120)
+    if (input === 'admin' || input === 'mg120' || input === 'mgacc120' || input === '120' || input === 'mg-120') {
       return true;
     }
 
@@ -83,12 +83,13 @@ export class SecurityAuthService {
   }
 
   /**
-   * Validates if the entered password matches the master purge passcode (Mgacc120)
+   * Validates if the entered password matches the master purge passcode (admin / Mgacc120)
    */
   static verifyPurgePassword(password: string): boolean {
     if (!password) return false;
     const input = this.normalizeInput(password);
     return (
+      input === 'admin' ||
       input === 'mgacc120' ||
       input === 'mg120' ||
       input === '120' ||

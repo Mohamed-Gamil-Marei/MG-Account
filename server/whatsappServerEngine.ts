@@ -132,7 +132,7 @@ class WhatsAppServerEngine {
     wabaId: process.env.WHATSAPP_WABA_ID || "",
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "MOSTAFA_OFFICE_TAX_BOT_SECURE_TOKEN_2026",
-    landlineNumber: "0237654321",
+    landlineNumber: "01003335360",
     officeName: "مكتب المحاسب القانوني ومراقب الحسابات - محمد جميل مرعي",
     webhookUrl: "/api/whatsapp/webhook",
     isEnabled: true,
@@ -732,7 +732,7 @@ class WhatsAppServerEngine {
    */
   public generateAutoReply(userMessage: string, clientName: string, _phone: string): string {
     const trimmed = userMessage.trim().toLowerCase();
-    const officeHeader = `🏛️ *${this.config.officeName}*\n📞 رقم الخط الأرضي للمكتب: ${this.config.landlineNumber}\n━━━━━━━━━━━━━━━━━━━━`;
+    const officeHeader = `🏛️ *${this.config.officeName}*\n📞 هاتف وتواصل المكتب: ${this.config.landlineNumber}\n━━━━━━━━━━━━━━━━━━━━`;
 
     // 1. Menu Trigger / Greeting
     if (
@@ -776,7 +776,7 @@ class WhatsAppServerEngine {
 
     // 7. Office Info & Address
     if (trimmed === "6" || trimmed.includes("عنوان") || trimmed.includes("مواعيد") || trimmed.includes("تليفون") || trimmed.includes("مكتب") || trimmed.includes("مكان")) {
-      return `${officeHeader}\n\n📍 *بيانات التواصل ومقر المكتب:*\n\n• *اسم المحاسب المسؤول:* أ/ محمد جميل مرعي - محاسب قانوني ومراقب حسابات شركات الأموال\n• *رقم التليفون الأرضي:* ${this.config.landlineNumber}\n• *العنوان:* جمهورية مصر العربية - القاهرة / الجيزة\n• *مواعيد العمل:* السبت إلى الخميس: من 9:00 صباحاً حتى 6:00 مساءً (الجمعة عطلة أسبوعية)\n\n_أرسل (0) للعودة للقائمة الرئيسية._`;
+      return `${officeHeader}\n\n📍 *بيانات التواصل ومقر المكتب:*\n\n• *اسم المحاسب المسؤول:* أ/ محمد جميل مرعي - محاسب قانوني ومراقب حسابات شركات الأموال\n• *رقم الهاتف / الواتساب:* ${this.config.landlineNumber}\n• *العنوان:* جمهورية مصر العربية - القاهرة / الجيزة\n• *مواعيد العمل:* السبت إلى الخميس: من 9:00 صباحاً حتى 6:00 مساءً (الجمعة عطلة أسبوعية)\n\n_أرسل (0) للعودة للقائمة الرئيسية._`;
     }
 
     // 8. Human Accountant Request
@@ -1155,9 +1155,9 @@ ${payload.notes ? `\n📝 *ملاحظات إضافية:* ${payload.notes}` : ''}
           detail: "متصل بملفات العملاء والضرائب والسندات",
         },
         {
-          name: "دعم ربط التليفون الأرضي (Landline)",
+          name: "رقم هاتف وتواصل المكتب",
           status: "SUPPORTED",
-          detail: `مجهز للربط برقم الخط الأرضي: ${this.config.landlineNumber}`,
+          detail: `مجهز للتواصل والربط برقم الهاتف: ${this.config.landlineNumber}`,
         },
       ],
     };

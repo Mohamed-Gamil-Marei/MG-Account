@@ -37,6 +37,7 @@ import {
   Undo2,
   Redo2,
   AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 import { JournalEntry, JournalEntryLine, Account, CurrencyCode, ClientArchiveRecord } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -69,6 +70,7 @@ import { PrintService } from '../services/PrintService';
 import { Wrench, Printer, UploadCloud, Camera, Zap, ShieldAlert, Check } from 'lucide-react';
 import { InvoiceOcrScannerView } from './accounting/InvoiceOcrScannerView';
 import { JournalErrorsAuditModal } from './audit/JournalErrorsAuditModal';
+import { JournalEntryNotesAuditorView } from './accounting/JournalEntryNotesAuditorView';
 import { SmartParsedEntryResult } from '../services/journalSuggestionEngine';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
@@ -141,6 +143,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
   // AI Journal Error Audit Modal State
   const [isAuditErrorsModalOpen, setIsAuditErrorsModalOpen] = useState(false);
+  const [isNotesAuditorModalOpen, setIsNotesAuditorModalOpen] = useState(false);
 
   // Quick Smart Entry Generator State (الوصف والقيمة فقط -> قيد متوازن فوري)
   const [isSmartGeneratorOpen, setIsSmartGeneratorOpen] = useState(false);
@@ -773,7 +776,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       if (!isNewEntryModalOpen) return;
 
       const isCtrlOrMeta = e.ctrlKey || e.metaKey;
-      if (!isCtrlOrMeta) return;
+      if (!isCtrlOrMeta || !e.key) return;
 
       const key = e.key.toLowerCase();
       if (key === 'z' && !e.shiftKey) {
@@ -1715,12 +1718,18 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
   const activeClient = state.activeClientContext;
   const isClientAutoFilterOn = activeClient?.autoFilterAccountingData && activeClient?.clientId;
+  const activeFiscalYear = activeClient?.selectedFiscalYear;
 
   const filteredEntries = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     return state.journalEntries.filter((entry) => {
       // If client filter is active and entry has clientId, filter by active client
       if (isClientAutoFilterOn && entry.clientId && entry.clientId !== activeClient.clientId) {
+        return false;
+      }
+
+      // Filter by active fiscal year if specified
+      if (activeFiscalYear && entry.date && !entry.date.startsWith(String(activeFiscalYear))) {
         return false;
       }
 
@@ -1738,7 +1747,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
       return matchesSearch && matchesPosted;
     });
-  }, [state.journalEntries, searchTerm, filterPosted, isClientAutoFilterOn, activeClient?.clientId]);
+  }, [state.journalEntries, searchTerm, filterPosted, isClientAutoFilterOn, activeClient?.clientId, activeFiscalYear]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEntries.length / (pageSize || 20)));
 
@@ -1818,6 +1827,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
             onClick: () => setIsAuditErrorsModalOpen(true),
           },
           {
+            id: 'btn-notes-auditor-modal',
+            label: 'فحص وتصحيح التوجيه (Notes Audit)',
+            icon: Sparkles,
+            onClick: () => setIsNotesAuditorModalOpen(true),
+          },
+          {
             isDivider: true,
             label: '',
             onClick: () => {},
@@ -1863,11 +1878,28 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           },
         ]}
         extraHeaderControls={
-          <CompanyHeaderSelector
-            state={state}
-            title="الشركة:"
-            allOptionLabel="كافة الشركات"
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <CompanyHeaderSelector
+              state={state}
+              title="الشركة:"
+              allOptionLabel="كافة الشركات"
+            />
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs">
+              <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">السنة:</span>
+              <select
+                value={state.activeClientContext?.selectedFiscalYear || 2026}
+                onChange={(e) => db.updateActiveClientFiscalYear(Number(e.target.value))}
+                className="bg-transparent font-bold font-mono text-xs focus:outline-none cursor-pointer text-slate-800 dark:text-slate-200"
+              >
+                <option value={2026}>2026</option>
+                <option value={2025}>2025</option>
+                <option value={2024}>2024</option>
+                <option value={2023}>2023</option>
+                <option value={2022}>2022</option>
+              </select>
+            </div>
+          </div>
         }
       >
         <div className="space-y-4">
@@ -4100,6 +4132,26 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           }
         }}
       />
+
+      {/* Smart Notes & Narration Reclassification Auditor Modal */}
+      {isNotesAuditorModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-5 relative">
+            <button
+              type="button"
+              onClick={() => setIsNotesAuditorModalOpen(false)}
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors z-20 cursor-pointer"
+              title="إغلاق النافذة"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <JournalEntryNotesAuditorView
+              state={state}
+              onNavigateToJournal={() => setIsNotesAuditorModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

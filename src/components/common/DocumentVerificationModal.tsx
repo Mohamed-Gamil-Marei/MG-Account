@@ -54,6 +54,7 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.key) return;
       const isModifier = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 

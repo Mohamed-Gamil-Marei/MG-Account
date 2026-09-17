@@ -107,12 +107,13 @@ export const WhatsAppClientPhonesDirectory: React.FC<WhatsAppClientPhonesDirecto
   const filteredClients = useMemo(() => {
     return state.clients.filter((c) => {
       const edit = clientPhoneEdits[c.id] || { phone: c.phone || '', contactPerson: c.contactPerson || '' };
-      const q = searchQuery.toLowerCase();
+      const q = (searchQuery || '').toLowerCase().trim();
       const matchesSearch =
-        c.name.toLowerCase().includes(q) ||
+        !q ||
+        (c.name || '').toLowerCase().includes(q) ||
         (c.clientCode && c.clientCode.toLowerCase().includes(q)) ||
-        edit.phone.includes(q) ||
-        edit.contactPerson.toLowerCase().includes(q);
+        (edit.phone && edit.phone.includes(q)) ||
+        (edit.contactPerson && edit.contactPerson.toLowerCase().includes(q));
 
       if (!matchesSearch) return false;
 

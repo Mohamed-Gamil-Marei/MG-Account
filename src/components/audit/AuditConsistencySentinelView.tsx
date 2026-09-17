@@ -39,11 +39,12 @@ export const AuditConsistencySentinelView: React.FC<AuditConsistencySentinelView
 
   const filteredChecks = useMemo(() => {
     return report.checks.filter((c) => {
+      const q = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        !searchTerm ||
-        c.titleAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.descriptionAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.standardReference.toLowerCase().includes(searchTerm.toLowerCase());
+        !q ||
+        (c.titleAr || '').toLowerCase().includes(q) ||
+        (c.descriptionAr || '').toLowerCase().includes(q) ||
+        (c.standardReference || '').toLowerCase().includes(q);
 
       if (!matchesSearch) return false;
       if (filterSeverity === 'ISSUES_ONLY') return c.status !== 'PASSED';

@@ -23,8 +23,10 @@ import {
   FileCheck2,
   Copy,
   Sliders,
+  Paperclip,
 } from 'lucide-react';
 import { DatabaseState, db } from '../../db/localDatabase';
+import { WhatsAppDocumentShareModal } from '../archive/WhatsAppDocumentShareModal';
 import {
   WhatsAppApiService,
   WhatsAppChatMessage,
@@ -72,6 +74,7 @@ export const WhatsAppLiveChatPanel: React.FC<WhatsAppLiveChatPanelProps> = ({
   const [isSimulating, setIsSimulating] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'SUCCESS' | 'ERROR'; text: string } | null>(null);
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -243,14 +246,14 @@ export const WhatsAppLiveChatPanel: React.FC<WhatsAppLiveChatPanelProps> = ({
       result = result.filter((item) => !!item.clientId);
     }
 
-    if (!searchQuery.trim()) return result;
-    const q = searchQuery.toLowerCase();
+    if (!searchQuery || !searchQuery.trim()) return result;
+    const q = searchQuery.toLowerCase().trim();
     return result.filter(
       (t) =>
-        t.clientName.toLowerCase().includes(q) ||
-        t.phone.includes(q) ||
+        (t.clientName || '').toLowerCase().includes(q) ||
+        (t.phone && t.phone.includes(q)) ||
         (t.contactPerson && t.contactPerson.toLowerCase().includes(q)) ||
-        t.lastMessage.toLowerCase().includes(q)
+        (t.lastMessage || '').toLowerCase().includes(q)
     );
   }, [unifiedChatList, searchQuery, conversationsFilter]);
 
@@ -621,6 +624,18 @@ export const WhatsAppLiveChatPanel: React.FC<WhatsAppLiveChatPanelProps> = ({
 
             {/* Quick Actions Header */}
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Attachment & Statement Modal Trigger */}
+              <button
+                type="button"
+                id="btn-livechat-attach-files"
+                onClick={() => setIsShareModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                title="إرسال ملف مأرشف أو كشف حساب أو أي ملف محدد"
+              >
+                <Paperclip className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>إرسال ملف / كشف حساب</span>
+              </button>
+
               {/* Subtle Testing/Simulation Toggle */}
               <button
                 type="button"
@@ -800,6 +815,16 @@ export const WhatsAppLiveChatPanel: React.FC<WhatsAppLiveChatPanelProps> = ({
 
           {/* Input & Dispatch Bar */}
           <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-end gap-2">
+            {/* Attachment Button */}
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(true)}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-200 transition-all cursor-pointer shrink-0"
+              title="إرفاق ملف مأرشف أو كشف حساب أو أي ملف مخصص"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             <div className="flex-1 relative">
               <textarea
                 ref={inputRef}
@@ -847,6 +872,16 @@ export const WhatsAppLiveChatPanel: React.FC<WhatsAppLiveChatPanelProps> = ({
           </div>
         </div>
       </div>
+
+      {/* WhatsApp Document & Statement Sharing Modal */}
+      {isShareModalOpen && (
+        <WhatsAppDocumentShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          client={matchedClient || state.clients.find((c) => c.phone && normalizePhone(c.phone) === normalizePhone(selectedPhone)) || state.clients[0] || null}
+          state={state}
+        />
+      )}
     </div>
   );
 };

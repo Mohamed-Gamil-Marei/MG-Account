@@ -15,10 +15,13 @@ import {
   Calculator,
   Building,
   Info,
+  Repeat,
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import * as XLSX from 'xlsx';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
+import { ActionMenu } from '../common/ActionMenu';
 
 export interface FixedAssetCategoryItem {
   id: string;
@@ -274,6 +277,97 @@ export const CreditFixedAssetsTab: React.FC<CreditFixedAssetsTabProps> = ({
     setEditingId(null);
   };
 
+  // Automatic Rollover Logic: Closing balances of year T become opening balances of year T+1
+  const handleRollForwardFromPrevYear = (targetYear: number) => {
+    const prevYear = targetYear - 1;
+    if (!yearsList.includes(prevYear)) return;
+
+    const updated = assetCategories.map((cat) => {
+      const prevData = cat.valuesByYear?.[prevYear] || {
+        costStart: 0,
+        additions: 0,
+        disposals: 0,
+        accumStart: 0,
+        accumDisposals: 0,
+      };
+
+      const costEndPrev = (prevData.costStart || 0) + (prevData.additions || 0) - (prevData.disposals || 0);
+      const depPrev = prevData.customDepExpense !== undefined
+        ? prevData.customDepExpense
+        : (cat.depRate > 0 ? Math.round(costEndPrev * (cat.depRate / 100)) : 0);
+      const accumEndPrev = (prevData.accumStart || 0) + depPrev - (prevData.accumDisposals || 0);
+
+      const targetCurrent = cat.valuesByYear?.[targetYear] || {
+        costStart: 0,
+        additions: 0,
+        disposals: 0,
+        accumStart: 0,
+        accumDisposals: 0,
+      };
+
+      return {
+        ...cat,
+        valuesByYear: {
+          ...cat.valuesByYear,
+          [targetYear]: {
+            ...targetCurrent,
+            costStart: costEndPrev,
+            accumStart: accumEndPrev,
+          },
+        },
+      };
+    });
+
+    onUpdateAssetCategories(updated);
+  };
+
+  const handleRollForwardAllYears = () => {
+    let currentCats = [...assetCategories];
+    const sorted = [...yearsList].sort((a, b) => a - b);
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prevYr = sorted[i - 1];
+      const currYr = sorted[i];
+
+      currentCats = currentCats.map((cat) => {
+        const prevData = cat.valuesByYear?.[prevYr] || {
+          costStart: 0,
+          additions: 0,
+          disposals: 0,
+          accumStart: 0,
+          accumDisposals: 0,
+        };
+        const costEndPrev = (prevData.costStart || 0) + (prevData.additions || 0) - (prevData.disposals || 0);
+        const depPrev = prevData.customDepExpense !== undefined
+          ? prevData.customDepExpense
+          : (cat.depRate > 0 ? Math.round(costEndPrev * (cat.depRate / 100)) : 0);
+        const accumEndPrev = (prevData.accumStart || 0) + depPrev - (prevData.accumDisposals || 0);
+
+        const currData = cat.valuesByYear?.[currYr] || {
+          costStart: 0,
+          additions: 0,
+          disposals: 0,
+          accumStart: 0,
+          accumDisposals: 0,
+        };
+
+        return {
+          ...cat,
+          valuesByYear: {
+            ...cat.valuesByYear,
+            [currYr]: {
+              ...currData,
+              costStart: costEndPrev,
+              accumStart: accumEndPrev,
+            },
+          },
+        };
+      });
+    }
+
+    onUpdateAssetCategories(currentCats);
+  };
+
   // Dedicated Excel Export
   const handleExportAssetsExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -347,56 +441,66 @@ export const CreditFixedAssetsTab: React.FC<CreditFixedAssetsTabProps> = ({
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Action Controls - Unified Dropdown Design */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Year Switcher */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <span className="text-xs font-bold text-slate-500 px-2">السنة:</span>
-            {yearsList.map((yr) => (
-              <button
-                key={yr}
-                type="button"
-                onClick={() => setSelectedYear(yr)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  selectedYear === yr
-                    ? 'bg-blue-700 text-white shadow-xs'
-                    : 'text-slate-700 hover:text-blue-700'
-                }`}
-              >
-                {yr}
-              </button>
-            ))}
-          </div>
+          {/* Unified Year Dropdown */}
+          <UnifiedSelectDropdown<number>
+            id="fixed-assets-year-dropdown"
+            label="سنة العرض"
+            value={selectedYear}
+            options={yearsList.map((yr) => ({
+              id: yr,
+              label: `سنة ${yr}`,
+              sublabel: `حركة وإهلاك أصول ${yr}`,
+            }))}
+            onChange={(yr) => setSelectedYear(yr)}
+          />
 
-          <button
-            type="button"
-            onClick={() => setIsAddingNew(true)}
-            className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            إضافة أصل ثابت
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportAssetsExcel}
-            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            تصدير جدول الإهلاك (Excel)
-          </button>
-
-          {onResetAssets && (
-            <button
-              type="button"
-              onClick={onResetAssets}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-              title="استعادة القيم القياسية"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              استعادة الافتراضي
-            </button>
-          )}
+          {/* Action Menu */}
+          <ActionMenu
+            id="fixed-assets-action-menu"
+            label="خيارات وإجراءات"
+            triggerVariant="primary"
+            align="left"
+            items={[
+              {
+                id: 'add-asset',
+                label: 'إضافة أصل ثابت جديد',
+                icon: Plus,
+                onClick: () => setIsAddingNew(true),
+              },
+              {
+                id: 'export-assets-excel',
+                label: 'تصدير جدول الإهلاك (Excel)',
+                icon: Download,
+                variant: 'success',
+                onClick: handleExportAssetsExcel,
+              },
+              {
+                id: 'rollover-prev-year',
+                label: `ترحيل أرصدة السنة السابقة (${selectedYear - 1}) إلى (${selectedYear})`,
+                icon: Repeat,
+                disabled: !yearsList.includes(selectedYear - 1),
+                onClick: () => handleRollForwardFromPrevYear(selectedYear),
+              },
+              {
+                id: 'rollover-all-years',
+                label: 'ترحيل مجمع الإهلاك والتكلفة عبر كل السنوات بالتتابع',
+                icon: RefreshCw,
+                onClick: handleRollForwardAllYears,
+              },
+              ...(onResetAssets
+                ? [
+                    {
+                      id: 'reset-assets',
+                      label: 'استعادة القيم والبنود القياسية',
+                      icon: RefreshCw,
+                      onClick: onResetAssets,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 

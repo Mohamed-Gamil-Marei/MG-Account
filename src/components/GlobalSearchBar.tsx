@@ -46,9 +46,10 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
   // Keyboard shortcut listener: Ctrl + / or Ctrl + Shift + F
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === '/' || e.key === 'f' || e.key === 'F')) {
+      if (!e.key) return;
+      if ((e.ctrlKey || e.metaKey) && (e.key === '/' || e.key.toLowerCase() === 'f')) {
         // If not typing in another input
-        const activeTag = document.activeElement?.tagName.toLowerCase();
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
         if (activeTag !== 'input' && activeTag !== 'textarea') {
           e.preventDefault();
           searchInputRef.current?.focus();

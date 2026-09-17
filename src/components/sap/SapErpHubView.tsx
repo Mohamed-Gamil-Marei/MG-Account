@@ -585,3 +585,6 @@ export const SapErpHubView: React.FC<SapErpHubViewProps> = ({
     </div>
   );
 };
+
+export default SapErpHubView;
+

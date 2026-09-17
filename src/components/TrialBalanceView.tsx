@@ -26,9 +26,25 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
   const [isAutoMapperOpen, setIsAutoMapperOpen] = useState(false);
   const [isAuditSentinelOpen, setIsAuditSentinelOpen] = useState(false);
   
+  const currentFiscalYear = state.activeClientContext?.selectedFiscalYear || fiscalYear || 2026;
+  const activeClientId = state.activeClientContext?.clientId;
+  const activeClient = state.clients.find((c) => c.id === activeClientId);
+
+  const filteredEntries = useMemo(() => {
+    return state.journalEntries.filter((e) => {
+      if (activeClientId && e.clientId && e.clientId !== activeClientId) {
+        return false;
+      }
+      if (e.date && !e.date.startsWith(String(currentFiscalYear))) {
+        return false;
+      }
+      return true;
+    });
+  }, [state.journalEntries, activeClientId, currentFiscalYear]);
+
   const calculatedAccounts = useMemo(() => {
-    return computeAccountBalances(state.accounts, state.journalEntries);
-  }, [state.accounts, state.journalEntries]);
+    return computeAccountBalances(state.accounts, filteredEntries);
+  }, [state.accounts, filteredEntries]);
 
   // Filter leaf/analytical accounts
   const leafAccounts = useMemo(() => {
@@ -114,7 +130,11 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
     <UnifiedScreenCard
       id="trial-balance-card"
       title="ميزان المراجعة بالمجاميع والأرصدة"
-      subtitle="الميزان ذو الأعمدة الستة المعتمد وفق المعايير المصرية (EAS)"
+      subtitle={
+        activeClient
+          ? `ميزان المراجعة لـ (${activeClient.name}) • السنة المالية ${currentFiscalYear} (EAS)`
+          : `الميزان المجمع وفق المعايير المصرية (EAS) • السنة المالية ${currentFiscalYear}`
+      }
       icon={Scale}
       badge={isEndingBalanced ? 'متزن محاسبياً ✓' : 'غير متزن ⚠'}
       badgeVariant={isEndingBalanced ? 'emerald' : 'rose'}

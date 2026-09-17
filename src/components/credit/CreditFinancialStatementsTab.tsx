@@ -28,6 +28,8 @@ import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { FiscalYearData } from './CreditYearlyEditor';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
 import { SupplementaryNoteItem, DEFAULT_SUPPLEMENTARY_NOTES } from './CreditNotesTab';
+import { UnifiedSelectDropdown, UnifiedDropdownOption } from '../common/UnifiedSelectDropdown';
+import { ActionMenu } from '../common/ActionMenu';
 import { DisclosureDetailModal } from './DisclosureDetailModal';
 import { FixedAssetCategoryItem } from './CreditFixedAssetsTab';
 import { AdminExpenseItem } from './CreditAdminExpensesTab';
@@ -150,6 +152,12 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
   const renderNoteBadge = (noteRef: string | number) => {
     const noteNumStr = String(noteRef).replace(/[^0-9]/g, '');
     const noteNum = noteNumStr ? parseInt(noteNumStr, 10) : null;
+    const displayText =
+      typeof noteRef === 'number'
+        ? `إيضاح (${noteRef})`
+        : noteNum
+        ? `إيضاح (${noteNum})`
+        : noteRef || 'إيضاح متمم';
     return (
       <button
         type="button"
@@ -163,7 +171,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
         className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono font-bold rounded-lg border border-purple-200 dark:border-purple-800 text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
         title="اضغط لمشاهدة وتعديل الإيضاح المتمم"
       >
-        <span>{typeof noteRef === 'number' ? `إيضاح (${noteRef})` : noteRef}</span>
+        <span>{displayText}</span>
         <BookOpen className="w-2.5 h-2.5 opacity-60" />
       </button>
     );
@@ -212,6 +220,48 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
           {onUpdateCell && (
             <Edit2 className="w-3 h-3 text-slate-300 group-hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
           )}
+        </div>
+      </td>
+    );
+  };
+
+  const renderCustomEditableCell = (
+    item: StatementLineItem,
+    year: number,
+    textColorClass: string = 'text-slate-900',
+    isBold: boolean = false,
+    allowNegative: boolean = true
+  ) => {
+    const currentVal = item.values[year] || 0;
+    if (isDirectEditMode) {
+      return (
+        <td key={year} className="p-1.5 text-left font-mono">
+          <AccountingNumberInput
+            value={currentVal}
+            onChange={(val) => handleUpdateItemValue(item.id, year, val)}
+            allowNegative={allowNegative}
+            allowDecimals={true}
+            decimalPlaces={2}
+            className={`w-full text-left px-2 py-1 rounded bg-amber-50 hover:bg-amber-100/90 focus:bg-white border border-amber-300 focus:border-blue-600 font-mono text-xs ${
+              isBold ? 'font-black' : 'font-bold'
+            } ${textColorClass} focus:outline-none transition-colors shadow-2xs`}
+          />
+        </td>
+      );
+    }
+
+    return (
+      <td
+        key={year}
+        onClick={() => {
+          setIsDirectEditMode(true);
+        }}
+        title="انقر لتعديل هذا الرقم مباشرة"
+        className={`p-2.5 text-left font-mono ${isBold ? 'font-black' : 'font-semibold'} ${textColorClass} cursor-pointer hover:bg-blue-50/80 rounded transition-colors group`}
+      >
+        <div className="flex items-center justify-end gap-1">
+          <span>{formatEgyptianCurrency(currentVal, allowNegative)}</span>
+          <Edit2 className="w-3 h-3 text-slate-300 group-hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </div>
       </td>
     );
@@ -391,7 +441,6 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
     return (
       <div className={`flex items-center justify-between group/row ${indentClass}`}>
         <span className="font-semibold text-slate-900 flex items-center gap-1.5">
-          {isCustom && <span className="text-blue-600 font-bold">•</span>}
           {displayName}
         </span>
         <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity no-print">
@@ -422,104 +471,83 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
     <div className="space-y-6">
       {/* Top Controls Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 no-print">
-        {/* Sub tabs switcher */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100/90 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60 overflow-x-auto w-full md:w-auto">
-          <button
-            type="button"
-            onClick={() => setStatementView('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              statementView === 'ALL'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            عرض القوائم الشاملة المقارنة
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatementView('BS')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              statementView === 'BS'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            1. المركز المالي
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatementView('IS')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              statementView === 'IS'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            2. قائمة الدخل
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatementView('CF')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              statementView === 'CF'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            3. التدفقات النقدية
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatementView('RATIOS')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              statementView === 'RATIOS'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            4. النسب والمؤشرات
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatementView('TRIAL_BALANCE')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              statementView === 'TRIAL_BALANCE'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Scale className="w-3.5 h-3.5" />
-            <span>5. ميزان المراجعة والتحقق (مدين ودائن)</span>
-          </button>
+        {/* Unified Dropdown Selector for Financial Statements */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <UnifiedSelectDropdown<'ALL' | 'BS' | 'IS' | 'CF' | 'RATIOS' | 'TRIAL_BALANCE'>
+            id="statement-view-dropdown"
+            label="القائمة المعروضة"
+            icon={FileSpreadsheet}
+            value={statementView}
+            menuWidth="w-72"
+            options={[
+              {
+                id: 'ALL',
+                label: 'عرض القوائم الشاملة المقارنة',
+                sublabel: 'المركز والدخل والتدفقات جنباً إلى جنب',
+                icon: FileSpreadsheet,
+              },
+              {
+                id: 'BS',
+                label: '1. قائمة المركز المالي',
+                sublabel: 'الأصول والالتزامات وحقوق الملكية',
+                icon: Scale,
+              },
+              {
+                id: 'IS',
+                label: '2. قائمة الدخل والأرباح والخسائر',
+                sublabel: 'الإيرادات وتكلفة المبيعات ومجمل وصافي الربح',
+                icon: TrendingUp,
+              },
+              {
+                id: 'CF',
+                label: '3. قائمة التدفقات النقدية',
+                sublabel: 'الأنشطة التشغيلية والاستثمارية والتمويلية',
+                icon: DollarSign,
+              },
+              {
+                id: 'RATIOS',
+                label: '4. النسب والمؤشرات المالية',
+                sublabel: 'السيولة والربحية والرافعة المالية ومعدلات الدوران',
+                icon: Activity,
+              },
+              {
+                id: 'TRIAL_BALANCE',
+                label: '5. ميزان المراجعة والتحقق المحاسبي',
+                sublabel: 'تطابق إجمالي المدين والدائن وفقاً للأصول المحاسبية',
+                badge: 'مدين/دائن',
+                icon: Scale,
+              },
+            ]}
+            onChange={(val) => setStatementView(val)}
+          />
         </div>
 
-        {/* Action Controls */}
+        {/* Action Controls via Dropdown Menu */}
         <div className="flex items-center gap-2">
-          {onUpdateCell && (
-            <button
-              type="button"
-              onClick={() => setIsDirectEditMode(!isDirectEditMode)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all no-print whitespace-nowrap border ${
-                isDirectEditMode
-                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-600 ring-2 ring-amber-400/40 animate-pulse'
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'
-              }`}
-              title="تفعيل نمط التعديل المباشر للأرقام كأوراق إكسيل مع الربط اللحظي بالإيضاحات"
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-              <span>{isDirectEditMode ? 'وضع التعديل المباشر (نشط ✏️)' : 'تعديل الأرقام مباشرة (Excel Mode)'}</span>
-            </button>
-          )}
-
-          {/* Action: Add new custom item */}
-          <button
-            type="button"
-            onClick={() => setIsAddingLineModal(!isAddingLineModal)}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors no-print whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4 text-slate-300 dark:text-blue-200" />
-            <span>إضافة بند مخصص</span>
-          </button>
+          <ActionMenu
+            id="statement-actions-dropdown"
+            label="خيارات وإجراءات القوائم"
+            triggerVariant="primary"
+            align="left"
+            items={[
+              {
+                id: 'add-line-action',
+                label: 'إضافة بند محاسبي مخصص',
+                icon: Plus,
+                onClick: () => setIsAddingLineModal(true),
+              },
+              ...(onUpdateCell
+                ? [
+                    {
+                      id: 'toggle-excel-mode',
+                      label: isDirectEditMode ? 'إلغاء وضع التعديل المباشر للأرقام' : 'تفعيل وضع التعديل المباشر (Excel)',
+                      icon: Edit2,
+                      onClick: () => setIsDirectEditMode(!isDirectEditMode),
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 
@@ -778,7 +806,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                                 className="w-full py-1 px-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
                               >
                                 <Sparkles className="w-3 h-3 text-rose-200" />
-                                <span>موازنة سنة {y} آلياً بالأرباح المرحلة</span>
+                                <span>موازنة سنة {y} آلياً بجاري الشركاء</span>
                               </button>
                             )}
                           </div>
@@ -879,29 +907,18 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 {/* Custom Non-Current Assets */}
                 {getSectionCustomItems('NON_CURRENT_ASSETS').map((item) => (
-                  <tr key={item.id} className="bg-blue-50/30">
-                    <td className="p-2.5 font-bold text-blue-950">
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
                       {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
-                    {yearsList.map((y) => (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        <AccountingNumberInput
-                          value={item.values[y] || 0}
-                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
-                          allowNegative={true}
-                          allowDecimals={true}
-                          decimalPlaces={2}
-                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-blue-300 font-mono font-bold text-blue-900 focus:outline-none"
-                        />
-                      </td>
-                    ))}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 5)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
-                        className="text-red-400 hover:text-red-700 cursor-pointer p-1"
-                        title="حذف هذا البند المخصص نهائياً"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1011,29 +1028,18 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 {/* Custom Current Assets */}
                 {getSectionCustomItems('CURRENT_ASSETS').map((item) => (
-                  <tr key={item.id} className="bg-emerald-50/30">
-                    <td className="p-2.5 font-bold text-emerald-950">
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
                       {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
-                    {yearsList.map((y) => (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        <AccountingNumberInput
-                          value={item.values[y] || 0}
-                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
-                          allowNegative={true}
-                          allowDecimals={true}
-                          decimalPlaces={2}
-                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-emerald-300 font-mono font-bold text-emerald-900 focus:outline-none"
-                        />
-                      </td>
-                    ))}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 9)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
-                        className="text-red-400 hover:text-red-700 cursor-pointer p-1"
-                        title="حذف هذا البند المخصص نهائياً"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1096,11 +1102,11 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 {!isItemHidden('legalReserve') && (
                   <tr>
                     <td className="p-2.5">
-                      {renderItemNameWithActions('legalReserve', 'الاحتياطي القانوني (5%)')}
+                      {renderItemNameWithActions('legalReserve', 'جاري الشركاء (اتزان الميزان)')}
                     </td>
                     <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
                     {yearsList.map((y) =>
-                      renderEditableCell('legalReserve', y, computedData[y]?.legalReserve || 0)
+                      renderEditableCell('legalReserve', y, computedData[y]?.legalReserve || 0, 'text-emerald-900 font-black', true)
                     )}
                     <td className="p-2.5 text-center no-print">
                       <button
@@ -1116,21 +1122,21 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 )}
 
                 {!isItemHidden('retainedEarningsAndProfit') && (
-                  <tr>
+                  <tr className="bg-indigo-50/40 dark:bg-indigo-950/20">
                     <td className="p-2.5">
-                      {renderItemNameWithActions('retainedEarningsAndProfit', 'الأرباح المرحلة وصافي ربح العام')}
+                      <div className="flex items-center gap-2">
+                        {renderItemNameWithActions('retainedEarningsAndProfit', 'الأرباح المرحلة وصافي ربح العام')}
+                        <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded font-mono font-normal">
+                          مربوط بقائمة الدخل تلقائياً
+                        </span>
+                      </div>
                     </td>
                     <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
-                    {yearsList.map((y) =>
-                      renderEditableCell(
-                        'retainedEarningsAndProfit',
-                        y,
-                        computedData[y]?.retainedEarningsAndProfit || 0,
-                        'text-purple-900',
-                        false,
-                        true
-                      )
-                    )}
+                    {yearsList.map((y) => (
+                      <td key={y} className="p-2.5 text-left font-mono font-black text-indigo-950 dark:text-indigo-200">
+                        {formatEgyptianCurrency(computedData[y]?.retainedEarningsAndProfit || 0, true)}
+                      </td>
+                    ))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
@@ -1146,29 +1152,18 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 {/* Custom Equity */}
                 {getSectionCustomItems('EQUITY').map((item) => (
-                  <tr key={item.id} className="bg-purple-50/30">
-                    <td className="p-2.5 font-bold text-purple-950">
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
                       {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
-                    {yearsList.map((y) => (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        <AccountingNumberInput
-                          value={item.values[y] || 0}
-                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
-                          allowNegative={true}
-                          allowDecimals={true}
-                          decimalPlaces={2}
-                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-purple-300 font-mono font-bold text-purple-900 focus:outline-none"
-                        />
-                      </td>
-                    ))}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 10)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y, 'text-purple-900'))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
-                        className="text-red-400 hover:text-red-700 cursor-pointer p-1"
-                        title="حذف هذا البند المخصص نهائياً"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1213,6 +1208,27 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                     </td>
                   </tr>
                 )}
+
+                {/* Custom Long Term Liabilities */}
+                {getSectionCustomItems('LONG_LIABILITIES').map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
+                      {renderItemNameWithActions(item.id, item.name, true)}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 11)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomLine(item.id)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
 
                 {!isItemHidden('suppliers') && (
                   <tr>
@@ -1278,29 +1294,18 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 {/* Custom Liabilities */}
                 {getSectionCustomItems('CURRENT_LIABILITIES').map((item) => (
-                  <tr key={item.id} className="bg-amber-50/30">
-                    <td className="p-2.5 font-bold text-amber-950">
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
                       {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{item.noteRef}</td>
-                    {yearsList.map((y) => (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        <AccountingNumberInput
-                          value={item.values[y] || 0}
-                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
-                          allowNegative={true}
-                          allowDecimals={true}
-                          decimalPlaces={2}
-                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-amber-300 font-mono font-bold text-amber-900 focus:outline-none"
-                        />
-                      </td>
-                    ))}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 13)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
-                        className="text-red-400 hover:text-red-700 cursor-pointer p-1"
-                        title="حذف هذا البند المخصص نهائياً"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1360,7 +1365,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                                 type="button"
                                 onClick={() => onAutoBalanceYear(y)}
                                 className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded font-sans cursor-pointer transition-colors shadow-2xs"
-                                title="موازنة الفرق في الأرباح المرحلة فورياً"
+                                title="موازنة الفرق في جاري الشركاء فورياً"
                               >
                                 موازنة الميزان ⚡
                               </button>
@@ -1428,28 +1433,18 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 {/* Custom Revenues */}
                 {getSectionCustomItems('IS_REVENUE').map((item) => (
-                  <tr key={item.id} className="bg-blue-50/20">
-                    <td className="p-2.5 pr-6 font-bold text-blue-900 flex items-center justify-between">
-                      <span>• {item.name}</span>
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
+                      {renderItemNameWithActions(item.id, item.name, true)}
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
-                    {yearsList.map((y) => (
-                      <td key={y} className="p-2.5 text-left font-mono">
-                        <AccountingNumberInput
-                          value={item.values[y] || 0}
-                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
-                          allowNegative={true}
-                          allowDecimals={true}
-                          decimalPlaces={2}
-                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-blue-300 font-mono font-bold text-blue-900 focus:outline-none"
-                        />
-                      </td>
-                    ))}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 14)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y, 'text-blue-900', true))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
-                        className="text-red-400 hover:text-red-700 cursor-pointer p-1"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1463,6 +1458,27 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                   {yearsList.map((y) => renderEditableCell('cogs', y, computedData[y]?.cogs || 0, 'text-red-700', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
+
+                {/* Custom COGS */}
+                {getSectionCustomItems('IS_COGS').map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
+                      {renderItemNameWithActions(item.id, `يخصم: ${item.name}`, true)}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 15)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y, 'text-red-700', false))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomLine(item.id)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
 
                 <tr className="bg-blue-50/70 font-black text-blue-950">
                   <td className="p-2.5">مجمل ربح النشاط (Gross Profit)</td>
@@ -1484,28 +1500,18 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
 
                 {/* Custom Admin Exp */}
                 {getSectionCustomItems('IS_ADMIN_EXP').map((item) => (
-                  <tr key={item.id} className="bg-red-50/20">
-                    <td className="p-2.5 pr-8 text-red-800 flex items-center justify-between">
-                      <span>• يخصم: {item.name}</span>
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
+                      {renderItemNameWithActions(item.id, `يخصم: ${item.name}`, true)}
                     </td>
-                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef)}</td>
-                    {yearsList.map((y) => (
-                      <td key={y} className="p-2.5 text-left font-mono text-red-700">
-                        <AccountingNumberInput
-                          value={item.values[y] || 0}
-                          onChange={(val) => handleUpdateItemValue(item.id, y, val)}
-                          allowNegative={true}
-                          allowDecimals={true}
-                          decimalPlaces={2}
-                          className="w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-red-300 font-mono font-bold text-red-700 focus:outline-none"
-                        />
-                      </td>
-                    ))}
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 16)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y, 'text-slate-700', false))}
                     <td className="p-2.5 text-center no-print">
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomLine(item.id)}
-                        className="text-red-400 hover:text-red-700 cursor-pointer p-1"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1519,6 +1525,27 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                   {yearsList.map((y) => renderEditableCell('sellingExp', y, computedData[y]?.sellingExp || 0, 'text-slate-700', false))}
                   <td className="p-2.5 no-print"></td>
                 </tr>
+
+                {/* Custom Selling Exp */}
+                {getSectionCustomItems('IS_SELLING_EXP').map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2.5">
+                      {renderItemNameWithActions(item.id, `يخصم: ${item.name}`, true)}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(item.noteRef || 17)}</td>
+                    {yearsList.map((y) => renderCustomEditableCell(item, y, 'text-slate-700', false))}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomLine(item.id)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
 
                 <tr className="bg-slate-50 font-bold text-slate-900">
                   <td className="p-2.5">أرباح التشغيل قبل الفوائد والضرائب (EBIT)</td>

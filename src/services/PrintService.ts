@@ -318,14 +318,8 @@ export class PrintService {
               break-inside: avoid !important;
             }
             th, td {
-              border: 1px solid #cbd5e1;
-              padding: 6px 10px;
+              padding: 4px 6px;
               text-align: right;
-            }
-            th {
-              background-color: #f8fafc !important;
-              font-weight: 700;
-              color: #0f172a;
             }
             .border-double-accounting {
               border-bottom: 3px double #0f172a !important;
@@ -345,11 +339,21 @@ export class PrintService {
               break-inside: avoid !important;
             }
             .a4-sheet-canvas, [id^="page-sheet-"], .printable-page {
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              min-height: auto !important;
+              height: auto !important;
+              box-sizing: border-box !important;
               page-break-after: always !important;
               break-after: page !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
-              margin-bottom: 8mm !important;
+              margin: 0 !important;
+              margin-bottom: 0 !important;
+              padding: 0 !important;
               box-shadow: none !important;
               border: none !important;
             }

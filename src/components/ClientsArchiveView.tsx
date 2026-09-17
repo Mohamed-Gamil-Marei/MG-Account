@@ -67,8 +67,11 @@ import { ClientDocumentManager } from './ClientDocumentManager';
 import { ClientNotificationModal } from './ClientNotificationModal';
 import { ClientCommunicationsLogView } from './archive/ClientCommunicationsLogView';
 import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
+import { WhatsAppCodeSenderModal } from './common/WhatsAppCodeSenderModal';
 import { SmartProcedureFeeEstimatorModal } from './SmartProcedureFeeEstimatorModal';
 import { CompanyDossierAndTokenLabelModal } from './archive/CompanyDossierAndTokenLabelModal';
+import { ClientExcelImportModal } from './archive/ClientExcelImportModal';
+import { ClientExcelEngine } from '../utils/clientExcelEngine';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
@@ -112,6 +115,13 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
   // WhatsApp Document Share Modal State
   const [isDocShareModalOpen, setIsDocShareModalOpen] = useState(false);
   const [docShareTargetClient, setDocShareTargetClient] = useState<ClientArchiveRecord | null>(null);
+
+  // WhatsApp Verification Code Sender Modal State
+  const [isCodeSenderModalOpen, setIsCodeSenderModalOpen] = useState(false);
+  const [codeTargetClient, setCodeTargetClient] = useState<ClientArchiveRecord | null>(null);
+
+  // Bulk Excel Import & Template Modal State
+  const [isBulkExcelModalOpen, setIsBulkExcelModalOpen] = useState(false);
 
   // Smart Procedure Fee Estimator Modal State
   const [isSmartEstimatorOpen, setIsSmartEstimatorOpen] = useState(false);
@@ -845,6 +855,18 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         }}
         actionMenuItems={[
           {
+            id: 'import-clients-excel',
+            label: 'استيراد عملاء جملة (Excel)',
+            icon: FileSpreadsheet,
+            onClick: () => setIsBulkExcelModalOpen(true),
+          },
+          {
+            id: 'download-client-template',
+            label: 'تحميل قالب Excel لإدخال العملاء',
+            icon: Upload,
+            onClick: () => ClientExcelEngine.downloadClientTemplate(),
+          },
+          {
             id: 'smart-fee-estimator',
             label: 'تقدير الرسوم والأتعاب الذكي',
             icon: Calculator,
@@ -906,6 +928,44 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
             </div>
           </div>
         )}
+
+        {/* Bulk Excel Operations & WhatsApp Quick Bar */}
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
+              <FileSpreadsheet className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>استيراد وتصدير ملفات العملاء جملة عبر Excel</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-semibold">قالب محاسبي معتمد</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                تصدير قالب إكسيل لتدوين العملاء واستيراد عشرات الشركات دفعة واحدة مع إنشاء الملفات والأكواد تلقائياً
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => ClientExcelEngine.downloadClientTemplate()}
+              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="تحميل قالب إكسيل رسمي فارغ لتدوين بيانات العملاء"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <span>تحميل القالب الفارغ</span>
+            </button>
+            <button
+              type="button"
+              id="btn-open-bulk-excel-import"
+              onClick={() => setIsBulkExcelModalOpen(true)}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>استيراد عملاء جملة من Excel</span>
+            </button>
+          </div>
+        </div>
 
         {/* KPI Compact Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
@@ -1200,6 +1260,30 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>ملخص واتساب</span>
+                </button>
+                <button
+                  id="btn-client-modal-send-code"
+                  onClick={() => {
+                    setCodeTargetClient(liveSelectedClient);
+                    setIsCodeSenderModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  title="إرسال كود تحقق أو اعتماد عبر WhatsApp"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-teal-600" />
+                  <span>إرسال كود 🔐</span>
+                </button>
+                <button
+                  id="btn-client-modal-send-file"
+                  onClick={() => {
+                    setDocShareTargetClient(liveSelectedClient);
+                    setIsDocShareModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  title="إرسال ملف مأرشف أو كشف حساب أو أي ملف عبر WhatsApp"
+                >
+                  <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>إرسال ملف / كشف حساب 📎</span>
                 </button>
                 <button
                   onClick={() => {
@@ -3082,6 +3166,19 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         />
       )}
 
+      {/* WhatsApp Verification Code Sender Modal */}
+      {isCodeSenderModalOpen && (
+        <WhatsAppCodeSenderModal
+          isOpen={isCodeSenderModalOpen}
+          onClose={() => {
+            setIsCodeSenderModalOpen(false);
+            setCodeTargetClient(null);
+          }}
+          initialClient={codeTargetClient || undefined}
+          state={state}
+        />
+      )}
+
       {/* Smart Procedure Fee Estimator Modal */}
       {isSmartEstimatorOpen && (
         <SmartProcedureFeeEstimatorModal
@@ -3119,6 +3216,15 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
           }}
           client={tokenDossierTargetClient || liveSelectedClient!}
           officeProfile={state.officeProfile}
+        />
+      )}
+
+      {/* Bulk Client Excel Import & Template Modal */}
+      {isBulkExcelModalOpen && (
+        <ClientExcelImportModal
+          isOpen={isBulkExcelModalOpen}
+          onClose={() => setIsBulkExcelModalOpen(false)}
+          state={state}
         />
       )}
     </>

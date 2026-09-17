@@ -16,7 +16,7 @@ import {
 } from '../types';
 
 export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
-  firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
+  firmName: 'منظومة المحاسب القانوني المتكامل',
   auditorName: 'محمد جميل مرعي',
   title: 'محاسب قانوني ومراجع حسابات - زميل جمعية المحاسبين والمراجعين المصرية',
   licenseNumber: 'س.م.م / 43122 - ترخيص وزارة المالية',
@@ -29,6 +29,8 @@ export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   showMainOfficeAddress: true,
   branchOfficeAddress: 'المباركية مول - مدينة العاشر من رمضان - الشرقية',
   showBranchOfficeAddress: true,
+  systemSerial: 'CPA-SYS-2026-MG120-PRO-EGY',
+  activationKey: 'ACT-CPA-99482-EGY-AUTH',
   notes: 'مكتب معتمد لدى مصلحة الضرائب المصرية، الهيئة العامة للرقابة المالية، والبنك المركزي المصري',
 };
 
@@ -1244,95 +1246,33 @@ export const SAMPLE_TAX_MANDATES: TaxMandateTask[] = [
   },
 ];
 
-export const SAMPLE_SYSTEM_USERS: SystemUser[] = [
-  {
-    id: 'user-admin',
-    name: 'محمد جميل مرعي',
-    email: 'cpa.mohamed.marei@egyptcpa.com',
-    role: 'ADMIN',
-    roleTitleArabic: 'مدير المنظومة والشريك المسؤول (المراجع القانوني)',
-    avatarInitials: 'م.م',
-    pinCode: 'Mg120',
-    canAccessTreasury: true,
-    canAccessAuditTrail: true,
-    canManageUsers: true,
-    canPostEntries: true,
-    canEditPostedEntries: true,
-    canDeleteRecords: true,
-    canIssueInvoices: true,
-    canModifySettings: true,
-    restrictedTabs: [],
-    createdAt: '2026-01-01',
-  },
-  {
-    id: 'user-auditor',
-    name: 'أ/ أحمد محمود الشناوي',
-    email: 'auditor.ahmed@egyptcpa.com',
-    role: 'AUDITOR',
-    roleTitleArabic: 'مراقب حسابات ومراجع قانوني أول',
-    avatarInitials: 'أ.ش',
-    pinCode: 'Aud2026',
-    canAccessTreasury: true,
-    canAccessAuditTrail: true,
-    canManageUsers: false,
-    canPostEntries: true,
-    canEditPostedEntries: false,
-    canDeleteRecords: false,
-    canIssueInvoices: true,
-    canModifySettings: false,
-    restrictedTabs: ['AUDIT_TRAIL'],
-    createdAt: '2026-01-01',
-  },
-  {
-    id: 'user-accountant',
-    name: 'أ/ إبراهيم يوسف سلامة',
-    email: 'acc.ibrahim@egyptcpa.com',
-    role: 'ACCOUNTANT',
-    roleTitleArabic: 'محاسب مالي ومدخل قيود اليومية',
-    avatarInitials: 'إ.ي',
-    pinCode: 'Acc123',
-    canAccessTreasury: false,
-    canAccessAuditTrail: false,
-    canManageUsers: false,
-    canPostEntries: false,
-    canEditPostedEntries: false,
-    canDeleteRecords: false,
-    canIssueInvoices: true,
-    canModifySettings: false,
-    restrictedTabs: ['AUDIT_TRAIL', 'OFFICE_TREASURY', 'AUDITOR_REPORT', 'AUDIT_WORKING_PAPERS'],
-    createdAt: '2026-01-01',
-  },
-  {
-    id: 'user-secretary',
-    name: 'أ/ سارة عبد الفتاح',
-    email: 'secretary@egyptcpa.com',
-    role: 'SECRETARY',
-    roleTitleArabic: 'سكرتارية واستقبال وإدارة الملفات',
-    avatarInitials: 'س.ع',
-    pinCode: 'Sec123',
-    canAccessTreasury: true,
-    canAccessAuditTrail: false,
-    canManageUsers: false,
-    canPostEntries: false,
-    canEditPostedEntries: false,
-    canDeleteRecords: false,
-    canIssueInvoices: true,
-    canModifySettings: false,
-    restrictedTabs: [
-      'JOURNAL_ENTRIES',
-      'GENERAL_LEDGER',
-      'TRIAL_BALANCE',
-      'FINANCIAL_STATEMENTS',
-      'FINANCIAL_NOTES',
-      'AUDITOR_REPORT',
-      'AUDIT_WORKING_PAPERS',
-      'TAX_EXPOSURE_SIMULATOR',
-      'ETA_RECONCILIATION',
-      'AUDIT_TRAIL'
-    ],
-    createdAt: '2026-01-01',
-  },
-];
+export const DEFAULT_MASTER_ADMIN_USER: SystemUser = {
+  id: 'user-admin',
+  name: 'admin',
+  username: 'admin',
+  employeeCode: 'ADM-001',
+  email: 'admin@system.local',
+  role: 'ADMIN',
+  roleTitleArabic: 'مدير المنظومة الرئيسي (الأدمن)',
+  avatarInitials: 'AD',
+  pinCode: 'admin',
+  password: 'admin',
+  isActive: true,
+  canAccessTreasury: true,
+  canAccessAuditTrail: true,
+  canAccessCreditFiles: true,
+  canAccessTaxReports: true,
+  canManageUsers: true,
+  canPostEntries: true,
+  canEditPostedEntries: true,
+  canDeleteRecords: true,
+  canIssueInvoices: true,
+  canModifySettings: true,
+  restrictedTabs: [],
+  createdAt: '2026-01-01',
+};
+
+export const SAMPLE_SYSTEM_USERS: SystemUser[] = [DEFAULT_MASTER_ADMIN_USER];
 
 export const SAMPLE_FIXED_ASSETS: FixedAsset[] = [
   {
@@ -1490,20 +1430,12 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'مطالبة أتعاب وفاتورة مهنية',
     category: 'INVOICE',
     subject: 'مطالبة بأتعاب الخدمات المحاسبية والضريبية',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-نرفق لسيادتكم بيان مطالبة بأتعاب الخدمات المحاسبية والمراجعة الدورية لشركتكم:
-
-🏢 *الشركة:* {CLIENT_NAME}
-📋 *البيان:* {DOC_TITLE}
-🔢 *رقم المطالبة:* {REF_CODE}
-📅 *الفترة المالية:* {PERIOD}
-💰 *المبلغ المطلوب:* *{AMOUNT} ج.م*
-🔹 *المبلغ بالحروف:* فقط {AMOUNT_WORDS} لا غير
-
-يرجى التكرم بالاطلاع واتخاذ اللازم وموافاتنا بصورة إشعار التحويل البنكي.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+مرفق مطالبة أتعاب رقم *{REF_CODE}* بمبلغ *{AMOUNT} ج.م* عن: {DOC_TITLE}.
+الحالة: مستحقة للسداد ⏳
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1513,19 +1445,13 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'كشف حساب وأرصدة العميل المتبقية',
     category: 'GENERAL',
     subject: 'كشف حساب ومطابقة أرصدة الأتعاب المهنية',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-نحيط سيادتكم علماً بالموقف المالي وكشف حساب الأتعاب حتى تاريخه:
-
-🏢 *الشركة:* {CLIENT_NAME}
-📅 *تاريخ المطابقة:* {DATE}
-💰 *إجمالي الأتعاب المستحقة:* {AMOUNT} ج.م
-💵 *الرصيد المتبقي للسداد:* *{BALANCE_DUE} ج.م*
-📋 *ملاحظات الفحص:* {DOC_TITLE}
-
-شاكرين لسيادتكم حسن تعاونكم الدائم معنا.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+كشف حساب أتعابكم حتى تاريخه:
+إجمالي المستحق: {AMOUNT} ج.م | الرصيد المتبقي: *{BALANCE_DUE} ج.م*.
+شاكرين حسن تعاونكم وحرصكم الدائم.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1535,18 +1461,12 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'إشعار وسند قبض خزينة معتمد',
     category: 'TREASURY_RECEIPT',
     subject: 'إشعار توريد واستلام أتعاب في الخزينة',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-نحيط سيادتكم علماً بأنه تم استلام وتوريد المبلغ المالي الموضح أدناه إلى خزينة المكتب وإصدار سند القبض المعتمد:
-
-🏢 *اسم الشركة:* {CLIENT_NAME}
-🧾 *رقم سند القبض:* {REF_CODE}
-💵 *المبلغ المحصل:* *{AMOUNT} ج.م*
-🔹 *المبلغ بالحروف:* فقط {AMOUNT_WORDS} لا غير
-📋 *البيان:* {DOC_TITLE}
-📅 *تاريخ السند:* {DATE}`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+تم استلام وتوريد مبلغ *{AMOUNT} ج.م* بالخزينة بموجب سند قبض رقم *{REF_CODE}* عن: {DOC_TITLE}.
+تم تحديث كشف حسابكم بالمنظومة.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1556,18 +1476,12 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'تذكير بالموعد النهائي للإقرار الضريبي',
     category: 'TAX_DEADLINE_REMINDER',
     subject: 'تذكير هام بموعد تقديم الإقرار الضريبي القانوني',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-تذكير من مكتب المحاسب القانوني بالموعد النهائي القانوني لتقديم الإقرار وسداد الضريبة لتجنب غرامات التأخير:
-
-🏢 *الشركة:* {CLIENT_NAME}
-📋 *نوع الإقرار:* {DOC_TITLE}
-⏳ *الموعد النهائي القانوني:* {DATE}
-📅 *الفترة الضريبية:* {PERIOD}
-
-يرجى سرعة موافاتنا بالفواتير ومستندات الشهر لاستكمال الربط واعتماد الإقرار.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+تذكير ودي بقرب الموعد القانوني لتقديم {DOC_TITLE} عن فترة {PERIOD} (الاستحقاق: {DATE}).
+يرجى التكرم بموافاتنا بالمستندات اللازمة لاستيفاء الفحص.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1577,19 +1491,13 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'إشعار اعتماد وتقديم الإقرار الضريبي',
     category: 'TAX_DECLARATION',
     subject: 'إشعار نجاح تقديم الإقرار على بوابة مصلحة الضرائب',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-يسعدنا إفادتكم بأنه تم إعداد واعتماد وتقديم الإقرار الضريبي بنجاح عبر المنظومة الإلكترونية لمصلحة الضرائب المصرية:
-
-🏢 *الشركة:* {CLIENT_NAME}
-📋 *نوع الإقرار:* {DOC_TITLE}
-🔢 *رقم الإشعار المرجعي:* {REF_CODE}
-📅 *الفترة الضريبية:* {PERIOD}
-💰 *الضريبة المستحقة المسددة:* *{AMOUNT} ج.م*
-
-الإشعار الضريبي المعتمد مؤرشف بملفكم طرفنا.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+تم اعتماد وتقديم {DOC_TITLE} بنجاح لدى مصلحة الضرائب المصرية عن فترة {PERIOD}.
+رقم الإشعار: {REF_CODE} | الضريبة المستحقة: *{AMOUNT} ج.م*.
+المستند مؤرشف بملفكم طرفنا.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1599,18 +1507,12 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'إشعار جهوزية مسودة القوائم المالية وتقرير المراجع',
     category: 'GENERAL',
     subject: 'انتهاء أعمال المراجعة وجهوزية مسودة القوائم المالية',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-يسعدنا إفادتكم بانتهاء أعمال المراجعة والتدقيق المحاسبي عن السنة المالية المنتهية:
-
-🏢 *الشركة:* {CLIENT_NAME}
-📊 *القوائم المالية عن:* {PERIOD}
-🔢 *الرقم المرجعي:* {REF_CODE}
-📋 *البيان:* مسودة القوائم المالية المستقلة وتقرير مراقب الحسابات
-
-يرجى التنسيق معنا لتحديد موعد توقيع واعتماد القوائم رسمياً.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+تم الانتهاء من مراجعة القوائم المالية وتقرير مراقب الحسابات عن {PERIOD}.
+المسودة جاهزة للاطلاع والاعتماد الرسمي بمقر المكتب.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1620,18 +1522,12 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'إشعار إصدار شهادة مهنية معتمدة بالـ QR',
     category: 'CERTIFICATE',
     subject: 'إصدار شهادة محاسبية موثقة بالباركود الذكي',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-تم بحمد الله إصدار واعتماد الشهادة المحاسبية بالرمز التشفيري QR Code للتحقق الرقمي:
-
-🏢 *الجهة / العميل:* {CLIENT_NAME}
-📜 *نوع الشهادة:* {DOC_TITLE}
-🔢 *كود التحقق والاعتماد:* {REF_CODE}
-📅 *تاريخ الإصدار:* {DATE}
-
-الشهادة جاهزة للاستلام والتسليم للجهة المعنية.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+تم اعتماد شهادتكم المحاسبية الموثقة: {DOC_TITLE} (كود: {REF_CODE}) بتاريخ {DATE}.
+الشهادة جاهزة للاستلام والتسليم للجهة المعنية.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },
@@ -1641,18 +1537,12 @@ export const DEFAULT_WHATSAPP_TEMPLATES: import('../types').WhatsAppMessageTempl
     title: 'إشعار جهوزية مستندات من الأرشيف الإلكتروني',
     category: 'GENERAL',
     subject: 'مستندات جاهزة من الأرشيف الإلكتروني للمكتب',
-    templateBody: `السادة / *{CLIENT_NAME}*
-عناية: {CONTACT_PERSON} المحترمين
-تحية طيبة وبعد،،
-
-نحيط سيادتكم علماً بجهوزية وتحديث المستندات التالية في الأرشيف الإلكتروني لشركتكم:
-
-🏢 *الشركة:* {CLIENT_NAME}
-📄 *المستند:* {DOC_TITLE}
-🔢 *الكود المرجعي:* {REF_CODE}
-📅 *تاريخ الأرشفة:* {DATE}
-
-المستند متاح للاطلاع والتحميل بصيغة PDF معتمدة.`,
+    templateBody: `مكتب المحاسب القانوني / محمد جميل مرعي
+السادة / *{CLIENT_NAME}*
+مرفق مستند معتمد من ملفكم بالأرشيف الإلكتروني: {DOC_TITLE} (مرجع: {REF_CODE}).
+متاح للاطلاع والتحميل بصيغة PDF.
+━━━━━━━━━━━━━━━━━━━━
+💬 واتساب: 0552777332 | 📞 اتصال: 01003335360`,
     isDefault: true,
     isActive: true,
   },

@@ -1018,7 +1018,7 @@ export function exportModelData(
     if (format === 'CSV' || format === 'TXT') {
       const textData = JSON.stringify(state, null, 2);
       const blob = new Blob([textData], { type: 'text/plain;charset=utf-8;' });
-      const fileName = `بيانات_المكتب_الشاملة_${timestamp}.${format.toLowerCase()}`;
+      const fileName = `بيانات_المكتب_الشاملة_${timestamp}.${(format || 'txt').toLowerCase()}`;
       triggerFileDownload(blob, fileName);
       return { success: true, fileName, message: `تم تصدير البيانات الشاملة بصيغة ${format}` };
     }
@@ -1212,7 +1212,7 @@ export async function importModelData(
   file: File,
   targetModel: ModelType
 ): Promise<ImportResult> {
-  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  const extension = (file && file.name ? file.name.split('.').pop()?.toLowerCase() : '') || '';
 
   try {
     // 1. JSON Import

@@ -1221,3 +1221,6 @@ const DiamondStarSvg: React.FC<{ size: number }> = ({ size }) => {
     </svg>
   );
 };
+
+export default MgOfficePromoModal;
+

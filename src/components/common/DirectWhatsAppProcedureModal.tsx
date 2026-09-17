@@ -166,7 +166,7 @@ export const DirectWhatsAppProcedureModal: React.FC<DirectWhatsAppModalProps> = 
     if (!isManualEditMode) {
       const firmName = state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
       const auditorName = state.officeProfile?.auditorName || 'أ/ محمد جميل مرعي';
-      const officePhone = state.officeProfile?.phone || '0237654321 / 01003335360';
+      const officePhone = state.officeProfile?.phone || '01003335360';
 
       const generated = buildProcedureWhatsAppMessage({
         procedureType,

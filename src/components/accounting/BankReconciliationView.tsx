@@ -138,7 +138,7 @@ export const BankReconciliationView: React.FC<BankReconciliationViewProps> = ({ 
         const parsedLines: BankStatementLine[] = [];
 
         // Check if first line is header
-        const startIndex = rows[0].includes('تاريخ') || rows[0].toLowerCase().includes('date') ? 1 : 0;
+        const startIndex = rows[0] && (rows[0].includes('تاريخ') || rows[0].toLowerCase().includes('date')) ? 1 : 0;
 
         for (let i = startIndex; i < rows.length; i++) {
           const cols = rows[i].split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, ''));
@@ -299,9 +299,11 @@ export const BankReconciliationView: React.FC<BankReconciliationViewProps> = ({ 
 
   const filteredLines = useMemo(() => {
     return statementLines.filter((l) => {
+      const q = (searchQuery || '').toLowerCase();
       const matchText =
-        l.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.reference.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        (l.description || '').toLowerCase().includes(q) ||
+        (l.reference || '').toLowerCase().includes(q);
       if (!matchText) return false;
       if (filterStatus === 'MATCHED') return l.isMatched;
       if (filterStatus === 'UNMATCHED') return !l.isMatched;

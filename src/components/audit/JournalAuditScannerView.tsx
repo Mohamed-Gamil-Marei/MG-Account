@@ -115,11 +115,11 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
 
       // Search Filter
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesSerial = f.entrySerialNumber.toLowerCase().includes(q);
-        const matchesDesc = f.entryDescription.toLowerCase().includes(q);
+        const q = (searchQuery || '').toLowerCase().trim();
+        const matchesSerial = (f.entrySerialNumber || '').toLowerCase().includes(q);
+        const matchesDesc = (f.entryDescription || '').toLowerCase().includes(q);
         const matchesClient = (f.clientName || '').toLowerCase().includes(q);
-        const matchesTitle = f.title.toLowerCase().includes(q);
+        const matchesTitle = (f.title || '').toLowerCase().includes(q);
         if (!matchesSerial && !matchesDesc && !matchesClient && !matchesTitle) return false;
       }
 

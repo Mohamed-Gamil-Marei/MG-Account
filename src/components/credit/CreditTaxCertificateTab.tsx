@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, FileBadge, Building2, Printer, Edit3, CheckSquare, Square } from 'lucide-react';
 import { formatEgyptianCurrency, generateQrCodeSvg, buildTaxDeclarationQrText } from '../../utils/qrCodeGenerator';
 import { OfficialReportHeader } from '../common/OfficialReportHeader';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 
 interface TaxItemStatus {
   id: string;
@@ -146,17 +147,19 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
 
           <div>
             <label className="block text-slate-700 font-bold mb-1">شهادة الموقف حتى السنة المالية:</label>
-            <select
+            <UnifiedSelectDropdown<number>
+              id="tax-certificate-year-dropdown"
+              label="سنة الموقف"
               value={statusYear}
-              onChange={(e) => setStatusYear(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-            >
-              {yearsList.map((y) => (
-                <option key={y} value={y}>
-                  السنة المالية {y}
-                </option>
-              ))}
-            </select>
+              menuWidth="w-full"
+              className="w-full"
+              options={yearsList.map((y) => ({
+                id: y,
+                label: `السنة المالية ${y}`,
+                sublabel: `الموقف الضريبي والتأميني حتى ${y}`,
+              }))}
+              onChange={(y) => setStatusYear(y)}
+            />
           </div>
         </div>
 

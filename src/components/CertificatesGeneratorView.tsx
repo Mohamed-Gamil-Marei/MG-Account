@@ -546,10 +546,12 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
 
   // Filtered certificates in archive
   const filteredCerts = certificates.filter((c) => {
+    const q = (searchQuery || '').toLowerCase().trim();
     const matchSearch =
-      c.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.certificateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.recipientEntity.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      !q ||
+      (c.clientName || '').toLowerCase().includes(q) ||
+      (c.certificateNumber || '').toLowerCase().includes(q) ||
+      (c.recipientEntity || '').toLowerCase().includes(q) ||
       (c.nationalId && c.nationalId.includes(searchQuery));
     const matchType = filterType === 'ALL' || c.beneficiaryType === filterType;
     return matchSearch && matchType;

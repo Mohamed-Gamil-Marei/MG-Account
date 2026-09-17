@@ -21,10 +21,12 @@ import { FixedAssetsView } from '../FixedAssetsView';
 import { BankReconciliationView } from '../accounting/BankReconciliationView';
 import { InvoiceOcrScannerView } from '../accounting/InvoiceOcrScannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
+import { JournalEntryNotesAuditorView } from '../accounting/JournalEntryNotesAuditorView';
 import { ClientSelector } from '../common/ClientSelector';
 
 export type AccountingSubTab =
   | 'JOURNAL_ENTRIES'
+  | 'JOURNAL_AUDITOR'
   | 'OCR_INVOICE_SCANNER'
   | 'CHART_OF_ACCOUNTS'
   | 'GENERAL_LEDGER'
@@ -69,6 +71,13 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       icon: Receipt,
       badge: unpostedEntriesCount > 0 ? `${unpostedEntriesCount} غير مرحل` : `${state.journalEntries.length}`,
       badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+    },
+    {
+      id: 'JOURNAL_AUDITOR',
+      label: 'فاحص ومُصحّح توجيه القيود (Notes Audit)',
+      icon: Sparkles,
+      badge: 'ذكي',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
     },
     {
       id: 'OCR_INVOICE_SCANNER',
@@ -195,6 +204,12 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       {/* Render Active Sub-View */}
       <div>
         {activeSubTab === 'JOURNAL_ENTRIES' && <JournalEntriesView state={state} />}
+        {activeSubTab === 'JOURNAL_AUDITOR' && (
+          <JournalEntryNotesAuditorView
+            state={state}
+            onNavigateToJournal={() => setActiveSubTab('JOURNAL_ENTRIES')}
+          />
+        )}
         {activeSubTab === 'OCR_INVOICE_SCANNER' && (
           <InvoiceOcrScannerView
             onNavigateToJournal={() => setActiveSubTab('JOURNAL_ENTRIES')}
@@ -210,3 +225,6 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
     </div>
   );
 };
+
+export default React.memo(AccountingHubView);
+

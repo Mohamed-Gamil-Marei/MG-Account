@@ -4,6 +4,7 @@ import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../../utils/numberToWordsArabic';
 import { SupplementaryNoteItem, DEFAULT_SUPPLEMENTARY_NOTES } from './CreditNotesTab';
 import { DisclosureDetailModal } from './DisclosureDetailModal';
+import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 
 interface CreditProfitDistributionTabProps {
   yearsList: number[];
@@ -14,6 +15,7 @@ interface CreditProfitDistributionTabProps {
   periodStartDate?: string;
   periodEndDate?: string;
   periodLabel?: string;
+  isolatedYear?: number;
 }
 
 export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabProps> = ({
@@ -25,8 +27,11 @@ export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabPr
   periodStartDate,
   periodEndDate,
   periodLabel,
+  isolatedYear,
 }) => {
-  const [selectedYear, setSelectedYear] = useState<number>(yearsList[yearsList.length - 1] || 2026);
+  const [selectedYear, setSelectedYear] = useState<number>(
+    isolatedYear || yearsList[yearsList.length - 1] || 2026
+  );
   const [legalReserveRatio, setLegalReserveRatio] = useState<number>(5); // 5% Legal Reserve
   const [statutoryReserveRatio, setStatutoryReserveRatio] = useState<number>(5); // 5% Statutory Reserve
   const [employeesShareRatio, setEmployeesShareRatio] = useState<number>(10); // 10% Employees Share
@@ -86,23 +91,17 @@ export const CreditProfitDistributionTab: React.FC<CreditProfitDistributionTabPr
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-slate-700">السنة المالية:</label>
-          <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
-            {yearsList.map((y) => (
-              <button
-                key={y}
-                type="button"
-                onClick={() => setSelectedYear(y)}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                  selectedYear === y
-                    ? 'bg-purple-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {y}
-              </button>
-            ))}
-          </div>
+          <UnifiedSelectDropdown<number>
+            id="profit-dist-year-dropdown"
+            label="سنة المشروع"
+            value={selectedYear}
+            options={yearsList.map((y) => ({
+              id: y,
+              label: `مشروع أرباح ${y}`,
+              sublabel: `توزيعات قانون 159 لسنة ${y}`,
+            }))}
+            onChange={(y) => setSelectedYear(y)}
+          />
         </div>
       </div>
 

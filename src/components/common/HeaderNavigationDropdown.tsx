@@ -55,122 +55,174 @@ const ALL_SYSTEM_SCREENS: NavItemDef[] = [
     icon: Smartphone,
   },
 
-  // 2. Accounting & Journals Hub
+  // 1. Accounting & Journals Hub (الواجهة الرئيسية 1)
+  {
+    id: 'ACCOUNTING_HUB',
+    labelAr: '1. الحسابات ودفاتر اليومية (المركز الشامل)',
+    labelEn: '1. Accounting & Journals Hub',
+    categoryAr: 'الواجهات الرئيسية الثلاث',
+    categoryEn: 'Core 3 Main Hubs',
+    badge: 'Hub 1',
+    icon: Layers,
+  },
+  {
+    id: 'FINANCIAL_REPORTING_HUB',
+    labelAr: '2. القوائم والتقارير المالية (المركز الشامل)',
+    labelEn: '2. Financial Reporting Hub',
+    categoryAr: 'الواجهات الرئيسية الثلاث',
+    categoryEn: 'Core 3 Main Hubs',
+    badge: 'Hub 2',
+    icon: FileSpreadsheet,
+  },
+  {
+    id: 'TAX_AUDIT_HUB',
+    labelAr: '3. الفحص الضريبي والمراجعة (المركز الشامل)',
+    labelEn: '3. Tax & Audit Sentinel Hub',
+    categoryAr: 'الواجهات الرئيسية الثلاث',
+    categoryEn: 'Core 3 Main Hubs',
+    badge: 'Hub 3',
+    icon: ShieldCheck,
+  },
   {
     id: 'JOURNAL_ENTRIES',
     labelAr: 'قيود اليومية العامة',
     labelEn: 'General Journal Entries',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: BookOpen,
   },
   {
     id: 'OCR_INVOICE_SCANNER',
     labelAr: 'مسح واستخراج الفواتير (OCR)',
     labelEn: 'OCR Invoice Scanner',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: Sparkles,
   },
   {
     id: 'CHART_OF_ACCOUNTS',
     labelAr: 'دليل الحسابات المصري',
     labelEn: 'Egyptian Chart of Accounts',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: Layers,
   },
   {
     id: 'GENERAL_LEDGER',
     labelAr: 'دفتر الأستاذ العام',
     labelEn: 'General Ledger',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: Receipt,
   },
   {
     id: 'TRIAL_BALANCE',
     labelAr: 'ميزان المراجعة بالمجاميع والأرصدة',
     labelEn: 'Trial Balance',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: Scale,
   },
   {
     id: 'FIXED_ASSETS',
     labelAr: 'سجل الأصول الثابتة والإهلاك (معيار 10)',
     labelEn: 'Fixed Assets (EAS 10)',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: Building2,
   },
   {
     id: 'BANK_RECONCILIATION',
     labelAr: 'مذكرة التسوية البنكية',
     labelEn: 'Bank Reconciliation',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: CheckCircle2,
   },
   {
     id: 'CURRENCY_EXCHANGE_RATES',
     labelAr: 'أسعار الصرف اليومية (EAS 13)',
     labelEn: 'Daily Exchange Rates (EAS 13)',
-    categoryAr: 'الإدارة المحاسبية ودفاتر اليومية',
-    categoryEn: 'Accounting & Journals',
+    categoryAr: '1. الحسابات ودفاتر اليومية',
+    categoryEn: '1. Accounting & Journals',
     icon: TrendingUp,
   },
 
-  // 3. Financial Reporting & Statements Hub
+  // 2. Financial Reporting & Statements Hub (الواجهة الرئيسية 2)
   {
     id: 'FINANCIAL_STATEMENTS',
     labelAr: 'القوائم المالية الختامية (EAS 1)',
     labelEn: 'Financial Statements (EAS 1)',
-    categoryAr: 'القوائم والتقارير المالية',
-    categoryEn: 'Financial Statements & EAS',
-    badge: 'EAS',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
+    badge: 'EAS 1',
     icon: FileSpreadsheet,
   },
   {
     id: 'FINANCIAL_NOTES',
     labelAr: 'الإيضاحات المتممة للقوائم',
     labelEn: 'Notes to Financial Statements',
-    categoryAr: 'القوائم والتقارير المالية',
-    categoryEn: 'Financial Statements & EAS',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
     icon: FileCheck2,
   },
   {
     id: 'AUDITOR_REPORT',
     labelAr: 'تقرير مراقب الحسابات المستقل (معيار 700)',
     labelEn: 'Auditor’s Report (ESA 700)',
-    categoryAr: 'القوائم والتقارير المالية',
-    categoryEn: 'Financial Statements & EAS',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
     icon: ShieldCheck,
   },
   {
     id: 'CREDIT_SIMULATOR',
     labelAr: 'محاكي الجدارة والملف الائتماني',
     labelEn: 'Credit Rating & Analysis',
-    categoryAr: 'القوائم والتقارير المالية',
-    categoryEn: 'Financial Statements & EAS',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
     icon: TrendingUp,
   },
   {
     id: 'FINANCIAL_SIMULATOR',
     labelAr: 'محاكي المؤشرات والنسب المالية',
     labelEn: 'Financial Ratios Simulator',
-    categoryAr: 'القوائم والتقارير المالية',
-    categoryEn: 'Financial Statements & EAS',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
+    icon: TrendingUp,
+  },
+  {
+    id: 'BUDGET_PLANNER',
+    labelAr: 'الموازنة التقديرية التشغيلية',
+    labelEn: 'Operational Budget Planner',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
+    icon: Scale,
+  },
+  {
+    id: 'CASH_FLOW_PREDICTOR',
+    labelAr: 'التدفقات النقدية التقديرية',
+    labelEn: 'Cash Flow Forecast',
+    categoryAr: '2. القوائم والتقارير المالية',
+    categoryEn: '2. Financial Statements & EAS',
     icon: TrendingUp,
   },
 
-  // 4. Tax & Audit Hub
+  // 3. Tax & Audit Hub (الواجهة الرئيسية 3)
+  {
+    id: 'EXCEL_AUDIT_SENTINEL',
+    labelAr: 'مختبر مراجعة الإكسيل الذكي (XAI)',
+    labelEn: 'Smart Excel Audit Sentinel (XAI)',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
+    badge: 'XAI',
+    icon: Sparkles,
+  },
   {
     id: 'TAX_TRACKER',
     labelAr: 'أجندة الإقرارات والالتزامات الضريبية',
     labelEn: 'Tax Declarations Tracker',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     badge: 'ETA',
     icon: Percent,
   },
@@ -178,48 +230,48 @@ const ALL_SYSTEM_SCREENS: NavItemDef[] = [
     id: 'TAX_PENALTY_SIMULATOR',
     labelAr: 'محاكي مقابل التأخير والغرامات',
     labelEn: 'Tax Delay Penalties Simulator',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     icon: Percent,
   },
   {
     id: 'FRAUD_AUDIT_SENTINEL',
     labelAr: 'حارس الفحص الإحصائي وكشف الاحتيال',
     labelEn: 'Fraud Sentinel & Anomaly Audit',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     icon: ShieldCheck,
   },
   {
     id: 'JOURNAL_AUDIT_SCANNER',
     labelAr: 'الفحص والتدقيق الآلي للقيود',
     labelEn: 'Automated Journal Scanner',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     icon: CheckCircle2,
   },
   {
     id: 'AUDIT_WORKING_PAPERS',
     labelAr: 'أوراق عمل الفحص والمراجعة',
     labelEn: 'Audit Working Papers',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     icon: FileCheck2,
   },
   {
     id: 'ETA_RECONCILIATION',
     labelAr: 'مطابقة الفاتورة الإلكترونية (ETA)',
     labelEn: 'ETA E-Invoice Reconciliation',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     icon: Receipt,
   },
   {
     id: 'PAYROLL_INSURANCE',
     labelAr: 'كسب العمل والتأمينات الاجتماعية (قانون 148)',
     labelEn: 'Payroll Tax & Social Insurance',
-    categoryAr: 'الضرائب والفحص والمراجعة',
-    categoryEn: 'Tax & Audit',
+    categoryAr: '3. الفحص الضريبي والمراجعة',
+    categoryEn: '3. Tax Declarations & Audit',
     icon: Building2,
   },
 
@@ -330,19 +382,19 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
   const currentScreen = ALL_SYSTEM_SCREENS.find((s) => s.id === activeTab) || ALL_SYSTEM_SCREENS[0];
 
   const filteredScreens = ALL_SYSTEM_SCREENS.filter((s) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
+    if (!searchQuery || !searchQuery.trim()) return true;
+    const q = (searchQuery || '').toLowerCase().trim();
     return (
-      s.labelAr.toLowerCase().includes(q) ||
-      s.labelEn.toLowerCase().includes(q) ||
-      s.categoryAr.toLowerCase().includes(q) ||
-      s.categoryEn.toLowerCase().includes(q)
+      (s.labelAr || '').toLowerCase().includes(q) ||
+      (s.labelEn || '').toLowerCase().includes(q) ||
+      (s.categoryAr || '').toLowerCase().includes(q) ||
+      (s.categoryEn || '').toLowerCase().includes(q)
     );
   });
 
   // Group by category
   const categories = Array.from(
-    new Set(filteredScreens.map((s) => (isEn ? s.categoryEn : s.categoryAr)))
+    new Set(filteredScreens.map((s) => (isEn ? s.categoryEn || '' : s.categoryAr || '')))
   );
 
   return (
@@ -361,7 +413,7 @@ export const HeaderNavigationDropdown: React.FC<HeaderNavigationDropdownProps> =
       >
         <LayoutGrid className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
         <span className="hidden md:inline text-xs font-bold max-w-[140px] truncate">
-          {isEn ? currentScreen.labelEn : currentScreen.labelAr}
+          {isEn ? (currentScreen?.labelEn || 'Screens') : (currentScreen?.labelAr || 'الشاشات')}
         </span>
         <span className="md:hidden text-xs font-bold">
           {isEn ? 'Screens' : 'الشاشات'}
