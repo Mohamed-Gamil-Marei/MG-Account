@@ -50,10 +50,46 @@
 
 @layer utilities {
   @media print {
-    /* Page Configuration for A4 Official Documents */
+    /* Page Configuration for A4 Official Documents with Landscape and Portrait support */
     @page {
       size: A4 portrait;
       margin: 8mm 8mm 10mm 8mm;
+    }
+
+    @page landscape {
+      size: A4 landscape;
+      margin: 6mm 8mm 8mm 8mm;
+    }
+
+    .print-landscape,
+    [data-orientation="landscape"],
+    .orientation-landscape {
+      page: landscape !important;
+    }
+
+    /* Complete Dark Mode Neutralization for crisp, ink-saving printing */
+    .dark,
+    .dark body,
+    .dark #root,
+    .dark main,
+    .dark [class*="bg-slate-"],
+    .dark [class*="bg-gray-"],
+    .dark [class*="bg-zinc-"] {
+      background-color: #ffffff !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+    }
+
+    .dark [class*="text-slate-100"],
+    .dark [class*="text-slate-200"],
+    .dark [class*="text-slate-300"],
+    .dark [class*="text-slate-400"],
+    .dark [class*="text-white"] {
+      color: #0f172a !important;
+    }
+
+    .dark [class*="border-slate-"] {
+      border-color: #cbd5e1 !important;
     }
 
     /* Absolute Color Fidelity and Background Printing */
@@ -91,9 +127,10 @@
     .action-toolbar,
     .screen-action-toolbar,
     button:not(.allow-print),
-    input:not([type="checkbox"]),
-    select,
-    textarea,
+    input[type="file"],
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
     .modal-backdrop,
     [role="tablist"],
     .toast-container,
@@ -105,6 +142,22 @@
       width: 0 !important;
       margin: 0 !important;
       padding: 0 !important;
+    }
+
+    /* Style active form inputs and textareas to print cleanly as legible static text values */
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      border: none !important;
+      outline: none !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      color: #0f172a !important;
+      font-weight: 600 !important;
+      padding: 0 !important;
+      font-family: inherit !important;
     }
 
     /* Reset HTML, Body and Container Canvas to full A4 page width with unrestricted overflow */
@@ -337,6 +390,11 @@
     #cash-flow-predictor-print,
     #practice-engagement-print,
     #tax-audit-defense-print,
+    #journal-notes-auditor-print,
+    #smart-excel-audit-print,
+    #trial-balance-report,
+    #chart-of-accounts-print,
+    #audit-consistency-print,
     .printable-canvas,
     .printable-content {
       position: static !important;

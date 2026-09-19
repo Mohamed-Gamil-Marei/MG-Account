@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
 export interface SmartCpaExpenseAllocation {
   salaries: number; // 20% أجور وما في حكمها
@@ -539,8 +540,9 @@ export class SmartCpaTemplateService {
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     XLSX.utils.book_append_sheet(wb, ws, 'القوائم المالية ونموذج CPA');
-    XLSX.writeFile(wb, `CPA_Financial_Statements_Model_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    writeArabicExcelFile(wb, `CPA_Financial_Statements_Model_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   /**

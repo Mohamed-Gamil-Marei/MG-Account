@@ -960,6 +960,7 @@ export function generateStandardExcelTemplate(): Blob {
 
   const wsData = [headers, ...sampleRows];
   const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!views'] = [{ RTL: true }];
 
   // Set column widths
   ws['!cols'] = [
@@ -989,8 +990,13 @@ export function generateStandardExcelTemplate(): Blob {
     ['ترويسة الملف', 'يدعم النظام أي ترتيب للأعمدة وأي مسميات ترويسة باللغتين العربية والإنجليزية'],
   ];
   const wsGuide = XLSX.utils.aoa_to_sheet([guideHeaders, ...guideRows]);
+  wsGuide['!views'] = [{ RTL: true }];
   wsGuide['!cols'] = [{ wch: 25 }, { wch: 65 }];
   XLSX.utils.book_append_sheet(wb, wsGuide, 'دليل_الإدخال_والمعايير');
+
+  wb.Workbook = {
+    Views: [{ RTL: true }],
+  };
 
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1029,6 +1035,7 @@ export function exportAuditReportToExcel(
     ['شواذ متوسطة الخطورة (Medium)', summary.anomaliesCount.medium, 'فحص دوري واستفسار'],
   ];
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+  wsSummary['!views'] = [{ RTL: true }];
   wsSummary['!cols'] = [{ wch: 35 }, { wch: 30 }, { wch: 35 }];
   XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص_نتائج_المراجعة');
 
@@ -1068,6 +1075,7 @@ export function exportAuditReportToExcel(
   ]);
 
   const wsAnom = XLSX.utils.aoa_to_sheet([anomHeaders, ...anomRows]);
+  wsAnom['!views'] = [{ RTL: true }];
   wsAnom['!cols'] = [
     { wch: 6 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 25 }, { wch: 24 },
     { wch: 16 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 40 }, { wch: 45 },
@@ -1095,6 +1103,7 @@ export function exportAuditReportToExcel(
     d.isAnomalous ? 'انحراف شاذ يستوجب الفحص' : 'طبيعي ومطابق',
   ]);
   const wsBenford = XLSX.utils.aoa_to_sheet([benfordHeaders, ...benfordRows]);
+  wsBenford['!views'] = [{ RTL: true }];
   wsBenford['!cols'] = [{ wch: 18 }, { wch: 24 }, { wch: 24 }, { wch: 26 }, { wch: 24 }, { wch: 22 }, { wch: 25 }];
   XLSX.utils.book_append_sheet(wb, wsBenford, 'تحليل_قانون_بنفورد');
 
@@ -1113,8 +1122,13 @@ export function exportAuditReportToExcel(
     r.hasWarnings ? 'مرصود به شذوذ' : 'مطابق مبدئياً',
   ]);
   const wsRaw = XLSX.utils.aoa_to_sheet([rawHeaders, ...rawDataRows]);
+  wsRaw['!views'] = [{ RTL: true }];
   wsRaw['!cols'] = [{ wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 35 }, { wch: 25 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(wb, wsRaw, 'البيانات_المفحوصة_كاملة');
+
+  wb.Workbook = {
+    Views: [{ RTL: true }],
+  };
 
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

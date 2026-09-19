@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
 export class TemplateGeneratorService {
   /**
@@ -113,7 +114,7 @@ export class TemplateGeneratorService {
 
     // Journal Sheet
     const wsJournal = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
-    wsJournal['!cols'] = [
+    formatWorksheetForArabicExport(wsJournal, [headers, ...sampleData], [
       { wch: 15 }, // Date
       { wch: 15 }, // Ref
       { wch: 12 }, // Code
@@ -127,15 +128,15 @@ export class TemplateGeneratorService {
       { wch: 18 }, // Cost Center
       { wch: 35 }, // Line Desc
       { wch: 40 }, // Header Desc
-    ];
+    ]);
     XLSX.utils.book_append_sheet(wb, wsJournal, 'قيود اليومية العامة');
 
     // Instructions Sheet
     const wsInstructions = XLSX.utils.aoa_to_sheet(instructions);
-    wsInstructions['!cols'] = [{ wch: 80 }];
+    formatWorksheetForArabicExport(wsInstructions, instructions, [{ wch: 80 }]);
     XLSX.utils.book_append_sheet(wb, wsInstructions, 'تعليمات الاستيراد');
 
-    XLSX.writeFile(wb, 'نموذج_استيراد_قيود_اليومية_العامة_المعتمد.xlsx');
+    writeArabicExcelFile(wb, 'نموذج_استيراد_قيود_اليومية_العامة_المعتمد.xlsx');
   }
 
   /**
@@ -168,7 +169,7 @@ export class TemplateGeneratorService {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
-    ws['!cols'] = [
+    formatWorksheetForArabicExport(ws, [headers, ...sampleData], [
       { wch: 12 },
       { wch: 30 },
       { wch: 15 },
@@ -179,9 +180,9 @@ export class TemplateGeneratorService {
       { wch: 16 },
       { wch: 16 },
       { wch: 18 },
-    ];
+    ]);
     XLSX.utils.book_append_sheet(wb, ws, 'ميزان المراجعة والأستاذ العام');
-    XLSX.writeFile(wb, 'نموذج_استيراد_ميزان_المراجعة_ودفتر_الأستاذ.xlsx');
+    writeArabicExcelFile(wb, 'نموذج_استيراد_ميزان_المراجعة_ودفتر_الأستاذ.xlsx');
   }
 
   /**
@@ -207,7 +208,7 @@ export class TemplateGeneratorService {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
-    ws['!cols'] = [
+    formatWorksheetForArabicExport(ws, [headers, ...sampleData], [
       { wch: 16 },
       { wch: 16 },
       { wch: 18 },
@@ -216,8 +217,8 @@ export class TemplateGeneratorService {
       { wch: 18 },
       { wch: 18 },
       { wch: 22 },
-    ];
+    ]);
     XLSX.utils.book_append_sheet(wb, ws, 'كشف الحساب البنكي');
-    XLSX.writeFile(wb, 'نموذج_استيراد_كشف_حساب_البنك.xlsx');
+    writeArabicExcelFile(wb, 'نموذج_استيراد_كشف_حساب_البنك.xlsx');
   }
 }

@@ -25,6 +25,7 @@ import { AccountingNumberInput } from '../common/AccountingNumberInput';
 import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 import { ActionMenu } from '../common/ActionMenu';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 
 export interface NoteBreakdownRow {
   id: string;
@@ -513,6 +514,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
     });
 
     const wsSummary = XLSX.utils.json_to_sheet(notesSummaryRows);
+    formatWorksheetForArabicExport(wsSummary, notesSummaryRows);
     XLSX.utils.book_append_sheet(wb, wsSummary, 'فهرس الإيضاحات المتممة');
 
     // Add breakdown details sheet
@@ -535,10 +537,11 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
 
     if (breakdownRows.length > 0) {
       const wsBreakdown = XLSX.utils.json_to_sheet(breakdownRows);
+      formatWorksheetForArabicExport(wsBreakdown, breakdownRows);
       XLSX.utils.book_append_sheet(wb, wsBreakdown, 'جداول تفاصيل الإيضاحات');
     }
 
-    XLSX.writeFile(wb, `الإيضاحات_المتممة_للقوائم_المالية.xlsx`);
+    writeArabicExcelFile(wb, `الإيضاحات_المتممة_للقوائم_المالية.xlsx`);
   };
 
   return (

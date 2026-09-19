@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from './excelArabicStyler';
 import { ClientArchiveRecord, CompanyType, ClientRelationshipType } from '../types';
 
 export interface ClientExcelRow {
@@ -186,25 +187,13 @@ export class ClientExcelEngine {
       header: CLIENT_EXCEL_HEADERS,
     });
 
-    // Auto-fit column widths
-    const colWidths = CLIENT_EXCEL_HEADERS.map((header) => {
-      const maxLen = Math.max(
-        header.length,
-        ...SAMPLE_CLIENT_EXCEL_DATA.map((row: any) => String(row[header] || '').length)
-      );
-      return { wch: Math.min(Math.max(maxLen + 4, 16), 45) };
-    });
-    ws['!cols'] = colWidths;
-
-    // Enable RTL right-to-left sheet view for Arabic
-    if (!ws['!views']) ws['!views'] = [];
-    ws['!views'].push({ rightToLeft: true });
+    formatWorksheetForArabicExport(ws, SAMPLE_CLIENT_EXCEL_DATA);
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'دليل استيراد العملاء');
 
     const fileName = `قالب_استيراد_العملاء_مكتب_${(officeName || 'محمد_جميل_مرعي').replace(/\s+/g, '_')}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    writeArabicExcelFile(wb, fileName);
   }
 
   /**

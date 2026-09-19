@@ -17,6 +17,7 @@ import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenera
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
 interface FeasibilityStudyViewProps {
   state: DatabaseState;
@@ -79,8 +80,9 @@ export const FeasibilityStudyView: React.FC<FeasibilityStudyViewProps> = ({ stat
       'القيمة الحالية (PV)': p.presentValue,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     XLSX.utils.book_append_sheet(wb, ws, 'دراسة الجدوى المالية');
-    XLSX.writeFile(wb, `دراسة_جدوى_${projectName.slice(0, 20)}.xlsx`);
+    writeArabicExcelFile(wb, `دراسة_جدوى_${projectName.slice(0, 20)}.xlsx`);
   };
 
   return (

@@ -917,6 +917,10 @@ export function exportModelData(
         XLSX.utils.book_append_sheet(wb, wsDetail, safeSheetName);
       });
 
+      wb.Workbook = {
+        Views: [{ RTL: true }],
+      };
+
       const fileName = `${cleanDocTitle}_${timestamp}.xlsx`;
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([excelBuffer], {
@@ -1005,6 +1009,10 @@ export function exportModelData(
           XLSX.utils.book_append_sheet(wb, ws, sheetNames[m] || m);
         }
       }
+
+      wb.Workbook = {
+        Views: [{ RTL: true }],
+      };
 
       const fileName = `المصنف_المحاسبي_الشامل_لكافة_النماذج_${timestamp}.xlsx`;
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -1160,6 +1168,10 @@ export function exportModelData(
       formatWorksheetForArabicExport(ws, dataRows);
       XLSX.utils.book_append_sheet(wb, ws, baseName.substring(0, 31));
     }
+
+    wb.Workbook = {
+      Views: [{ RTL: true }],
+    };
 
     const fileName = `${baseName}_${timestamp}.xlsx`;
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });

@@ -11,6 +11,7 @@ import {
   Layers,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 
 interface InternalControlRiskMatrixProps {
   state: DatabaseState;
@@ -127,9 +128,10 @@ export const InternalControlRiskMatrix: React.FC<InternalControlRiskMatrixProps>
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'مصفوفة تقييم الرقابة والمخاطر');
-    XLSX.writeFile(wb, `مصفوفة_تقييم_الرقابة_الداخلية_والمخاطر_${selectedYear}.xlsx`);
+    writeArabicExcelFile(wb, `مصفوفة_تقييم_الرقابة_الداخلية_والمخاطر_${selectedYear}.xlsx`);
   };
 
   const filteredCycles = cycles.filter((c) => {

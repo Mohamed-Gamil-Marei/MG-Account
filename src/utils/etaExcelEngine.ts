@@ -5,6 +5,7 @@
  */
 
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from './excelArabicStyler';
 import { Invoice, InvoiceItem } from '../types';
 import { etaService } from './etaSdkEngine';
 
@@ -90,8 +91,7 @@ export class EtaExcelEngine {
 
     const ws1 = XLSX.utils.json_to_sheet(templateData);
 
-    // Styling column widths for Arabic readability
-    ws1['!cols'] = [
+    formatWorksheetForArabicExport(ws1, templateData, [
       { wch: 18 }, // رقم الفاتورة
       { wch: 16 }, // التاريخ
       { wch: 16 }, // نوع المستند
@@ -111,7 +111,7 @@ export class EtaExcelEngine {
       { wch: 16 }, // الخصم والتحصيل
       { wch: 14 }, // طريقة السداد
       { wch: 30 }, // ملاحظات
-    ];
+    ]);
 
     XLSX.utils.book_append_sheet(wb, ws1, 'بيانات الفواتير والإيصالات');
 
@@ -125,10 +125,10 @@ export class EtaExcelEngine {
       { 'نوع التكويد': 'GS1', 'المسمى': 'Global Standard 1 Barcode', 'النمط': 'أرقام باركود دولية 13 رقم', 'ملاحظات': 'معتمد دولياً ومسجل تلقائياً' },
     ];
     const ws2 = XLSX.utils.json_to_sheet(guideData);
-    ws2['!cols'] = [{ wch: 16 }, { wch: 32 }, { wch: 20 }, { wch: 45 }];
+    formatWorksheetForArabicExport(ws2, guideData, [{ wch: 16 }, { wch: 32 }, { wch: 20 }, { wch: 45 }]);
     XLSX.utils.book_append_sheet(wb, ws2, 'دليل أكواد ومحددات المنظومة');
 
-    XLSX.writeFile(wb, `نموذج_استيراد_الفواتير_الإلكترونية_ETA_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    writeArabicExcelFile(wb, `نموذج_استيراد_الفواتير_الإلكترونية_ETA_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   // --- 2. Import & Parse Excel File into Invoices ---
@@ -395,7 +395,7 @@ export class EtaExcelEngine {
       { 'البيان': 'صافي المبلغ المستحق (ج.م)', 'القيمة': invoice.grandTotal },
     ];
     const wsHeader = XLSX.utils.json_to_sheet(headerData);
-    wsHeader['!cols'] = [{ wch: 25 }, { wch: 45 }];
+    formatWorksheetForArabicExport(wsHeader, headerData, [{ wch: 25 }, { wch: 45 }]);
     XLSX.utils.book_append_sheet(wb, wsHeader, 'بيانات المستند الرئيسية');
 
     const linesData = invoice.items.map((it, idx) => ({
@@ -412,7 +412,7 @@ export class EtaExcelEngine {
       'الصافي الإجمالي': it.netTotal,
     }));
     const wsLines = XLSX.utils.json_to_sheet(linesData);
-    wsLines['!cols'] = [
+    formatWorksheetForArabicExport(wsLines, linesData, [
       { wch: 6 },
       { wch: 22 },
       { wch: 12 },
@@ -424,10 +424,10 @@ export class EtaExcelEngine {
       { wch: 20 },
       { wch: 16 },
       { wch: 18 },
-    ];
+    ]);
     XLSX.utils.book_append_sheet(wb, wsLines, 'بنود الفاتورة المفصلة');
 
-    XLSX.writeFile(wb, `فاتورة_${invoice.invoiceNumber}_${invoice.partnerName.slice(0, 15)}.xlsx`);
+    writeArabicExcelFile(wb, `فاتورة_${invoice.invoiceNumber}_${invoice.partnerName.slice(0, 15)}.xlsx`);
   }
 
   // --- 7. Export All Invoices to Master Excel File ---
@@ -458,7 +458,7 @@ export class EtaExcelEngine {
     }));
 
     const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-    wsSummary['!cols'] = [
+    formatWorksheetForArabicExport(wsSummary, summaryRows, [
       { wch: 16 },
       { wch: 14 },
       { wch: 14 },
@@ -472,7 +472,7 @@ export class EtaExcelEngine {
       { wch: 16 },
       { wch: 18 },
       { wch: 14 },
-    ];
+    ]);
     XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص سجل الفواتير');
 
     // Sheet 2: All line items flattened
@@ -498,8 +498,9 @@ export class EtaExcelEngine {
     });
 
     const wsAllLines = XLSX.utils.json_to_sheet(allLines);
+    formatWorksheetForArabicExport(wsAllLines, allLines);
     XLSX.utils.book_append_sheet(wb, wsAllLines, 'كافة البنود التفصيلية');
 
-    XLSX.writeFile(wb, `سجل_الفواتير_الإلكترونية_الشامل_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    writeArabicExcelFile(wb, `سجل_الفواتير_الإلكترونية_الشامل_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 }

@@ -32,6 +32,7 @@ import {
   Coins,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import { FiscalYearData } from './CreditYearlyEditor';
 import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 import { ActionMenu } from '../common/ActionMenu';
@@ -731,6 +732,7 @@ export const CreditScoringKpisTab: React.FC<CreditScoringKpisTabProps> = ({
     });
 
     const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'الملف الائتماني والمصرفي');
 
@@ -744,9 +746,10 @@ export const CreditScoringKpisTab: React.FC<CreditScoringKpisTabProps> = ({
       { 'البيان': 'توصية وقرار اللجنة', 'القيمة': activeConfig.recommendationDecision === 'APPROVED' ? 'موافقة معتمدة' : activeConfig.recommendationDecision === 'CONDITIONAL' ? 'موافقة مشروطة' : 'مراجعة إضافية' },
     ];
     const wsMemo = XLSX.utils.json_to_sheet(memoRows);
+    formatWorksheetForArabicExport(wsMemo, memoRows);
     XLSX.utils.book_append_sheet(wb, wsMemo, 'مذكرة التسهيلات والتوصية');
 
-    XLSX.writeFile(wb, `الملف_الائتماني_البنكي_الشامل_${latestYear}.xlsx`);
+    writeArabicExcelFile(wb, `الملف_الائتماني_البنكي_الشامل_${latestYear}.xlsx`);
   };
 
   return (

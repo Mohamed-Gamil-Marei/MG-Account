@@ -96,6 +96,7 @@ import { ActionMenu } from './common/ActionMenu';
 import { UnifiedSelectDropdown, UnifiedDropdownOption } from './common/UnifiedSelectDropdown';
 import { ClientArchiveRecord } from '../types';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 import { SmartCreditSuite } from './credit/SmartCreditSuite';
 import { CreditExcelBridgeModal } from './credit/CreditExcelBridgeModal';
 import { DedicatedYearWorkspace } from './credit/DedicatedYearWorkspace';
@@ -1518,6 +1519,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       { 'بيان قائمة الدخل': 'صافي أرباح العام بعد الضريبة', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.netProfit }), {}) },
     ];
     const wsIS = XLSX.utils.json_to_sheet(isRows);
+    formatWorksheetForArabicExport(wsIS, isRows);
     XLSX.utils.book_append_sheet(wb, wsIS, 'قائمة الدخل المقارنة');
 
     // 2. Sheet: Balance Sheet
@@ -1542,6 +1544,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       { 'بيان المركز المالي': 'إجمالي الالتزامات وحقوق الملكية', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.totalEquityAndLiabilities }), {}) },
     ];
     const wsBS = XLSX.utils.json_to_sheet(bsRows);
+    formatWorksheetForArabicExport(wsBS, bsRows);
     XLSX.utils.book_append_sheet(wb, wsBS, 'قائمة المركز المالي');
 
     // 3. Sheet: Cash Flow Statement
@@ -1555,6 +1558,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       { 'بيان التدفقات النقدية': 'صافي التدفقات النقدية من الأنشطة التمويلية', ...yearsList.reduce((acc, y) => ({ ...acc, [`سنة ${y}`]: computedData[y]?.financingCashFlow }), {}) },
     ];
     const wsCF = XLSX.utils.json_to_sheet(cfRows);
+    formatWorksheetForArabicExport(wsCF, cfRows);
     XLSX.utils.book_append_sheet(wb, wsCF, 'قائمة التدفقات النقدية');
 
     // 4. Sheet: Fixed Assets Schedule
@@ -1583,6 +1587,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       });
     });
     const wsFA = XLSX.utils.json_to_sheet(faRows);
+    formatWorksheetForArabicExport(wsFA, faRows);
     XLSX.utils.book_append_sheet(wb, wsFA, 'جدول إهلاك الأصول الثابتة');
 
     // 5. Sheet: Admin Expenses Schedule
@@ -1598,6 +1603,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       return rowData;
     });
     const wsGA = XLSX.utils.json_to_sheet(gaRows);
+    formatWorksheetForArabicExport(wsGA, gaRows);
     XLSX.utils.book_append_sheet(wb, wsGA, 'المصروفات الإدارية والعمومية');
 
     // 6. Sheet: Notes & Schedules
@@ -1608,9 +1614,10 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       'نص الإيضاح': n.content.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim(),
     }));
     const wsNotes = XLSX.utils.json_to_sheet(notesExportRows);
+    formatWorksheetForArabicExport(wsNotes, notesExportRows);
     XLSX.utils.book_append_sheet(wb, wsNotes, 'الإيضاحات المتممة');
 
-    XLSX.writeFile(wb, `الملف_الائتماني_المتكامل_والقوائم_المالية_${selectedYear}.xlsx`);
+    writeArabicExcelFile(wb, `الملف_الائتماني_المتكامل_والقوائم_المالية_${selectedYear}.xlsx`);
   };
 
   // Handler for Reverse Engineering / Smart Suite updates

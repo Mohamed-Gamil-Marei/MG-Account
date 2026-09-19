@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
 import { SMART_EXPENSE_RATIOS } from '../../services/smartCpaTemplateService';
 import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
@@ -262,8 +263,9 @@ export const CreditAdminExpensesTab: React.FC<CreditAdminExpensesTabProps> = ({
     rows.push(totalsRow);
 
     const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     XLSX.utils.book_append_sheet(wb, ws, 'المصروفات الإدارية والعمومية');
-    XLSX.writeFile(wb, `جدول_المصروفات_الإدارية_والعمومية_${selectedYear}.xlsx`);
+    writeArabicExcelFile(wb, `جدول_المصروفات_الإدارية_والعمومية_${selectedYear}.xlsx`);
   };
 
   const currentYearSales = computedData[selectedYear]?.sales || 10000000;

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 import {
   Account,
   JournalEntry,
@@ -1890,8 +1891,9 @@ export class LocalDatabase {
         'رصيد افتتاحي دائن': a.openingBalanceCredit,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'شجرة الحسابات');
-      XLSX.writeFile(wb, `شجرة_الحسابات_المصرية_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `شجرة_الحسابات_المصرية_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } else if (tableName === 'JOURNAL') {
       const rows: any[] = [];
       for (const entry of this.state.journalEntries) {
@@ -1910,8 +1912,9 @@ export class LocalDatabase {
         }
       }
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'قيود اليومية');
-      XLSX.writeFile(wb, `قيود_اليومية_العامة_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `قيود_اليومية_العامة_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } else if (tableName === 'CLIENTS') {
       const rows = this.state.clients.map((c) => ({
         'كود العميل': c.clientCode,
@@ -1928,8 +1931,9 @@ export class LocalDatabase {
         'النشاط': c.activity,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'أرشيف العملاء');
-      XLSX.writeFile(wb, `أرشيف_العملاء_والشركات_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `أرشيف_العملاء_والشركات_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } else if (tableName === 'TREASURY') {
       const rows = this.state.treasuryTransactions.map((t) => ({
         'رقم السند': t.voucherNumber,
@@ -1943,8 +1947,9 @@ export class LocalDatabase {
         'المسؤول': t.recordedBy,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'خزنة المكتب');
-      XLSX.writeFile(wb, `حركات_خزنة_المكتب_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `حركات_خزنة_المكتب_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } else if (tableName === 'TAXES') {
       const rows = this.state.taxDeclarations.map((tx) => ({
         'نوع الإقرار': tx.declarationType,
@@ -1959,8 +1964,9 @@ export class LocalDatabase {
         'رقم الإيصال': tx.receiptNumber || '',
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'الإقرارات الضريبية');
-      XLSX.writeFile(wb, `سجل_الإقرارات_الضريبية_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `سجل_الإقرارات_الضريبية_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } else if (tableName === 'INVOICES') {
       const rows = this.state.invoices.map((inv) => ({
         'رقم الفاتورة': inv.invoiceNumber,
@@ -1977,8 +1983,9 @@ export class LocalDatabase {
         'حالة المنظومة': inv.etaStatus || 'مسودة',
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'سجل الفواتير والإيصالات');
-      XLSX.writeFile(wb, `سجل_الفواتير_الإلكترونية_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `سجل_الفواتير_الإلكترونية_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } else if (tableName === 'FIXED_ASSETS') {
       const rows = (this.state.fixedAssets || []).map((ast) => ({
         'كود الأصل': ast.assetCode,
@@ -1998,8 +2005,9 @@ export class LocalDatabase {
         'الحالة': ast.status,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      formatWorksheetForArabicExport(ws, rows);
       XLSX.utils.book_append_sheet(wb, ws, 'سجل الأصول الثابتة');
-      XLSX.writeFile(wb, `سجل_الأصول_الثابتة_والإهلاك_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      writeArabicExcelFile(wb, `سجل_الأصول_الثابتة_والإهلاك_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
   }
 

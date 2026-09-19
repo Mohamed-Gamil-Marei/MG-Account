@@ -33,6 +33,7 @@ import {
 import { FixedAssetCategoryItem } from './CreditFixedAssetsTab';
 import { AdminExpenseItem } from './CreditAdminExpensesTab';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 import { ActionMenu } from '../common/ActionMenu';
 
@@ -190,6 +191,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       { 'البيان': 'صافي ربح / (خسارة) العام بعد الضريبة (يرحل لحقوق الملكية)', 'القيمة (ج.م)': cd.netProfit, 'الإيضاح': '-' },
     ];
     const wsIncome = XLSX.utils.json_to_sheet(incomeRows);
+    formatWorksheetForArabicExport(wsIncome, incomeRows);
     XLSX.utils.book_append_sheet(wb, wsIncome, `قائمة الدخل ${activeYear}`);
 
     // 2. Balance Sheet
@@ -212,6 +214,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       { 'التبويب': 'فحص الاتزان', 'البيان': 'فارق الميزانية (يجب أن يكون 0)', 'القيمة (ج.م)': balanceDiff, 'الإيضاح': isBalanced ? 'متزن 100%' : 'فارق' },
     ];
     const wsBal = XLSX.utils.json_to_sheet(balanceRows);
+    formatWorksheetForArabicExport(wsBal, balanceRows);
     XLSX.utils.book_append_sheet(wb, wsBal, `المركز المالي ${activeYear}`);
 
     // 3. Cash Flow Sheet
@@ -224,6 +227,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       { 'البيان': 'صافي التدفقات النقدية من الأنشطة التمويلية', 'القيمة (ج.م)': cd.financingCashFlow },
     ];
     const wsCF = XLSX.utils.json_to_sheet(cfRows);
+    formatWorksheetForArabicExport(wsCF, cfRows);
     XLSX.utils.book_append_sheet(wb, wsCF, `التدفقات النقدية ${activeYear}`);
 
     // 4. Profit Distribution Sheet
@@ -237,6 +241,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       { 'البند': 'الأرباح المحتجزة والمرحلة لتدعيم المركز المالي', 'النسبة': `${retainedRatio}%`, 'المبلغ (ج.م)': retainedCarriedForward },
     ];
     const wsPDist = XLSX.utils.json_to_sheet(pdistRows);
+    formatWorksheetForArabicExport(wsPDist, pdistRows);
     XLSX.utils.book_append_sheet(wb, wsPDist, `توزيع الأرباح ${activeYear}`);
 
     // 5. Notes to Financial Statements for this year only
@@ -250,9 +255,10 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       });
     });
     const wsNotes = XLSX.utils.json_to_sheet(notesRows);
+    formatWorksheetForArabicExport(wsNotes, notesRows);
     XLSX.utils.book_append_sheet(wb, wsNotes, `الإيضاحات المتممة ${activeYear}`);
 
-    XLSX.writeFile(wb, `الملف_المالي_المستقل_المعتمد_سنة_${activeYear}.xlsx`);
+    writeArabicExcelFile(wb, `الملف_المالي_المستقل_المعتمد_سنة_${activeYear}.xlsx`);
   };
 
   return (

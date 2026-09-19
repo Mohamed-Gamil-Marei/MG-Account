@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
 export type AuditIssueSeverity = 'HIGH' | 'MEDIUM' | 'INFO';
 
@@ -903,7 +904,7 @@ export class JournalNotesAuditEngine {
     }));
 
     const wsReport = XLSX.utils.json_to_sheet(reportData);
-    wsReport['!cols'] = [
+    formatWorksheetForArabicExport(wsReport, reportData, [
       { wch: 14 }, // entry
       { wch: 12 }, // date
       { wch: 14 }, // code
@@ -921,7 +922,7 @@ export class JournalNotesAuditEngine {
       { wch: 30 }, // cr
       { wch: 15 }, // amt
       { wch: 45 }, // exp
-    ];
+    ]);
 
     XLSX.utils.book_append_sheet(wb, wsReport, 'تقرير الفحص وإعادة التوجيه');
 
@@ -938,7 +939,7 @@ export class JournalNotesAuditEngine {
     }));
 
     const wsCorrected = XLSX.utils.json_to_sheet(correctedJournalData);
-    wsCorrected['!cols'] = [
+    formatWorksheetForArabicExport(wsCorrected, correctedJournalData, [
       { wch: 15 },
       { wch: 12 },
       { wch: 35 },
@@ -947,7 +948,7 @@ export class JournalNotesAuditEngine {
       { wch: 15 },
       { wch: 15 },
       { wch: 35 },
-    ];
+    ]);
     XLSX.utils.book_append_sheet(wb, wsCorrected, 'شيت القيود بعد التصحيح');
 
     // 3. Summary KPI Sheet
@@ -961,8 +962,12 @@ export class JournalNotesAuditEngine {
       { 'المؤشر': 'إجمالي المبالغ الخاضعة لإعادة التوجيه (ج.م)', 'القيمة': stats.totalDiscrepancyAmount },
     ];
     const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    formatWorksheetForArabicExport(wsSummary, summaryData, [
+      { wch: 45 },
+      { wch: 25 },
+    ]);
     XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص مؤشرات التدقيق');
 
-    XLSX.writeFile(wb, `تقرير_فحص_وتصحيح_توجيه_القيود_${new Date().toISOString().split('T')[0]}.xlsx`);
+    writeArabicExcelFile(wb, `تقرير_فحص_وتصحيح_توجيه_القيود_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 }

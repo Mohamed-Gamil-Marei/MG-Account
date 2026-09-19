@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
 import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 import { ActionMenu } from '../common/ActionMenu';
@@ -415,10 +416,11 @@ export const CreditFixedAssetsTab: React.FC<CreditFixedAssetsTabProps> = ({
       });
 
       const ws = XLSX.utils.json_to_sheet(sheetData);
+      formatWorksheetForArabicExport(ws, sheetData);
       XLSX.utils.book_append_sheet(wb, ws, `إهلاك الأصول ${yr}`);
     });
 
-    XLSX.writeFile(wb, `جدول_إهلاك_وحركة_الأصول_الثابتة_${selectedYear}.xlsx`);
+    writeArabicExcelFile(wb, `جدول_إهلاك_وحركة_الأصول_الثابتة_${selectedYear}.xlsx`);
   };
 
   return (

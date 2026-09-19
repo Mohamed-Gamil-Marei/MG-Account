@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { DatabaseState } from '../../db/localDatabase';
 import { formatEgyptianCurrency } from '../../utils/egyptianTaxCalculations';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import {
   Layers,
   Filter,
@@ -199,9 +200,10 @@ export const AuditSamplingTool: React.FC<AuditSamplingToolProps> = ({ state, sel
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'عينات المراجعة المعتمدة');
-    XLSX.writeFile(wb, `ورقة_عمل_عينات_المراجعة_${populationType}_${selectedYear}.xlsx`);
+    writeArabicExcelFile(wb, `ورقة_عمل_عينات_المراجعة_${populationType}_${selectedYear}.xlsx`);
   };
 
   const filteredSamples = samples.filter((s) =>

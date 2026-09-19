@@ -828,6 +828,10 @@ export function exportDocumentToExcel(
       XLSX.utils.book_append_sheet(wb, wsItems, '2. بنود الفاتورة المعتمدة');
     }
 
+    wb.Workbook = {
+      Views: [{ RTL: true }],
+    };
+
     const filename = customFilename || `شهادة_معتمدة_${doc.clientName || doc.certificateNumber || 'بيانات'}.xlsx`;
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], {

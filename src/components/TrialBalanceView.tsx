@@ -15,6 +15,7 @@ import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { TrialBalanceAutoMapperModal } from './accounting/TrialBalanceAutoMapperModal';
 import { AuditConsistencySentinelModal } from './audit/AuditConsistencySentinelModal';
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
 interface TrialBalanceViewProps {
   state: DatabaseState;
@@ -122,8 +123,9 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
     });
 
     const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
     XLSX.utils.book_append_sheet(wb, ws, 'ميزان المراجعة');
-    XLSX.writeFile(wb, `ميزان_المراجعة_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    writeArabicExcelFile(wb, `ميزان_المراجعة_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   return (
@@ -169,7 +171,7 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
       onSearchChange={setSearchTerm}
       searchPlaceholder="بحث بكود أو اسم الحساب بالميزان..."
     >
-      <div className="space-y-4">
+      <div id="trial-balance-report" className="space-y-4 print-landscape">
         {/* Verification status boxes */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">

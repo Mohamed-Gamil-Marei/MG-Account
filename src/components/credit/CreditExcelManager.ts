@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport } from '../../utils/excelArabicStyler';
 import { FiscalYearData } from './CreditYearlyEditor';
 
 export interface CreditExcelTemplateData {
@@ -50,7 +51,7 @@ export function generateCreditDossierTemplate(
     { 'البيان الائتماني والبنكي': 'القيمة السوقية التقديرية للضمانة (ج.م)', 'القيمة المدخلة': 18000000, 'ملاحظات وتوجيهات': 'تقييم خبير معتمد أو مقيم عقاري' },
   ];
   const wsClient = XLSX.utils.json_to_sheet(clientRows);
-  wsClient['!cols'] = [{ wch: 40 }, { wch: 35 }, { wch: 45 }];
+  formatWorksheetForArabicExport(wsClient, clientRows, [{ wch: 40 }, { wch: 35 }, { wch: 45 }]);
   XLSX.utils.book_append_sheet(wb, wsClient, '1. بيانات التسهيل والضمانات');
 
   // -------------------------------------------------------------
@@ -76,7 +77,7 @@ export function generateCreditDossierTemplate(
   });
 
   const wsIS = XLSX.utils.json_to_sheet(isRows);
-  wsIS['!cols'] = [{ wch: 38 }, { wch: 15 }, ...yearsList.map(() => ({ wch: 20 }))];
+  formatWorksheetForArabicExport(wsIS, isRows, [{ wch: 38 }, { wch: 15 }, ...yearsList.map(() => ({ wch: 20 }))]);
   XLSX.utils.book_append_sheet(wb, wsIS, '2. قائمة الدخل');
 
   // -------------------------------------------------------------
@@ -107,7 +108,7 @@ export function generateCreditDossierTemplate(
   });
 
   const wsBS = XLSX.utils.json_to_sheet(bsRows);
-  wsBS['!cols'] = [{ wch: 42 }, { wch: 20 }, { wch: 22 }, ...yearsList.map(() => ({ wch: 20 }))];
+  formatWorksheetForArabicExport(wsBS, bsRows, [{ wch: 42 }, { wch: 20 }, { wch: 22 }, ...yearsList.map(() => ({ wch: 20 }))]);
   XLSX.utils.book_append_sheet(wb, wsBS, '3. المركز المالي');
 
   // -------------------------------------------------------------
@@ -120,8 +121,12 @@ export function generateCreditDossierTemplate(
     { 'الإرشاد المحاسبي': '4. إضافة سنوات إضافية', 'الشرح والتوضيح': 'يمكنك إضافة أعمدة لسنوات قادمة مثل (سنة 2027) أو (سنة 2028) وسيقوم البرنامج باكتشافها وإضافتها تلقائياً.' },
   ];
   const wsGuide = XLSX.utils.json_to_sheet(guideRows);
-  wsGuide['!cols'] = [{ wch: 28 }, { wch: 75 }];
+  formatWorksheetForArabicExport(wsGuide, guideRows, [{ wch: 28 }, { wch: 75 }]);
   XLSX.utils.book_append_sheet(wb, wsGuide, '4. إرشادات الاستيراد');
+
+  wb.Workbook = {
+    Views: [{ RTL: true }],
+  };
 
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   return new Uint8Array(out);
