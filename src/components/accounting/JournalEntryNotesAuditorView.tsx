@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   Sparkles,
   Upload,
@@ -26,6 +26,15 @@ import {
   RefreshCw,
   TrendingDown,
   Info,
+  ShieldAlert,
+  Activity,
+  TrendingUp,
+  Printer,
+  BarChart3,
+  AlertOctagon,
+  Zap,
+  CheckCircle,
+  Coins,
 } from 'lucide-react';
 import {
   JournalNotesAuditEngine,
@@ -33,20 +42,29 @@ import {
   AuditedJournalRow,
   AuditSummaryStats,
   AuditIssueCategory,
+  ForensicAuditAnalysisResult,
+  ForensicAnomaly,
+  BenfordDigitStat,
 } from '../../services/journalNotesAuditService';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { JournalEntry, JournalEntryLine } from '../../types';
+import { PrintLayoutWrapper } from '../common/PrintLayoutWrapper';
 
 interface JournalEntryNotesAuditorViewProps {
   state?: DatabaseState;
   onNavigateToJournal?: () => void;
+  initialMainTab?: 'DIRECTION_AUDIT' | 'FORENSIC_FRAUD_AUDIT';
 }
 
 export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorViewProps> = ({
   state,
   onNavigateToJournal,
+  initialMainTab = 'DIRECTION_AUDIT',
 }) => {
+  const [activeMainTab, setActiveMainTab] = useState<'DIRECTION_AUDIT' | 'FORENSIC_FRAUD_AUDIT'>(
+    initialMainTab
+  );
   const [rows, setRows] = useState<AuditedJournalRow[]>([]);
   const [stats, setStats] = useState<AuditSummaryStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,13 +72,20 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  // Filters & Search
+  // Filters & Search for Direction Audit
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<'ALL' | 'ERRORS_ONLY' | AuditIssueCategory>('ALL');
   const [selectedRowForCorrection, setSelectedRowForCorrection] = useState<AuditedJournalRow | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Filters & Search for Forensic Fraud Audit
+  const [forensicSeverityFilter, setForensicSeverityFilter] = useState<'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM'>('ALL');
+  const [forensicSearchQuery, setForensicSearchQuery] = useState('');
+  const [isForensicPrintModalOpen, setIsForensicPrintModalOpen] = useState(false);
+  const [isAuditPrintModalOpen, setIsAuditPrintModalOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasAutoLoadedRef = useRef(false);
 
   // Load sample dataset
   const handleLoadSampleDataset = () => {
@@ -211,10 +236,39 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
     );
   };
 
-  // Export to Excel
+  // Auto-load system entries on initial mount if available and rows empty
+  useEffect(() => {
+    if (!hasAutoLoadedRef.current && state?.journalEntries && state.journalEntries.length > 0 && rows.length === 0) {
+      hasAutoLoadedRef.current = true;
+      handleAuditCurrentSystemEntries();
+    }
+  }, [state?.journalEntries]);
+
+  // Export to Excel (Full Audit Report)
   const handleExportReport = () => {
     if (rows.length === 0 || !stats) return;
     JournalNotesAuditEngine.exportAuditReportToExcel(rows, stats);
+  };
+
+  // Export to Excel (Dedicated Errors & Suggested Adjusting Entries Only)
+  const handleExportErrorsOnly = () => {
+    if (rows.length === 0 || !stats) return;
+    JournalNotesAuditEngine.exportErrorsAndAdjustmentsOnly(
+      rows,
+      stats,
+      fileName || undefined
+    );
+  };
+
+  // Export to Excel (Original Structure with Audit Annotations, Forensic Red Flags & Benford sheets)
+  const handleExportOriginalWithAudit = () => {
+    if (rows.length === 0 || !stats) return;
+    JournalNotesAuditEngine.exportOriginalWithAuditAnnotations(
+      rows,
+      stats,
+      fileName || undefined,
+      forensicResult
+    );
   };
 
   // Import resolved entries into App Database
@@ -265,7 +319,7 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
     }
   };
 
-  // Filtered rows
+  // Direction Audit Filtered rows
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
       // Category filter
@@ -298,6 +352,32 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
     });
   }, [rows, activeCategoryFilter, searchQuery]);
 
+  // Forensic Fraud & Benford Analysis Results
+  const forensicResult = useMemo<ForensicAuditAnalysisResult>(() => {
+    return JournalNotesAuditEngine.analyzeForensics(rows);
+  }, [rows]);
+
+  // Filtered Forensic Anomalies
+  const filteredForensicAnomalies = useMemo(() => {
+    return forensicResult.anomalies.filter((a) => {
+      if (forensicSeverityFilter !== 'ALL' && a.severity !== forensicSeverityFilter) {
+        return false;
+      }
+      if (forensicSearchQuery.trim()) {
+        const q = forensicSearchQuery.toLowerCase().trim();
+        const matchTitle = (a.title || '').toLowerCase().includes(q);
+        const matchAcc = (a.accountName || '').toLowerCase().includes(q);
+        const matchDesc = (a.description || '').toLowerCase().includes(q);
+        const matchEntry = (a.entryNo || '').toLowerCase().includes(q);
+        const matchRec = (a.recommendation || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchAcc && !matchDesc && !matchEntry && !matchRec) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [forensicResult.anomalies, forensicSeverityFilter, forensicSearchQuery]);
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* Hidden File Input */}
@@ -321,13 +401,13 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
               </div>
               <div>
                 <h1 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
-                  فاحص ومُصحّح توجيه القيود الذكي
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 font-mono">
-                    Notes & Narration AI Auditor
+                  المنظومة الموحدة لتدقيق القيود والرقابة الجنائية المالية
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30 font-mono">
+                    ISA 240 & Benford Sentinel
                   </span>
                 </h1>
                 <p className="text-xs text-indigo-200/80">
-                  فحص دلالي ومطابقة شرح القيود (Notes / Narration) مع الحسابات المسجلة لكشف أخطاء التوجيه والرسملة وإعادة التوجيه المحاسبي السليم
+                  كشف أخطاء التوجيه والرسملة | رصد شبهات الغش والتدليس واختراق الرقابة الداخلية | التحليل الرقمي بقانون بنفورد
                 </p>
               </div>
             </div>
@@ -367,18 +447,95 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
             )}
 
             {rows.length > 0 && (
-              <button
-                type="button"
-                onClick={handleExportReport}
-                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-                title="تصدير تقرير التدقيق وشيت القيود المصححة للإكسيل"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>تصدير Excel</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportOriginalWithAudit}
+                  className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  title="تصدير ملف الإكسيل الشامل متضمناً: الشيت الأصلي بملاحظات الفحص، وشيت الأخطاء برقم الصف، وشيت القيود المصححة للترحيل، وشيت التدليس وبنفورد"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>تصدير الإكسيل الشامل (كافة الشيتات)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportErrorsOnly}
+                  className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  title="تصدير شيت مستقل يقتصر على السطور والقيود التي بها مشكلة مع أرقام الصفوف وقيد التسوية المصحح"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>شيت الأخطاء والتسويات فقط</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAuditPrintModalOpen(true)}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  title="معاينة وطباعة تقرير الفحص والتوجيه المحاسبي وقائمة الأخطاء والتسويات (PDF)"
+                >
+                  <Printer className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>طباعة تقرير الفحص</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsForensicPrintModalOpen(true)}
+                  className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  title="طباعة ملف تقرير التدقيق الجنائي وشبهات التدليس المعتمد (ISA 240)"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>تقرير الرقابة الجنائية</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Unified Master Tabs Switcher */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('DIRECTION_AUDIT')}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeMainTab === 'DIRECTION_AUDIT'
+              ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow-md border border-indigo-200 dark:border-indigo-900'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <ArrowLeftRight className="w-4 h-4 text-indigo-500" />
+          <span>فحص وتصحيح توجيه القيود والبيان (Direction & Narration)</span>
+          {stats && stats.flaggedErrorsCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-mono font-bold">
+              {stats.flaggedErrorsCount} توجيه مخالف
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('FORENSIC_FRAUD_AUDIT')}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeMainTab === 'FORENSIC_FRAUD_AUDIT'
+              ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-amber-300" />
+          <span>الرقابة الجنائية وكشف الغش والتدليس (ISA 240 & Benford's Law)</span>
+          {rows.length > 0 && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-black ${
+                forensicResult.overallRiskScore > 40
+                  ? 'bg-amber-400 text-slate-950 animate-pulse'
+                  : 'bg-white/20 text-white'
+              }`}
+            >
+              مؤشر المخاطر: {forensicResult.overallRiskScore}% ({forensicResult.anomalies.length} شبهة)
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Notifications */}
@@ -474,8 +631,11 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
         </div>
       )}
 
-      {/* Stats Summary Dashboard */}
-      {stats && rows.length > 0 && (
+      {/* Direction Audit Tab View */}
+      {activeMainTab === 'DIRECTION_AUDIT' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Stats Summary Dashboard */}
+          {stats && rows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs">
             <span className="text-[11px] text-slate-500 dark:text-slate-400 block">إجمالي السطور</span>
@@ -556,7 +716,7 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handleSaveCorrectedEntriesToApp}
@@ -569,11 +729,32 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
 
               <button
                 type="button"
-                onClick={handleExportReport}
-                className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                onClick={handleExportOriginalWithAudit}
+                className="px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="تصدير الشيت الشامل بجميع الشيتات (الأصل، تقرير الأخطاء برقم الصف، القيود المصححة، وشيتات التدليس وبنفورد)"
               >
-                <Download className="w-3.5 h-3.5 text-emerald-600" />
-                <span>تصدير تقرير الإكسيل</span>
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                <span>تصدير الشيت الشامل (كافة الشيتات)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportErrorsOnly}
+                className="px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="تصدير شيت منفصل للأخطاء وقيود التسوية فقط"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                <span>شيت الأخطاء والتسويات فقط</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAuditPrintModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="معاينة وطباعة تقرير الفحص والتوجيه المحاسبي وقائمة الأخطاء والتسويات (PDF)"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                <span>طباعة تقرير الفحص</span>
               </button>
 
               <button
@@ -901,6 +1082,702 @@ export const JournalEntryNotesAuditorView: React.FC<JournalEntryNotesAuditorView
             </table>
           </div>
         </div>
+      )}
+        </div>
+      )}
+
+      {/* Forensic Fraud Sentinel View (ISA 240 & Benford's Law) */}
+      {activeMainTab === 'FORENSIC_FRAUD_AUDIT' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {rows.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-3">
+              <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                يرجى رفع ملف قيود أو فحص قيود المنظومة لتشغيل رادار التدليس وبنفورد
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                يقوم محرك الرقابة الجنائية بمطابقة القيود مع معيار التدقيق الدولي ISA 240، وقانون الدفع غير النقدي (حد الـ 20,000 كاش)، وتحليل الأرقام الدائرية، وقانون بنفورد الرقمي.
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer"
+                >
+                  رفع ملف قيود الآن
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLoadSampleDataset}
+                  className="px-4 py-2 bg-amber-50 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  تجربة النموذج الشامل
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Forensic Metric Scorecards (6 Cards) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {/* 1. Overall Risk Score */}
+                <div
+                  className={`rounded-xl p-3 border shadow-2xs ${
+                    forensicResult.overallRiskScore > 40
+                      ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-900/60'
+                      : forensicResult.overallRiskScore > 20
+                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-900/60'
+                      : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-900/60'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold block flex items-center gap-1 text-slate-700 dark:text-slate-300">
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                    مؤشر مخاطر التدليس
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span
+                      className={`text-2xl font-black font-mono ${
+                        forensicResult.overallRiskScore > 40
+                          ? 'text-rose-700 dark:text-rose-300'
+                          : forensicResult.overallRiskScore > 20
+                          ? 'text-amber-700 dark:text-amber-300'
+                          : 'text-emerald-700 dark:text-emerald-300'
+                      }`}
+                    >
+                      {forensicResult.overallRiskScore}%
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      {forensicResult.riskLevel}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Critical Red Flags */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-rose-200 dark:border-rose-900/60 shadow-2xs">
+                  <span className="text-[11px] text-rose-600 dark:text-rose-400 font-bold block flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                    مخالفات رقابية حرجة
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-xl font-black text-rose-600 dark:text-rose-400">
+                      {forensicResult.criticalCount}
+                    </span>
+                    <span className="text-[10px] text-slate-400">مؤشر حرج</span>
+                  </div>
+                </div>
+
+                {/* 3. High Severity / Cash Violations */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-amber-200 dark:border-amber-900/60 shadow-2xs">
+                  <span className="text-[11px] text-amber-700 dark:text-amber-400 font-bold block flex items-center gap-1">
+                    <Coins className="w-3.5 h-3.5 text-amber-600" />
+                    مخالفات نقدية ومرتفعة
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-xl font-black text-amber-600 dark:text-amber-400">
+                      {forensicResult.highCount}
+                    </span>
+                    <span className="text-[10px] text-slate-400">مؤشر مرتفع</span>
+                  </div>
+                </div>
+
+                {/* 4. Smurfing Count */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-purple-200 dark:border-purple-900/60 shadow-2xs">
+                  <span className="text-[11px] text-purple-700 dark:text-purple-400 font-bold block flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5 text-purple-600" />
+                    شبهات تفتيت المبالغ
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-xl font-black text-purple-600 dark:text-purple-400">
+                      {forensicResult.smurfingCount}
+                    </span>
+                    <span className="text-[10px] text-slate-400">حالة تجزئة</span>
+                  </div>
+                </div>
+
+                {/* 5. Round Numbers Count */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-blue-200 dark:border-blue-900/60 shadow-2xs">
+                  <span className="text-[11px] text-blue-700 dark:text-blue-400 font-bold block flex items-center gap-1">
+                    <TrendingDown className="w-3.5 h-3.5 text-blue-600" />
+                    أرقام دائرية متكلفة
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-xl font-black text-blue-600 dark:text-blue-400">
+                      {forensicResult.roundNumbersCount}
+                    </span>
+                    <span className="text-[10px] text-slate-400">مبالغ مصطنعة</span>
+                  </div>
+                </div>
+
+                {/* 6. Benford Deviations */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-200 dark:border-indigo-900/60 shadow-2xs">
+                  <span className="text-[11px] text-indigo-700 dark:text-indigo-400 font-bold block flex items-center gap-1">
+                    <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                    شذوذ قانون بنفورد
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                      {forensicResult.benfordAnomaliesCount}
+                    </span>
+                    <span className="text-[10px] text-slate-400">أرقام شاذة</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Benford's Law First Digit Interactive Distribution */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
+                      <BarChart3 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        التحليل الإحصائي الرقمي لقانون بنفورد (Benford's Law Distribution)
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-mono">
+                          First-Digit Law
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        مقارنة التوزيع الطبيعي اللوغاريتمي المتوقع مع التكرار الفعلي لمبالغ القيود المفحوصة لاكتشاف القيود الوهمية المصطنعة يدوياً
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 font-mono flex items-center gap-3">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block" />
+                      الفعلي
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-0.5 bg-slate-400 inline-block" />
+                      المتوقع ببنفورد
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
+                      شذوذ إحصائي
+                    </span>
+                  </div>
+                </div>
+
+                {/* Benford Columns (Digits 1 to 9) */}
+                <div className="grid grid-cols-3 sm:grid-cols-9 gap-2.5 pt-2">
+                  {forensicResult.benfordStats.map((b) => {
+                    const isAnomalous = b.isAnomalous;
+                    const heightPercent = Math.min(Math.round(b.actualPercentage * 2.2), 100);
+
+                    return (
+                      <div
+                        key={b.digit}
+                        className={`rounded-xl p-2.5 border text-center transition-all flex flex-col justify-between ${
+                          isAnomalous
+                            ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-300 dark:border-rose-900/80 shadow-xs'
+                            : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60'
+                        }`}
+                      >
+                        {/* Digit Header */}
+                        <div className="flex items-center justify-between">
+                          <span className="w-6 h-6 rounded-full bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center">
+                            {b.digit}
+                          </span>
+                          {isAnomalous && (
+                            <span className="px-1 py-0.2 rounded bg-rose-600 text-white text-[9px] font-bold animate-pulse">
+                              شذوذ
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Visual Bar Container */}
+                        <div className="my-3 h-28 flex items-end justify-center relative px-2">
+                          {/* Expected Reference Mark */}
+                          <div
+                            className="absolute left-0 right-0 border-t-2 border-dashed border-slate-400 z-10"
+                            style={{ bottom: `${Math.min(Math.round(b.expectedPercentage * 2.2), 100)}%` }}
+                            title={`المتوقع: ${b.expectedPercentage}%`}
+                          />
+
+                          {/* Actual Bar */}
+                          <div
+                            className={`w-full rounded-t-lg transition-all duration-500 shadow-sm ${
+                              isAnomalous
+                                ? 'bg-gradient-to-t from-rose-600 to-red-400'
+                                : 'bg-gradient-to-t from-indigo-700 to-indigo-500'
+                            }`}
+                            style={{ height: `${Math.max(heightPercent, 8)}%` }}
+                            title={`الفعلي: ${b.actualPercentage}%`}
+                          />
+                        </div>
+
+                        {/* Stat Details */}
+                        <div className="space-y-1 text-[10px] font-mono border-t border-slate-200 dark:border-slate-700 pt-1.5">
+                          <div className="flex items-center justify-between text-slate-800 dark:text-slate-200 font-bold">
+                            <span>الفعلي:</span>
+                            <span>{b.actualPercentage}%</span>
+                          </div>
+                          <div className="flex items-center justify-between text-slate-500">
+                            <span>المتوقع:</span>
+                            <span>{b.expectedPercentage}%</span>
+                          </div>
+                          <div
+                            className={`text-[9px] font-bold ${
+                              isAnomalous
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            انحراف: {b.deviation > 0 ? `+${b.deviation}` : b.deviation}%
+                          </div>
+                          <div className="text-[9px] text-slate-400">
+                            ({b.actualCount} قيد)
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Audit Standard Guidance Box */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs flex items-start gap-2.5">
+                  <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                    <span className="font-bold text-slate-800 dark:text-slate-100">سند الفحص الجنائي (ISA 240): </span>
+                    أثبتت أبحاث مراجعة الحسابات الجنائية أن الأرقام المصطنعة أو المفبركة في الدفاتر تبتعد بشكل ملحوظ عن قانون بنفورد الإحصائي (الذي يشترط بدء الرقم 1 بنسبة 30.1% وتناقصه تدريجياً حتى الرقم 9 بنسبة 4.6%). ارتفاع انحراف رقم معين عن 8% يمثل قرينة قوية تستدعي مراجعة وفحص أصول المستندات الورقية لتلك القيود.
+                  </p>
+                </div>
+              </div>
+
+              {/* Forensic Red Flag Radar Table */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden space-y-3 p-4">
+                {/* Radar Header & Controls */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-rose-600" />
+                      رادار مؤشرات الشبهة والتدليس واختراق الرقابة (Forensic Red Flags)
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-mono font-bold">
+                        {filteredForensicAnomalies.length} شبهة
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      حصر شامل لكافة القيود المنطوية على شبهة تفتيت، أو أرقام دائرية، أو سحوبات نقدية كاش مخالفة للقانون، أو سحوبات شركاء دون إذن
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExportOriginalWithAudit}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>تصدير إكسيل شامل</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsForensicPrintModalOpen(true)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>طباعة تقرير الرقابة</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={forensicSearchQuery}
+                      onChange={(e) => setForensicSearchQuery(e.target.value)}
+                      placeholder="بحث في شبهات التدليس، الحساب، أو المعيار..."
+                      className="w-full pl-3 pr-9 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
+                    />
+                    {forensicSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setForensicSearchQuery('')}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Severity Filter Pills */}
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setForensicSeverityFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        forensicSeverityFilter === 'ALL'
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      الكل ({forensicResult.anomalies.length})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setForensicSeverityFilter('CRITICAL')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        forensicSeverityFilter === 'CRITICAL'
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200/80'
+                      }`}
+                    >
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>حرج جداً ({forensicResult.criticalCount})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setForensicSeverityFilter('HIGH')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        forensicSeverityFilter === 'HIGH'
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/80'
+                      }`}
+                    >
+                      مرتفع ({forensicResult.highCount})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setForensicSeverityFilter('MEDIUM')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        forensicSeverityFilter === 'MEDIUM'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/80'
+                      }`}
+                    >
+                      متوسط ({forensicResult.mediumCount})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Radar Table */}
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                      <tr>
+                        <th className="p-2.5 w-16 text-center">الصف</th>
+                        <th className="p-2.5 w-24">رقم القيد</th>
+                        <th className="p-2.5 w-24">التاريخ</th>
+                        <th className="p-2.5 w-44">الحساب والشرح</th>
+                        <th className="p-2.5 text-left w-28">المبلغ</th>
+                        <th className="p-2.5 w-24 text-center">الخطورة</th>
+                        <th className="p-2.5">مؤشر التدليس وتفصيل الشبهة</th>
+                        <th className="p-2.5 w-64">توصية وإجراء الفحص الميداني الموصى به</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredForensicAnomalies.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-slate-400">
+                            لا توجد مؤشرات تدليس أو شبهات تطابق معايير البحث والتصفية المحددة.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredForensicAnomalies.map((anomaly) => (
+                          <tr
+                            key={anomaly.id}
+                            className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors ${
+                              anomaly.severity === 'CRITICAL'
+                                ? 'bg-rose-50/40 dark:bg-rose-950/30'
+                                : anomaly.severity === 'HIGH'
+                                ? 'bg-amber-50/30 dark:bg-amber-950/20'
+                                : ''
+                            }`}
+                          >
+                            <td className="p-2.5 text-center font-mono text-slate-400 text-[11px]">
+                              {anomaly.rowIndex}
+                            </td>
+
+                            <td className="p-2.5 font-mono font-bold text-slate-700 dark:text-slate-200">
+                              {anomaly.entryNo}
+                            </td>
+
+                            <td className="p-2.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">
+                              {anomaly.date}
+                            </td>
+
+                            <td className="p-2.5">
+                              <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                                {anomaly.accountName}
+                              </span>
+                              <span className="text-[10px] text-slate-400 block line-clamp-2 mt-0.5">
+                                {anomaly.description}
+                              </span>
+                            </td>
+
+                            <td className="p-2.5 text-left font-mono font-bold text-slate-900 dark:text-white">
+                              {formatEgyptianCurrency(anomaly.amount)}
+                            </td>
+
+                            <td className="p-2.5 text-center whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  anomaly.severity === 'CRITICAL'
+                                    ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300'
+                                    : anomaly.severity === 'HIGH'
+                                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300'
+                                    : 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-300'
+                                }`}
+                              >
+                                {anomaly.severity === 'CRITICAL'
+                                  ? 'حرج جداً'
+                                  : anomaly.severity === 'HIGH'
+                                  ? 'مرتفع'
+                                  : 'متوسط'}
+                              </span>
+                            </td>
+
+                            <td className="p-2.5">
+                              <div className="space-y-1">
+                                <span className="font-bold text-rose-700 dark:text-rose-300 text-xs block">
+                                  {anomaly.title}
+                                </span>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                                  {anomaly.description}
+                                </p>
+                                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold block">
+                                  السند: {anomaly.standardRef}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="p-2.5">
+                              <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                                <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-0.5">
+                                  إجراء التحقق الموصى به:
+                                </span>
+                                {anomaly.recommendation}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Forensic Print Report Modal (PrintLayoutWrapper) */}
+      {isForensicPrintModalOpen && (
+        <PrintLayoutWrapper
+          title="تقرير الفحص الجنائي المالي وشبهات التدليس (ISA 240 & Benford Sentinel)"
+          subTitle="تقرير فحص المخالفات الرقابية الحرجة وشبهات اصطناع القيود واختراق الصلاحيات"
+          fileName={`Forensic-Audit-Report-${new Date().toISOString().split('T')[0]}.pdf`}
+          onClose={() => setIsForensicPrintModalOpen(false)}
+        >
+          <div className="space-y-6 text-slate-800" dir="rtl">
+            {/* Header Executive Summary */}
+            <div className="grid grid-cols-4 gap-3 p-4 bg-slate-50 border border-slate-300 rounded-xl text-xs">
+              <div>
+                <span className="text-slate-500 block">إجمالي القيود والسطور:</span>
+                <span className="font-bold text-sm">{rows.length} سطر</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">مؤشر مخاطر التدليس العام:</span>
+                <span className="font-black text-sm text-rose-700">{forensicResult.overallRiskScore}% ({forensicResult.riskLevel})</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">مخالفات رقابية حرجة:</span>
+                <span className="font-bold text-sm text-rose-700">{forensicResult.criticalCount} مخالفة</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">شبهات التفتيت والأرقام الدائرية:</span>
+                <span className="font-bold text-sm">{forensicResult.smurfingCount + forensicResult.roundNumbersCount} حالة</span>
+              </div>
+            </div>
+
+            {/* Benford Summary in Print */}
+            <div>
+              <h4 className="font-bold text-sm mb-2 border-b pb-1 text-slate-900">
+                نتائج التحليل الإحصائي لقانون بنفورد (Benford's Law First-Digit Analysis)
+              </h4>
+              <table className="w-full text-right text-xs border border-slate-300">
+                <thead className="bg-slate-100 font-bold border-b border-slate-300">
+                  <tr>
+                    <th className="p-2">الرقم الأول</th>
+                    <th className="p-2 text-center">النسبة المتوقعة</th>
+                    <th className="p-2 text-center">النسبة الفعلية</th>
+                    <th className="p-2 text-center">عدد التكرارات</th>
+                    <th className="p-2 text-center">نسبة الانحراف</th>
+                    <th className="p-2 text-center">التقييم الجنائي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {forensicResult.benfordStats.map((b) => (
+                    <tr key={b.digit} className={b.isAnomalous ? 'bg-rose-50 font-bold' : ''}>
+                      <td className="p-2 font-mono">{b.digit}</td>
+                      <td className="p-2 text-center font-mono">{b.expectedPercentage}%</td>
+                      <td className="p-2 text-center font-mono">{b.actualPercentage}%</td>
+                      <td className="p-2 text-center font-mono">{b.actualCount}</td>
+                      <td className="p-2 text-center font-mono">{b.deviation}%</td>
+                      <td className="p-2 text-center">
+                        {b.isAnomalous ? (
+                          <span className="text-rose-700 font-bold">شذوذ إحصائي (تكرار غير طبيعي)</span>
+                        ) : (
+                          <span className="text-emerald-700">توزيع طبيعي</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Anomalies Table in Print */}
+            <div>
+              <h4 className="font-bold text-sm mb-2 border-b pb-1 text-slate-900">
+                سجل مؤشرات الشبهة والتدليس واختراق الرقابة (ISA 240 Forensic Red Flags)
+              </h4>
+              <table className="w-full text-right text-xs border border-slate-300">
+                <thead className="bg-slate-100 font-bold border-b border-slate-300">
+                  <tr>
+                    <th className="p-2 w-12 text-center">الصف</th>
+                    <th className="p-2 w-20">رقم القيد</th>
+                    <th className="p-2 w-28">الحساب المسجل</th>
+                    <th className="p-2 text-left w-24">المبلغ</th>
+                    <th className="p-2 w-20 text-center">الخطورة</th>
+                    <th className="p-2">طبيعة الشبهة والتفاصيل</th>
+                    <th className="p-2 w-48">إجراء الفحص الميداني الموصى به</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {forensicResult.anomalies.map((a) => (
+                    <tr key={a.id}>
+                      <td className="p-2 text-center font-mono">{a.rowIndex}</td>
+                      <td className="p-2 font-mono font-bold">{a.entryNo}</td>
+                      <td className="p-2">{a.accountName}</td>
+                      <td className="p-2 text-left font-mono">{formatEgyptianCurrency(a.amount)}</td>
+                      <td className="p-2 text-center font-bold">
+                        {a.severity === 'CRITICAL' ? 'حرج' : a.severity === 'HIGH' ? 'مرتفع' : 'متوسط'}
+                      </td>
+                      <td className="p-2">
+                        <span className="font-bold block text-slate-900">{a.title}</span>
+                        <span className="text-[11px] text-slate-600 block">{a.description}</span>
+                        <span className="text-[10px] text-slate-500 block">المرجع: {a.standardRef}</span>
+                      </td>
+                      <td className="p-2 text-[11px]">{a.recommendation}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Auditor Signature Block */}
+            <div className="pt-8 border-t border-slate-300 grid grid-cols-2 text-xs">
+              <div>
+                <span className="font-bold block">مُعد التقرير (فاحص الحسابات الجنائي):</span>
+                <span className="block mt-6 text-slate-400">...................................................</span>
+              </div>
+              <div className="text-left">
+                <span className="font-bold block">اعتماد الشريك المسؤول / المراجع العام:</span>
+                <span className="block mt-6 text-slate-400">...................................................</span>
+              </div>
+            </div>
+          </div>
+        </PrintLayoutWrapper>
+      )}
+
+      {/* Direction Audit Print Report Modal (PrintLayoutWrapper) */}
+      {isAuditPrintModalOpen && stats && (
+        <PrintLayoutWrapper
+          title="تقرير الفحص والتوجيه المحاسبي وقائمة الأخطاء وقيود التسوية"
+          subTitle="تقرير فحص أخطاء التوجيه المحاسبي الدلالي للقيود وتحديد قيود التسوية المقترحة"
+          fileName={`Audit-Direction-Report-${new Date().toISOString().split('T')[0]}.pdf`}
+          onClose={() => setIsAuditPrintModalOpen(false)}
+        >
+          <div className="space-y-6 text-slate-800" dir="rtl">
+            {/* Header Executive Summary */}
+            <div className="grid grid-cols-4 gap-3 p-4 bg-slate-50 border border-slate-300 rounded-xl text-xs">
+              <div>
+                <span className="text-slate-500 block">إجمالي السطور المفحوصة:</span>
+                <span className="font-bold text-sm">{stats.totalRows} سطر ({stats.totalEntriesCount} قيد)</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">السطور ذات التوجيه المخالف:</span>
+                <span className="font-black text-sm text-rose-700">{stats.flaggedErrorsCount} سطر</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">مخالفات حرجة (High):</span>
+                <span className="font-bold text-sm text-amber-700">{stats.highSeverityCount} سطر</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">إجمالي المبالغ الخاضعة للتوجيه:</span>
+                <span className="font-black text-sm text-indigo-700">{formatEgyptianCurrency(stats.totalDiscrepancyAmount)}</span>
+              </div>
+            </div>
+
+            {/* Flagged Errors & Suggested Adjusting Entries */}
+            <div>
+              <h4 className="font-bold text-sm mb-2 border-b pb-1 text-slate-900">
+                جدول السطور والقيود التي بها مشاكل توجيه مع قيود التسوية المقترحة
+              </h4>
+              <table className="w-full text-right text-xs border border-slate-300">
+                <thead className="bg-slate-100 font-bold border-b border-slate-300">
+                  <tr>
+                    <th className="p-2 w-12 text-center">الصف</th>
+                    <th className="p-2 w-20">رقم القيد</th>
+                    <th className="p-2 w-28">الحساب الخطأ</th>
+                    <th className="p-2">البيان في الملف</th>
+                    <th className="p-2 text-left w-24">المبلغ</th>
+                    <th className="p-2 w-32">نوع الخطأ</th>
+                    <th className="p-2 w-32">التوجيه الصحيح</th>
+                    <th className="p-2 w-48">قيد التسوية المقترح</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {rows
+                    .filter((r) => r.audit.hasIssue)
+                    .map((r) => (
+                      <tr key={r.id}>
+                        <td className="p-2 text-center font-mono">{r.originalRowIndex}</td>
+                        <td className="p-2 font-mono font-bold">{r.entryNo}</td>
+                        <td className="p-2 text-rose-700 font-bold">{r.accountName}</td>
+                        <td className="p-2 text-[11px]">{r.narration}</td>
+                        <td className="p-2 text-left font-mono font-bold">
+                          {formatEgyptianCurrency(Math.max(r.debit || 0, r.credit || 0))}
+                        </td>
+                        <td className="p-2 text-[11px] text-amber-800">{r.audit.categoryLabel}</td>
+                        <td className="p-2 text-[11px] text-emerald-800 font-bold">
+                          {r.userOverriddenAccount || r.audit.suggestedAccountName}
+                        </td>
+                        <td className="p-2 text-[10px] space-y-0.5">
+                          <div className="text-emerald-700 font-bold">
+                            من حـ/ {r.audit.suggestedCorrectionEntry.debitAccount}
+                          </div>
+                          <div className="text-rose-700 font-bold">
+                            إلى حـ/ {r.audit.suggestedCorrectionEntry.creditAccount}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Auditor Signature Block */}
+            <div className="pt-8 border-t border-slate-300 grid grid-cols-2 text-xs">
+              <div>
+                <span className="font-bold block">مُعد التقرير (فاحص التوجيه المحاسبي):</span>
+                <span className="block mt-6 text-slate-400">...................................................</span>
+              </div>
+              <div className="text-left">
+                <span className="font-bold block">اعتماد مدير المراجعة / الشريك المسؤول:</span>
+                <span className="block mt-6 text-slate-400">...................................................</span>
+              </div>
+            </div>
+          </div>
+        </PrintLayoutWrapper>
       )}
 
       {/* Correction Entry Modal */}

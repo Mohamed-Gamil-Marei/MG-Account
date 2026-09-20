@@ -1828,7 +1828,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           },
           {
             id: 'btn-notes-auditor-modal',
-            label: 'فحص وتصحيح التوجيه (Notes Audit)',
+            label: 'فحص التوجيه والرقابة الجنائية (Notes & Fraud)',
             icon: Sparkles,
             onClick: () => setIsNotesAuditorModalOpen(true),
           },

@@ -74,9 +74,9 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
     },
     {
       id: 'JOURNAL_AUDITOR',
-      label: 'فاحص ومُصحّح توجيه القيود (Notes Audit)',
+      label: 'فاحص التوجيه والرقابة الجنائية (Notes & Fraud)',
       icon: Sparkles,
-      badge: 'ذكي',
+      badge: 'توجيه & بنفورد',
       badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
     },
     {

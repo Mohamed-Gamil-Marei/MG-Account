@@ -30,6 +30,8 @@ export interface RawJournalRow {
   credit: number;
   reference?: string;
   costCenter?: string;
+  originalRawRow?: any[];
+  originalHeaders?: string[];
   [key: string]: any;
 }
 
@@ -56,6 +58,56 @@ export interface AuditedJournalRow extends RawJournalRow {
   audit: AuditFinding;
   userOverriddenAccount?: string;
   isResolved?: boolean;
+}
+
+export interface ForensicAnomaly {
+  id: string;
+  rowIndex: number;
+  entryNo: string;
+  date: string;
+  accountName: string;
+  accountCode?: string;
+  narration: string;
+  amount: number;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM';
+  category:
+    | 'ROUND_NUMBER'
+    | 'LARGE_CASH_DRAWS'
+    | 'SMURFING_THRESHOLD'
+    | 'WEEKEND_OFFHOURS'
+    | 'VAGUE_NARRATION'
+    | 'DUPLICATE_PAYMENT'
+    | 'CONTROL_OVERRIDE'
+    | 'BENFORD_ANOMALY';
+  title: string;
+  description: string;
+  recommendation: string;
+  standardRef?: string;
+}
+
+export interface BenfordDigitStat {
+  digit: number;
+  actualCount: number;
+  actualPercentage: number;
+  expectedPercentage: number;
+  deviation: number;
+  isAnomalous: boolean;
+}
+
+export interface ForensicAuditAnalysisResult {
+  overallRiskScore: number; // 0 to 100
+  totalSampleAmounts: number;
+  totalSampleValue: number;
+  digitStats: BenfordDigitStat[];
+  benfordStats: BenfordDigitStat[];
+  anomalies: ForensicAnomaly[];
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  smurfingCount: number;
+  roundNumbersCount: number;
+  benfordAnomaliesCount: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 }
 
 export interface AuditSummaryStats {
@@ -593,6 +645,324 @@ export class JournalNotesAuditEngine {
   }
 
   /**
+   * Forensic Accounting & Fraud Red Flags Engine (ISA 240 & Benford's Law)
+   * Analyzes rows for financial manipulation, split smurfing, round figures, off-hour postings, and Benford curve deviations.
+   */
+  static analyzeForensics(rows: RawJournalRow[]): ForensicAuditAnalysisResult {
+    const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+    const expectedPercentages: Record<number, number> = {
+      1: 30.1,
+      2: 17.6,
+      3: 12.5,
+      4: 9.7,
+      5: 7.9,
+      6: 6.7,
+      7: 5.8,
+      8: 5.1,
+      9: 4.6,
+    };
+
+    let totalAmountsCount = 0;
+    let totalSampleValue = 0;
+    const anomalies: ForensicAnomaly[] = [];
+    const seenAmountsMap = new Map<string, { rowIndex: number; entryNo: string; date: string }>();
+
+    rows.forEach((row, idx) => {
+      const amt = Math.max(row.debit || 0, row.credit || 0);
+      const accNorm = normalizeText(row.accountName);
+      const narrNorm = normalizeText(row.narration);
+      const rIndex = row.originalRowIndex || idx + 1;
+
+      if (amt >= 10) {
+        totalAmountsCount++;
+        totalSampleValue += amt;
+
+        // Benford first digit
+        const firstDigitStr = amt.toString().replace(/[^1-9]/, '').charAt(0);
+        const digit = parseInt(firstDigitStr, 10);
+        if (digit >= 1 && digit <= 9) {
+          counts[digit]++;
+        }
+
+        // Rule 1: Round Numbers Anomaly (الأرقام الدائرية المقفولة المصطنعة)
+        if (
+          amt >= 20000 &&
+          amt % 10000 === 0 &&
+          !accNorm.includes('راس المال') &&
+          !accNorm.includes('قرض') &&
+          !accNorm.includes('بنك')
+        ) {
+          anomalies.push({
+            id: `forensic-round-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: row.narration,
+            amount: amt,
+            severity: amt >= 100000 ? 'CRITICAL' : 'HIGH',
+            category: 'ROUND_NUMBER',
+            title: `مبلغ دائري مقفول مصطنع (${amt.toLocaleString('ar-EG')} ج.م)`,
+            description: `تم قيد مبلغ دائري دون كسور بحساب [${row.accountName}]، وهو نمط متكرر عند فبركة الأرقام أو الصرف بدون فواتير تفصيلية رسمية.`,
+            recommendation: 'فحص المستند المؤيد الأصلي، وإشعار الخصم والإضافة، والتحقق من عدم التقدير الجزافي غير المستندي.',
+            standardRef: 'معيار المراجعة الدولي ISA 240 فقرة A37',
+          });
+        }
+
+        // Rule 2: Large Cash Withdrawals (مخالفة السحب النقدي المباشر قانون 18 لسنة 2019)
+        if (
+          amt >= 50000 &&
+          (accNorm.includes('صندوق') || accNorm.includes('نقديه') || accNorm.includes('خزينه') || narrNorm.includes('نقدا')) &&
+          (row.debit > 0 || !row.credit)
+        ) {
+          anomalies.push({
+            id: `forensic-cash-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: row.narration,
+            amount: amt,
+            severity: 'CRITICAL',
+            category: 'LARGE_CASH_DRAWS',
+            title: `سحب نقدي ضخم مخالف لقانون المدفوعات غير النقدية (${amt.toLocaleString('ar-EG')} ج.م)`,
+            description: `تم صرف أو سحب مبلغ نقدي يتجاوز الحدود القصوى المقررة بقانون تنظيم وسائل الدفع غير النقدي رقم 18 لسنة 2019.`,
+            recommendation: 'مراجعة محضر الجرد وإذن الصرف، وإلزام المنشأة بالسداد عبر وسائل الدفع الإلكتروني أو الشيكات لتفادي الغرامات الضريبية.',
+            standardRef: 'القانون 18 لسنة 2019 & ISA 250',
+          });
+        }
+
+        // Rule 3: Smurfing / Threshold Split (تجزئة وتفتيت المبالغ للهروب من حدود التفويض)
+        if (
+          (amt >= 4800 && amt <= 4999) ||
+          (amt >= 9600 && amt <= 9999) ||
+          (amt >= 48000 && amt <= 49999) ||
+          (amt >= 96000 && amt <= 99999)
+        ) {
+          anomalies.push({
+            id: `forensic-smurf-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: row.narration,
+            amount: amt,
+            severity: 'HIGH',
+            category: 'SMURFING_THRESHOLD',
+            title: `شبهة تفتيت وتجزئة المبلغ للهروب من التفويض الرقابي (${amt.toLocaleString('ar-EG')} ج.م)`,
+            description: `المبلغ يقع تحت سقف التفويض المالي مباشرة، وهو مؤشر قوي على تجزئة الفواتير لتفادي اعتماد الإدارة العليا.`,
+            recommendation: 'فحص المعاملات المجاورة لنفس المورد أو المستفيد للتحقق من تجزئة أوامر الشراء.',
+            standardRef: 'ISA 240 (Management Override & Fraud Red Flags)',
+          });
+        }
+
+        // Rule 4: Suspicious / Vague Narration (بيانات مبهمة وتلاعب محاسبي)
+        const suspiciousKeywords = [
+          'تسوية عاجلة', 'تسويات عاجلة', 'بدون مستند', 'مؤقت', 'معلق', 'فروق جرد',
+          'امانة خاصة', 'تعديل رصيد', 'حساب وسيط', 'مجهول', 'طوارئ', 'تعليمات شفهية',
+          'استثنائي', 'بدون فاتورة', 'تحت التسوية', 'فروقات غير معروفة'
+        ];
+        const matchedSusp = suspiciousKeywords.filter((k) => narrNorm.includes(normalizeText(k)));
+        if (matchedSusp.length > 0) {
+          anomalies.push({
+            id: `forensic-narr-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: row.narration,
+            amount: amt,
+            severity: amt >= 40000 ? 'CRITICAL' : 'HIGH',
+            category: 'VAGUE_NARRATION',
+            title: `بيان قيد مشبوه وعالي المخاطر الرقابية (${matchedSusp.join('، ')})`,
+            description: `يتضمن الشرح عبارات [${matchedSusp.join('، ')}] تشير إلى غياب المستندات المؤيدة أو استخدام حسابات وسيطة معلقة لحجب التلاعب.`,
+            recommendation: 'استبعاد التسوية من الأرباح المعتمدة ضريبياً لحين تقديم المستندات الرسمية الموثقة.',
+            standardRef: 'ISA 240 فقرة A38 & معيار المحاسبة المصري 1',
+          });
+        } else if ((!row.narration || row.narration.trim().length === 0) && amt >= 20000) {
+          anomalies.push({
+            id: `forensic-blank-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: 'فارغ تماماً (بدون شرح)',
+            amount: amt,
+            severity: 'HIGH',
+            category: 'VAGUE_NARRATION',
+            title: `حركة بمبلغ جوهري بدون تدوين أي بيان (${amt.toLocaleString('ar-EG')} ج.م)`,
+            description: `تم قيد حركة دائنة/مدينة جوهرية بدون كتابة أي شرح أو بيان يوضح طبيعة العملية أو الجهة المستفيدة.`,
+            recommendation: 'استيفاء إذن الصرف وأصل الفاتورة وتوثيق البيان في الدفاتر لمنع المساءلة القانونية.',
+            standardRef: 'المادة 22 من قانون التجارة & معايير الرقابة الداخلية',
+          });
+        }
+
+        // Rule 5: Duplicate Payments / Invoices (شبهة دفع مكرر لنفس الحساب والقيمة)
+        const dupKey = `${row.accountName}-${amt}-${row.date}`;
+        if (seenAmountsMap.has(dupKey) && amt >= 5000) {
+          const prev = seenAmountsMap.get(dupKey)!;
+          anomalies.push({
+            id: `forensic-dup-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: row.narration,
+            amount: amt,
+            severity: 'HIGH',
+            category: 'DUPLICATE_PAYMENT',
+            title: `شبهة تكرار صرف أو فاتورة مكررة (${amt.toLocaleString('ar-EG')} ج.م)`,
+            description: `تكرار نفس المبلغ وتاريخ القيد مع سطر سابق (صف رقم ${prev.rowIndex}، قيد #${prev.entryNo})، مما يشير إلى صرف مكرر أو ازدواج قيدي.`,
+            recommendation: 'مطابقة كشف حساب المورد ورقم إشعار البنك للتأكد من عدم تكرار الخصم.',
+            standardRef: 'إجراءات التدقيق الجنائي الداخلي لمنع الهدر المالي',
+          });
+        } else {
+          seenAmountsMap.set(dupKey, { rowIndex: rIndex, entryNo: row.entryNo, date: row.date });
+        }
+
+        // Rule 6: Sensitive Control Override (التسويات المباشرة على الأرباح المرحلة ورأس المال)
+        if (
+          (accNorm.includes('ارباح مرحله') ||
+            accNorm.includes('ارباح محتجزه') ||
+            accNorm.includes('راس المال') ||
+            accNorm.includes('حسابات الشركاء الجاريه')) &&
+          amt >= 20000 &&
+          !narrNorm.includes('توزيع ارباح') &&
+          !narrNorm.includes('زياده راس المال')
+        ) {
+          anomalies.push({
+            id: `forensic-override-${row.id || idx}`,
+            rowIndex: rIndex,
+            entryNo: row.entryNo,
+            date: row.date,
+            accountName: row.accountName,
+            accountCode: row.accountCode,
+            narration: row.narration,
+            amount: amt,
+            severity: 'CRITICAL',
+            category: 'CONTROL_OVERRIDE',
+            title: `قيد تسوية مباشر على حقوق الملكية والأرباح المرحلة (${amt.toLocaleString('ar-EG')} ج.م)`,
+            description: `تسجيل قيد تسوية على حساب الأرباح المرحلة أو حقوق الملكية مباشرة متجاوزاً قائمة الدخل بدون سند جمعية عمومية.`,
+            recommendation: 'طلب محضر اجتماع الجمعية العامة غير العادية وموافقة مراجع الحسابات الخارجي المعتمدة.',
+            standardRef: 'معيار المحاسبة الدولي IAS 1 & معيار المراجعة ISA 240',
+          });
+        }
+
+        // Rule 7: Weekend Postings (عطلات نهاية الأسبوع)
+        if (row.date) {
+          try {
+            const d = new Date(row.date);
+            const dayOfWeek = d.getDay(); // 5 = Friday, 6 = Saturday
+            if ((dayOfWeek === 5 || dayOfWeek === 6) && amt >= 35000) {
+              anomalies.push({
+                id: `forensic-wknd-${row.id || idx}`,
+                rowIndex: rIndex,
+                entryNo: row.entryNo,
+                date: row.date,
+                accountName: row.accountName,
+                accountCode: row.accountCode,
+                narration: row.narration,
+                amount: amt,
+                severity: 'MEDIUM',
+                category: 'WEEKEND_OFFHOURS',
+                title: `قيد مرحل في عطلة أسبوعية رسمية (${amt.toLocaleString('ar-EG')} ج.م)`,
+                description: `تم إثبات القيد في يوم عطلة رسمية (الجمعة/السبت)، وهو مؤشر على محاولات ترحيل عمليات بمعزل عن الرقابة المباشرة.`,
+                recommendation: 'التحقق من سجل إدخال المستخدمين (User Log) وتأكيد تصريح العمل بالعطلات.',
+                standardRef: 'ISA 240 فقرة A39',
+              });
+            }
+          } catch {
+            // ignore date parse errors
+          }
+        }
+      }
+    });
+
+    // Benford Digit Stats
+    const digitStats: BenfordDigitStat[] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => {
+      const count = counts[digit] || 0;
+      const actualPercentage = totalAmountsCount > 0 ? Number(((count / totalAmountsCount) * 100).toFixed(1)) : 0;
+      const expectedPercentage = expectedPercentages[digit];
+      const deviation = Number(Math.abs(actualPercentage - expectedPercentage).toFixed(1));
+      const isAnomalous = totalAmountsCount > 25 && deviation > 6.5;
+
+      return {
+        digit,
+        actualCount: count,
+        actualPercentage,
+        expectedPercentage,
+        deviation,
+        isAnomalous,
+      };
+    });
+
+    const anomalousDigits = digitStats.filter((d) => d.isAnomalous);
+    if (anomalousDigits.length > 0) {
+      anomalies.push({
+        id: `forensic-benford-general`,
+        rowIndex: 0,
+        entryNo: 'عام إحصائي',
+        date: new Date().toISOString().split('T')[0],
+        accountName: 'تحليل قانون بنفورد',
+        accountCode: '',
+        narration: `انحراف إحصائي غير طبيعي في الأرقام: ${anomalousDigits.map((d) => d.digit).join('، ')}`,
+        amount: totalSampleValue,
+        severity: 'HIGH',
+        category: 'BENFORD_ANOMALY',
+        title: `انحراف إحصائي عن قانون بنفورد الطبيعي (الرقم ${anomalousDigits.map((d) => d.digit).join('، ')})`,
+        description: `أظهرت البيانات تكراراً غير طبيعي للأرقام التي تبدأ بالخانة (${anomalousDigits.map((d) => d.digit).join('، ')}) بانحراف يتجاوز الحد المسموح، مما يعزز فرضية افتعال أو تقدير الأرقام يدوياً.`,
+        recommendation: 'توسيع حجم العينة المختارة للمراجعة المستندية وتكثيف التحقق من مصادر القيود.',
+        standardRef: 'Benford’s Law in Forensic Accounting & ISA 240',
+      });
+    }
+
+    const criticalCount = anomalies.filter((a) => a.severity === 'CRITICAL').length;
+    const highCount = anomalies.filter((a) => a.severity === 'HIGH').length;
+    const mediumCount = anomalies.filter((a) => a.severity === 'MEDIUM').length;
+
+    // Calculate Overall Risk Score (0 - 100)
+    let computedScore =
+      anomalousDigits.length * 8 +
+      criticalCount * 22 +
+      highCount * 9 +
+      mediumCount * 3;
+    if (totalAmountsCount > 0 && computedScore > 100) computedScore = 100;
+    if (totalAmountsCount === 0) computedScore = 0;
+
+    let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'LOW';
+    if (computedScore >= 75) riskLevel = 'CRITICAL';
+    else if (computedScore >= 45) riskLevel = 'HIGH';
+    else if (computedScore >= 20) riskLevel = 'MEDIUM';
+    else riskLevel = 'LOW';
+
+    const smurfingCount = anomalies.filter((a) => a.category === 'SMURFING_THRESHOLD').length;
+    const roundNumbersCount = anomalies.filter((a) => a.category === 'ROUND_NUMBER').length;
+    const benfordAnomaliesCount = anomalousDigits.length;
+
+    return {
+      overallRiskScore: computedScore,
+      totalSampleAmounts: totalAmountsCount,
+      totalSampleValue,
+      digitStats,
+      benfordStats: digitStats,
+      anomalies,
+      criticalCount,
+      highCount,
+      mediumCount,
+      smurfingCount,
+      roundNumbersCount,
+      benfordAnomaliesCount,
+      riskLevel,
+    };
+  }
+
+  /**
    * Smart File Reader: Handles Excel (.xlsx/.xls) and CSV files
    */
   static parseUploadedFile(file: File): Promise<RawJournalRow[]> {
@@ -700,6 +1070,8 @@ export class JournalNotesAuditEngine {
               narration: narrationVal,
               debit: debitNum,
               credit: creditNum,
+              originalRawRow: row,
+              originalHeaders: headerRow,
             });
           }
 
@@ -969,5 +1341,367 @@ export class JournalNotesAuditEngine {
     XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص مؤشرات التدقيق');
 
     writeArabicExcelFile(wb, `تقرير_فحص_وتصحيح_توجيه_القيود_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }
+
+  /**
+   * Exports dedicated Errors & Suggested Adjusting Entries spreadsheet (شيت المشاكل والتصحيح فقط)
+   */
+  static exportErrorsAndAdjustmentsOnly(
+    auditedRows: AuditedJournalRow[],
+    stats: AuditSummaryStats,
+    originalFileName?: string
+  ): void {
+    const wb = XLSX.utils.book_new();
+
+    // 1. Errors by Row Sheet
+    const flaggedRows = auditedRows.filter((r) => r.audit.hasIssue);
+    const errorsData = flaggedRows.map((row) => ({
+      'رقم الصف بالملف الأصلي': row.originalRowIndex,
+      'رقم القيد': row.entryNo,
+      'التاريخ': row.date,
+      'الحساب المسجل حالياً (الخطأ)': row.accountName,
+      'كود الحساب المسجل': row.accountCode || '-',
+      'البيان والشرح في الملف': row.narration,
+      'المبلغ (ج.م)': (row.debit || 0) > 0 ? row.debit : row.credit,
+      'نوع الخطأ المحاسبي': row.audit.categoryLabel,
+      'شرح سبب الخطأ بالتفصيل': row.audit.issueDescription,
+      'التوجيه المحاسبي السليم': row.userOverriddenAccount || row.audit.suggestedAccountName,
+      'كود الحساب الصحيح': row.audit.suggestedAccountCode,
+      'قيد التسوية المصحح (من حـ/)': row.audit.suggestedCorrectionEntry.debitAccount,
+      'قيد التسوية المصحح (إلى حـ/)': row.audit.suggestedCorrectionEntry.creditAccount,
+      'مبلغ قيد التسوية': row.audit.suggestedCorrectionEntry.amount,
+      'شرح قيد التسوية المقترح': row.audit.suggestedCorrectionEntry.explanation,
+      'السند والمعيار المحاسبي': row.audit.accountingStandardRef,
+      'درجة الخطورة': row.audit.severity === 'HIGH' ? 'حرجة' : row.audit.severity === 'MEDIUM' ? 'متوسطة' : 'عادية',
+    }));
+
+    const wsErrors = XLSX.utils.json_to_sheet(
+      errorsData.length > 0
+        ? errorsData
+        : [{ 'ملاحظة': 'لا توجد أخطاء توجيه في الملف المفحوص، كافة القيود سليمة وموجهة طبقاً للمعايير.' }]
+    );
+
+    formatWorksheetForArabicExport(
+      wsErrors,
+      errorsData.length > 0 ? errorsData : undefined,
+      [
+        { wch: 18 },
+        { wch: 15 },
+        { wch: 12 },
+        { wch: 32 },
+        { wch: 16 },
+        { wch: 45 },
+        { wch: 16 },
+        { wch: 30 },
+        { wch: 55 },
+        { wch: 35 },
+        { wch: 16 },
+        { wch: 32 },
+        { wch: 32 },
+        { wch: 16 },
+        { wch: 45 },
+        { wch: 35 },
+        { wch: 14 },
+      ]
+    );
+    XLSX.utils.book_append_sheet(wb, wsErrors, 'الأخطاء وقيود التسوية');
+
+    // 2. Clean Corrected Journal (Ready for ERP Import)
+    const correctedJournalData = auditedRows.map((row) => ({
+      'رقم الصف': row.originalRowIndex,
+      'رقم القيد': row.entryNo,
+      'التاريخ': row.date,
+      'الحساب بعد التصحيح': row.userOverriddenAccount || (row.audit.hasIssue ? row.audit.suggestedAccountName : row.accountName),
+      'كود الحساب الصحيح': row.audit.hasIssue && !row.userOverriddenAccount ? row.audit.suggestedAccountCode : row.accountCode,
+      'البيان': row.narration,
+      'مدين': row.debit || 0,
+      'دائن': row.credit || 0,
+      'حالة التعديل': row.audit.hasIssue
+        ? `تم تعديله من [${row.accountName}] إلى [${row.userOverriddenAccount || row.audit.suggestedAccountName}]`
+        : 'أصلي بدون تعديل',
+    }));
+
+    const wsCorrected = XLSX.utils.json_to_sheet(correctedJournalData);
+    formatWorksheetForArabicExport(wsCorrected, correctedJournalData);
+    XLSX.utils.book_append_sheet(wb, wsCorrected, 'القيود المصححة للترحيل ERP');
+
+    // 3. Summary
+    const summaryData = [
+      { 'المؤشر': 'إجمالي السطور المفحوصة', 'القيمة': stats.totalRows },
+      { 'المؤشر': 'إجمالي القيود المفحوصة', 'القيمة': stats.totalEntriesCount },
+      { 'المؤشر': 'السطور ذات التوجيه الخاطئ', 'القيمة': stats.flaggedErrorsCount },
+      { 'المؤشر': 'أخطاء حرجة (High Severity)', 'القيمة': stats.highSeverityCount },
+      { 'المؤشر': 'ملاحظات متوسطة (Medium)', 'القيمة': stats.mediumSeverityCount },
+      { 'المؤشر': 'سطور موجهة بصورة سليمة', 'القيمة': stats.cleanRowsCount },
+      { 'المؤشر': 'إجمالي المبالغ الخاضعة لإعادة التوجيه (ج.م)', 'القيمة': stats.totalDiscrepancyAmount },
+    ];
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    formatWorksheetForArabicExport(wsSummary, summaryData, [{ wch: 45 }, { wch: 25 }]);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص التدقيق');
+
+    const baseName = originalFileName ? originalFileName.replace(/\.[^/.]+$/, '') : 'القيود';
+    writeArabicExcelFile(wb, `شيت_الأخطاء_وقيود_التسوية_${baseName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }
+
+  /**
+   * Exports the EXACT original uploaded file rows/columns with appended Audit Columns
+   * plus a dedicated Discrepancy by Row Number report sheet as requested by the user.
+   */
+  static exportOriginalWithAuditAnnotations(
+    auditedRows: AuditedJournalRow[],
+    stats: AuditSummaryStats,
+    originalFileName?: string,
+    forensicResult?: ForensicAuditAnalysisResult
+  ): void {
+    const wb = XLSX.utils.book_new();
+
+    // Check if we have originalRawRow and originalHeaders from file upload
+    const hasOriginalRawData = auditedRows.length > 0 && Array.isArray(auditedRows[0].originalRawRow);
+
+    let originalHeaders: string[] = [];
+    if (hasOriginalRawData && auditedRows[0].originalHeaders && auditedRows[0].originalHeaders.length > 0) {
+      originalHeaders = [...auditedRows[0].originalHeaders];
+    } else {
+      originalHeaders = [
+        'رقم القيد',
+        'التاريخ',
+        'كود الحساب',
+        'اسم الحساب',
+        'البيان / الشرح',
+        'مدين',
+        'دائن',
+      ];
+    }
+
+    // Map forensic anomalies by row index or row id
+    const forensicByRow = new Map<number, ForensicAnomaly[]>();
+    if (forensicResult && forensicResult.anomalies) {
+      forensicResult.anomalies.forEach((a) => {
+        if (a.rowIndex > 0) {
+          const arr = forensicByRow.get(a.rowIndex) || [];
+          arr.push(a);
+          forensicByRow.set(a.rowIndex, arr);
+        }
+      });
+    }
+
+    // New Audit Columns to append
+    const auditExtraHeaders = [
+      'حالة التدقيق',
+      'هل يوجد خطأ في التوجيه؟',
+      'نوع الخطأ المحاسبي',
+      'تفصيل الخطأ المحاسبي والسند',
+      'التوجيه المحاسبي الصحيح (الحساب المقترح)',
+      'كود الحساب المقترح',
+      'قيد التسوية المقترح (من حـ/)',
+      'قيد التسوية المقترح (إلى حـ/)',
+      'مبلغ الخطأ / التسوية',
+      'مخاطر التدليس والغش (ISA 240)',
+      'درجة الخطورة',
+    ];
+
+    const allSheetHeaders = [...originalHeaders, ...auditExtraHeaders];
+
+    // Build the rows array of arrays (AOA)
+    const exportAoa: any[][] = [];
+    exportAoa.push(allSheetHeaders);
+
+    auditedRows.forEach((row) => {
+      let baseRowData: any[] = [];
+      if (hasOriginalRawData && row.originalRawRow) {
+        baseRowData = [...row.originalRawRow];
+        // Ensure baseRowData length matches originalHeaders length
+        while (baseRowData.length < originalHeaders.length) {
+          baseRowData.push('');
+        }
+      } else {
+        baseRowData = [
+          row.entryNo,
+          row.date,
+          row.accountCode || '',
+          row.accountName,
+          row.narration,
+          row.debit || 0,
+          row.credit || 0,
+        ];
+      }
+
+      const rowForensics = forensicByRow.get(row.originalRowIndex) || [];
+      const forensicSummary =
+        rowForensics.length > 0
+          ? rowForensics.map((f) => `[${f.title}]: ${f.description}`).join(' | ')
+          : 'لا توجد مؤشرات احتيال';
+
+      const auditData = [
+        row.audit.hasIssue ? '⚠️ توجيه خاطئ' : '✅ سليم',
+        row.audit.hasIssue ? 'نعم - متوجه خطأ' : 'لا - صحيح',
+        row.audit.hasIssue ? row.audit.categoryLabel : '-',
+        row.audit.hasIssue ? `${row.audit.issueDescription} (${row.audit.accountingStandardRef})` : 'التوجيه متوافق مع المعايير',
+        row.userOverriddenAccount || (row.audit.hasIssue ? row.audit.suggestedAccountName : row.accountName),
+        row.audit.hasIssue ? row.audit.suggestedAccountCode : row.accountCode,
+        row.audit.hasIssue ? row.audit.suggestedCorrectionEntry.debitAccount : '-',
+        row.audit.hasIssue ? row.audit.suggestedCorrectionEntry.creditAccount : '-',
+        row.audit.hasIssue ? row.audit.suggestedCorrectionEntry.amount : 0,
+        forensicSummary,
+        row.audit.hasIssue
+          ? (row.audit.severity === 'HIGH' ? 'حرجة (عالية)' : row.audit.severity === 'MEDIUM' ? 'متوسطة' : 'عادية')
+          : rowForensics.some((f) => f.severity === 'CRITICAL')
+          ? 'شبهة احتيال حرجة'
+          : 'سليم',
+      ];
+
+      exportAoa.push([...baseRowData, ...auditData]);
+    });
+
+    const wsOriginalWithAudit = XLSX.utils.aoa_to_sheet(exportAoa);
+    formatWorksheetForArabicExport(wsOriginalWithAudit, exportAoa);
+    XLSX.utils.book_append_sheet(wb, wsOriginalWithAudit, 'البيانات الأصلية مع الملاحظات');
+
+    // 2. Sheet: "تقرير الأخطاء بأرقام الصفوف"
+    const flaggedRows = auditedRows.filter((r) => r.audit.hasIssue);
+    const rowByRowReportData = flaggedRows.map((row) => ({
+      'رقم الصف بالملف الأصلي': row.originalRowIndex,
+      'رقم القيد': row.entryNo,
+      'التاريخ': row.date,
+      'الحساب المسجل حالياً (التوجيه الخاطئ)': row.accountName,
+      'كود الحساب الأصلي': row.accountCode || '-',
+      'البيان والشرح في الملف': row.narration,
+      'المبلغ': (row.debit || 0) > 0 ? row.debit : row.credit,
+      'نوع الخطأ': row.audit.categoryLabel,
+      'شرح سبب خطأ التوجيه': row.audit.issueDescription,
+      'التوجيه الصح الواجب إثباته': row.userOverriddenAccount || row.audit.suggestedAccountName,
+      'كود الحساب الصح': row.audit.suggestedAccountCode,
+      'قيد التسوية المصحح': `من حـ/ ${row.audit.suggestedCorrectionEntry.debitAccount} إلى حـ/ ${row.audit.suggestedCorrectionEntry.creditAccount}`,
+      'المعيار المحاسبي': row.audit.accountingStandardRef,
+      'درجة الخطورة': row.audit.severity === 'HIGH' ? 'حرجة (عالية)' : row.audit.severity === 'MEDIUM' ? 'متوسطة' : 'عادية',
+    }));
+
+    const wsRowErrors = XLSX.utils.json_to_sheet(
+      rowByRowReportData.length > 0
+        ? rowByRowReportData
+        : [{ 'ملاحظة': 'لا توجد أخطاء توجيه في الملف المفحوص، كافة القيود سليمة وموجهة طبقاً للمعايير.' }]
+    );
+
+    formatWorksheetForArabicExport(
+      wsRowErrors,
+      rowByRowReportData.length > 0 ? rowByRowReportData : undefined,
+      [
+        { wch: 18 }, // row index
+        { wch: 15 }, // entry
+        { wch: 12 }, // date
+        { wch: 32 }, // wrong account
+        { wch: 15 }, // wrong code
+        { wch: 45 }, // narration
+        { wch: 15 }, // amount
+        { wch: 30 }, // category
+        { wch: 55 }, // explanation
+        { wch: 35 }, // correct account
+        { wch: 15 }, // correct code
+        { wch: 50 }, // adjusting entry
+        { wch: 30 }, // standard
+        { wch: 15 }, // severity
+      ]
+    );
+    XLSX.utils.book_append_sheet(wb, wsRowErrors, 'تقرير الأخطاء بأرقام الصفوف');
+
+    // 3. Sheet: "مخاطر التدليس والغش (ISA 240)"
+    if (forensicResult && forensicResult.anomalies && forensicResult.anomalies.length > 0) {
+      const forensicData = forensicResult.anomalies.map((a) => ({
+        'رقم الصف بالملف': a.rowIndex > 0 ? a.rowIndex : 'إجمالي',
+        'رقم القيد': a.entryNo,
+        'التاريخ': a.date,
+        'الحساب': a.accountName,
+        'المبلغ (ج.م)': a.amount,
+        'درجة الخطورة': a.severity === 'CRITICAL' ? 'حرج جداً' : a.severity === 'HIGH' ? 'مرتفع' : 'متوسط',
+        'مؤشر الخطر': a.title,
+        'طبيعة الشبهة والتدليس': a.description,
+        'توصية مراجع الحسابات': a.recommendation,
+        'المعيار والسند': a.standardRef || 'معيار ISA 240',
+      }));
+
+      const wsForensic = XLSX.utils.json_to_sheet(forensicData);
+      formatWorksheetForArabicExport(wsForensic, forensicData, [
+        { wch: 16 },
+        { wch: 15 },
+        { wch: 12 },
+        { wch: 30 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 35 },
+        { wch: 55 },
+        { wch: 55 },
+        { wch: 30 },
+      ]);
+      XLSX.utils.book_append_sheet(wb, wsForensic, 'مخاطر التدليس والغش ISA 240');
+
+      // Benford sheet
+      if (forensicResult.digitStats && forensicResult.digitStats.length > 0) {
+        const benfordData = forensicResult.digitStats.map((d) => ({
+          'الرقم الأول (Digit)': d.digit,
+          'التكرار الفعلي في الملف': d.actualCount,
+          'النسبة الفعلية (%)': `${d.actualPercentage}%`,
+          'النسبة المتوقعة بقانون بنفورد (%)': `${d.expectedPercentage}%`,
+          'الانحراف عن الطبيعي (%)': `${d.deviation}%`,
+          'حالة الشذوذ الإحصائي': d.isAnomalous ? '⚠️ انحراف غير طبيعي (شبهة افتعال)' : 'طبيعي ومطابق ✓',
+        }));
+        const wsBenford = XLSX.utils.json_to_sheet(benfordData);
+        formatWorksheetForArabicExport(wsBenford, benfordData, [
+          { wch: 20 },
+          { wch: 22 },
+          { wch: 18 },
+          { wch: 30 },
+          { wch: 22 },
+          { wch: 35 },
+        ]);
+        XLSX.utils.book_append_sheet(wb, wsBenford, 'تحليل قانون بنفورد');
+      }
+    }
+
+    // 4. Clean Corrected Journal (Ready for ERP Import)
+    const correctedJournalData = auditedRows.map((row) => ({
+      'رقم الصف': row.originalRowIndex,
+      'رقم القيد': row.entryNo,
+      'التاريخ': row.date,
+      'الحساب بعد التصحيح': row.userOverriddenAccount || (row.audit.hasIssue ? row.audit.suggestedAccountName : row.accountName),
+      'كود الحساب الصحيح': row.audit.hasIssue && !row.userOverriddenAccount ? row.audit.suggestedAccountCode : row.accountCode,
+      'البيان': row.narration,
+      'مدين': row.debit || 0,
+      'دائن': row.credit || 0,
+      'حالة التعديل': row.audit.hasIssue ? `تم تصحيحه من [${row.accountName}] إلى [${row.userOverriddenAccount || row.audit.suggestedAccountName}]` : 'أصلي بدون تعديل',
+    }));
+
+    const wsCorrected = XLSX.utils.json_to_sheet(correctedJournalData);
+    formatWorksheetForArabicExport(wsCorrected, correctedJournalData);
+    XLSX.utils.book_append_sheet(wb, wsCorrected, 'القيود بعد التصحيح للترحيل');
+
+    // 5. Summary KPI Sheet
+    const summaryData = [
+      { 'المؤشر': 'إجمالي السطور المفحوصة', 'القيمة': stats.totalRows },
+      { 'المؤشر': 'إجمالي القيود المفحوصة', 'القيمة': stats.totalEntriesCount },
+      { 'المؤشر': 'السطور ذات التوجيه الخاطئ', 'القيمة': stats.flaggedErrorsCount },
+      { 'المؤشر': 'أخطاء حرجة (High Severity)', 'القيمة': stats.highSeverityCount },
+      { 'المؤشر': 'ملاحظات متوسطة (Medium)', 'القيمة': stats.mediumSeverityCount },
+      { 'المؤشر': 'سطور موجهة بصورة سليمة', 'القيمة': stats.cleanRowsCount },
+      { 'المؤشر': 'إجمالي المبالغ الخاضعة لإعادة التوجيه (ج.م)', 'القيمة': stats.totalDiscrepancyAmount },
+      {
+        'المؤشر': 'مؤشر مخاطر الاحتيال والتدليس (0-100)',
+        'القيمة': forensicResult ? `${forensicResult.overallRiskScore} / 100 (${forensicResult.riskLevel})` : 'غير مفعل',
+      },
+      {
+        'المؤشر': 'مخالفات تدليس ورقابة حرجة (Critical)',
+        'القيمة': forensicResult ? forensicResult.criticalCount : 0,
+      },
+    ];
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    formatWorksheetForArabicExport(wsSummary, summaryData, [{ wch: 45 }, { wch: 25 }]);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص التدقيق الشامل');
+
+    // Generate filename based on original file if available
+    const baseName = originalFileName
+      ? originalFileName.replace(/\.[^/.]+$/, '')
+      : 'القيود_المفحوصة';
+    const finalFilename = `${baseName}_مع_ملاحظات_التوجيه_والتدليس_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    writeArabicExcelFile(wb, finalFilename);
   }
 }
