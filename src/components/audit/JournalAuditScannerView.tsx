@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { formatEgyptianCurrency } from '../../utils/egyptianTaxCalculations';
 import {
@@ -225,6 +227,64 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
     window.print();
   };
 
+  // Export to Excel: Dedicated sheet of problematic journal entries, errors, and recommended corrections
+  const handleExportAuditToExcel = () => {
+    if (filteredFindings.length === 0) {
+      alert('لا توجد ملاحظات أو قيود بها مشاكل مطابقة للتصفية الحالية لتصديرها.');
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+
+    const findingsData = filteredFindings.map((f, idx) => ({
+      'م': idx + 1,
+      'رقم القيد': f.journalEntrySerial,
+      'التاريخ': f.entryDate,
+      'اسم الشركة / العميل': f.clientName || 'المنشأة العامة',
+      'عنوان الملاحظة': f.title,
+      'المبلغ المرتبط (ج.م)': f.amount || 0,
+      'نوع الملاحظة': f.findingType === 'UNBALANCED_ENTRY' ? 'عدم توازن محاسبي' : f.findingType === 'DUPLICATE_ENTRY' ? 'قيد مكرر مشبوه' : f.findingType === 'MISSING_DOCUMENT' ? 'نقص مستندات مؤيدة' : 'مخالفة توجيه محاسبي',
+      'درجة الخطورة': f.severity === 'CRITICAL' ? 'حرج للغاية (Critical)' : f.severity === 'HIGH' ? 'مخاطر عالية (High)' : f.severity === 'MEDIUM' ? 'متوسط (Medium)' : 'تنبيه (Low)',
+      'التفاصيل والوصف': f.description,
+      'الإجراء والتصحيح المقترح': f.suggestedAction,
+      'حالة القيد': f.isPosted ? 'مرحل لدفتر الأستاذ' : 'مسودة غير مرحل',
+    }));
+
+    const wsFindings = XLSX.utils.json_to_sheet(findingsData);
+    formatWorksheetForArabicExport(wsFindings, findingsData, [
+      { wch: 6 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 25 },
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 50 },
+      { wch: 50 },
+      { wch: 18 },
+    ]);
+    XLSX.utils.book_append_sheet(wb, wsFindings, 'القيود المعيبة والتصحيح');
+
+    // Summary Sheet
+    const summaryData = [
+      { 'المؤشر الرقابي': 'اسم مراقب الحسابات', 'القيمة': state.officeProfile.auditorName || 'أ/ محمد جميل مرعي' },
+      { 'المؤشر الرقابي': 'تاريخ التقرير والفحص', 'القيمة': new Date().toLocaleDateString('ar-EG') },
+      { 'المؤشر الرقابي': 'إجمالي القيود المفحوصة', 'القيمة': summary.totalEntriesScanned },
+      { 'المؤشر الرقابي': 'عدد القيود ذات المشاكل المرصودة', 'القيمة': summary.totalFindingsCount },
+      { 'المؤشر الرقابي': 'القيود غير المتزنة حسابياً', 'القيمة': summary.unbalancedCount },
+      { 'المؤشر الرقابي': 'القيود المكررة', 'القيمة': summary.duplicatesCount },
+      { 'المؤشر الرقابي': 'القيود المفتقرة للمستندات', 'القيمة': summary.missingDocsCount },
+      { 'المؤشر الرقابي': 'مؤشر الصحة الدفترية', 'القيمة': `${summary.healthScore} / 100` },
+      { 'المؤشر الرقابي': 'التقييم الرقابي العام', 'القيمة': summary.healthGrade === 'EXCELLENT' ? 'ممتاز' : summary.healthGrade === 'GOOD' ? 'جيد' : summary.healthGrade === 'NEEDS_REVIEW' ? 'يحتاج مراجعة وتصحيح' : 'حرج ومخاطر مرتفعة' },
+    ];
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    formatWorksheetForArabicExport(wsSummary, summaryData, [{ wch: 35 }, { wch: 30 }]);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص التدقيق والرقابة');
+
+    writeArabicExcelFile(wb, `شيت_القيود_ذات_المشاكل_وقيود_التصحيح_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    showSuccessNotification('تم تصدير شيت القيود ذات المشاكل والتصحيح بنجاح بصيغة Excel معتمدة.');
+  };
+
   const getSeverityBadge = (sev: AuditSeverity) => {
     switch (sev) {
       case 'CRITICAL':
@@ -355,6 +415,15 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
             >
               <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
               <span>{isScanning ? 'جاري الفحص الشامل...' : '⚡ تشغيل الفحص الآلي الفوري'}</span>
+            </button>
+
+            <button
+              onClick={handleExportAuditToExcel}
+              className="px-3.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-emerald-950/20"
+              title="تصدير شيت إكسيل بجميع القيود التي بها ملاحظات أو مشاكل مع التوصيات والإجراءات التصحيحية"
+            >
+              <Download className="w-4 h-4 text-emerald-200" />
+              <span>تصدير شيت التصحيح (Excel)</span>
             </button>
 
             <button

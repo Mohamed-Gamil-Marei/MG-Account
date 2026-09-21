@@ -12,6 +12,7 @@ import {
 import { DatabaseState } from '../db/localDatabase';
 import { generateQrCodeSvg, buildAuditorReportQrText } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { OfficialReportHeader } from './common/OfficialReportHeader';
 
 interface AuditorReportViewProps {
   state: DatabaseState;
@@ -113,22 +114,20 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
         style={{ letterSpacing: 'normal' }}
       >
         {/* Auditor Official Top Letterhead */}
-        <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h1 className="text-base sm:text-lg font-black text-slate-900">{profile.firmName}</h1>
-            <div className="text-xs font-bold text-emerald-800">{profile.auditorName} - {profile.title}</div>
-            <div className="text-[11px] text-slate-500 font-mono">
-              سجل المحاسبين والمراجعين رقم: {profile.licenseNumber} • سجل خبراء الضرائب رقم: {profile.taxAuthorityLicense}
-            </div>
-          </div>
-          <div className="text-left font-mono text-[11px] text-slate-500">
-            <div>التاريخ: {governanceDate}</div>
-            <div>الرقم المرجعي: AUD-EGY-{fiscalYear}-8821</div>
-          </div>
-        </div>
+        <OfficialReportHeader
+          officeProfile={profile}
+          clientProfile={{
+            companyName: clientCompanyName,
+          }}
+          reportTitle="تقرير مراقب الحسابات المستقل"
+          documentReference={`AUD-EGY-${fiscalYear}-8821`}
+          fiscalYear={fiscalYear}
+          issueDate={governanceDate}
+          showTaxAndRegDetails={false}
+        />
 
         {/* Title */}
-        <div className="text-center py-2">
+        <div className="text-center py-1">
           <h2 className="text-lg font-black text-slate-900 underline underline-offset-8">
             تقرير مراقب الحسابات المستقل
           </h2>
@@ -183,28 +182,39 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
         </div>
 
         {/* Official Signature and Stamp Box */}
-        <div className="pt-8 border-t-2 border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="space-y-1 text-center sm:text-right">
+        <div className="pt-6 border-t-2 border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="space-y-1.5 text-center sm:text-right">
             <div className="text-xs text-slate-500 font-bold">مراقب الحسابات والمراجع القانوني:</div>
-            <div className="text-base font-black text-slate-900">{profile.auditorName}</div>
-            <div className="text-emerald-800 font-semibold">{profile.title}</div>
-            <div className="text-slate-500 font-mono text-[11px]">
+            <div className="text-base font-black text-slate-950">{profile.auditorName}</div>
+            <div className="text-emerald-850 font-bold text-xs">{profile.title}</div>
+            <div className="text-slate-600 font-mono text-[11px]">
               رقم القيد بسجل المحاسبين: {profile.licenseNumber}
             </div>
-            <div className="text-emerald-900 font-mono font-bold text-[11px]">
-              هاتف وتواصل المكتب: {profile.phone || '01003335360'}
-            </div>
-            <div className="text-slate-500 text-[11px]">
+            {profile.phone && (
+              <div className="text-emerald-900 font-mono font-bold text-[11px]">
+                هاتف وتواصل المكتب: {profile.phone}
+              </div>
+            )}
+            <div className="text-slate-500 text-[10.5px]">
               عضو جمعية المحاسبين والمراجعين المصرية (ESAA)
+            </div>
+
+            {/* Handwritten Signature Target Area */}
+            <div className="pt-2">
+              <div className="text-[10px] text-slate-600 font-bold mb-1">التوقيع والاعتماد المهني (بخط اليد):</div>
+              <div className="w-56 h-10 border-b-2 border-dotted border-slate-700 flex items-end pb-1 text-slate-400 text-[10px]">
+                <span>توقيع المحاسب القانوني: ............................</span>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="w-28 h-28 rounded-full border-2 border-dashed border-emerald-700 flex flex-col items-center justify-center text-[9px] font-bold text-emerald-900 p-2 text-center">
-              <span>مكتب المحاسب القانوني</span>
-              <span className="text-emerald-800 font-black text-[11px]">{profile.auditorName}</span>
-              <span>س.م.م {profile.licenseNumber}</span>
-              <span className="text-xs text-emerald-600 font-bold">معتمد وموثق</span>
+            {/* Designated Physical Stamp Area */}
+            <div className="w-28 h-28 rounded-full border-2 border-dashed border-emerald-800 bg-emerald-50/30 flex flex-col items-center justify-center text-[8.5px] font-bold text-emerald-950 p-2 text-center select-none shadow-2xs">
+              <span className="text-[8px] font-black">★ موضع خاتم المكتب ★</span>
+              <span className="text-emerald-900 font-black text-[10px] my-0.5">{profile.auditorName}</span>
+              <span className="font-mono text-[8px]">{profile.licenseNumber}</span>
+              <span className="text-[7px] text-slate-500 mt-1 font-sans">(بصمة الختم الحي)</span>
             </div>
 
             <div

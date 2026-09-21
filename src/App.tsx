@@ -64,6 +64,7 @@ import { DeviceLockModal } from './components/DeviceLockModal';
 import { PurgeDatabaseModal } from './components/PurgeDatabaseModal';
 import { DocumentVerificationModal } from './components/common/DocumentVerificationModal';
 import { SystemManualModal } from './components/common/SystemManualModal';
+import { LogoInspectionModal } from './components/common/LogoInspectionModal';
 import { AppSettingsModal } from './components/AppSettingsModal';
 
 import { LanguageToggle } from './components/LanguageToggle';
@@ -156,6 +157,7 @@ export default function App() {
   const [unlockedTabs, setUnlockedTabs] = useState<string[]>([]);
   const [verificationData, setVerificationData] = useState<VerificationPayloadData | null>(null);
   const [isMgPromoModalOpen, setIsMgPromoModalOpen] = useState<boolean>(false);
+  const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(true);
 
   // Check if user set promo as welcome screen on startup
   useEffect(() => {
@@ -757,6 +759,14 @@ export default function App() {
         />
       )}
 
+      {/* Mohamed Gamil Marei - Official Logo & Seal Cutout Inspection Modal */}
+      {isLogoInspectionModalOpen && (
+        <LogoInspectionModal
+          isOpen={isLogoInspectionModalOpen}
+          onClose={() => setIsLogoInspectionModalOpen(false)}
+        />
+      )}
+
       {/* Global Command Palette (Ctrl + K) */}
       <GlobalCommandPalette
         isOpen={isCommandPaletteOpen}
@@ -910,6 +920,21 @@ export default function App() {
                   </div>
                   <span className="hidden xl:inline text-[11px] text-amber-300">
                     {!isRtl ? 'Promo' : 'برومو المكتب'}
+                  </span>
+                </button>
+
+                {/* Instant Inspection of Isolated Logo & Seal */}
+                <button
+                  onClick={() => setIsLogoInspectionModalOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 hover:border-amber-400 text-amber-400 hover:text-amber-300 transition-all cursor-pointer shrink-0 text-xs font-bold shadow-2xs"
+                  title="معاينة تجربة تفريغ الشعار والختم الرسمي (أ/ محمد جميل مرعي)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  <span className="hidden sm:inline text-[11px] text-amber-200">
+                    معاينة تفريغ الشعار والختم
+                  </span>
+                  <span className="sm:hidden text-[10px] text-amber-200">
+                    تفريغ الشعار
                   </span>
                 </button>
               </div>

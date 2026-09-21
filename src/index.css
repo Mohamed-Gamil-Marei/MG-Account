@@ -377,7 +377,6 @@
     #financial-statements-container,
     #credit-financials-container,
     #credit-printable-dossier,
-    #official-certificate-document,
     #egyptian-official-tax-form,
     #office-treasury-voucher-print,
     #official-invoice-document,
@@ -405,6 +404,23 @@
       background: white !important;
       box-shadow: none !important;
       border: none !important;
+    }
+
+    /* Official CPA Certificate Special Print Layout (Preserve double luxury border & inner padding) */
+    #official-certificate-document {
+      position: relative !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 auto !important;
+      padding: 22px !important;
+      background: white !important;
+      box-shadow: none !important;
+      border: 4px double #022c22 !important;
+      border-radius: 8px !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
 
     /* Ensure text contrast for high-resolution printing */

@@ -47,6 +47,7 @@ import { EtaExcelEngine } from '../utils/etaExcelEngine';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { ActionMenu } from './common/ActionMenu';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
+import { OfficialReportHeader } from './common/OfficialReportHeader';
 import { PostingEngineService } from '../services/PostingEngineService';
 import { DirectWhatsAppProcedureModal } from './common/DirectWhatsAppProcedureModal';
 
@@ -1104,6 +1105,19 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
             </div>
 
             <div id="official-invoice-document" className="space-y-4 mt-4">
+              {/* Official Office Letterhead */}
+              <OfficialReportHeader
+                officeProfile={state.officeProfile}
+                clientProfile={{
+                  companyName: selectedInvoice.partnerName,
+                  taxRegNo: selectedInvoice.partnerTaxNo,
+                }}
+                reportTitle={selectedInvoice.isReceipt ? 'إيصال إلكتروني ضريبي' : selectedInvoice.invoiceType === 'SALES' ? 'فاتورة مبيعات ضريبية رسمية' : 'فاتورة مشتريات'}
+                documentReference={selectedInvoice.invoiceNumber}
+                issueDate={selectedInvoice.date}
+                showTaxAndRegDetails={false}
+              />
+
               <div className="flex justify-between bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                 <div>
                   <div className="text-slate-400">الطرف المستلم:</div>

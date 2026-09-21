@@ -47,8 +47,6 @@ export const CurrencyRevaluationWizardModal: React.FC<CurrencyRevaluationWizardM
   state,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const [valuationDate, setValuationDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -288,6 +286,8 @@ export const CurrencyRevaluationWizardModal: React.FC<CurrencyRevaluationWizardM
       alert(`حدث خطأ أثناء ترحيل القيد: ${err?.message || 'يرجى المحاولة مجدداً'}`);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto font-['Cairo',sans-serif]">

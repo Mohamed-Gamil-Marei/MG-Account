@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { JournalEntry, JournalEntryLine, Account } from '../../types';
 import { formatEgyptianCurrency } from '../../utils/egyptianTaxCalculations';
@@ -22,6 +24,7 @@ import {
   Calendar,
   Layers,
   ArrowRight,
+  Download,
 } from 'lucide-react';
 
 export interface AuditIssueItem {
@@ -311,6 +314,70 @@ export const JournalErrorsAuditModal: React.FC<JournalErrorsAuditModalProps> = (
     setTimeout(() => setActionFeedback(null), 4000);
   };
 
+  // Export detected errors & correction recommendations to Excel
+  const handleExportIssuesToExcel = () => {
+    if (detectedIssues.length === 0) {
+      setActionFeedback({
+        type: 'error',
+        message: 'لا توجد قيود معيبة أو أخطاء حالياً لتصديرها.',
+      });
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    const data = detectedIssues.map((issue, idx) => ({
+      'م': idx + 1,
+      'رقم القيد': issue.serialNumber,
+      'تاريخ القيد': issue.entryDate,
+      'اسم العميل / المنشأة': issue.clientName || 'المنشأة العامة',
+      'عنوان الخطأ والملاحظة': issue.title,
+      'مستوى الخطورة': issue.severity === 'CRITICAL' ? 'حرج للغاية (Critical)' : issue.severity === 'HIGH' ? 'مخاطر عالية (High)' : 'متوسط (Medium)',
+      'إجمالي المدين (ج.م)': issue.totalDebit,
+      'إجمالي الدائن (ج.م)': issue.totalCredit,
+      'قيمة الفرق / الاختلال (ج.م)': issue.variance || Math.abs(issue.totalDebit - issue.totalCredit),
+      'شرح وتفاصيل الخطأ': issue.explanation,
+      'التصحيح المقترح / التوصية المهنية': issue.recommendation,
+      'حالة القيد': issue.isPosted ? 'مرحل للأستاذ العام' : 'مسودة غير مرحل',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    formatWorksheetForArabicExport(ws, data, [
+      { wch: 6 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 25 },
+      { wch: 32 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 50 },
+      { wch: 50 },
+      { wch: 18 },
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'شيت تصحيح القيود');
+
+    // Summary sheet
+    const summaryData = [
+      { 'المؤشر': 'تاريخ التصدير', 'القيمة': new Date().toLocaleDateString('ar-EG') },
+      { 'المؤشر': 'المحاسب القانوني ومراقب الحسابات', 'القيمة': state.officeProfile.auditorName },
+      { 'المؤشر': 'إجمالي القيود التي بها ملاحظات', 'القيمة': detectedIssues.length },
+      { 'المؤشر': 'قيود بها اختلال في التوازن', 'القيمة': detectedIssues.filter((i) => i.issueType === 'UNBALANCED').length },
+      { 'المؤشر': 'قيود مكررة مشبوهة', 'القيمة': detectedIssues.filter((i) => i.issueType === 'DUPLICATE').length },
+      { 'المؤشر': 'قيود ذات طبيعة شاذة', 'القيمة': detectedIssues.filter((i) => i.issueType === 'ABNORMAL_NATURE').length },
+    ];
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    formatWorksheetForArabicExport(wsSummary, summaryData, [{ wch: 35 }, { wch: 30 }]);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص الفحص');
+
+    writeArabicExcelFile(wb, `شيت_تصحيح_القيود_المعيبة_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setActionFeedback({
+      type: 'success',
+      message: 'تم تصدير شيت القيود المعيبة والتصحيحات المقترحة بنجاح بصيغة Excel.',
+    });
+  };
+
   const filteredIssues = useMemo(() => {
     if (activeFilter === 'ALL') return detectedIssues;
     if (activeFilter === 'UNBALANCED') return detectedIssues.filter((i) => i.issueType === 'UNBALANCED');
@@ -351,6 +418,15 @@ export const JournalErrorsAuditModal: React.FC<JournalErrorsAuditModalProps> = (
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportIssuesToExcel}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+              title="تصدير شيت إكسيل بجميع القيود التي بها أخطاء أو اختلال في التوازن مع التصحيحات المقترحة"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-100" />
+              <span>تصدير شيت الأخطاء (Excel)</span>
+            </button>
+
             <button
               onClick={handleDeepAiScan}
               disabled={isScanningWithAi}

@@ -690,6 +690,12 @@ export interface OfficeProfile {
   showMainOfficeAddress?: boolean; // خيار إظهار أو إخفاء عنوان المكتب الرئيسي
   branchOfficeAddress?: string; // عنوان الفرع (المباركية مول مدينة العاشر من رمضان الشرقية)
   showBranchOfficeAddress?: boolean; // خيار إظهار أو إخفاء عنوان الفرع
+  mainOfficeTitle?: string;
+  branchOfficeTitle?: string;
+  showOfficePhones?: boolean;
+  showLogo?: boolean;
+  logoType?: 'MOHAMED_GAMIL_GOLD' | 'EGYPT_EMBLEM' | 'CUSTOM_UPLOAD' | 'NONE';
+  headerStyle?: 'standard' | 'formal-classic' | 'two-column' | 'compact';
   logoUrl?: string;
   stampUrl?: string;
   publicDomainUrl?: string; // رابط النطاق العام للتحقق المباشر من الـ QR

@@ -34,8 +34,6 @@ export const YearEndClosingWizardModal: React.FC<YearEndClosingWizardModalProps>
   state,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const [closingYear, setClosingYear] = useState<number>(2026);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -303,6 +301,8 @@ export const YearEndClosingWizardModal: React.FC<YearEndClosingWizardModalProps>
       alert(`تم فك قفل السنة المالية ${closingYear} بنجاح.`);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto font-['Cairo',sans-serif]">

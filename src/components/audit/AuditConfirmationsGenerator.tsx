@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DatabaseState } from '../../db/localDatabase';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
+import { OfficialReportHeader } from '../common/OfficialReportHeader';
 import {
   FileBadge,
   Printer,
@@ -149,26 +150,17 @@ export const AuditConfirmationsGenerator: React.FC<AuditConfirmationsGeneratorPr
       {/* Official Printable Document Container (A4 Standard) */}
       <div className="bg-white rounded-3xl border border-slate-300 shadow-lg p-8 sm:p-12 max-w-4xl mx-auto print:p-0 print:border-none print:shadow-none print:max-w-none text-slate-900 leading-relaxed font-sans text-sm">
         {/* Document Letterhead */}
-        <div className="border-b-2 border-slate-900 pb-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-right">
-            <h2 className="text-base font-black text-slate-900">{office.firmName}</h2>
-            <h3 className="text-xs font-bold text-slate-700 mt-0.5">{office.auditorName}</h3>
-            <p className="text-[11px] text-slate-500 font-mono">{office.title} - ترخيص {office.licenseNumber}</p>
-          </div>
-
-          <div className="text-center">
-            <div className="w-14 h-14 mx-auto rounded-full bg-slate-900 text-white flex items-center justify-center font-serif text-lg font-bold border-2 border-slate-700">
-              ESA
-            </div>
-            <span className="text-[10px] text-slate-500 font-bold block mt-1">معيار مراجعة مصري (505)</span>
-          </div>
-
-          <div className="text-left text-xs font-mono">
-            <div>التاريخ: {new Date().toLocaleDateString('ar-EG')}</div>
-            <div>تاريخ المطابقة: {confirmationDate}</div>
-            <div>الإشارة: CONF-{selectedYear}-042</div>
-          </div>
-        </div>
+        <OfficialReportHeader
+          officeProfile={office}
+          clientProfile={{
+            companyName: selectedClientName,
+          }}
+          reportTitle="طلب مصادقة تدقيق ومراجعة خارجية"
+          documentReference={`CONF-${selectedYear}-042`}
+          fiscalYear={selectedYear}
+          issueDate={new Date().toLocaleDateString('ar-EG')}
+          showTaxAndRegDetails={false}
+        />
 
         {/* Confirmation Subject & Salutation */}
         <div className="mb-6 space-y-2">

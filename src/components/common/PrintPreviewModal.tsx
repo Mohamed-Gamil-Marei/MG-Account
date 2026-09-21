@@ -137,13 +137,38 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           )
           .forEach((node) => node.remove());
 
-        setClonedHtml(clone.innerHTML);
+        if (!showLetterhead) {
+          clone
+            .querySelectorAll<HTMLElement>(
+              '.official-header, .injected-official-print-header, [data-letterhead="true"]'
+            )
+            .forEach((node) => node.remove());
+        }
+        if (!showStamp) {
+          clone
+            .querySelectorAll<HTMLElement>('.official-stamp, [data-stamp="true"]')
+            .forEach((node) => node.remove());
+        }
+        if (!showQr) {
+          clone
+            .querySelectorAll<HTMLElement>(
+              '.qr-verification, [data-qr="true"], [data-qr-container="true"], [data-barcode-container="true"]'
+            )
+            .forEach((node) => node.remove());
+        }
+
+        // Use outerHTML for certificate or single card documents to preserve outer styling, borders & padding
+        if (targetElementId === 'official-certificate-document' || clone.classList.contains('border-4') || clone.id === 'official-certificate-document') {
+          setClonedHtml(clone.outerHTML);
+        } else {
+          setClonedHtml(clone.innerHTML);
+        }
       }
     };
 
     const timer = setTimeout(inspectElement, 150);
     return () => clearTimeout(timer);
-  }, [isOpen, targetElementId]);
+  }, [isOpen, targetElementId, showLetterhead, showStamp, showQr]);
 
   // Handle page toggle chip
   const togglePageSelection = (pageNum: number) => {

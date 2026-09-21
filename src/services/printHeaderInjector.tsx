@@ -2,6 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { db } from '../db/localDatabase';
 import { OfficialReportHeader } from '../components/common/OfficialReportHeader';
+import { DensityProvider } from '../components/common/CompactDensityContext';
+import { I18nProvider } from '../utils/i18n';
 
 let injectedHeaderContainer: HTMLElement | null = null;
 let injectedRoot: ReturnType<typeof createRoot> | null = null;
@@ -41,17 +43,21 @@ export function injectPrintHeader(customTitle?: string): void {
     // If target container already has a visible header, mark this as fallback/print-aware
     injectedRoot = createRoot(injectedHeaderContainer);
     injectedRoot.render(
-      <div className="w-full">
-        <OfficialReportHeader
-          officeProfile={officeProfile}
-          clientProfile={clientProfile}
-          fiscalYear={fiscalYear}
-          documentTitle={customTitle || document.title || 'تقرير مالي محاسبي معتمد'}
-          documentSubtitle="مستخرج رسمي صادر من المنظومة ومطابق لمعايير المحاسبة والمراجعة المصرية (EAS/ESA)"
-          variant="print-only"
-          className={hasInternalOfficialHeader ? 'print:hidden' : 'w-full'}
-        />
-      </div>
+      <DensityProvider>
+        <I18nProvider>
+          <div className="w-full">
+            <OfficialReportHeader
+              officeProfile={officeProfile}
+              clientProfile={clientProfile}
+              fiscalYear={fiscalYear}
+              documentTitle={customTitle || document.title || 'تقرير مالي محاسبي معتمد'}
+              documentSubtitle="مستخرج رسمي صادر من المنظومة ومطابق لمعايير المحاسبة والمراجعة المصرية (EAS/ESA)"
+              variant="print-only"
+              className={hasInternalOfficialHeader ? 'print:hidden' : 'w-full'}
+            />
+          </div>
+        </I18nProvider>
+      </DensityProvider>
     );
   } catch (err) {
     console.warn('[injectPrintHeader] Warning while injecting print header:', err);

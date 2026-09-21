@@ -16,7 +16,7 @@ import {
 } from '../types';
 
 export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
-  firmName: 'منظومة المحاسب القانوني المتكامل',
+  firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
   auditorName: 'محمد جميل مرعي',
   title: 'محاسب قانوني ومراجع حسابات - زميل جمعية المحاسبين والمراجعين المصرية',
   licenseNumber: 'س.م.م / 43122 - ترخيص وزارة المالية',
@@ -29,6 +29,12 @@ export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   showMainOfficeAddress: true,
   branchOfficeAddress: 'المباركية مول - مدينة العاشر من رمضان - الشرقية',
   showBranchOfficeAddress: true,
+  mainOfficeTitle: 'المقر الرئيسي',
+  branchOfficeTitle: 'فرع العاشر من رمضان',
+  showLogo: true,
+  showOfficePhones: true,
+  logoType: 'MOHAMED_GAMIL_GOLD',
+  headerStyle: 'standard',
   systemSerial: 'CPA-SYS-2026-MG120-PRO-EGY',
   activationKey: 'ACT-CPA-99482-EGY-AUTH',
   notes: 'مكتب معتمد لدى مصلحة الضرائب المصرية، الهيئة العامة للرقابة المالية، والبنك المركزي المصري',

@@ -288,7 +288,7 @@ export class LocalDatabase {
 
         const cleanProfile: OfficeProfile = {
           ...DEFAULT_OFFICE_PROFILE,
-          firmName: 'منظومة المحاسب القانوني المتكامل',
+          firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
         };
 
         const cleanState: DatabaseState = {
@@ -371,20 +371,29 @@ export class LocalDatabase {
 
       let loadedOfficeProfile: OfficeProfile = officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE;
       if (loadedOfficeProfile) {
-        if (!loadedOfficeProfile.phone || loadedOfficeProfile.phone === '02-27945620' || loadedOfficeProfile.mobile?.includes('01001234567')) {
+        if (!loadedOfficeProfile.firmName || loadedOfficeProfile.firmName === 'منظومة المحاسب القانوني المتكامل' || loadedOfficeProfile.firmName.trim() === '') {
+          loadedOfficeProfile.firmName = 'مكتب المحاسب القانوني ومراقب الحسابات';
+        }
+        if (!loadedOfficeProfile.auditorName || loadedOfficeProfile.auditorName.trim() === '') {
+          loadedOfficeProfile.auditorName = 'محمد جميل مرعي';
+        }
+        if (!loadedOfficeProfile.phone || loadedOfficeProfile.phone === '02-27945620' || loadedOfficeProfile.mobile?.includes('01001234567') || loadedOfficeProfile.phone.trim() === '') {
           loadedOfficeProfile.phone = '01003335360';
           loadedOfficeProfile.mobile = '01003335360';
         }
-        if (loadedOfficeProfile.licenseNumber && loadedOfficeProfile.licenseNumber.includes('18492')) {
-          loadedOfficeProfile.licenseNumber = loadedOfficeProfile.licenseNumber.replace('18492', '43122');
+        if (!loadedOfficeProfile.licenseNumber || loadedOfficeProfile.licenseNumber.includes('18492') || loadedOfficeProfile.licenseNumber.includes('18452') || loadedOfficeProfile.licenseNumber.trim() === '') {
+          loadedOfficeProfile.licenseNumber = 'س.م.م / 43122 - ترخيص وزارة المالية';
         }
-        if (!loadedOfficeProfile.mainOfficeAddress || loadedOfficeProfile.address?.includes('ميدان التحرير')) {
+        if (!loadedOfficeProfile.taxAuthorityRegNo || loadedOfficeProfile.taxAuthorityRegNo.trim() === '' || loadedOfficeProfile.taxAuthorityRegNo.includes('200-145-890')) {
+          loadedOfficeProfile.taxAuthorityRegNo = 'م.ض. 492-817-302';
+        }
+        if (!loadedOfficeProfile.mainOfficeAddress || loadedOfficeProfile.mainOfficeAddress.trim() === '' || loadedOfficeProfile.mainOfficeAddress.includes('ميدان التحرير') || loadedOfficeProfile.address?.includes('ميدان التحرير')) {
           loadedOfficeProfile.mainOfficeAddress = 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية';
-          loadedOfficeProfile.showMainOfficeAddress = loadedOfficeProfile.showMainOfficeAddress ?? true;
+          loadedOfficeProfile.showMainOfficeAddress = true;
         }
-        if (!loadedOfficeProfile.branchOfficeAddress) {
+        if (!loadedOfficeProfile.branchOfficeAddress || loadedOfficeProfile.branchOfficeAddress.trim() === '') {
           loadedOfficeProfile.branchOfficeAddress = 'المباركية مول - مدينة العاشر من رمضان - الشرقية';
-          loadedOfficeProfile.showBranchOfficeAddress = loadedOfficeProfile.showBranchOfficeAddress ?? true;
+          loadedOfficeProfile.showBranchOfficeAddress = true;
         }
         if (loadedOfficeProfile.showMainOfficeAddress === undefined) {
           loadedOfficeProfile.showMainOfficeAddress = true;
@@ -392,7 +401,7 @@ export class LocalDatabase {
         if (loadedOfficeProfile.showBranchOfficeAddress === undefined) {
           loadedOfficeProfile.showBranchOfficeAddress = true;
         }
-        if (!loadedOfficeProfile.address || loadedOfficeProfile.address.includes('ميدان التحرير')) {
+        if (!loadedOfficeProfile.address || loadedOfficeProfile.address.includes('ميدان التحرير') || loadedOfficeProfile.address.trim() === '') {
           loadedOfficeProfile.address = 'المكتب الرئيسي: ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية | الفرع: المباركية مول - مدينة العاشر من رمضان - الشرقية';
         }
       }
@@ -1617,8 +1626,11 @@ export class LocalDatabase {
       ...this.state.officeProfile,
       ...profile,
     };
-    this.logAudit('UPDATE', 'تحديث بيانات وترويسة مكتب المحاسب القانوني');
-    this.saveState();
+    this.dirtyKeys.add(STORAGE_KEYS.OFFICE_PROFILE);
+    this.logAudit('UPDATE', 'تحديث بيانات وترويسة وشعار مكتب المحاسب القانوني');
+    this.saveState('OFFICE_PROFILE');
+    this.flushDirtyStorage(true);
+    this.notify();
   }
 
   // --- Reset to Demo Data ---
@@ -1745,7 +1757,7 @@ export class LocalDatabase {
 
     const cleanProfile: OfficeProfile = {
       ...DEFAULT_OFFICE_PROFILE,
-      firmName: 'منظومة المحاسب القانوني المتكامل',
+      firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
     };
 
     this.state = {

@@ -39,14 +39,12 @@ export const DisclosureDetailModal: React.FC<DisclosureDetailModalProps> = ({
   assetCategories = [],
   adminExpenses = [],
 }) => {
-  if (!isOpen || !note) return null;
-
   const [isEditingMode, setIsEditingMode] = useState(false);
-  const [noteNumber, setNoteNumber] = useState<number | string>(note.noteNumber);
-  const [title, setTitle] = useState(note.title);
-  const [category, setCategory] = useState(note.category);
-  const [content, setContent] = useState(note.content);
-  const [breakdownRows, setBreakdownRows] = useState<NoteBreakdownRow[]>(note.customBreakdownRows || []);
+  const [noteNumber, setNoteNumber] = useState<number | string>(note?.noteNumber ?? 1);
+  const [title, setTitle] = useState(note?.title ?? '');
+  const [category, setCategory] = useState(note?.category ?? 'GENERAL');
+  const [content, setContent] = useState(note?.content ?? '');
+  const [breakdownRows, setBreakdownRows] = useState<NoteBreakdownRow[]>(note?.customBreakdownRows || []);
 
   const [newRowLabel, setNewRowLabel] = useState('');
   const [newRowBaseVal, setNewRowBaseVal] = useState<number>(100000);
@@ -61,6 +59,8 @@ export const DisclosureDetailModal: React.FC<DisclosureDetailModalProps> = ({
       setIsEditingMode(false);
     }
   }, [note]);
+
+  if (!isOpen || !note) return null;
 
   const handleSave = () => {
     const updated: SupplementaryNoteItem = {

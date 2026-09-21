@@ -2,6 +2,7 @@ import React from 'react';
 import { ShieldCheck, Building2, Calendar, FileText, CheckCircle2, MapPin } from 'lucide-react';
 import { OfficeProfile, ClientArchiveRecord } from '../../types';
 import { ClientProfileData } from '../credit/CreditBatchPrintDocument';
+import { MohamedGamilLogo } from './MohamedGamilLogo';
 
 export interface OfficialReportHeaderProps {
   officeProfile?: (Partial<OfficeProfile> & {
@@ -147,20 +148,23 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
         {/* Center: Logo or Emblem (if enabled) */}
         {showLogo && (
           <div className="flex flex-col items-center justify-center shrink-0 px-2 text-center">
-            {logoUrl ? (
+            {officeProfile?.logoType === 'NONE' ? null : (officeProfile?.logoType === 'CUSTOM_UPLOAD' && logoUrl) || (logoUrl && officeProfile?.logoType !== 'MOHAMED_GAMIL_GOLD' && officeProfile?.logoType !== 'EGYPT_EMBLEM') ? (
               <img
                 src={logoUrl}
                 alt="شعار المكتب"
                 className="h-13 w-auto max-w-[120px] object-contain mb-1"
                 referrerPolicy="no-referrer"
               />
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-800 shadow-2xs mb-0.5">
-                <Building2 className="w-5 h-5 text-slate-700" />
+            ) : officeProfile?.logoType === 'EGYPT_EMBLEM' ? (
+              <div className="w-12 h-12 rounded-xl bg-slate-900 border border-amber-400/70 flex flex-col items-center justify-center text-amber-300 shadow-2xs mb-0.5">
+                <span className="text-[10px] font-black tracking-tight">مصر</span>
+                <span className="text-[7.5px] text-slate-300 font-mono">EAS</span>
               </div>
+            ) : (
+              <MohamedGamilLogo size={62} variant="HEADER_TRANSPARENT" className="mb-0.5" />
             )}
-            <span className="text-[8.5px] font-bold text-slate-600 font-mono tracking-wider uppercase">
-              Financial Audit
+            <span className="text-[8px] font-black text-amber-800 dark:text-amber-400 font-mono tracking-wider uppercase">
+              MOHAMED GAMIL MAREI
             </span>
           </div>
         )}
