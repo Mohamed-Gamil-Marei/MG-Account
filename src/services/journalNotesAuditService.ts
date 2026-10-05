@@ -963,9 +963,58 @@ export class JournalNotesAuditEngine {
   }
 
   /**
-   * Smart File Reader: Handles Excel (.xlsx/.xls) and CSV files
+   * Inspect sheets inside an uploaded Excel workbook
    */
-  static parseUploadedFile(file: File): Promise<RawJournalRow[]> {
+  static inspectWorkbook(file: File): Promise<{ sheetNames: string[]; totalSheets: number }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          resolve({
+            sheetNames: workbook.SheetNames || [],
+            totalSheets: workbook.SheetNames ? workbook.SheetNames.length : 0,
+          });
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('تعذر قراءة ملف الإكسل.'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /**
+   * Helper to format Excel serial numbers or standard date strings into YYYY-MM-DD
+   */
+  static formatRawDate(val: any): string {
+    if (!val && val !== 0) return new Date().toISOString().split('T')[0];
+    if (typeof val === 'number' && val > 20000 && val < 75000) {
+      // Excel serial date format
+      const date = new Date((val - 25569) * 86400 * 1000);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    }
+    const str = String(val).trim();
+    // Handle DD/MM/YYYY or DD-MM-YYYY
+    const parts = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+    if (parts) {
+      const day = parts[1].padStart(2, '0');
+      const month = parts[2].padStart(2, '0');
+      const year = parts[3];
+      return `${year}-${month}-${day}`;
+    }
+    return str || new Date().toISOString().split('T')[0];
+  }
+
+  /**
+   * Smart File Reader: Handles Excel (.xlsx/.xls), CSV and Text exports
+   * Supports multi-sheet fallback, deep header detection (up to 35 rows),
+   * rich Arabic ERP terminology and summary row filtering.
+   */
+  static parseUploadedFile(file: File, targetSheet?: string): Promise<RawJournalRow[]> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 
@@ -973,31 +1022,72 @@ export class JournalNotesAuditEngine {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const rawJson: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-          if (!rawJson || rawJson.length === 0) {
-            reject(new Error('الملف فارغ أو لا يحتوي على بيانات.'));
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            reject(new Error('الملف فارغ ولا يحتوي على أي شيتات (أوراق عمل).'));
             return;
           }
 
-          // Detect Header Row (find row with highest keywords match)
+          // Determine which sheet to parse
+          let sheetToUse = targetSheet && workbook.Sheets[targetSheet] ? targetSheet : workbook.SheetNames[0];
+
+          // If targetSheet not provided, scan sheets to find the one with the most data/journal keywords
+          if (!targetSheet && workbook.SheetNames.length > 1) {
+            let bestSheet = workbook.SheetNames[0];
+            let maxRows = 0;
+            for (const sName of workbook.SheetNames) {
+              const ws = workbook.Sheets[sName];
+              if (!ws) continue;
+              const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+              if (rows && rows.length > maxRows) {
+                // Boost sheet if name has journal-related terms
+                const lowerName = sName.toLowerCase();
+                const hasKeywords = lowerName.includes('قيد') || lowerName.includes('يومي') || lowerName.includes('journal') || lowerName.includes('ledger') || lowerName.includes('entry');
+                const score = rows.length + (hasKeywords ? 500 : 0);
+                if (score > maxRows) {
+                  maxRows = score;
+                  bestSheet = sName;
+                }
+              }
+            }
+            sheetToUse = bestSheet;
+          }
+
+          const worksheet = workbook.Sheets[sheetToUse];
+          if (!worksheet) {
+            reject(new Error(`تعذر العثور على ورقة العمل المطلوبة: ${sheetToUse}`));
+            return;
+          }
+
+          const rawJson: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+          if (!rawJson || rawJson.length === 0) {
+            reject(new Error(`ورقة العمل "${sheetToUse}" فارغة أو لا تحتوي على بيانات.`));
+            return;
+          }
+
+          // Detect Header Row (search up to 35 rows)
           const headerKeywords = [
-            'قيد', 'تاريخ', 'حساب', 'بيان', 'شرح', 'مدين', 'دائن',
-            'entry', 'date', 'account', 'narration', 'description', 'notes', 'debit', 'credit'
+            'قيد', 'سند', 'حركة', 'مستند', 'تاريخ', 'حساب', 'بيان', 'شرح', 'مدين', 'دائن', 'ملاحظ',
+            'entry', 'voucher', 'date', 'account', 'narration', 'description', 'notes', 'debit', 'credit', 'ref', 'trans'
           ];
 
-          let bestHeaderRowIndex = 0;
+          let bestHeaderRowIndex = -1;
           let maxMatches = 0;
 
-          for (let r = 0; r < Math.min(rawJson.length, 10); r++) {
+          const scanLimit = Math.min(rawJson.length, 35);
+          for (let r = 0; r < scanLimit; r++) {
             const rowStr = rawJson[r].map((cell) => String(cell || '').toLowerCase()).join(' ');
             const matches = headerKeywords.filter((kw) => rowStr.includes(kw)).length;
             if (matches > maxMatches) {
               maxMatches = matches;
               bestHeaderRowIndex = r;
             }
+          }
+
+          // If no good header found, default to row 0
+          if (bestHeaderRowIndex === -1 || maxMatches === 0) {
+            bestHeaderRowIndex = 0;
           }
 
           const headerRow = rawJson[bestHeaderRowIndex].map((h) => String(h || '').trim());
@@ -1011,35 +1101,74 @@ export class JournalNotesAuditEngine {
             narration: -1,
             debit: -1,
             credit: -1,
+            amount: -1,
+            dOrC: -1,
           };
 
           headerRow.forEach((colName, idx) => {
             const norm = normalizeText(colName);
-            if (colMap.entryNo === -1 && (norm.includes('قيد') || norm.includes('رقم') || norm.includes('ref') || norm.includes('voucher') || norm.includes('entry'))) {
+            if (colMap.entryNo === -1 && (
+              norm.includes('رقم القيد') || norm.includes('رقم السند') || norm.includes('رقم الحركة') ||
+              norm.includes('رقم المستند') || norm.includes('قيد') || norm.includes('سند') ||
+              norm.includes('ref') || norm.includes('voucher') || norm.includes('entry') ||
+              norm.includes('journal') || norm.includes('jv') || norm.includes('doc')
+            )) {
               colMap.entryNo = idx;
-            } else if (colMap.date === -1 && (norm.includes('تاريخ') || norm.includes('date'))) {
+            } else if (colMap.date === -1 && (
+              norm.includes('تاريخ القيد') || norm.includes('تاريخ السند') || norm.includes('تاريخ الحركة') ||
+              norm.includes('تاريخ') || norm.includes('date') || norm.includes('posting')
+            )) {
               colMap.date = idx;
-            } else if (colMap.accountCode === -1 && (norm.includes('كود') || norm.includes('code'))) {
+            } else if (colMap.accountCode === -1 && (
+              norm.includes('كود الحساب') || norm.includes('رقم الحساب') || norm.includes('رمز الحساب') ||
+              norm.includes('كود') || norm.includes('دليل') || norm.includes('account code') ||
+              norm.includes('acc code') || norm.includes('gl code') || norm.includes('code')
+            )) {
               colMap.accountCode = idx;
-            } else if (colMap.accountName === -1 && (norm.includes('حساب') || norm.includes('اسم الحساب') || norm.includes('account'))) {
+            } else if (colMap.accountName === -1 && (
+              norm.includes('اسم الحساب') || norm.includes('اسم الحساب الفرعي') || norm.includes('حساب الأستاذ') ||
+              norm.includes('طرف القيد') || norm.includes('حساب') || norm.includes('account name') ||
+              norm.includes('account') || norm.includes('acc name') || norm.includes('gl name') || norm.includes('title')
+            )) {
               colMap.accountName = idx;
-            } else if (colMap.narration === -1 && (norm.includes('بيان') || norm.includes('شرح') || norm.includes('ملاحظ') || norm.includes('نوتس') || norm.includes('desc') || norm.includes('narr') || norm.includes('note'))) {
+            } else if (colMap.narration === -1 && (
+              norm.includes('شرح القيد') || norm.includes('البيان والشارح') || norm.includes('نص البيان') ||
+              norm.includes('البيان') || norm.includes('شرح') || norm.includes('ملاحظ') || norm.includes('تفاصيل') ||
+              norm.includes('الوصف') || norm.includes('desc') || norm.includes('narr') || norm.includes('note') ||
+              norm.includes('particulars') || norm.includes('memo') || norm.includes('remark')
+            )) {
               colMap.narration = idx;
-            } else if (colMap.debit === -1 && (norm.includes('مدين') || norm.includes('منه') || norm.includes('debit') || norm.includes('dr'))) {
+            } else if (colMap.debit === -1 && (
+              norm.includes('مدين محلي') || norm.includes('قيمة مدين') || norm.includes('مبلغ مدين') ||
+              norm.includes('مدين') || norm.includes('منه') || norm.includes('debit') || norm.includes('dr')
+            )) {
               colMap.debit = idx;
-            } else if (colMap.credit === -1 && (norm.includes('دائن') || norm.includes('له') || norm.includes('credit') || norm.includes('cr'))) {
+            } else if (colMap.credit === -1 && (
+              norm.includes('دائن محلي') || norm.includes('قيمة دائن') || norm.includes('مبلغ دائن') ||
+              norm.includes('دائن') || norm.includes('له') || norm.includes('credit') || norm.includes('cr')
+            )) {
               colMap.credit = idx;
+            } else if (colMap.amount === -1 && (
+              norm.includes('المبلغ') || norm.includes('القيمة') || norm.includes('amount') || norm.includes('val')
+            )) {
+              colMap.amount = idx;
+            } else if (colMap.dOrC === -1 && (
+              norm.includes('طبيعة') || norm.includes('نوع الحركة') || norm.includes('d/c') || norm.includes('dr/cr') || norm.includes('type')
+            )) {
+              colMap.dOrC = idx;
             }
           });
 
-          // Fallbacks if some columns weren't matched
+          // Intelligent column fallback
           if (colMap.accountName === -1) {
-            // Find first text column that isn't date or narration
-            colMap.accountName = headerRow.findIndex((_, idx) => idx !== colMap.date && idx !== colMap.narration && idx !== colMap.entryNo);
+            colMap.accountName = headerRow.findIndex((_, idx) =>
+              idx !== colMap.date && idx !== colMap.narration && idx !== colMap.entryNo && idx !== colMap.debit && idx !== colMap.credit
+            );
           }
           if (colMap.narration === -1) {
-            // Try to find any remaining column with 'تفاصيل' or take next available column
-            colMap.narration = headerRow.findIndex((_, idx) => idx !== colMap.accountName && idx !== colMap.debit && idx !== colMap.credit);
+            colMap.narration = headerRow.findIndex((_, idx) =>
+              idx !== colMap.accountName && idx !== colMap.debit && idx !== colMap.credit && idx !== colMap.date && idx !== colMap.entryNo
+            );
           }
 
           const parsedRows: RawJournalRow[] = [];
@@ -1048,14 +1177,31 @@ export class JournalNotesAuditEngine {
             const row = rawJson[i];
             if (!row || row.every((c) => c === '' || c === undefined || c === null)) continue;
 
+            // Check if summary row (e.g. Total / الإجمالي)
+            const rowSummaryCheck = row.map((c) => String(c || '').trim()).join(' ');
+            if (rowSummaryCheck.includes('الإجمالي') || rowSummaryCheck.includes('المجموع') || rowSummaryCheck.toLowerCase().includes('total')) {
+              continue;
+            }
+
             const entryNoVal = colMap.entryNo !== -1 ? String(row[colMap.entryNo] || '').trim() : `JV-${i}`;
-            const dateVal = colMap.date !== -1 ? String(row[colMap.date] || '').trim() : new Date().toISOString().split('T')[0];
+            const dateVal = colMap.date !== -1 ? JournalNotesAuditEngine.formatRawDate(row[colMap.date]) : new Date().toISOString().split('T')[0];
             const accountCodeVal = colMap.accountCode !== -1 ? String(row[colMap.accountCode] || '').trim() : '';
             const accountNameVal = colMap.accountName !== -1 ? String(row[colMap.accountName] || '').trim() : 'حساب عام';
             const narrationVal = colMap.narration !== -1 ? String(row[colMap.narration] || '').trim() : '';
 
-            const debitNum = colMap.debit !== -1 ? parseFloat(String(row[colMap.debit]).replace(/,/g, '')) || 0 : 0;
-            const creditNum = colMap.credit !== -1 ? parseFloat(String(row[colMap.credit]).replace(/,/g, '')) || 0 : 0;
+            let debitNum = colMap.debit !== -1 ? parseFloat(String(row[colMap.debit]).replace(/,/g, '')) || 0 : 0;
+            let creditNum = colMap.credit !== -1 ? parseFloat(String(row[colMap.credit]).replace(/,/g, '')) || 0 : 0;
+
+            // If debit and credit not separated, check amount & D/C column
+            if (debitNum === 0 && creditNum === 0 && colMap.amount !== -1) {
+              const rawAmt = parseFloat(String(row[colMap.amount]).replace(/,/g, '')) || 0;
+              const typeStr = colMap.dOrC !== -1 ? String(row[colMap.dOrC] || '').trim().toLowerCase() : '';
+              if (typeStr.includes('دائن') || typeStr.includes('cr') || typeStr === 'c' || rawAmt < 0) {
+                creditNum = Math.abs(rawAmt);
+              } else {
+                debitNum = Math.abs(rawAmt);
+              }
+            }
 
             // Skip empty spacer lines
             if (!accountNameVal && !narrationVal && debitNum === 0 && creditNum === 0) continue;
@@ -1075,15 +1221,110 @@ export class JournalNotesAuditEngine {
             });
           }
 
+          if (parsedRows.length === 0) {
+            reject(new Error(`لم يتم العثور على أسطر قيود قابلة للقراءة في ورقة العمل "${sheetToUse}". يرجى التأكد من احتواء الملف على أعمدة الحساب، البيان، المدين والدائن.`));
+            return;
+          }
+
           resolve(parsedRows);
         } catch (err) {
           reject(err);
         }
       };
 
-      reader.onerror = () => reject(new Error('تعذر قراءة محتويات الملف.'));
+      reader.onerror = () => reject(new Error('تعذر قراءة محتويات الملف. تأكد من أن الملف سليم بصيغة Excel أو CSV.'));
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  /**
+   * Smart Parser for Text Pasted from Clipboard / Excel
+   */
+  static parsePastedText(pastedText: string): RawJournalRow[] {
+    const lines = pastedText.trim().split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length === 0) {
+      throw new Error('النص المنسوخ فارغ.');
+    }
+
+    // Split by tabs or commas
+    const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') ? ';' : ',');
+    const tableData = lines.map((line) => line.split(delimiter).map((c) => c.trim()));
+
+    // Look for header row in top 5 lines
+    const headerKeywords = ['قيد', 'سند', 'تاريخ', 'حساب', 'بيان', 'شرح', 'مدين', 'دائن', 'entry', 'date', 'account', 'narration', 'debit', 'credit'];
+    let headerIdx = 0;
+    let maxKws = 0;
+
+    for (let i = 0; i < Math.min(tableData.length, 5); i++) {
+      const matchCount = tableData[i].filter((cell) => headerKeywords.some((kw) => cell.toLowerCase().includes(kw))).length;
+      if (matchCount > maxKws) {
+        maxKws = matchCount;
+        headerIdx = i;
+      }
+    }
+
+    const headers = tableData[headerIdx];
+    const colMap: Record<string, number> = {
+      entryNo: -1,
+      date: -1,
+      accountCode: -1,
+      accountName: -1,
+      narration: -1,
+      debit: -1,
+      credit: -1,
+    };
+
+    headers.forEach((h, idx) => {
+      const norm = normalizeText(h);
+      if (colMap.entryNo === -1 && (norm.includes('قيد') || norm.includes('سند') || norm.includes('ref') || norm.includes('entry'))) colMap.entryNo = idx;
+      else if (colMap.date === -1 && (norm.includes('تاريخ') || norm.includes('date'))) colMap.date = idx;
+      else if (colMap.accountCode === -1 && (norm.includes('كود') || norm.includes('code'))) colMap.accountCode = idx;
+      else if (colMap.accountName === -1 && (norm.includes('حساب') || norm.includes('account'))) colMap.accountName = idx;
+      else if (colMap.narration === -1 && (norm.includes('بيان') || norm.includes('شرح') || norm.includes('ملاحظ') || norm.includes('desc') || norm.includes('narr'))) colMap.narration = idx;
+      else if (colMap.debit === -1 && (norm.includes('مدين') || norm.includes('منه') || norm.includes('debit') || norm.includes('dr'))) colMap.debit = idx;
+      else if (colMap.credit === -1 && (norm.includes('دائن') || norm.includes('له') || norm.includes('credit') || norm.includes('cr'))) colMap.credit = idx;
+    });
+
+    if (colMap.accountName === -1 && headers.length > 1) colMap.accountName = 1;
+    if (colMap.narration === -1 && headers.length > 2) colMap.narration = 2;
+
+    const parsed: RawJournalRow[] = [];
+    const startIndex = maxKws > 0 ? headerIdx + 1 : 0;
+
+    for (let i = startIndex; i < tableData.length; i++) {
+      const row = tableData[i];
+      if (!row || row.every((c) => !c)) continue;
+
+      const entryNo = colMap.entryNo !== -1 ? row[colMap.entryNo] : `JV-${i + 1}`;
+      const date = colMap.date !== -1 ? JournalNotesAuditEngine.formatRawDate(row[colMap.date]) : new Date().toISOString().split('T')[0];
+      const accountCode = colMap.accountCode !== -1 ? row[colMap.accountCode] : '';
+      const accountName = colMap.accountName !== -1 ? row[colMap.accountName] : 'حساب عام';
+      const narration = colMap.narration !== -1 ? row[colMap.narration] : '';
+      const debit = colMap.debit !== -1 ? parseFloat(String(row[colMap.debit]).replace(/,/g, '')) || 0 : 0;
+      const credit = colMap.credit !== -1 ? parseFloat(String(row[colMap.credit]).replace(/,/g, '')) || 0 : 0;
+
+      if (!accountName && !narration && debit === 0 && credit === 0) continue;
+
+      parsed.push({
+        id: `paste-${i}-${Date.now()}`,
+        originalRowIndex: i + 1,
+        entryNo: entryNo || `JV-${i + 1}`,
+        date,
+        accountCode,
+        accountName: accountName || 'حساب غير محدد',
+        narration,
+        debit,
+        credit,
+        originalRawRow: row,
+        originalHeaders: headers,
+      });
+    }
+
+    if (parsed.length === 0) {
+      throw new Error('لم يتم استخراج أي أسطر قيود صالحة من النص المنسوخ.');
+    }
+
+    return parsed;
   }
 
   /**

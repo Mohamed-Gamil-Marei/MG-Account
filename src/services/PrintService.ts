@@ -1,5 +1,88 @@
 import { db } from '../db/localDatabase';
-import { PrintSettings } from '../types';
+import { PrintSettings, ReportLayoutConfig, StandardReportType } from '../types';
+
+export const DEFAULT_REPORT_LAYOUTS: Record<StandardReportType, ReportLayoutConfig> = {
+  TRIAL_BALANCE: {
+    paperSize: 'A4',
+    orientation: 'LANDSCAPE',
+    margins: 'NARROW',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  BALANCE_SHEET: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  INCOME_STATEMENT: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  UNIFIED_FINANCIAL_REPORT: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  AUDITOR_REPORT: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  INVOICE: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  TAX_DECLARATION: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'NARROW',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  CERTIFICATE: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  CREDIT_DOSSIER: {
+    paperSize: 'A4',
+    orientation: 'LANDSCAPE',
+    margins: 'NARROW',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+  FEASIBILITY_STUDY: {
+    paperSize: 'A4',
+    orientation: 'PORTRAIT',
+    margins: 'DEFAULT',
+    includeLetterhead: true,
+    includeStamp: true,
+    includeQr: true,
+  },
+};
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   paperSize: 'A4',
@@ -12,6 +95,18 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   includeSignatureStamp: true,
   autoPrintDelayMs: 200,
   showPreviewModalByDefault: true,
+  qrMode: 'OFFLINE_TEXT',
+  qrSizePx: 115,
+  stampStyle: 'CIRCULAR_SEAL',
+  showPageNumbers: true,
+  showDocumentTimestamp: true,
+  watermark: 'NONE',
+  inkSaver: false,
+  headerStyle: 'standard',
+  headerColorTheme: 'navy',
+  logoPosition: 'RIGHT',
+  logoSizePx: 64,
+  reportDefaults: DEFAULT_REPORT_LAYOUTS,
 };
 
 export interface PrintElementOptions {
@@ -45,6 +140,39 @@ export class PrintService {
     const current = this.getSettings();
     const updated = { ...current, ...settings };
     db.updatePreferences({ printSettings: updated });
+  }
+
+  /**
+   * Retrieves configured layout defaults for a specific report type (A4/Portrait/Landscape)
+   */
+  public static getReportLayout(reportType: StandardReportType): ReportLayoutConfig {
+    const settings = this.getSettings();
+    if (settings.reportDefaults && settings.reportDefaults[reportType]) {
+      return settings.reportDefaults[reportType]!;
+    }
+    return DEFAULT_REPORT_LAYOUTS[reportType] || {
+      paperSize: settings.paperSize || 'A4',
+      orientation: settings.orientation === 'LANDSCAPE' ? 'LANDSCAPE' : 'PORTRAIT',
+      margins: settings.margins || 'DEFAULT',
+      includeLetterhead: settings.includeLetterhead !== false,
+      includeStamp: settings.includeSignatureStamp !== false,
+      includeQr: settings.includeQrVerification !== false,
+    };
+  }
+
+  /**
+   * Saves customized layout config for a specific report
+   */
+  public static saveReportLayout(reportType: StandardReportType, config: Partial<ReportLayoutConfig>): void {
+    const settings = this.getSettings();
+    const currentDefaults = settings.reportDefaults || { ...DEFAULT_REPORT_LAYOUTS };
+    const currentForType = currentDefaults[reportType] || DEFAULT_REPORT_LAYOUTS[reportType];
+    const updatedForType = { ...currentForType, ...config };
+    const updatedDefaults = {
+      ...currentDefaults,
+      [reportType]: updatedForType,
+    };
+    this.saveSettings({ reportDefaults: updatedDefaults });
   }
 
   /**

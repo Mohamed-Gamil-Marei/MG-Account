@@ -63,7 +63,7 @@ import { PrintPreviewModal } from './common/PrintPreviewModal';
 import { CertifiedDocumentExportMenu } from './common/CertifiedDocumentExportMenu';
 import { DocumentVerificationModal } from './common/DocumentVerificationModal';
 import { DirectWhatsAppProcedureModal } from './common/DirectWhatsAppProcedureModal';
-import { MohamedGamilLogo } from './common/MohamedGamilLogo';
+import { OfficialReportHeader } from './common/OfficialReportHeader';
 
 interface CertificatesGeneratorViewProps {
   state: DatabaseState;
@@ -624,49 +624,14 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
     return p;
   }, [activePurpose]);
 
-  const effectiveMainAddress = useMemo(() => {
-    const raw = profile?.mainOfficeAddress?.trim();
-    if (raw && raw.length > 5 && !raw.includes('ميدان التحرير')) return raw;
-    return 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية';
-  }, [profile?.mainOfficeAddress]);
-
-  const effectiveBranchAddress = useMemo(() => {
-    const raw = profile?.branchOfficeAddress?.trim();
-    if (raw && raw.length > 5) return raw;
-    return 'المباركية مول - مدينة العاشر من رمضان - الشرقية';
-  }, [profile?.branchOfficeAddress]);
-
-  const effectiveFirmName = useMemo(() => {
-    const raw = profile?.firmName?.trim();
-    if (raw && raw !== 'منظومة المحاسب القانوني المتكامل' && raw.length > 2) {
-      return raw;
-    }
-    return 'مكتب المحاسب القانوني ومراقب الحسابات';
-  }, [profile?.firmName]);
-
-  const effectiveAuditorName = useMemo(() => {
-    const raw = profile?.auditorName?.trim();
-    if (!raw) return 'أ/ محمد جميل مرعي';
-    if (!raw.startsWith('أ/') && !raw.startsWith('أستاذ') && !raw.startsWith('الأستاذ')) {
-      return `أ/ ${raw}`;
-    }
-    return raw;
-  }, [profile?.auditorName]);
-
-  const effectiveAuditorTitle = profile?.title?.trim() || 'محاسب قانوني ومراجع حسابات - زميل جمعية المحاسبين والمراجعين المصرية';
-  
-  const effectiveLicenseNumber = useMemo(() => {
-    const raw = profile?.licenseNumber?.trim();
-    if (raw && !raw.includes('18452') && !raw.includes('18492') && raw.length > 4) {
-      return raw;
-    }
-    return 'س.م.م / 43122 - ترخيص وزارة المالية';
-  }, [profile?.licenseNumber]);
-
-  const effectivePhone = (profile?.phone && profile.phone.trim().length > 5) 
-    ? profile.phone.trim() 
-    : (profile?.mobile && profile.mobile.trim().length > 5) ? profile.mobile.trim() : '01003335360';
-  const effectiveEmail = (profile?.email && profile.email.trim().length > 4) ? profile.email.trim() : 'cpa.mohamed.marei@egyptcpa.com';
+  const effectiveMainAddress = profile?.mainOfficeAddress || profile?.address || '';
+  const effectiveBranchAddress = profile?.branchOfficeAddress || '';
+  const effectiveFirmName = profile?.firmName?.trim() || 'مكتب المحاسب القانوني ومراقب الحسابات';
+  const effectiveAuditorName = profile?.auditorName?.trim() || 'محمد جميل مرعي';
+  const effectiveAuditorTitle = profile?.title?.trim() || 'محاسب قانوني وخبير ضرائب ومراقب حسابات';
+  const effectiveLicenseNumber = profile?.licenseNumber?.trim() || 'س.م.م / 43122';
+  const effectivePhone = profile?.phone?.trim() || profile?.mobile?.trim() || '';
+  const effectiveEmail = profile?.email?.trim() || '';
 
   // Certificate Payload for Direct Document Preview and Printing
   const activeCertificatePayload = useMemo(() => {
@@ -772,36 +737,34 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Top Header */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-700 to-emerald-950 text-white flex items-center justify-center shadow-xs">
-              <Award className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900">
-                منظومة إصدار وتوثيق الشهادات المحاسبية والمهنية المعتمدة
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                إصدار شهادات رأس المال المستثمر، إثبات الدخل، الملاءة المالية، وفحص القوائم بمرونة صياغة وتحكم كامل في البنود والجداول.
-              </p>
-            </div>
+      <div className="bg-white dark:bg-slate-900 rounded-xl px-4 py-2.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <Award className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              منظومة إصدار وتوثيق الشهادات المحاسبية والمهنية المعتمدة
+            </h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              إصدار شهادات رأس المال، إثبات الدخل، الملاءة المالية، وفحص القوائم بمرونة صياغة وتحكم كامل
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => {
                 setActiveTab('CREATE');
                 setSelectedCertForView(null);
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-bold text-xs transition-colors cursor-pointer ${
                 activeTab === 'CREATE'
-                  ? 'bg-white text-emerald-950 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
@@ -1013,7 +976,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
           {/* Certificate Editor Controls */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-5 text-xs">
             {/* Quick Entity Type Selector */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-slate-50 to-emerald-50/50 rounded-xl border border-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-slate-800">نوع الكيان المستفيد من الشهادة:</span>
               </div>
@@ -2011,124 +1974,14 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
             style={{ breakInside: 'avoid', pageBreakInside: 'avoid', pageBreakAfter: 'avoid', breakAfter: 'avoid' }}
             className="bg-white rounded-xl border-4 border-double border-emerald-950 shadow-lg p-6 sm:p-8 print:p-6 space-y-3.5 text-slate-900 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-4 print:border-double print:border-emerald-950 print:max-w-full relative overflow-hidden"
           >
-            {/* Subtle Security Watermark */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none z-0">
-              <div className="w-80 h-80 rounded-full border-8 border-emerald-900 flex items-center justify-center">
-                <Award className="w-56 h-56 text-emerald-950" />
-              </div>
-            </div>
-
-            {/* Letterhead Header */}
-            <div
-              data-letterhead="true"
-              className="official-header border-b-2 border-emerald-950 pb-3 mb-2 relative z-10 w-full"
-            >
-              <div className="flex items-start justify-between gap-3 text-right" dir="rtl">
-                {/* Right Column: Office Credentials, Names, and Both Branch & Main Addresses */}
-                <div className="space-y-1 text-right flex-1 min-w-[280px]">
-                  <div className="flex items-center gap-1.5">
-                    <ShieldCheck className="w-5 h-5 text-emerald-800 shrink-0" />
-                    <h1 className="text-base sm:text-lg font-black text-slate-950 tracking-tight">
-                      {effectiveFirmName}
-                    </h1>
-                  </div>
-                  <div className="text-sm sm:text-base font-black text-emerald-950 flex items-center gap-2">
-                    <span>{effectiveAuditorName}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
-                      محاسب قانوني ومراقب حسابات
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-700 font-semibold">{effectiveAuditorTitle}</div>
-                  <div className="flex items-center gap-4 text-[11px] text-slate-700 font-mono flex-wrap">
-                    <span>
-                      سجل المحاسبين والمراجعين: <strong className="text-slate-950 font-bold">{effectiveLicenseNumber}</strong>
-                    </span>
-                    <span>
-                      البطاقة الضريبية: <strong className="text-slate-950 font-bold">{profile?.taxAuthorityRegNo || 'م.ض 492-817-302'}</strong>
-                    </span>
-                  </div>
-
-                  {/* High-Visibility Addresses Box: Main Office & Branch Office */}
-                  <div className="pt-2 mt-1 border-t border-emerald-900/20 bg-emerald-50/60 rounded-xl p-2.5 space-y-1 text-[11px] text-slate-800 shadow-2xs border border-emerald-200/80">
-                    <div className="flex items-start gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-800 shrink-0 mt-0.5" />
-                      <span>
-                        <strong className="text-emerald-950 font-black">المقر الرئيسي:</strong> {effectiveMainAddress}
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-teal-800 shrink-0 mt-0.5" />
-                      <span>
-                        <strong className="text-teal-950 font-black">فرع العاشر من رمضان:</strong> {effectiveBranchAddress}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] text-slate-700 pt-1 font-mono flex-wrap border-t border-emerald-200/60">
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-emerald-700 shrink-0" />
-                        <span>هاتف / واتساب: <strong className="text-slate-900 font-bold">{effectivePhone}</strong></span>
-                      </span>
-                      {effectiveEmail && (
-                        <span className="flex items-center gap-1">
-                          <Mail className="w-3 h-3 text-slate-500 shrink-0" />
-                          <span>{effectiveEmail}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Center: Official Logo / Emblem (Configurable & Dynamic) */}
-                <div className="flex flex-col items-center justify-center shrink-0 px-2 text-center self-center min-w-[120px]">
-                  {profile?.logoType === 'NONE' ? null : (profile?.logoType === 'CUSTOM_UPLOAD' && profile?.logoUrl) || (profile?.logoUrl && profile?.logoType !== 'MOHAMED_GAMIL_GOLD' && profile?.logoType !== 'EGYPT_EMBLEM') ? (
-                    <img
-                      src={profile.logoUrl}
-                      alt="شعار المكتب"
-                      className="h-15 w-auto max-w-[125px] object-contain mb-1"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : profile?.logoType === 'EGYPT_EMBLEM' ? (
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 border-2 border-amber-400/90 flex flex-col items-center justify-center text-amber-300 shadow-md mb-1">
-                      <Award className="w-8 h-8 text-amber-300 drop-shadow-sm" />
-                    </div>
-                  ) : (
-                    <MohamedGamilLogo size={66} variant="HEADER_TRANSPARENT" className="mb-0.5" />
-                  )}
-                  <span className="text-[9px] font-black text-emerald-950 tracking-wider">
-                    جمهورية مصر العربية
-                  </span>
-                  <span className="text-[8px] font-bold text-slate-700">
-                    وزارة المالية
-                  </span>
-                  <span className="text-[7.5px] font-bold text-emerald-900 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-full mt-0.5 shadow-2xs">
-                    سجل المحاسبين والمراجعين
-                  </span>
-                </div>
-
-                {/* Left Column: Certificate Metadata Card */}
-                <div className="text-right font-mono text-[11px] text-slate-800 space-y-1.5 bg-gradient-to-br from-emerald-50/90 to-teal-50/50 p-3 rounded-xl border border-emerald-300/80 min-w-[210px] shrink-0 self-start shadow-2xs">
-                  <div className="flex items-center justify-between border-b border-emerald-200 pb-1">
-                    <span className="text-[10.5px] text-slate-500 font-sans font-medium">رقم الشهادة:</span>
-                    <strong className="text-emerald-950 font-black text-xs font-mono">{certNumber}</strong>
-                  </div>
-                  <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-[10.5px] text-slate-500 font-sans font-medium">تاريخ التحرير:</span>
-                    <strong className="text-slate-900 font-mono">{activeIssueDate}</strong>
-                  </div>
-                  <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-[10.5px] text-slate-500 font-sans font-medium">نوع الكيان:</span>
-                    <strong className="text-slate-900 text-[10.5px]">
-                      {activeBeneficiaryType === 'NATURAL_PERSON' ? (activeBeneficiaryGender === 'FEMALE' ? 'شخص طبيعي (أنثى)' : 'شخص طبيعي (ذكر)') : 'شخص اعتباري (منشأة)'}
-                    </strong>
-                  </div>
-                  <div className="pt-1.5 border-t border-emerald-200 text-[10px] text-emerald-900 font-bold flex items-center justify-between">
-                    <span>شهادة مهنية معتمدة</span>
-                    <span className="text-[8.5px] bg-emerald-800 text-white px-2 py-0.5 rounded-md font-sans">
-                      موثقة رسمياً
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Official Letterhead Header */}
+            <OfficialReportHeader
+              officeProfile={profile}
+              documentTitle="شهادة مهنية معتمدة"
+              documentReference={certNumber}
+              issueDate={activeIssueDate}
+              className="pb-3 mb-2"
+            />
 
             {/* Certificate Title Badge */}
             <div className="text-center py-0.5 relative z-10">
@@ -2340,14 +2193,11 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   هاتف المكتب والتواصل المباشر: <strong className="text-slate-950 font-bold">{effectivePhone}</strong>
                 </div>
 
-                {/* Manual Handwritten Professional Signature Area */}
-                <div className="pt-2 flex flex-col items-center sm:items-start">
-                  <div className="text-[10px] text-slate-600 font-bold mb-1">التوقيع والاعتماد المهني (بخط اليد):</div>
-                  <div className="w-56 h-12 border-b-2 border-dotted border-slate-700 flex items-end justify-start pb-1 text-slate-400 text-[10px] font-sans">
-                    <span>توقيع المحاسب القانوني: ............................</span>
-                  </div>
-                  <div className="text-[8.5px] text-slate-500 font-mono mt-1">
-                    تحريراً بتاريخ: {activeIssueDate}
+                {/* Official CPA Signature Field */}
+                <div className="pt-3">
+                  <div className="text-xs text-slate-700 font-bold mb-1">التوقيع والاعتماد:</div>
+                  <div className="text-slate-400 text-xs tracking-widest">
+                    ........................................................
                   </div>
                 </div>
               </div>
@@ -2431,18 +2281,21 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   );
                 })()}
 
-                {/* Designated Physical Ink Rubber Seal Target Area */}
+                {/* Official Certified Egyptian Rubber Seal & Stamp */}
                 <div
                   data-stamp="true"
-                  className="w-32 h-32 rounded-full border-2 border-dashed border-emerald-800/70 bg-emerald-50/20 flex flex-col items-center justify-center text-[9px] font-bold text-emerald-950 p-2 text-center shadow-2xs leading-tight space-y-1 select-none"
+                  className="w-32 h-32 rounded-full border-2 border-emerald-900 outline outline-1 outline-emerald-700/80 flex flex-col items-center justify-center text-[9px] font-bold text-emerald-950 p-1.5 text-center shadow-md bg-emerald-50/40 leading-tight space-y-0.5 transform -rotate-2 select-none"
                 >
-                  <div className="text-[8px] text-emerald-950 font-black tracking-tight">★ موضع خاتم المكتب الرسمي ★</div>
-                  <div className="w-16 border-t border-dashed border-emerald-400 my-0.5" />
-                  <div className="text-[7.5px] text-slate-600 font-sans">يُختم بخاتم المكتب الأصلي الحي</div>
-                  <div className="text-[7px] text-emerald-900 font-mono font-bold">
+                  <div className="text-[7.5px] text-slate-700 font-bold tracking-tight">★ جمهورية مصر العربية ★</div>
+                  <div className="text-[7px] text-slate-600">سجل المحاسبين والمراجعين</div>
+                  <div className="w-full border-t border-emerald-300/80 my-0.5" />
+                  <div className="text-emerald-950 font-black text-[10.5px] px-1">{effectiveAuditorName}</div>
+                  <div className="text-[7.5px] text-emerald-900 font-bold">محاسب قانوني ومراقب حسابات</div>
+                  <div className="font-mono text-[8.5px] text-slate-900 font-black">
                     {effectiveLicenseNumber?.includes('س.م.م') ? effectiveLicenseNumber.split('-')[0].trim() : 'س.م.م 43122'}
                   </div>
-                  <div className="text-[6.5px] text-slate-400 font-sans mt-0.5">(بصمة الختم الحي)</div>
+                  <div className="w-full border-t border-emerald-300/80 my-0.5" />
+                  <div className="text-[7px] text-emerald-800 font-bold">ختم الاعتماد الرسمي الساري</div>
                 </div>
               </div>
             </div>

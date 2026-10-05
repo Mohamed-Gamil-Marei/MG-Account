@@ -508,45 +508,29 @@ export const SmartExcelAuditSentinelView: React.FC<SmartExcelAuditSentinelViewPr
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200 text-right min-w-0" dir="rtl">
-      {/* 1. Top Executive Banner & System Identity */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900/40 rounded-2xl p-5 sm:p-6 text-white shadow-xl flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span>التعلم الآلي غير الخاضع للإشراف (Unsupervised ML)</span>
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
-              قانون بنفورد (Benford's Law)
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold">
-              الذكاء القابل للتفسير (XAI)
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-bold">
-              معايير المراجعة المصرية (ESA 240)
-            </span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 shrink-0">
+            <FileSpreadsheet className="w-4 h-4" />
           </div>
-
-          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <FileSpreadsheet className="w-6 h-6 text-indigo-400 shrink-0" />
-            <span>مختبر المراجعة والتدقيق الجنائي الذكي لملفات الإكسيل</span>
-          </h1>
-
-          <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
-            محرك مراجعة إلكتروني متكامل يقرأ أي ملف إكسيل أو CSV بأي ترتيب للترويسة، ويفحص البيانات لاكتشاف التلاعب والعمليات المكررة وتجزئة المدفوعات والكسور الدائرية والشواذ الإحصائية مع استخراج تقارير Word و Excel و PDF معتمدة.
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              مختبر التدقيق الجنائي الذكي لملفات Excel
+            </h1>
+          </div>
         </div>
 
         {/* Action Controls Suite */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => fileInputRef.current?.click()}
             id="btn-excel-upload"
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md hover:shadow-indigo-500/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-            title="رفع ملف إكسيل أو CSV من جهازك"
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="رفع ملف إكسيل أو CSV"
           >
-            <Upload className="w-4 h-4" />
-            <span>رفع ملف إكسيل / CSV</span>
+            <Upload className="w-3.5 h-3.5" />
+            <span>رفع ملف Excel / CSV</span>
           </button>
           <input
             type="file"
@@ -562,21 +546,21 @@ export const SmartExcelAuditSentinelView: React.FC<SmartExcelAuditSentinelViewPr
           <button
             onClick={handleDownloadTemplate}
             id="btn-excel-template"
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            title="تحميل قالب إكسيل قياسي جاهز للإدخال والملء"
+            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            title="تحميل قالب إكسيل قياسي"
           >
-            <Download className="w-4 h-4 text-emerald-400" />
-            <span>تحميل القالب الجاهز</span>
+            <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>قالب جاهز</span>
           </button>
 
           <button
             onClick={handleLoadBenchmarkDemo}
             id="btn-excel-demo"
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-            title="تحميل بيانات تجريبية مع شواذ إحصائية لاختبار النظام"
+            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+            title="تحميل بيانات تجريبية لاختبار النظام"
           >
             <Play className="w-3.5 h-3.5" />
-            <span>اختبار تجريبي افتراضي</span>
+            <span>تجربة افتراضية</span>
           </button>
         </div>
       </div>

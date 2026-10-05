@@ -187,44 +187,31 @@ export const DemurrageSentinelTab: React.FC<DemurrageSentinelTabProps> = ({
 
   return (
     <div className="space-y-6 text-right font-sans">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900 border border-amber-500/30 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-500/20">
-              <ShieldAlert className="w-8 h-8" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-white">
-                  رادار حراسة أرضيات الموانئ وغرامات الحاويات (Demurrage & Detention Sentinel)
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold font-mono">
-                  Smart Free-Time Watcher
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                مراقبة استباقية بالثواني لفترات السماح المجانية للحاويات (Free Time) الممنوحة من الخطوط الملاحية بالموانئ المصرية،
-                واحتساب غرامات الأرضيات (Demurrage) المتراكمة بالدولار الأمريكي والجنيه، مع إرسال إنذارات WhatsApp فورية للمخلص والعميل قبل فرض الغرامات.
-              </p>
-            </div>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
+            <ShieldAlert className="w-4 h-4" />
           </div>
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              حراسة أرضيات الموانئ وغرامات الحاويات (Demurrage)
+            </h2>
+          </div>
+        </div>
 
-          <div className="flex items-center gap-3 shrink-0 bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
-            <div className="text-left">
-              <div className="text-[10px] text-slate-400">سعر صرف غرامات الموانئ</div>
-              <div className="text-sm font-black text-amber-400 font-mono flex items-center gap-1">
-                <span>$1 = </span>
-                <input
-                  type="number"
-                  step="0.05"
-                  value={usdExchangeRate}
-                  onChange={(e) => setUsdExchangeRate(Number(e.target.value) || 50)}
-                  className="w-16 bg-slate-900 border border-slate-700 rounded px-1 text-center text-white"
-                />
-                <span>ج.م</span>
-              </div>
-            </div>
+        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+          <span className="text-slate-500 dark:text-slate-400">صرف الموانئ:</span>
+          <div className="font-bold text-amber-600 dark:text-amber-400 font-mono flex items-center gap-1">
+            <span>$1 = </span>
+            <input
+              type="number"
+              step="0.05"
+              value={usdExchangeRate}
+              onChange={(e) => setUsdExchangeRate(Number(e.target.value) || 50)}
+              className="w-14 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-1 text-center text-slate-900 dark:text-white"
+            />
+            <span>ج.م</span>
           </div>
         </div>
       </div>

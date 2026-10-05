@@ -205,22 +205,17 @@ export const AuditWorkingPapersView: React.FC<AuditWorkingPapersProps> = ({ stat
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              معايير المراجعة المصرية (ESA 320 / 330 / 500)
-            </span>
-            <span className="text-slate-400 text-xs font-mono">ملف المراجعة السنوي المعتمد (Engagement Binder)</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 shrink-0">
+            <ShieldCheck className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            منظومة أوراق عمل المراجعة الميدانية والأهمية النسبية
-          </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1">
-            توثيق كامل لإجراءات المراجعة الميدانية، مصفوفة الأهمية النسبية، أدلة الإثبات واختبارات الرقابة والتحقق
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              أوراق عمل المراجعة الميدانية والأهمية النسبية (ESA)
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

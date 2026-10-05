@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Settings,
   Globe,
@@ -27,29 +27,28 @@ import {
   Laptop,
   Eye,
   EyeOff,
-  Upload,
-  Image as ImageIcon,
-  Trash2,
-  Award,
+  Printer,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, BrandColor, ThemeMode, UserPreferences, CustomFirebaseConfig } from '../types';
 import { getTranslation } from '../utils/i18n';
 import defaultFirebaseConfig from '../../firebase-applet-config.json';
 import { CloudSync } from '../services/cloudSyncService';
-import { MohamedGamilLogo } from './common/MohamedGamilLogo';
-import { DEFAULT_OFFICE_PROFILE } from '../data/sampleData';
+import { PrintExportSettingsPanel } from './common/PrintExportSettingsPanel';
+import { PrintExportSettingsUnit } from './common/PrintExportSettingsUnit';
 
 interface AppSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   state: DatabaseState;
+  initialTab?: 'PREFERENCES' | 'AUDITOR_PROFILE' | 'PRINT_EXPORT' | 'FIREBASE_CLOUD';
 }
 
 export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   isOpen,
   onClose,
   state,
+  initialTab,
 }) => {
   const preferences: UserPreferences = state.preferences || {
     themeMode: 'light',
@@ -63,7 +62,9 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const currentLang = preferences.language || 'ar';
   const t = getTranslation(currentLang);
 
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'PREFERENCES' | 'AUDITOR_PROFILE' | 'FIREBASE_CLOUD'>('PREFERENCES');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'PREFERENCES' | 'AUDITOR_PROFILE' | 'PRINT_EXPORT' | 'FIREBASE_CLOUD'>(
+    initialTab || 'PREFERENCES'
+  );
 
   const [selectedLang, setSelectedLang] = useState<AppLanguage>(currentLang);
   const [selectedTheme, setSelectedTheme] = useState<ThemeMode>(preferences.themeMode || 'light');
@@ -95,53 +96,36 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const [testSyncStatus, setTestSyncStatus] = useState<string | null>(null);
 
   // Auditor Profile Fields
-  const officeProfile = state.officeProfile || DEFAULT_OFFICE_PROFILE;
+  const officeProfile = state.officeProfile || {
+    auditorName: 'محمد جميل مرعي',
+    title: 'محاسب قانوني وخبير ضرائب ومراقب حسابات',
+    firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
+    licenseNumber: 'س.م.م / 43122',
+    taxAuthorityRegNo: 'م.ض. 492-817-302',
+    phone: '01003335360',
+    mobile: '01003335360',
+    email: 'cpa.mohamed.marei@egyptcpa.com',
+    address: 'المكتب الرئيسي: ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية',
+    mainOfficeAddress: 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية',
+    showMainOfficeAddress: true,
+    branchOfficeAddress: 'المباركية مول - مدينة العاشر من رمضان - الشرقية',
+    showBranchOfficeAddress: true,
+    notes: '',
+  };
 
-  const [auditorName, setAuditorName] = useState<string>(officeProfile.auditorName || 'محمد جميل مرعي');
-  const [titleName, setTitleName] = useState<string>(officeProfile.title || 'محاسب قانوني ومراقب حسابات');
-  const [firmName, setFirmName] = useState<string>(officeProfile.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات');
-  const [licenseNumber, setLicenseNumber] = useState<string>(officeProfile.licenseNumber || 'س.م.م / 43122 - ترخيص وزارة المالية');
-  const [taxAuthorityRegNo, setTaxAuthorityRegNo] = useState<string>(officeProfile.taxAuthorityRegNo || 'م.ض 492-817-302');
-  const [phone, setPhone] = useState<string>(officeProfile.phone || '01003335360');
-  const [email, setEmail] = useState<string>(officeProfile.email || 'cpa.mohamed.marei@egyptcpa.com');
+  const [auditorName, setAuditorName] = useState<string>(officeProfile.auditorName || '');
+  const [titleName, setTitleName] = useState<string>(officeProfile.title || '');
+  const [firmName, setFirmName] = useState<string>(officeProfile.firmName || '');
+  const [licenseNumber, setLicenseNumber] = useState<string>(officeProfile.licenseNumber || '');
+  const [taxAuthorityRegNo, setTaxAuthorityRegNo] = useState<string>(officeProfile.taxAuthorityRegNo || '');
+  const [phone, setPhone] = useState<string>(officeProfile.phone || '');
+  const [email, setEmail] = useState<string>(officeProfile.email || '');
   const [address, setAddress] = useState<string>(officeProfile.address || '');
   const [mainOfficeAddress, setMainOfficeAddress] = useState<string>(officeProfile.mainOfficeAddress || 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية');
   const [showMainOfficeAddress, setShowMainOfficeAddress] = useState<boolean>(officeProfile.showMainOfficeAddress !== false);
   const [branchOfficeAddress, setBranchOfficeAddress] = useState<string>(officeProfile.branchOfficeAddress || 'المباركية مول - مدينة العاشر من رمضان - الشرقية');
   const [showBranchOfficeAddress, setShowBranchOfficeAddress] = useState<boolean>(officeProfile.showBranchOfficeAddress !== false);
-  const [mainOfficeTitle, setMainOfficeTitle] = useState<string>(officeProfile.mainOfficeTitle || 'المقر الرئيسي');
-  const [branchOfficeTitle, setBranchOfficeTitle] = useState<string>(officeProfile.branchOfficeTitle || 'فرع العاشر من رمضان');
-  const [logoType, setLogoType] = useState<'MOHAMED_GAMIL_GOLD' | 'EGYPT_EMBLEM' | 'CUSTOM_UPLOAD' | 'NONE'>(officeProfile.logoType || 'MOHAMED_GAMIL_GOLD');
-  const [logoUrl, setLogoUrl] = useState<string>(officeProfile.logoUrl || '');
-  const [showLogo, setShowLogo] = useState<boolean>(officeProfile.showLogo !== false);
-  const [showOfficePhones, setShowOfficePhones] = useState<boolean>(officeProfile.showOfficePhones !== false);
   const [publicDomainUrl, setPublicDomainUrl] = useState<string>(officeProfile.publicDomainUrl || (typeof window !== 'undefined' ? window.location.origin : ''));
-
-  // Synchronize state whenever modal opens or officeProfile updates in database
-  useEffect(() => {
-    if (isOpen) {
-      const prof = state.officeProfile || DEFAULT_OFFICE_PROFILE;
-      setAuditorName(prof.auditorName || 'محمد جميل مرعي');
-      setTitleName(prof.title || 'محاسب قانوني ومراقب حسابات');
-      setFirmName(prof.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات');
-      setLicenseNumber(prof.licenseNumber || 'س.م.م / 43122 - ترخيص وزارة المالية');
-      setTaxAuthorityRegNo(prof.taxAuthorityRegNo || 'م.ض 492-817-302');
-      setPhone(prof.phone || '01003335360');
-      setEmail(prof.email || 'cpa.mohamed.marei@egyptcpa.com');
-      setAddress(prof.address || '');
-      setMainOfficeAddress(prof.mainOfficeAddress || 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية');
-      setShowMainOfficeAddress(prof.showMainOfficeAddress !== false);
-      setBranchOfficeAddress(prof.branchOfficeAddress || 'المباركية مول - مدينة العاشر من رمضان - الشرقية');
-      setShowBranchOfficeAddress(prof.showBranchOfficeAddress !== false);
-      setMainOfficeTitle(prof.mainOfficeTitle || 'المقر الرئيسي');
-      setBranchOfficeTitle(prof.branchOfficeTitle || 'فرع العاشر من رمضان');
-      setLogoType(prof.logoType || 'MOHAMED_GAMIL_GOLD');
-      setLogoUrl(prof.logoUrl || '');
-      setShowLogo(prof.showLogo !== false);
-      setShowOfficePhones(prof.showOfficePhones !== false);
-      setPublicDomainUrl(prof.publicDomainUrl || (typeof window !== 'undefined' ? window.location.origin : ''));
-    }
-  }, [isOpen, state.officeProfile]);
 
   const brandOptions: { id: BrandColor; nameAr: string; nameEn: string; bgClass: string; ringClass: string }[] = [
     { id: 'blue', nameAr: 'أزرق كلاسيكي مصرفي', nameEn: 'Banking Navy Blue', bgClass: 'bg-blue-600', ringClass: 'ring-blue-500' },
@@ -167,27 +151,6 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     }
   };
 
-  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('حجم ملف الصورة يجب ألا يتجاوز 2 ميجابايت لضمان سرعة التحميل والطباعة');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setLogoUrl(result);
-        setLogoType('CUSTOM_UPLOAD');
-        setShowLogo(true);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -211,10 +174,10 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     });
 
     db.updateOfficeProfile({
-      auditorName: auditorName.trim(),
-      title: titleName.trim(),
-      firmName: firmName.trim(),
-      licenseNumber: licenseNumber.trim(),
+      auditorName: auditorName.trim() || officeProfile.auditorName,
+      title: titleName.trim() || officeProfile.title,
+      firmName: firmName.trim() || officeProfile.firmName,
+      licenseNumber: licenseNumber.trim() || officeProfile.licenseNumber,
       taxAuthorityRegNo: taxAuthorityRegNo.trim(),
       phone: phone.trim(),
       mobile: phone.trim(),
@@ -224,12 +187,6 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       showMainOfficeAddress,
       branchOfficeAddress: branchOfficeAddress.trim(),
       showBranchOfficeAddress,
-      mainOfficeTitle: mainOfficeTitle.trim() || 'المقر الرئيسي',
-      branchOfficeTitle: branchOfficeTitle.trim() || 'فرع العاشر من رمضان',
-      logoType,
-      logoUrl: logoType === 'CUSTOM_UPLOAD' ? logoUrl : (logoType === 'NONE' ? '' : logoUrl),
-      showLogo,
-      showOfficePhones,
       publicDomainUrl: publicDomainUrl.trim(),
     });
 
@@ -237,7 +194,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     setTimeout(() => {
       setSavedSuccess(false);
       onClose();
-    }, 1200);
+    }, 1000);
   };
 
   return (
@@ -308,6 +265,19 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
             <Cloud className="w-3.5 h-3.5" />
             <span>{currentLang === 'ar' ? 'الربط السحابي Firebase' : 'Firebase Cloud Sync'}</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSettingsTab('PRINT_EXPORT')}
+            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              activeSettingsTab === 'PRINT_EXPORT'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>{currentLang === 'ar' ? 'أساليب الطباعة والـ QR' : 'Print & QR Settings'}</span>
+          </button>
         </div>
 
         {/* Modal Body */}
@@ -324,136 +294,6 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
           {activeSettingsTab === 'AUDITOR_PROFILE' && (
             /* Auditor Profile Tab */
             <div className="space-y-4">
-              {/* Logo Selection & Custom Upload Section */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-amber-500" />
-                    <span>شعار ترويسة المكتب والشهادات والتقارير:</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={showLogo}
-                      onChange={(e) => setShowLogo(e.target.checked)}
-                      className="rounded border-slate-300 dark:border-slate-600 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
-                    />
-                    <span>إظهار الشعار في الترويسة</span>
-                  </label>
-                </div>
-
-                {/* Logo Options Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {/* Option 1: Golden Seal */}
-                  <button
-                    type="button"
-                    onClick={() => setLogoType('MOHAMED_GAMIL_GOLD')}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center ${
-                      logoType === 'MOHAMED_GAMIL_GOLD'
-                        ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200 ring-2 ring-amber-500/30'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
-                    }`}
-                  >
-                    <MohamedGamilLogo size={36} className="shrink-0" />
-                    <span className="text-[10px] font-bold leading-tight">شعار المكتب المعتمد (الذهبي الفاخر)</span>
-                    {logoType === 'MOHAMED_GAMIL_GOLD' && <Check className="w-3.5 h-3.5 text-amber-600" />}
-                  </button>
-
-                  {/* Option 2: Custom Upload */}
-                  <button
-                    type="button"
-                    onClick={() => setLogoType('CUSTOM_UPLOAD')}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center ${
-                      logoType === 'CUSTOM_UPLOAD'
-                        ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 ring-2 ring-blue-500/30'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
-                    }`}
-                  >
-                    {logoUrl ? (
-                      <img src={logoUrl} alt="شعار مخصص" className="w-9 h-9 object-contain rounded-md border border-slate-200 dark:border-slate-700" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-300">
-                        <Upload className="w-4 h-4" />
-                      </div>
-                    )}
-                    <span className="text-[10px] font-bold leading-tight">رفع وتغيير الشعار (من الجهاز)</span>
-                    {logoType === 'CUSTOM_UPLOAD' && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                  </button>
-
-                  {/* Option 3: Egypt Ministry of Finance */}
-                  <button
-                    type="button"
-                    onClick={() => setLogoType('EGYPT_EMBLEM')}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center ${
-                      logoType === 'EGYPT_EMBLEM'
-                        ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/30'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-full bg-slate-900 text-amber-400 flex items-center justify-center text-base">
-                      🦅
-                    </div>
-                    <span className="text-[10px] font-bold leading-tight">نسر الجمهورية ووزارة المالية</span>
-                    {logoType === 'EGYPT_EMBLEM' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                  </button>
-
-                  {/* Option 4: None */}
-                  <button
-                    type="button"
-                    onClick={() => setLogoType('NONE')}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center ${
-                      logoType === 'NONE'
-                        ? 'border-slate-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 ring-2 ring-slate-500/30'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                      <X className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold leading-tight">بدون شعار (ترويسة نصية)</span>
-                    {logoType === 'NONE' && <Check className="w-3.5 h-3.5 text-slate-600" />}
-                  </button>
-                </div>
-
-                {/* Custom File Upload Box */}
-                {logoType === 'CUSTOM_UPLOAD' && (
-                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                      <span>اختيار ملف الصورة من جهازك (PNG, JPG, SVG):</span>
-                      {logoUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setLogoUrl('')}
-                          className="text-red-500 hover:text-red-700 flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>مسح الصورة المرفوعة</span>
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-white dark:bg-slate-900 border-2 border-dashed border-blue-400 dark:border-blue-700 rounded-xl cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition-colors">
-                        <Upload className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                        <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                          {logoUrl ? 'تغيير ملف الشعار الحالي...' : 'اضغط لاختيار صورة اللوجو من جهازك'}
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                          onChange={handleLogoFileUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      {logoUrl && (
-                        <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 p-1 flex items-center justify-center shrink-0">
-                          <img src={logoUrl} alt="معاينة الشعار المرفوع" className="max-w-full max-h-full object-contain" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
@@ -514,20 +354,9 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      رقم هاتف المكتب / واتساب:
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-600 dark:text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={showOfficePhones}
-                        onChange={(e) => setShowOfficePhones(e.target.checked)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3 h-3 cursor-pointer"
-                      />
-                      <span>إظهار في الترويسة</span>
-                    </label>
-                  </div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    رقم هاتف المكتب / واتساب:
+                  </label>
                   <input
                     type="text"
                     value={phone}
@@ -567,16 +396,10 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
               {/* Main Office Address with Visibility Toggle */}
               <div className="p-3 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    <input
-                      type="text"
-                      value={mainOfficeTitle}
-                      onChange={(e) => setMainOfficeTitle(e.target.value)}
-                      placeholder="المقر الرئيسي"
-                      className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-transparent border-b border-dashed border-emerald-400 w-32 focus:outline-none"
-                    />
-                  </div>
+                    <span>عنوان المقر الرئيسي للمكتب:</span>
+                  </label>
                   <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700">
                     <input
                       type="checkbox"
@@ -599,16 +422,10 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
               {/* Branch Office Address with Visibility Toggle */}
               <div className="p-3 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    <input
-                      type="text"
-                      value={branchOfficeTitle}
-                      onChange={(e) => setBranchOfficeTitle(e.target.value)}
-                      placeholder="فرع العاشر من رمضان"
-                      className="text-xs font-bold text-teal-800 dark:text-teal-300 bg-transparent border-b border-dashed border-teal-400 w-36 focus:outline-none"
-                    />
-                  </div>
+                    <span>عنوان الفرع (العاشر من رمضان):</span>
+                  </label>
                   <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700">
                     <input
                       type="checkbox"
@@ -952,6 +769,12 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                   {testSyncStatus}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeSettingsTab === 'PRINT_EXPORT' && (
+            <div className="space-y-4">
+              <PrintExportSettingsUnit showHeader={false} onSaved={() => setSavedSuccess(true)} />
             </div>
           )}
 

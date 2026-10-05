@@ -318,7 +318,7 @@ function findTargetElement(elementIdOrSelector?: string): HTMLElement | null {
 export async function exportElementToPdf(
   elementIdOrSelector?: string,
   filename: string = 'المستند_المعتمد.pdf',
-  options?: { orientation?: 'portrait' | 'landscape'; format?: 'a4' | 'a3' | 'letter' }
+  options?: { orientation?: 'portrait' | 'landscape'; format?: 'a4' | 'a3' | 'letter'; fitToSinglePage?: boolean }
 ): Promise<boolean> {
   const element = findTargetElement(elementIdOrSelector);
   if (!element) {
@@ -406,7 +406,7 @@ export async function exportElementToPdf(
     }
 
     // Continuous single-element fallback with careful proportional margins
-    const marginMm = 8;
+    const marginMm = 6;
     const printableWidth = pdfWidth - marginMm * 2;
     const printableHeight = pdfHeight - marginMm * 2;
 
@@ -418,11 +418,47 @@ export async function exportElementToPdf(
       backgroundColor: '#ffffff',
       scrollX: 0,
       scrollY: 0,
-      windowWidth: Math.max(element.scrollWidth, 1200),
+      windowWidth: Math.max(element.scrollWidth, 1100),
       onclone: (clonedDoc) => {
         sanitizeClonedDocForHtml2Canvas(clonedDoc);
       },
     });
+
+    const totalHeightMm = (canvas.height * printableWidth) / canvas.width;
+    const shouldFitSinglePage = options?.fitToSinglePage || totalHeightMm <= printableHeight * 1.35;
+
+    if (shouldFitSinglePage) {
+      if (totalHeightMm <= printableHeight) {
+        // Fits vertically within standard margins
+        pdf.addImage(
+          canvas.toDataURL('image/png', 1.0),
+          'PNG',
+          marginMm,
+          marginMm,
+          printableWidth,
+          totalHeightMm,
+          undefined,
+          'FAST'
+        );
+      } else {
+        // Scale down proportionally so whole document fits on 1 single page without any cutoff
+        const scaleFactor = printableHeight / totalHeightMm;
+        const scaledWidthMm = printableWidth * scaleFactor;
+        const offsetX = marginMm + (printableWidth - scaledWidthMm) / 2;
+        pdf.addImage(
+          canvas.toDataURL('image/png', 1.0),
+          'PNG',
+          offsetX,
+          marginMm,
+          scaledWidthMm,
+          printableHeight,
+          undefined,
+          'FAST'
+        );
+      }
+      pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+      return true;
+    }
 
     const pageCanvasHeight = Math.floor(canvas.width * (printableHeight / printableWidth));
     let sourceY = 0;
@@ -471,7 +507,6 @@ export async function exportElementToPdf(
   } catch (error) {
     console.error('Error generating PDF with html2canvas:', error);
     try {
-      // Graceful fallback: trigger native browser print which allows Save as PDF without canvas errors
       window.print();
       return true;
     } catch {

@@ -17,16 +17,19 @@ import { ChartOfAccountsView } from '../ChartOfAccountsView';
 import { JournalEntriesView } from '../JournalEntriesView';
 import { GeneralLedgerView } from '../GeneralLedgerView';
 import { TrialBalanceView } from '../TrialBalanceView';
+import { UnifiedFinancialReportsView } from '../UnifiedFinancialReportsView';
 import { FixedAssetsView } from '../FixedAssetsView';
 import { BankReconciliationView } from '../accounting/BankReconciliationView';
 import { InvoiceOcrScannerView } from '../accounting/InvoiceOcrScannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
-import { JournalEntryNotesAuditorView } from '../accounting/JournalEntryNotesAuditorView';
 import { ClientSelector } from '../common/ClientSelector';
+import { ShieldCheck, ShieldAlert, Factory, Percent } from 'lucide-react';
+import { MultiTenantWorkspacesModal } from '../common/MultiTenantWorkspacesModal';
+import { AcceleratedDepreciationCalculatorModal } from '../industrial/AcceleratedDepreciationCalculatorModal';
+import { IndustrialCostManagerModal } from '../industrial/IndustrialCostManagerModal';
 
 export type AccountingSubTab =
   | 'JOURNAL_ENTRIES'
-  | 'JOURNAL_AUDITOR'
   | 'OCR_INVOICE_SCANNER'
   | 'CHART_OF_ACCOUNTS'
   | 'GENERAL_LEDGER'
@@ -47,6 +50,9 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
   fiscalYear = 2026,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<AccountingSubTab>(initialSubTab);
+  const [isWorkspacesModalOpen, setIsWorkspacesModalOpen] = useState(false);
+  const [isDeprecModalOpen, setIsDeprecModalOpen] = useState(false);
+  const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   useEffect(() => {
     if (initialSubTab) {
@@ -73,13 +79,6 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
     },
     {
-      id: 'JOURNAL_AUDITOR',
-      label: 'فاحص التوجيه والرقابة الجنائية (Notes & Fraud)',
-      icon: Sparkles,
-      badge: 'توجيه & بنفورد',
-      badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
-    },
-    {
       id: 'OCR_INVOICE_SCANNER',
       label: 'مسح الفواتير (OCR)',
       icon: Sparkles,
@@ -98,7 +97,7 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
     },
     {
       id: 'TRIAL_BALANCE',
-      label: 'ميزان المراجعة',
+      label: 'ميزان المراجعة والتقارير الموحدة',
       icon: Scale,
     },
     {
@@ -123,52 +122,13 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
   ];
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-2.5">
       {/* Central Active Client Context Selector */}
       <ClientSelector state={state} />
 
-      {/* Hub Top Navigation Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-200/60 dark:border-blue-900/50">
-              <Layers className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">الدورة المحاسبية العامة</h2>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  EAS
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                قيود اليومية، دليل الحسابات، دفتر الأستاذ وميزان المراجعة
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs shrink-0 self-end sm:self-auto">
-            <div className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center gap-1.5 text-[11px]">
-              <span className="text-slate-500 dark:text-slate-400">مرحل:</span>
-              <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                {postedEntriesCount}
-              </span>
-            </div>
-            {unpostedEntriesCount > 0 && (
-              <div className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 flex items-center gap-1.5 text-[11px]">
-                <span className="text-amber-700 dark:text-amber-400">غير مرحل:</span>
-                <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  {unpostedEntriesCount}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sub-Tabs Selector */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar">
+      {/* Compact Sub-Tabs Toolbar */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
@@ -199,17 +159,50 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
             );
           })}
         </div>
+
+        <div className="hidden sm:flex items-center gap-1.5 text-xs shrink-0 pl-1">
+          <button
+            type="button"
+            onClick={() => setIsWorkspacesModalOpen(true)}
+            title="إدارة بيئات عمل الشركات والمصانع المتعددة (Multi-Tenant Hub)"
+            className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <Factory className="w-3.5 h-3.5 text-amber-600" />
+            <span>بيئات الكيانات</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsCostModalOpen(true)}
+            title="محاسبة التكاليف ومراكز التكلفة الصناعية FOH"
+            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <Layers className="w-3.5 h-3.5 text-indigo-600" />
+            <span>تكاليف FOH</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsDeprecModalOpen(true)}
+            title="الإهلاك الصناعي المعجل 30% - المادة 27 قانون 91/2005"
+            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <Percent className="w-3.5 h-3.5 text-amber-600" />
+            <span>إهلاك 30%</span>
+          </button>
+
+          <span className="text-[11px] text-slate-500 font-mono mr-1">
+            مرحل: <strong className="text-emerald-600">{postedEntriesCount}</strong>
+            {unpostedEntriesCount > 0 && (
+              <> | غير مرحل: <strong className="text-amber-600">{unpostedEntriesCount}</strong></>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* Render Active Sub-View */}
       <div>
         {activeSubTab === 'JOURNAL_ENTRIES' && <JournalEntriesView state={state} />}
-        {activeSubTab === 'JOURNAL_AUDITOR' && (
-          <JournalEntryNotesAuditorView
-            state={state}
-            onNavigateToJournal={() => setActiveSubTab('JOURNAL_ENTRIES')}
-          />
-        )}
         {activeSubTab === 'OCR_INVOICE_SCANNER' && (
           <InvoiceOcrScannerView
             onNavigateToJournal={() => setActiveSubTab('JOURNAL_ENTRIES')}
@@ -217,11 +210,32 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
         )}
         {activeSubTab === 'CHART_OF_ACCOUNTS' && <ChartOfAccountsView state={state} />}
         {activeSubTab === 'GENERAL_LEDGER' && <GeneralLedgerView state={state} />}
-        {activeSubTab === 'TRIAL_BALANCE' && <TrialBalanceView state={state} fiscalYear={fiscalYear} />}
+        {activeSubTab === 'TRIAL_BALANCE' && (
+          <UnifiedFinancialReportsView state={state} fiscalYear={fiscalYear} initialMode="TRIAL_BALANCE" />
+        )}
         {activeSubTab === 'FIXED_ASSETS' && <FixedAssetsView state={state} fiscalYear={fiscalYear} />}
         {activeSubTab === 'BANK_RECONCILIATION' && <BankReconciliationView state={state} />}
         {activeSubTab === 'CURRENCY_EXCHANGE_RATES' && <ExchangeRatesManagerView state={state} />}
       </div>
+
+      {/* Industrial & Multi-Tenant Modals */}
+      <MultiTenantWorkspacesModal
+        isOpen={isWorkspacesModalOpen}
+        onClose={() => setIsWorkspacesModalOpen(false)}
+        state={state}
+      />
+
+      <AcceleratedDepreciationCalculatorModal
+        isOpen={isDeprecModalOpen}
+        onClose={() => setIsDeprecModalOpen(false)}
+        state={state}
+      />
+
+      <IndustrialCostManagerModal
+        isOpen={isCostModalOpen}
+        onClose={() => setIsCostModalOpen(false)}
+        state={state}
+      />
     </div>
   );
 };

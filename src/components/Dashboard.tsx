@@ -26,10 +26,12 @@ import {
   Search,
   CheckCircle2,
   Smartphone,
+  Upload,
 } from 'lucide-react';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu, ActionMenuItem } from './common/ActionMenu';
 import { ClientSelector } from './common/ClientSelector';
+import { CpaAutonomousCommandDeck } from './dashboard/CpaAutonomousCommandDeck';
 import { DatabaseState } from '../db/localDatabase';
 import {
   computeAccountBalances,
@@ -74,7 +76,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenQuickTreasury,
   fiscalYear = 2026,
 }) => {
-  const navigate = onNavigate || onSelectTab || (() => {});
+  const navigate = (tabId: string) => {
+    if (onNavigate) onNavigate(tabId);
+    else if (onSelectTab) onSelectTab(tabId);
+  };
   const [selectedCategory, setSelectedCategory] = useState<KpiCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -521,6 +526,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
         actions: [
           {
+            id: 'act-auditor-upload',
+            label: 'رفع مستخرج الشركة وتدقيق التوجيه',
+            icon: Upload,
+            onClick: () => navigate('JOURNAL_AUDITOR'),
+          },
+          {
             id: 'act-journal-view',
             label: 'عرض دفتر القيود',
             icon: ExternalLink,
@@ -672,9 +683,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   ];
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-4">
       {/* Central Screen Client & Fiscal Year Context Banner */}
       <ClientSelector state={state} />
+
+      {/* Autonomous CPA Command Deck (Morning Radar, War-Room & One-Click Tools) */}
+      <CpaAutonomousCommandDeck
+        state={state}
+        onNavigate={navigate}
+        fiscalYear={currentFiscalYear}
+      />
 
       <UnifiedScreenCard
         title="لوحة مؤشرات الأداء المالي والمحاسبي"

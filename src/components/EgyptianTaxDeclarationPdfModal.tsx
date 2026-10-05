@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Printer,
   Download,
@@ -13,453 +13,680 @@ import {
   FileSpreadsheet,
   QrCode,
   Sparkles,
+  Loader2,
+  ArrowRightLeft,
+  Sliders,
 } from 'lucide-react';
-import { TaxDeclarationRecord, ClientArchiveRecord } from '../types';
 import { DatabaseState } from '../db/localDatabase';
-import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
-import { numberToArabicWords } from '../utils/numberToWordsArabic';
+import { TaxDeclarationRecord, ClientArchiveRecord } from '../types';
+import { exportElementToPdf } from '../utils/certifiedDocumentExporter';
+import { PrintService } from '../services/PrintService';
+import { generateQrCodeSvg } from '../utils/qrCodeGenerator';
+import { PrintExportControlModal } from './common/PrintExportControlModal';
 
 interface EgyptianTaxDeclarationPdfModalProps {
+  isOpen: boolean;
   state: DatabaseState;
   selectedDeclaration?: TaxDeclarationRecord | null;
+  initialDeclaration?: TaxDeclarationRecord | null;
   onClose: () => void;
 }
 
 export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfModalProps> = ({
   state,
   selectedDeclaration,
+  initialDeclaration,
   onClose,
 }) => {
   const profile = state.officeProfile;
+  const targetInitialDecl = selectedDeclaration || initialDeclaration;
 
-  // Active declaration or client selection
+  // Active declaration ID
   const [activeDeclId, setActiveDeclId] = useState<string>(
-    selectedDeclaration?.id || (state.taxDeclarations[0]?.id ?? '')
+    targetInitialDecl?.id || (state.taxDeclarations[0]?.id ?? '')
   );
 
-  const currentDeclaration =
-    state.taxDeclarations.find((d) => d.id === activeDeclId) || selectedDeclaration || state.taxDeclarations[0];
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isPrintSettingsOpen, setIsPrintSettingsOpen] = useState(false);
+  const [printSettings, setPrintSettings] = useState(PrintService.getSettings());
+
+  // تحديث الإقرار النشط تلقائياً بمجرد تغير التاريخ أو البيانات من الدرفة
+  useEffect(() => {
+    if (targetInitialDecl?.id) {
+      setActiveDeclId(targetInitialDecl.id);
+    }
+  }, [targetInitialDecl]);
+
+  // قائمة الإقرارات في القائمة العلوية متضمنة الإقرار الحالي المباشر
+  const declarationOptions = useMemo(() => {
+    const list = [...state.taxDeclarations];
+    if (targetInitialDecl && !list.some((d) => d.id === targetInitialDecl.id)) {
+      list.unshift(targetInitialDecl);
+    }
+    return list;
+  }, [state.taxDeclarations, targetInitialDecl]);
+
+  // استخراج الإقرار الحالي (مع أولوية مطلقة للبيانات الحية الممررة من الدرفة بالتاريخ المحدث)
+  const currentDeclaration = useMemo(() => {
+    if (targetInitialDecl && (activeDeclId === targetInitialDecl.id || !activeDeclId)) {
+      return targetInitialDecl;
+    }
+    return (
+      state.taxDeclarations.find((d) => d.id === activeDeclId) ||
+      targetInitialDecl ||
+      state.taxDeclarations[0]
+    );
+  }, [activeDeclId, targetInitialDecl, state.taxDeclarations]);
 
   const matchedClient: ClientArchiveRecord | undefined = state.clients.find(
     (c) => c.id === currentDeclaration?.clientId || c.name === currentDeclaration?.clientName
   );
 
   // Form custom overrides for print rendering
-  const clientName = matchedClient?.name || currentDeclaration?.clientName || 'شركة الأهرام للصناعات الهندسية والتجارة (ش.م.م)';
-  const taxRegNo = matchedClient?.taxCardNo || matchedClient?.vatRegistrationNo || '284-918-372';
+  const clientName =
+    currentDeclaration?.clientName ||
+    matchedClient?.name ||
+    'شركة النيل للصناعات الهندسية والتوريدات (ش.م.م)';
+  const taxRegNo =
+    currentDeclaration?.taxCardNo ||
+    matchedClient?.taxCardNo ||
+    matchedClient?.vatRegistrationNo ||
+    '482-910-332';
   const taxFileNo = matchedClient?.incomeTaxFileNo || '14/829/938/01';
-  const taxOffice = matchedClient?.taxOffice || 'مأمورية ضرائب الشركات المساهمة بالقاهرة';
+  const taxOffice =
+    currentDeclaration?.taxOffice ||
+    matchedClient?.taxOffice ||
+    'مركز كبار الممولين (SAP - الحي المالي)';
   const commercialReg = matchedClient?.commercialRegistrationNo || '148293';
-  const activity = matchedClient?.activity || 'نشاط تجاري وصناعي وتوريدات عمومية';
-  const address = matchedClient?.address || 'المنطقة الصناعية الثالثة - مدينة السادس من أكتوبر - الجيزة';
+  const activity = matchedClient?.activity || 'صناعات هندسية ومقاولات وتوريدات عمومية';
+  const address =
+    matchedClient?.address ||
+    'المنطقة الصناعية - الحي المالي - العاصمة الإدارية الجديدة';
 
-  const period = currentDeclaration?.period || 'يناير 2026';
+  const period = currentDeclaration?.period || 'فبراير 2026';
   const taxYear = currentDeclaration?.taxYear || 2026;
   const declarationType = currentDeclaration?.declarationType || 'VAT_10';
+  const amendmentType = currentDeclaration?.amendmentType || 'ORIGINAL';
+  const isZeroReturn =
+    currentDeclaration?.declarationNature === 'ZERO_RETURN' ||
+    (currentDeclaration as any)?.isZeroReturn;
 
-  // Financial figures
-  const salesAmount = currentDeclaration?.salesTaxableAmount || 1850000;
-  const vatOutput = currentDeclaration?.vatOutputTax || (salesAmount * 0.14);
-  const purchasesAmount = currentDeclaration?.purchasesTaxableAmount || 1120000;
-  const vatInput = currentDeclaration?.vatInputTax || (purchasesAmount * 0.14);
-  const netVatPayable = currentDeclaration?.netVatPayable ?? Math.max(0, vatOutput - vatInput);
-  const netTaxPayable = currentDeclaration?.netTaxPayable ?? netVatPayable;
+  // الحسبة المحاسبية والضريبية الشاملة (المبيعات، المشتريات، المخرجات، المدخلات، الرصيد الدائن، الصافي)
+  const salesAmount =
+    isZeroReturn ? 0 : Number(currentDeclaration?.salesTaxableAmount ?? currentDeclaration?.salesAmount ?? 0);
+  const vatOutput =
+    isZeroReturn ? 0 : Number(currentDeclaration?.vatOutputTax ?? Math.round(salesAmount * 0.14));
+  const purchasesAmount =
+    isZeroReturn ? 0 : Number(currentDeclaration?.purchasesTaxableAmount ?? currentDeclaration?.purchasesAmount ?? 0);
+  const vatInput =
+    isZeroReturn ? 0 : Number(currentDeclaration?.vatInputTax ?? Math.round(purchasesAmount * 0.14));
+  const previousCredit =
+    isZeroReturn ? 0 : Number(currentDeclaration?.previousCreditBalance ?? 0);
 
-  const finalDueAmount = netTaxPayable > 0 ? netTaxPayable : netVatPayable;
-  const arabicWords = numberToArabicWords(Math.round(finalDueAmount));
+  // إجمالي الخصومات والمدخلات والرصيد الدائن السابق
+  const totalDeductions = vatInput + previousCredit;
+
+  // صافي الفارق الضريبي واحتساب الرصيد الدائن أو مستحق السداد
+  let calcDifference = 0;
+  let isPayable = false;
+  let isCreditCarriedForward = false;
+  let payableAmount = 0;
+  let creditCarriedAmount = 0;
+
+  if (isZeroReturn) {
+    calcDifference = 0;
+    isPayable = false;
+    isCreditCarriedForward = false;
+    payableAmount = 0;
+    creditCarriedAmount = 0;
+  } else if (declarationType === 'VAT_10') {
+    calcDifference = vatOutput - totalDeductions;
+    if (calcDifference > 0) {
+      isPayable = true;
+      payableAmount = calcDifference;
+      creditCarriedAmount = 0;
+    } else if (calcDifference < 0) {
+      isCreditCarriedForward = true;
+      creditCarriedAmount = Math.abs(calcDifference);
+      payableAmount = 0;
+    } else {
+      if ((currentDeclaration?.netTaxPayable ?? 0) > 0) {
+        isPayable = true;
+        payableAmount = Number(currentDeclaration?.netTaxPayable);
+      } else if ((currentDeclaration?.netTaxPayable ?? 0) < 0) {
+        isCreditCarriedForward = true;
+        creditCarriedAmount = Math.abs(Number(currentDeclaration?.netTaxPayable));
+      }
+    }
+  } else {
+    // إقرارات الدخل أو كسب العمل أو الخصم والتحصيل
+    const net = Number(currentDeclaration?.netTaxPayable ?? 0);
+    if (net > 0) {
+      isPayable = true;
+      payableAmount = net;
+    } else if (net < 0 || previousCredit > 0) {
+      isCreditCarriedForward = true;
+      creditCarriedAmount = net < 0 ? Math.abs(net) : previousCredit;
+    }
+  }
+
+  const isBalancedOrZero = !isPayable && !isCreditCarriedForward;
+
+  // القيمة المعروضة والتفقيط بالعربية
+  const finalDisplayAmount = isPayable
+    ? payableAmount
+    : isCreditCarriedForward
+    ? creditCarriedAmount
+    : 0;
+
+  const arabicWords = numberToArabicWords(Math.round(finalDisplayAmount));
 
   // QR Code Verification Payload
-  const qrPayload = `ETA-EGY-TAX|DECL:${declarationType}|REG:${taxRegNo}|PERIOD:${period}-${taxYear}|NET:${finalDueAmount.toFixed(
-    2
-  )}|AUDITOR:MOHAMED_GAMIL_MAREI|HASH:${Date.now().toString(16).toUpperCase()}`;
+  const qrPayload = `ETA-EGY-TAX|DECL:${declarationType}|REG:${taxRegNo}|PERIOD:${period}-${taxYear}|TYPE:${
+    isPayable ? 'PAYABLE' : isCreditCarriedForward ? 'CREDIT_CARRIED' : 'ZERO'
+  }|AMOUNT:${finalDisplayAmount.toFixed(2)}|AUDITOR:${profile.auditorName || 'MOHAMED_GAMIL_MAREI'}|HASH:${(
+    currentDeclaration?.id || Date.now().toString(16)
+  ).toUpperCase()}`;
 
   const printableRef = useRef<HTMLDivElement>(null);
 
+  // طباعة مباشرة نظيفة ومعزولة تمنع تماماً ظهور أي صفحات بيضاء أو ترحيل
   const handlePrint = () => {
-    const styleId = 'tax-declaration-print-style';
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement;
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      document.head.appendChild(styleEl);
-    }
-    styleEl.innerHTML = `
-      @page {
-        size: A4 portrait;
-        margin: 8mm 8mm 10mm 8mm;
-      }
-      @media print {
-        body * {
-          visibility: hidden !important;
-        }
-        #egyptian-official-tax-form, #egyptian-official-tax-form * {
-          visibility: visible !important;
-        }
-        #egyptian-official-tax-form {
-          position: absolute !important;
-          left: 0 !important;
-          top: 0 !important;
-          width: 100% !important;
-          margin: 0 !important;
-          padding: 12px 16px !important;
-          background: white !important;
-          box-shadow: none !important;
-          border: none !important;
-        }
-      }
-    `;
-    setTimeout(() => {
+    const formEl = document.getElementById('egyptian-official-tax-form');
+    if (!formEl) {
       window.print();
-    }, 120);
-  };
+      return;
+    }
 
-  const handleDownloadHtmlPdf = () => {
-    if (!printableRef.current) return;
-    const content = printableRef.current.innerHTML;
-    const pageHtml = `
+    // إنشاء iframe عازل ومخصص للطباعة
+    let printIframe = document.getElementById('tax-return-print-iframe') as HTMLIFrameElement;
+    if (!printIframe) {
+      printIframe = document.createElement('iframe');
+      printIframe.id = 'tax-return-print-iframe';
+      printIframe.style.position = 'fixed';
+      printIframe.style.right = '0';
+      printIframe.style.bottom = '0';
+      printIframe.style.width = '0px';
+      printIframe.style.height = '0px';
+      printIframe.style.border = 'none';
+      printIframe.style.opacity = '0';
+      printIframe.style.zIndex = '-9999';
+      document.body.appendChild(printIframe);
+    }
+
+    const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
+    if (!iframeDoc) {
+      window.print();
+      return;
+    }
+
+    // استيراد كافة ملفات التنسيق والخطوط من الصفحة الرئيسية
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map((s) => s.outerHTML)
+      .join('\n');
+
+    iframeDoc.open();
+    iframeDoc.write(`
       <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
+      <html lang="ar" dir="rtl">
         <head>
-          <meta charset="utf-8">
-          <title>إقرار ضريبي رسمي - ${clientName} - ${period} ${taxYear}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+          <meta charset="utf-8" />
+          <title>إقرار ضريبي رسمي - ${clientName}</title>
+          ${styles}
           <style>
-            body {
-              font-family: 'Cairo', sans-serif;
-              background-color: #f8fafc;
-              color: #0f172a;
-              padding: 20px;
-              direction: rtl;
-            }
-            @media print {
-              body { background-color: #ffffff; padding: 0; }
-              .no-print { display: none !important; }
-            }
             @page {
               size: A4 portrait;
-              margin: 12mm;
+              margin: 4mm 4mm 4mm 4mm;
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              box-sizing: border-box;
+            }
+            html, body {
+              background: #ffffff !important;
+              color: #0f172a !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+              direction: rtl !important;
+              font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif !important;
+            }
+            #egyptian-official-tax-form {
+              width: 100% !important;
+              max-width: 100% !important;
+              margin: 0 !important;
+              padding: 2mm 3mm !important;
+              box-shadow: none !important;
+              border: none !important;
+            }
+            .no-print {
+              display: none !important;
             }
           </style>
         </head>
         <body>
-          <div style="max-width: 900px; margin: 0 auto; background: white; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            ${content}
+          <div id="egyptian-official-tax-form">
+            ${formEl.innerHTML}
           </div>
-          <script>
-            window.onload = () => { window.print(); };
-          </script>
         </body>
       </html>
-    `;
+    `);
+    iframeDoc.close();
 
-    const blob = new Blob([pageHtml], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `إقرار_ضريبي_${declarationType}_${clientName.replace(/\s+/g, '_')}_${taxYear}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    // تشغيل الطباعة بعد اكتمال تحميل عناصر الـ iframe
+    setTimeout(() => {
+      try {
+        printIframe.contentWindow?.focus();
+        printIframe.contentWindow?.print();
+      } catch {
+        window.print();
+      }
+    }, 250);
+  };
+
+  // تصدير وتحميل ملف PDF حقيقي ومباشر وكامل البيانات على صفحة A4 واحدة معتمدة
+  const handleExportDirectPdf = async () => {
+    setIsExportingPdf(true);
+    try {
+      const cleanClientName = clientName.replace(/[/\\?%*:|"<>]/g, '_').trim();
+      const cleanPeriod = period.replace(/[/\\?%*:|"<>]/g, '_').trim();
+      const statusSuffix = isPayable ? 'مستحق_سداد' : isCreditCarriedForward ? 'رصيد_دائن_مرحل' : 'صفري';
+      const pdfFileName = `إقرار_ضريبي_${declarationType}_${cleanClientName}_${cleanPeriod}_${taxYear}_${statusSuffix}.pdf`;
+
+      const success = await exportElementToPdf('egyptian-official-tax-form', pdfFileName, {
+        orientation: 'portrait',
+        format: 'a4',
+        fitToSinglePage: true,
+      });
+      if (!success) {
+        handlePrint();
+      }
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      handlePrint();
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-slate-100 rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-300 my-auto overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-slate-100 dark:bg-slate-950 rounded-2xl sm:rounded-3xl max-w-5xl w-full max-h-[96vh] flex flex-col shadow-2xl border border-slate-300 dark:border-slate-800 my-auto overflow-hidden">
         {/* Modal Top Control Bar */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-red-600/30 border border-red-500/40 text-red-400">
-              <Percent className="w-5 h-5" />
+        <div className="bg-slate-900 text-white px-4 sm:px-6 py-3 sm:py-3.5 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-red-600/30 border border-red-500/40 text-red-400">
+              <Percent className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span>تصدير وطباعة الإقرار الضريبي الرسمي (PDF Egyptian Tax Return)</span>
-                <span className="text-[11px] bg-red-800 text-red-100 px-2 py-0.5 rounded-full font-mono">
+              <h3 className="text-sm sm:text-base font-bold text-white flex flex-wrap items-center gap-1.5">
+                <span>تصدير وطباعة الإقرار الضريبي الرسمي</span>
+                <span className="text-[10px] bg-red-800 text-red-100 px-2 py-0.5 rounded-full font-mono">
                   ETA-FORM-{declarationType}
                 </span>
+                {isPayable ? (
+                  <span className="text-[10px] bg-red-700/80 text-white px-2 py-0.5 rounded-full">
+                    مستحق السداد
+                  </span>
+                ) : isCreditCarriedForward ? (
+                  <span className="text-[10px] bg-emerald-700/80 text-white px-2 py-0.5 rounded-full">
+                    رصيد دائن مرحل (زيادة)
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-slate-700 text-slate-200 px-2 py-0.5 rounded-full">
+                    إقرار صفري
+                  </span>
+                )}
               </h3>
-              <p className="text-xs text-slate-300">
-                منسق بالكامل وفق النماذج الرسمية المعتمدة بمصلحة الضرائب المصرية وقانون الإجراءات الضريبية الموحد 206 لسنة 2020.
+              <p className="text-[11px] text-slate-300 hidden sm:block">
+                منسق وفق النماذج الرسمية المعتمدة بمصلحة الضرائب المصرية وقانون الإجراءات الضريبية 206 لسنة 2020.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* زر تصدير PDF مباشر وحقيقي */}
+            <button
+              onClick={handleExportDirectPdf}
+              disabled={isExportingPdf}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all"
+              title="تحميل ملف PDF رسمي معتمد بصيغة PDF فورية"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>{isExportingPdf ? 'جارِ التحميل...' : 'تحميل PDF'}</span>
+            </button>
+
+            {/* زر إعدادات الطباعة والـ QR */}
+            <button
+              type="button"
+              onClick={() => setIsPrintSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-700 cursor-pointer transition-all"
+              title="تخصيص أساليب الطباعة، إظهار/إخفاء الـ QR، شكل الختم والهوامش"
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-400" />
+              <span>إعدادات الطباعة والـ QR</span>
+            </button>
+
+            {/* زر طباعة الإقرار */}
             <button
               onClick={handlePrint}
               id="btn-print-tax-return"
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all"
+              className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-700 cursor-pointer transition-all"
+              title="طباعة الإقرار فوراً دون صفحات بيضاء"
             >
-              <Printer className="w-4 h-4" />
-              <span>طباعة الإقرار (Print / PDF)</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>طباعة</span>
             </button>
-            <button
-              onClick={handleDownloadHtmlPdf}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-700 cursor-pointer transition-all"
-            >
-              <Download className="w-4 h-4 text-emerald-400" />
-              <span>تنزيل مستند الإقرار</span>
-            </button>
+
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer transition-colors"
+              className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
-        {/* Declaration Selector Sub-bar */}
-        <div className="bg-white px-6 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+        {/* Declaration Selector & Toolbar */}
+        <div className="bg-slate-800/90 px-4 sm:px-6 py-2 border-b border-slate-700/60 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-200 shrink-0">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-700">اختر الإقرار أو الممول:</span>
+            <span className="text-slate-400 font-semibold text-[11px]">الفترة والإقرار:</span>
             <select
               value={activeDeclId}
               onChange={(e) => setActiveDeclId(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+              className="bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded-lg text-xs font-medium focus:ring-2 focus:ring-red-500 focus:outline-none"
             >
-              {state.taxDeclarations.map((d) => (
-                <option key={d.id} value={d.id}>
-                  [{d.declarationType}] {d.clientName} - {d.period} {d.taxYear} ({formatEgyptianCurrency(d.netVatPayable || d.netTaxPayable || 0)})
+              {declarationOptions.map((decl) => (
+                <option key={decl.id} value={decl.id}>
+                  {decl.clientName} - {decl.period} ({decl.taxYear}) [{decl.declarationType}]
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="flex items-center gap-3 text-slate-500 text-[11px]">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>معتمد بختم المحاسب القانوني: <strong>{profile.auditorName}</strong></span>
+          <div className="flex items-center gap-2 sm:gap-3 text-[11px]">
+            <span className="text-slate-300">
+              الحالة: <strong className="text-emerald-400 font-bold">{currentDeclaration?.status === 'SUBMITTED_TO_ETA' || currentDeclaration?.status === 'PAID' ? 'تم التقديم' : 'مسودة'}</strong>
             </span>
             <span>•</span>
-            <span className="font-mono text-slate-600">{(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}</span>
+            <span className="text-slate-300">
+              المأمورية: <strong className="text-slate-100">{taxOffice}</strong>
+            </span>
           </div>
         </div>
 
-        {/* Scrollable Printable Form Area */}
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-200/60">
+        {/* Printable View Container */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 bg-slate-200/70 dark:bg-slate-900/50 flex justify-center">
           <div
-            ref={printableRef}
             id="egyptian-official-tax-form"
-            className="max-w-[850px] mx-auto bg-white p-8 sm:p-10 rounded-2xl shadow-xl border border-slate-300 text-slate-900 space-y-6 relative"
+            ref={printableRef}
+            className="w-full max-w-[840px] bg-white text-slate-900 p-4 sm:p-6 rounded-xl shadow-lg border border-slate-300 space-y-2.5 font-sans text-right relative"
+            style={{
+              direction: 'rtl',
+              fontFamily: "'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+            }}
           >
             {/* Watermark */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] overflow-hidden">
-              <div className="text-9xl font-black text-slate-950 rotate-[-30deg] select-none text-center leading-none">
-                مصلحة الضرائب المصرية<br />EGYPTIAN TAX AUTHORITY
-              </div>
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] select-none overflow-hidden">
+              <span className="text-8xl font-black text-slate-900 -rotate-45 tracking-widest uppercase">
+                ETA OFFICIAL
+              </span>
             </div>
 
-            {/* Form Official Header */}
-            <div className="border-b-2 border-slate-900 pb-5">
-              <div className="flex items-start justify-between gap-4">
-                {/* Right: State / Ministry Info */}
-                <div className="text-right space-y-0.5">
-                  <div className="font-bold text-xs text-slate-600">جمهورية مصر العربية</div>
-                  <div className="font-bold text-sm text-slate-900">وزارة المالية</div>
-                  <div className="font-black text-base text-red-900">مصلحة الضرائب المصرية</div>
-                  <div className="text-[11px] font-semibold text-slate-600">{taxOffice}</div>
+            {/* Official Header */}
+            <div className="border-b-2 border-red-800 pb-2">
+              <div className="flex items-start justify-between">
+                {/* Right: Ministry & Authority */}
+                <div className="space-y-0.2">
+                  <h2 className="font-bold text-[11px] text-slate-800">جمهورية مصر العربية</h2>
+                  <h3 className="font-bold text-[11px] text-slate-800">وزارة المالية</h3>
+                  <h4 className="font-black text-xs text-red-800">مصلحة الضرائب المصرية</h4>
+                  <p className="text-[9px] text-slate-600 font-medium">
+                    {taxOffice}
+                  </p>
                 </div>
 
-                {/* Center: Title / Form Emblem */}
-                <div className="text-center space-y-1">
-                  <div className="inline-block px-4 py-1 bg-slate-900 text-white rounded-lg font-black text-sm">
-                    {declarationType === 'VAT_10'
-                      ? 'نموذج رقم (10) ض.ق.م'
-                      : declarationType === 'INCOME_27_CORP'
-                      ? 'نموذج رقم (27) ض.د'
-                      : declarationType === 'PAYROLL_4'
-                      ? 'نموذج رقم (4) مرتبات'
-                      : 'نموذج رقم (41) خصم وتحصيل'}
+                {/* Center: Title & Form Type */}
+                <div className="text-center space-y-0.5">
+                  <div className="inline-block bg-red-800 text-white px-2.5 py-0.5 rounded font-mono font-black text-[11px] tracking-wider shadow-2xs">
+                    نموذج رقم ({declarationType === 'VAT_10' ? '10' : declarationType === 'INCOME_27_CORP' ? '27' : declarationType === 'INCOME_28_INDIV' ? '28' : declarationType === 'PAYROLL_4' ? '4' : '41'}) ضريبة
                   </div>
-                  <h1 className="text-base sm:text-lg font-black text-slate-950">
+                  <h1 className="font-black text-sm text-slate-900">
                     {declarationType === 'VAT_10'
                       ? 'إقرار الضريبة على القيمة المضافة وضريبة الجدول'
                       : declarationType === 'INCOME_27_CORP'
                       ? 'إقرار ضريبة أرباح الأشخاص الاعتبارية (الشركات)'
+                      : declarationType === 'INCOME_28_INDIV'
+                      ? 'إقرار ضريبة دخل الأشخاص الطبيعيين (المنشآت الفردية)'
                       : declarationType === 'PAYROLL_4'
                       ? 'إقرار المرتبات والأجور وما في حكمها (كسب العمل)'
                       : 'إقرار الخصم والتحصيل والدفعات المقدمة (أ.ت.ص)'}
                   </h1>
-                  <p className="text-[10px] text-slate-500 font-semibold">
-                    وفقاً لأحكام القانون رقم 67 لسنة 2016 وتعديلاته وقانون الإجراءات الضريبية الموحد رقم 206 لسنة 2020
+                  <p className="text-[9px] text-slate-500 font-semibold">
+                    وفقاً لأحكام القانون رقم 67 لسنة 2016 وتعديلاته وقانون الإجراءات الضريبية 206 لسنة 2020
                   </p>
                 </div>
 
                 {/* Left: QR Code and Serial */}
-                <div className="text-left flex flex-col items-end space-y-1">
-                  <div
-                    data-qr-container="true"
-                    dangerouslySetInnerHTML={{
-                      __html: generateQrCodeSvg(qrPayload, 96),
-                    }}
-                    className="qr-print-container border border-slate-300 p-1 rounded-lg bg-white shadow-2xs"
-                  />
-                  <span className="font-mono text-[9px] text-slate-500 font-bold">
-                    ETA-REF-{currentDeclaration?.id.slice(-6).toUpperCase() || '2026-X'}
-                  </span>
-                </div>
+                {printSettings.includeQrVerification !== false && (
+                  <div className="text-left flex flex-col items-end space-y-0.5">
+                    <div
+                      data-qr-container="true"
+                      dangerouslySetInnerHTML={{
+                        __html: generateQrCodeSvg(qrPayload, printSettings.qrSizePx || 76),
+                      }}
+                      className="qr-print-container border border-slate-300 p-0.5 rounded bg-white shadow-2xs"
+                    />
+                    <span className="font-mono text-[8.5px] text-slate-500 font-bold">
+                      ETA-REF-{(currentDeclaration?.etaReferenceNumber || currentDeclaration?.id || '2026-X').slice(-8).toUpperCase()}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Tax Period Banner */}
-              <div className="mt-4 bg-slate-100 p-2.5 rounded-xl border border-slate-300 flex items-center justify-between text-xs font-bold">
+              <div className="mt-1.5 bg-slate-100 p-1.5 rounded-lg border border-slate-300 flex flex-wrap items-center justify-between text-[11px] font-bold">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-red-700" />
+                  <Calendar className="w-3.5 h-3.5 text-red-700" />
                   <span>الفترة الضريبية: <strong className="text-red-950 font-black">{period}</strong></span>
+                  <span className="px-1.5 py-0.2 rounded text-[9.5px] bg-blue-100 text-blue-800">
+                    {amendmentType === 'AMENDED' ? 'إقرار مُعدّل' : 'إقرار أصلي'}
+                  </span>
+                  {isZeroReturn && (
+                    <span className="px-1.5 py-0.2 rounded text-[9.5px] bg-purple-100 text-purple-800">
+                      إقرار صفري
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span>سنة الإقرار: <strong className="font-mono text-slate-900">{taxYear}</strong></span>
                   <span>|</span>
-                  <span>تاريخ وجوب التقديم والسداد: <strong className="font-mono text-slate-900">{currentDeclaration?.dueDate || 'نهاية الشهر التالي'}</strong></span>
+                  <span>تاريخ الاستحقاق: <strong className="font-mono text-slate-900">{currentDeclaration?.dueDate || 'نهاية الشهر التالي'}</strong></span>
                 </div>
               </div>
             </div>
 
             {/* Section 1: Taxpayer Identification Data */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 bg-slate-900 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
                 <span>أولاً: بيانات المسجل / الممول (Taxpayer Profile)</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                 <div>
-                  <span className="text-slate-500 block text-[10px]">اسم الشركة / المسجل:</span>
-                  <span className="font-black text-slate-900">{clientName}</span>
+                  <span className="text-slate-500 block text-[9.5px]">اسم الشركة / المسجل:</span>
+                  <span className="font-black text-slate-900 text-[11.5px]">{clientName}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">رقم التسجيل الضريبي (9 أرقام):</span>
-                  <span className="font-mono font-black text-red-700 text-sm tracking-wider">{taxRegNo}</span>
+                  <span className="text-slate-500 block text-[9.5px]">رقم التسجيل الضريبي (9 أرقام):</span>
+                  <span className="font-mono font-black text-red-700 text-xs tracking-wider">{taxRegNo}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">رقم الملف الضريبي:</span>
-                  <span className="font-mono font-bold text-slate-800">{taxFileNo}</span>
+                  <span className="text-slate-500 block text-[9.5px]">رقم الملف الضريبي:</span>
+                  <span className="font-mono font-bold text-slate-800 text-[11px]">{taxFileNo}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">المأمورية المختصة:</span>
-                  <span className="font-semibold text-slate-800">{taxOffice}</span>
+                  <span className="text-slate-500 block text-[9.5px]">المأمورية المختصة:</span>
+                  <span className="font-semibold text-slate-800 text-[11px]">{taxOffice}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">رقم السجل التجاري:</span>
-                  <span className="font-mono font-bold text-slate-800">{commercialReg}</span>
+                  <span className="text-slate-500 block text-[9.5px]">رقم السجل التجاري:</span>
+                  <span className="font-mono font-bold text-slate-800 text-[11px]">{commercialReg}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">النشاط الرئيسي:</span>
-                  <span className="font-medium text-slate-800 truncate block">{activity}</span>
+                  <span className="text-slate-500 block text-[9.5px]">النشاط الرئيسي:</span>
+                  <span className="font-medium text-slate-800 truncate block text-[11px]">{activity}</span>
                 </div>
                 <div className="col-span-2 sm:col-span-3">
-                  <span className="text-slate-500 block text-[10px]">العنوان والمركز الرئيسي:</span>
-                  <span className="font-medium text-slate-800">{address}</span>
+                  <span className="text-slate-500 block text-[9.5px]">العنوان والمركز الرئيسي:</span>
+                  <span className="font-medium text-slate-800 text-[11px]">{address}</span>
                 </div>
               </div>
             </div>
 
-            {/* Section 2: Detailed Tax Calculations Schedule (جدول المبيعات والمشتريات والضريبة) */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold">
+            {/* Section 2: Detailed Tax Calculations Schedule */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 bg-slate-900 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
                 <span>ثانياً: جدول تفريغ العمليات واحتساب الضريبة (Tax Schedule & Deductions)</span>
               </div>
 
-              <div className="border border-slate-300 rounded-xl overflow-hidden text-xs">
+              <div className="border border-slate-300 rounded-lg overflow-hidden text-xs">
                 <table className="w-full text-right border-collapse">
                   <thead>
-                    <tr className="bg-slate-200 text-slate-900 font-bold border-b border-slate-300">
-                      <th className="p-2.5 border-l border-slate-300 w-12 text-center">م</th>
-                      <th className="p-2.5 border-l border-slate-300">بيان العمليات الخاضعة والمعفاة</th>
-                      <th className="p-2.5 border-l border-slate-300 text-left w-36">القيمة / وعاء الضريبة (ج.م)</th>
-                      <th className="p-2.5 border-l border-slate-300 text-center w-20">فئة الضريبة</th>
-                      <th className="p-2.5 text-left w-36">قيمة الضريبة (ج.م)</th>
+                    <tr className="bg-slate-200 text-slate-900 font-bold border-b border-slate-300 text-[10px]">
+                      <th className="p-1 border-l border-slate-300 w-8 text-center">م</th>
+                      <th className="p-1 border-l border-slate-300">بيان العمليات الخاضعة والمعفاة</th>
+                      <th className="p-1 border-l border-slate-300 text-left w-32">وعاء الضريبة (ج.م)</th>
+                      <th className="p-1 border-l border-slate-300 text-center w-16">الفئة</th>
+                      <th className="p-1 text-left w-32">قيمة الضريبة (ج.م)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-slate-200 text-[11px]">
                     {/* Sales Section */}
                     <tr className="bg-slate-100 font-bold text-slate-900">
-                      <td colSpan={5} className="p-2 text-right text-red-900">
+                      <td colSpan={5} className="p-0.5 px-1 text-right text-red-900 text-[10px]">
                         ( أ ) المبيعات والإيرادات عن الفترة الضريبية (ضريبة المخرجات)
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono">1</td>
-                      <td className="p-2 border-l border-slate-200 font-medium">
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">1</td>
+                      <td className="p-1 border-l border-slate-200 font-medium">
                         مبيعات سلع عامة وخدمات محلية خاضعة للسعر العام
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono font-bold text-slate-800">
+                      <td className="p-1 border-l border-slate-200 text-left font-mono font-bold text-slate-800">
                         {formatEgyptianCurrency(salesAmount)}
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-center font-bold text-red-700">14 %</td>
-                      <td className="p-2 text-left font-mono font-black text-red-900">
+                      <td className="p-1 border-l border-slate-200 text-center font-bold text-red-700">14 %</td>
+                      <td className="p-1 text-left font-mono font-black text-red-900">
                         {formatEgyptianCurrency(vatOutput)}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono">2</td>
-                      <td className="p-2 border-l border-slate-200 text-slate-600">
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">2</td>
+                      <td className="p-1 border-l border-slate-200 text-slate-600">
                         صادرات سلع وخدمات خاضعة لسعر (صفر %)
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono text-slate-600">0.00</td>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono text-slate-500">0 %</td>
-                      <td className="p-2 text-left font-mono text-slate-600">0.00</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono">3</td>
-                      <td className="p-2 border-l border-slate-200 text-slate-600">
-                        مبيعات وإيرادات سلع جدول (القيمة المضافة)
-                      </td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono text-slate-600">0.00</td>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono text-slate-500">جدول</td>
-                      <td className="p-2 text-left font-mono text-slate-600">0.00</td>
+                      <td className="p-1 border-l border-slate-200 text-left font-mono text-slate-600">0.00</td>
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-slate-500">0 %</td>
+                      <td className="p-1 text-left font-mono text-slate-600">0.00</td>
                     </tr>
                     <tr className="bg-red-50/70 font-bold border-t border-red-200 text-red-950">
-                      <td className="p-2 border-l border-slate-200 text-center">★</td>
-                      <td className="p-2 border-l border-slate-200">إجمالي المبيعات وضريبة المخرجات المستحقة</td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono font-black">
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">★</td>
+                      <td className="p-1 border-l border-slate-200">إجمالي المبيعات وضريبة المخرجات المستحقة (أ)</td>
+                      <td className="p-1 border-l border-slate-200 text-left font-mono font-black">
                         {formatEgyptianCurrency(salesAmount)}
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-center">-</td>
-                      <td className="p-2 text-left font-mono font-black text-red-900">
+                      <td className="p-1 border-l border-slate-200 text-center">-</td>
+                      <td className="p-1 text-left font-mono font-black text-red-900">
                         {formatEgyptianCurrency(vatOutput)}
                       </td>
                     </tr>
 
                     {/* Purchases Section */}
                     <tr className="bg-slate-100 font-bold text-slate-900">
-                      <td colSpan={5} className="p-2 text-right text-emerald-900">
+                      <td colSpan={5} className="p-0.5 px-1 text-right text-emerald-900 text-[10px]">
                         ( ب ) المشتريات والمدخلات القابلة للخصم القانوني (ضريبة المدخلات)
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono">4</td>
-                      <td className="p-2 border-l border-slate-200 font-medium">
-                        مشتريات محلية واستيرادية خاضعة ومسدد عنها الضريبة بالفواتير الإلكترونية
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">3</td>
+                      <td className="p-1 border-l border-slate-200 font-medium">
+                        مشتريات محلية واستيرادية خاضعة ومسدد عنها الضريبة
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono font-bold text-slate-800">
+                      <td className="p-1 border-l border-slate-200 text-left font-mono font-bold text-slate-800">
                         {formatEgyptianCurrency(purchasesAmount)}
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-center font-bold text-emerald-700">14 %</td>
-                      <td className="p-2 text-left font-mono font-black text-emerald-800">
+                      <td className="p-1 border-l border-slate-200 text-center font-bold text-emerald-700">14 %</td>
+                      <td className="p-1 text-left font-mono font-black text-emerald-800">
                         {formatEgyptianCurrency(vatInput)}
                       </td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono">5</td>
-                      <td className="p-2 border-l border-slate-200 text-slate-600">
-                        مشتريات أصول رأسمالية وآلات ومعدات إنتاجية
-                      </td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono text-slate-600">0.00</td>
-                      <td className="p-2 border-l border-slate-200 text-center font-mono text-slate-500">14 %</td>
-                      <td className="p-2 text-left font-mono text-slate-600">0.00</td>
                     </tr>
                     <tr className="bg-emerald-50/70 font-bold border-t border-emerald-200 text-emerald-950">
-                      <td className="p-2 border-l border-slate-200 text-center">★</td>
-                      <td className="p-2 border-l border-slate-200">إجمالي المشتريات وضريبة المدخلات القابلة للخصم</td>
-                      <td className="p-2 border-l border-slate-200 text-left font-mono font-black">
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">★</td>
+                      <td className="p-1 border-l border-slate-200">إجمالي المشتريات وضريبة المدخلات القابلة للخصم (ب)</td>
+                      <td className="p-1 border-l border-slate-200 text-left font-mono font-black">
                         {formatEgyptianCurrency(purchasesAmount)}
                       </td>
-                      <td className="p-2 border-l border-slate-200 text-center">-</td>
-                      <td className="p-2 text-left font-mono font-black text-emerald-900">
+                      <td className="p-1 border-l border-slate-200 text-center">-</td>
+                      <td className="p-1 text-left font-mono font-black text-emerald-900">
                         {formatEgyptianCurrency(vatInput)}
+                      </td>
+                    </tr>
+
+                    {/* Previous Credit Section */}
+                    <tr className="bg-indigo-50/80 font-bold border-t border-indigo-200 text-indigo-950">
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">4</td>
+                      <td className="p-1 border-l border-slate-200">
+                        ( ج ) رصيد دائن مرحل من فترات ضريبية سابقة واجب الخصم
+                      </td>
+                      <td className="p-1 border-l border-slate-200 text-left font-mono text-slate-600">-</td>
+                      <td className="p-1 border-l border-slate-200 text-center">-</td>
+                      <td className="p-1 text-left font-mono font-black text-indigo-900">
+                        {formatEgyptianCurrency(previousCredit)}
+                      </td>
+                    </tr>
+
+                    {/* Total Deductions */}
+                    <tr className="bg-slate-100 font-bold border-t border-slate-300 text-slate-900 text-[10.5px]">
+                      <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]">★</td>
+                      <td className="p-1 border-l border-slate-200">
+                        إجمالي الخصومات والمدخلات (ضريبة المدخلات + الرصيد الدائن السابق)
+                      </td>
+                      <td className="p-1 border-l border-slate-200 text-left font-mono font-bold text-slate-600">-</td>
+                      <td className="p-1 border-l border-slate-200 text-center">-</td>
+                      <td className="p-1 text-left font-mono font-black text-slate-900">
+                        {formatEgyptianCurrency(totalDeductions)}
+                      </td>
+                    </tr>
+
+                    {/* Net Result Row */}
+                    <tr
+                      className={`font-black border-t-2 text-[11px] ${
+                        isPayable
+                          ? 'bg-red-100/90 text-red-950 border-red-400'
+                          : isCreditCarriedForward
+                          ? 'bg-emerald-100/90 text-emerald-950 border-emerald-400'
+                          : 'bg-slate-100 text-slate-900 border-slate-300'
+                      }`}
+                    >
+                      <td className="p-1.5 border-l border-slate-300 text-center font-mono">★</td>
+                      <td className="p-1.5 border-l border-slate-300">
+                        {isPayable
+                          ? '( د ) صافي الضريبة المستحقة واجبة السداد لمصلحة الضرائب المصرية'
+                          : isCreditCarriedForward
+                          ? '( د ) رصيد دائن / زيادة مسددة للمسجل ترحل للفترة الضريبية القادمة'
+                          : '( د ) صافي الضريبة (إقرار صفري متوازن)'}
+                      </td>
+                      <td className="p-1.5 border-l border-slate-300 text-left font-mono font-black">-</td>
+                      <td className="p-1.5 border-l border-slate-300 text-center">
+                        {isPayable ? 'سداد' : isCreditCarriedForward ? 'يرحل' : 'صفر'}
+                      </td>
+                      <td className="p-1.5 text-left font-mono font-black text-xs">
+                        {formatEgyptianCurrency(finalDisplayAmount)}
                       </td>
                     </tr>
                   </tbody>
@@ -467,54 +694,97 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
               </div>
             </div>
 
-            {/* Section 3: Net Tax Calculation & Arabic Word Transcription (صافي الضريبة والتفقيط) */}
-            <div className="bg-gradient-to-r from-red-50 to-slate-50 p-4 rounded-xl border-2 border-red-700/30 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-red-200 pb-2">
-                <span className="font-bold text-slate-900 text-sm">
-                  صافي الضريبة المستحقة واجبة السداد لمصلحة الضرائب المصرية:
-                </span>
-                <span className="font-mono font-black text-xl text-red-900">
-                  {formatEgyptianCurrency(finalDueAmount)}
-                </span>
+            {/* Section 3: Net Tax Calculation & Arabic Word Transcription */}
+            <div
+              className={`p-2.5 rounded-lg border-2 space-y-1.5 ${
+                isPayable
+                  ? 'bg-gradient-to-r from-red-50 to-slate-50 border-red-700/40 text-red-950'
+                  : isCreditCarriedForward
+                  ? 'bg-gradient-to-r from-emerald-50 to-indigo-50/40 border-emerald-600/40 text-emerald-950'
+                  : 'bg-slate-50 border-slate-300 text-slate-900'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-300/60 pb-1.5">
+                <div className="flex items-center gap-1.5">
+                  {isPayable ? (
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-600 shrink-0"></span>
+                  ) : isCreditCarriedForward ? (
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                  )}
+                  <span className="font-black text-xs">
+                    {isPayable
+                      ? 'صافي الضريبة المستحقة واجبة السداد لمصلحة الضرائب المصرية:'
+                      : isCreditCarriedForward
+                      ? 'رصيد دائن / زيادة مسددة للمسجل ترحل للفترة الضريبية القادمة:'
+                      : 'نتيجة الإقرار الضريبي:'}
+                  </span>
+                </div>
+
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    className={`font-mono font-black text-base ${
+                      isPayable
+                        ? 'text-red-900'
+                        : isCreditCarriedForward
+                        ? 'text-emerald-800'
+                        : 'text-slate-800'
+                    }`}
+                  >
+                    {formatEgyptianCurrency(finalDisplayAmount)}
+                  </span>
+                  <span className="text-[10px] font-bold">
+                    {isPayable
+                      ? '(مستحق السداد)'
+                      : isCreditCarriedForward
+                      ? '(فائض دائن يرحل)'
+                      : '(إقرار صفري)'}
+                  </span>
+                </div>
               </div>
 
-              <div className="text-xs text-slate-800 flex items-center gap-2">
-                <span className="font-bold text-slate-600 shrink-0">المبلغ فقط وقدره:</span>
-                <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-lg border border-red-200 shadow-2xs flex-1">
-                  {arabicWords} لا غير
+              <div className="text-[11px] flex items-center gap-1.5">
+                <span className="font-bold text-slate-600 shrink-0 text-[10px]">المبلغ فقط وقدره:</span>
+                <span className="font-black bg-white px-2.5 py-0.5 rounded border border-slate-300 shadow-2xs flex-1 text-slate-900">
+                  {isBalancedOrZero
+                    ? 'صفر جنيه مصري لا غير (لا توجد مبالغ مستحقة السداد أو أرصدة دائنة مرحلة)'
+                    : isPayable
+                    ? `فقط ${arabicWords} لا غير (واجب السداد لمصلحة الضرائب المصرية)`
+                    : `فقط ${arabicWords} لا غير (رصيد دائن للمسجل يرحل للفترة الضريبية التالية)`}
                 </span>
               </div>
             </div>
 
-            {/* Section 4: Auditor & Chartered Accountant Certification (إقرار المحاسب القانوني ومراقب الحسابات) */}
-            <div className="border border-slate-300 rounded-xl p-4 bg-slate-50/50 space-y-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-200 pb-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+            {/* Section 4: Auditor & Chartered Accountant Certification */}
+            <div className="border border-slate-300 rounded-lg p-2 bg-slate-50/50 space-y-1 text-xs">
+              <div className="flex items-center gap-1.5 text-slate-900 font-bold border-b border-slate-200 pb-0.5 text-[11px]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
                 <span>إقرار واعتماد المحاسب القانوني ومراقب الحسابات (Auditor Attestation)</span>
               </div>
 
-              <p className="text-right text-slate-700 leading-relaxed text-[11px]">
-                أقر أنا المحاسب القانوني المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم ({(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}), بصفتي مراقب حسابات الممول الموضح بياناته أعلاه، بأن البيانات والمبالغ والضرائب المدرجة بهذا الإقرار مطابقة تماماً لقيود الدفاتر المحاسبية المنتظمة والفواتير والإشعارات الإلكترونية الصادرة والواردة والموثقة بمنظومة الفاتورة والإيصال الإلكتروني بمصلحة الضرائب المصرية، وقد تم إعداد هذا الإقرار وفقاً لمعايير المحاسبة المصرية (EAS) والقوانين واللوائح التنفيذية السارية.
+              <p className="text-right text-slate-700 leading-normal text-[9.5px]">
+                أقر أنا المحاسب القانوني المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم ({(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}), بصفتي مراقب حسابات الممول الموضح بياناته أعلاه، بأن البيانات والمبالغ والضرائب المدرجة بهذا الإقرار مطابقة تماماً لقيود الدفاتر المحاسبية والفواتير والإشعارات الإلكترونية الصادرة والواردة بمنظومة مصلحة الضرائب المصرية، وتم إعداد هذا الإقرار وفقاً لمعايير المحاسبة المصرية (EAS) والقوانين السارية.
               </p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2 text-center">
-                <div className="space-y-1">
-                  <span className="text-[10px] text-slate-500 block">المحاسب القانوني ومراقب الحسابات</span>
-                  <strong className="text-slate-900 text-xs block">{profile.auditorName}</strong>
-                  <span className="text-[10px] font-mono text-slate-600 block">{(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5 text-center">
+                <div className="space-y-0.2">
+                  <span className="text-[9px] text-slate-500 block">المحاسب القانوني ومراقب الحسابات</span>
+                  <strong className="text-slate-900 text-[11px] block">{profile.auditorName || 'محمد جميل مرعي'}</strong>
+                  <span className="text-[9px] font-mono text-slate-600 block">{(profile as any).registrationNumber || profile.licenseNumber || 'س.م.م / 43122'}</span>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="text-[10px] text-slate-500 block">تاريخ الاعتماد والإصدار</span>
-                  <strong className="font-mono text-slate-900 text-xs block">
-                    {new Date().toISOString().slice(0, 10)}
+                <div className="space-y-0.2">
+                  <span className="text-[9px] text-slate-500 block">تاريخ الاعتماد والإصدار</span>
+                  <strong className="font-mono text-slate-900 text-[11px] block">
+                    {currentDeclaration?.submissionDate || new Date().toISOString().slice(0, 10)}
                   </strong>
-                  <span className="text-[10px] text-emerald-700 font-bold block">✓ موثق إلكترونياً</span>
+                  <span className="text-[9px] text-emerald-700 font-bold block">✓ موثق إلكترونياً</span>
                 </div>
 
-                <div className="col-span-2 sm:col-span-1 border border-dashed border-slate-300 p-2 rounded-xl bg-white flex flex-col items-center justify-center">
-                  <span className="text-[9px] text-slate-400 block mb-1">ختم المكتب والاعتماد المهني</span>
-                  <div className="w-16 h-10 border border-emerald-700/40 rounded flex items-center justify-center text-[8px] font-bold text-emerald-800 bg-emerald-50/50">
+                <div className="col-span-2 sm:col-span-1 border border-dashed border-slate-300 p-1 rounded-lg bg-white flex flex-col items-center justify-center">
+                  <span className="text-[8px] text-slate-400 block mb-0.5">ختم المكتب والاعتماد المهني</span>
+                  <div className="w-14 h-6 border border-emerald-700/40 rounded flex items-center justify-center text-[7.5px] font-bold text-emerald-800 bg-emerald-50/50">
                     مكتب مرعي للمحاسبة
                   </div>
                 </div>
@@ -522,13 +792,140 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
             </div>
 
             {/* Footer Bar */}
-            <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
-              <span>طُبع بواسطة: منظومة المحاسب القانوني ومراقب الحسابات • محمد جميل مرعي</span>
+            <div className="pt-1 border-t border-slate-200 flex items-center justify-between text-[9px] text-slate-500">
+              <span>طُبع بواسطة: منظومة المحاسب القانوني ومراقب الحسابات • {profile.auditorName || 'محمد جميل مرعي'}</span>
               <span className="font-mono">Page 1 of 1 • System Generated Official Return</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* نافذة التحكم في أساليب الطباعة والتصدير والـ QR */}
+      <PrintExportControlModal
+        isOpen={isPrintSettingsOpen}
+        onClose={() => setIsPrintSettingsOpen(false)}
+        onSaved={() => setPrintSettings(PrintService.getSettings())}
+      />
     </div>
   );
 };
+
+// Helper: Format Egyptian Currency
+function formatEgyptianCurrency(num: number): string {
+  if (isNaN(num)) return '0.00 ج.م';
+  return (
+    num.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + ' ج.م'
+  );
+}
+
+// Helper: Convert Numbers to Arabic Words (Tafqeet)
+function numberToArabicWords(number: number): string {
+  if (number === 0) return 'صفر جنيه مصري';
+
+  const ones = [
+    '',
+    'واحد',
+    'اثنان',
+    'ثلاثة',
+    'أربعة',
+    'خمسة',
+    'ستة',
+    'سبعة',
+    'ثمانية',
+    'تسعة',
+    'عشرة',
+    'أحد عشر',
+    'اثنا عشر',
+    'ثلاثة عشر',
+    'أربعة عشر',
+    'خمسة عشر',
+    'ستة عشر',
+    'سبعة عشر',
+    'ثمانية عشر',
+    'تسعة عشر',
+  ];
+
+  const tens = [
+    '',
+    '',
+    'عشرون',
+    'ثلاثون',
+    'أربعون',
+    'خمسون',
+    'ستون',
+    'سبعون',
+    'ثمانون',
+    'تسعون',
+  ];
+
+  const hundreds = [
+    '',
+    'مائة',
+    'مائتان',
+    'ثلاثمائة',
+    'أربعمائة',
+    'خمسمائة',
+    'ستمائة',
+    'سبعمائة',
+    'ثمانمائة',
+    'تسعمائة',
+  ];
+
+  function convertGroup(n: number): string {
+    let result = '';
+    const h = Math.floor(n / 100);
+    const remainder = n % 100;
+
+    if (h > 0) {
+      result += hundreds[h];
+    }
+
+    if (remainder > 0) {
+      if (result !== '') result += ' و ';
+      if (remainder < 20) {
+        result += ones[remainder];
+      } else {
+        const t = Math.floor(remainder / 10);
+        const o = remainder % 10;
+        if (o > 0) {
+          result += ones[o] + ' و ' + tens[t];
+        } else {
+          result += tens[t];
+        }
+      }
+    }
+    return result;
+  }
+
+  const absNum = Math.abs(Math.floor(number));
+  if (absNum === 0) return 'صفر جنيه مصري';
+
+  const billions = Math.floor(absNum / 1000000000);
+  const millions = Math.floor((absNum % 1000000000) / 1000000);
+  const thousands = Math.floor((absNum % 1000000) / 1000);
+  const remainder = absNum % 1000;
+
+  const parts: string[] = [];
+
+  if (billions > 0) {
+    parts.push(convertGroup(billions) + (billions === 1 ? ' مليار' : billions === 2 ? ' ملياران' : ' مليارات'));
+  }
+  if (millions > 0) {
+    parts.push(convertGroup(millions) + (millions === 1 ? ' مليون' : millions === 2 ? ' مليونان' : ' ملايين'));
+  }
+  if (thousands > 0) {
+    if (thousands === 1) parts.push('ألف');
+    else if (thousands === 2) parts.push('ألفان');
+    else parts.push(convertGroup(thousands) + ' آلاف');
+  }
+  if (remainder > 0) {
+    parts.push(convertGroup(remainder));
+  }
+
+  return parts.join(' و ') + ' جنيه مصري';
+}
+
+export default React.memo(EgyptianTaxDeclarationPdfModal);

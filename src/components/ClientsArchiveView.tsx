@@ -41,6 +41,7 @@ import {
   Calculator,
   Tag,
   Scissors,
+  Factory,
 } from 'lucide-react';
 import {
   ClientArchiveRecord,
@@ -75,9 +76,10 @@ import { ClientExcelEngine } from '../utils/clientExcelEngine';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
+  onNavigateToTab?: (tab: string) => void;
 }
 
-export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state }) => {
+export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, onNavigateToTab }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [selectedClient, setSelectedClient] = useState<ClientArchiveRecord | null>(null);
@@ -897,60 +899,40 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
         onFilterTabChange={setFilterType}
       >
       <div className="space-y-4">
-        {/* Automatic 3-Day Portal Password Expiration Reminder Alert Banner */}
+        {/* Automatic 3-Day Portal Password Expiration Reminder Alert */}
         {expiringCredentials.length > 0 && (
-          <div className="bg-gradient-to-r from-amber-950 via-rose-950 to-slate-900 text-white rounded-2xl p-3.5 sm:p-4 border border-amber-500/50 shadow-md">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-400/40">
-                  <Bell className="w-4 h-4 text-amber-300 animate-bounce" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-bold text-white">
-                      تنبيه انتهاء كلمات مرور البوابات
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
-                      {expiringCredentials.length} تنبيهات
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsExportAuthModalOpen(true)}
-                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>طباعة الكشف</span>
-              </button>
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 rounded-xl px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="font-bold">تنبيه انتهاء كلمات مرور البوابات:</span>
+              <span className="px-2 py-0.2 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 text-[10px] font-bold">
+                {expiringCredentials.length} تنبيهات وشيكة
+              </span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsExportAuthModalOpen(true)}
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-amber-100 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-lg font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>كشف البوابات</span>
+            </button>
           </div>
         )}
 
-        {/* Bulk Excel Operations & WhatsApp Quick Bar */}
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
-              <FileSpreadsheet className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <span>استيراد وتصدير ملفات العملاء جملة عبر Excel</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-semibold">قالب محاسبي معتمد</span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                تصدير قالب إكسيل لتدوين العملاء واستيراد عشرات الشركات دفعة واحدة مع إنشاء الملفات والأكواد تلقائياً
-              </p>
-            </div>
+        {/* Bulk Excel Operations Compact Toolbar */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-2xs">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+            <span className="font-bold text-slate-700 dark:text-slate-200">استيراد وتصدير العملاء (Excel):</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => ClientExcelEngine.downloadClientTemplate()}
-              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="تحميل قالب إكسيل رسمي فارغ لتدوين بيانات العملاء"
+              className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="تحميل قالب إكسيل رسمي فارغ"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
               <span>تحميل القالب الفارغ</span>
@@ -1010,107 +992,134 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state })
           </div>
         </div>
 
-        {/* Clients Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+        {/* Clients Grid - High Density & Compact Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
           {filteredClients.map((client) => {
             const procedures = client.procedures || [];
             const activeProcs = procedures.filter(
               (p) => p.status === 'IN_PROGRESS' || p.status === 'AT_AUTHORITY' || p.status === 'PENDING_CLIENT_DOCS'
             );
-            const completedProcs = procedures.filter((p) => p.status === 'COMPLETED');
             const summary = db.getClientTreasurySummary(client.id);
             const isActive = state.activeClientContext?.clientId === client.id;
 
             return (
               <div
                 key={client.id}
-                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-4 space-y-3 hover:border-emerald-500/60 dark:hover:border-emerald-500/50 hover:shadow-md transition-all flex flex-col justify-between"
+                className={`bg-white dark:bg-slate-900 rounded-xl border p-2.5 sm:p-3 space-y-2 hover:border-emerald-500/60 dark:hover:border-emerald-500/50 hover:shadow-md transition-all flex flex-col justify-between ${
+                  isActive ? 'border-purple-500/70 bg-purple-50/20 dark:bg-purple-950/20 shadow-xs' : 'border-slate-200/80 dark:border-slate-800 shadow-2xs'
+                }`}
               >
-                <div className="space-y-2.5">
-                  {/* Card Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          {client.companyType === 'JOINT_STOCK'
-                            ? 'ش.م.م'
-                            : client.companyType === 'LLC'
-                            ? 'ش.ذ.م.م'
-                            : client.companyType === 'SOLE_PROPRIETORSHIP'
-                            ? 'فردية'
-                            : 'أشخاص'}
+                <div className="space-y-1.5">
+                  {/* Card Header Compact */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        {client.companyType === 'JOINT_STOCK'
+                          ? 'ش.م.م'
+                          : client.companyType === 'LLC'
+                          ? 'ش.ذ.م.م'
+                          : client.companyType === 'SOLE_PROPRIETORSHIP'
+                          ? 'فردية'
+                          : 'أشخاص'}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                        client.relationshipType === 'TEMPORARY'
+                          ? 'bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                          : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                      }`}>
+                        {client.relationshipType === 'TEMPORARY' ? 'مؤقت' : 'دائم'}
+                      </span>
+                      {isActive && (
+                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-purple-600 text-white shadow-2xs">
+                          ★ نشط
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                          client.relationshipType === 'TEMPORARY'
-                            ? 'bg-amber-50 text-amber-800 border-amber-200'
-                            : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                        }`}>
-                          {client.relationshipType === 'TEMPORARY' ? 'مؤقت' : 'دائم'}
-                        </span>
-                        {isActive && (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-600 text-white">
-                            ★ نشط
-                          </span>
-                        )}
-                        <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {client.clientCode}
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-bold text-slate-900 mt-1.5 line-clamp-1">{client.name}</h3>
+                      )}
+                      <span className="font-mono text-[9px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded">
+                        {client.clientCode}
+                      </span>
                     </div>
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                      <Building className="w-4 h-4 text-emerald-800" />
+                    <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-800 dark:text-emerald-300 shrink-0">
+                      <Building className="w-3.5 h-3.5" />
                     </div>
                   </div>
 
-                  {/* Company Info Condensed */}
-                  <div className="space-y-1 text-xs text-slate-600 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400 text-[11px]">سجل تجاري:</span>
-                      <span className="font-mono font-bold text-slate-800 text-[11px]">{client.commercialRegistrationNo || '-'}</span>
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate" title={client.name}>
+                    {client.name}
+                  </h3>
+
+                  {/* Company Info Condensed Single Grid */}
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <div className="truncate">
+                      <span className="text-slate-400 text-[9px] block">سجل تجاري:</span>
+                      <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{client.commercialRegistrationNo || '—'}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400 text-[11px]">بطاقة ضريبية:</span>
-                      <span className="font-mono font-bold text-slate-800 text-[11px]">{client.taxCardNo || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400 text-[11px]">المسؤول:</span>
-                      <span className="text-slate-800 font-medium text-[11px]">{client.contactPerson || '-'}</span>
+                    <div className="truncate">
+                      <span className="text-slate-400 text-[9px] block">بطاقة ضريبية:</span>
+                      <span className="font-mono font-bold text-red-700 dark:text-red-400">{client.taxCardNo || '—'}</span>
                     </div>
                   </div>
 
-                  {/* Condensed Summary */}
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="bg-blue-50/60 border border-blue-100 p-1.5 rounded-lg text-blue-900 flex justify-between items-center">
-                      <span className="text-blue-600">الإجراءات:</span>
-                      <span className="font-bold">{procedures.length} ({activeProcs.length} جاري)</span>
-                    </div>
-                    <div className="bg-amber-50/60 border border-amber-100 p-1.5 rounded-lg text-amber-900 flex justify-between items-center">
-                      <span className="text-amber-700">المحصل:</span>
-                      <span className="font-mono font-bold">{formatEgyptianCurrency(summary.totalCollectedFees)}</span>
-                    </div>
+                  {/* Micro Summary Stats */}
+                  <div className="flex items-center justify-between gap-1 text-[10px] px-1.5 py-1 bg-slate-100/70 dark:bg-slate-800/40 rounded-md">
+                    <span className="text-blue-700 dark:text-blue-300 font-semibold truncate">
+                      الإجراءات: <strong>{procedures.length}</strong> ({activeProcs.length} جاري)
+                    </span>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 truncate">
+                      {formatEgyptianCurrency(summary.totalCollectedFees)}
+                    </span>
                   </div>
                 </div>
 
-                {/* Bottom Actions Consolidated */}
-                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                {/* Bottom Actions High Density */}
+                <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedClient(client);
                       setActiveTab('PROCEDURES');
                     }}
-                    className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
                   >
                     <span>فتح الملف</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3 h-3" />
                   </button>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
+                    {/* Quick Set Active Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isActive) {
+                          db.clearActiveClient();
+                        } else {
+                          db.setActiveClient(client.id);
+                        }
+                      }}
+                      className={`p-1 rounded-md border text-[10px] font-bold cursor-pointer transition-colors ${
+                        isActive
+                          ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 border-purple-300'
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-500 border-slate-200 dark:border-slate-700'
+                      }`}
+                      title={isActive ? 'إلغاء التفعيل كنشط' : 'تعيين كمنشأة نشطة'}
+                    >
+                      ★
+                    </button>
+
                     {/* Consolidated Row Action Dropdown */}
                     <QuickRowActionDropdown
-                      title="خيارات العميل"
+                      title="خيارات"
                       actions={[
+                        {
+                          label: 'الانتقال لبيئة عمل ومصنع هذا الكيان (Workspace 🏭)',
+                          icon: Factory,
+                          variant: 'primary',
+                          onClick: () => {
+                            db.setActiveClient(client.id, { autoFilter: true });
+                            if (onNavigateToTab) {
+                              onNavigateToTab('MULTI_TENANT_WORKSPACES');
+                            }
+                          },
+                        },
                         {
                           label: 'بطاقة المنشأة وليبل التوكن (A4)',
                           icon: Tag,

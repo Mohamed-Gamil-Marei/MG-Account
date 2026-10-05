@@ -15,6 +15,7 @@ import {
 import { db, DatabaseState } from '../../db/localDatabase';
 import { ClientArchiveRecord } from '../../types';
 import { QuickCompanyModal } from './QuickCompanyModal';
+import { MultiTenantWorkspacesModal } from './MultiTenantWorkspacesModal';
 
 interface CompanyHeaderSelectorProps {
   state: DatabaseState;
@@ -37,6 +38,7 @@ export const CompanyHeaderSelector: React.FC<CompanyHeaderSelectorProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isWorkspacesHubOpen, setIsWorkspacesHubOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const currentClientId = selectedClientId !== undefined ? selectedClientId : state.activeClientContext?.clientId;
@@ -98,6 +100,15 @@ export const CompanyHeaderSelector: React.FC<CompanyHeaderSelectorProps> = ({
 
             <button
               type="button"
+              onClick={() => setIsWorkspacesHubOpen(true)}
+              title="لوحة إدارة بيئات عمل الشركات والمصانع المتعددة (Multi-Tenant Hub)"
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer shadow-xs transition-colors border border-slate-700/60"
+            >
+              <Layers className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => setIsQuickAddOpen(true)}
               title="إضافة وتأسيس شركة جديدة"
               className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer shadow-xs transition-colors"
@@ -114,17 +125,30 @@ export const CompanyHeaderSelector: React.FC<CompanyHeaderSelectorProps> = ({
               <span className="text-xs font-black text-slate-800 dark:text-slate-200">
                 اختيار وتحديد الشركة النشطة
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  setIsQuickAddOpen(true);
-                }}
-                className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>شركة جديدة</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    setIsWorkspacesHubOpen(true);
+                  }}
+                  className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>لوحة المصانع والشركات</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    setIsQuickAddOpen(true);
+                  }}
+                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>شركة جديدة</span>
+                </button>
+              </div>
             </div>
 
             {/* Search Input */}
@@ -201,6 +225,12 @@ export const CompanyHeaderSelector: React.FC<CompanyHeaderSelectorProps> = ({
         isOpen={isQuickAddOpen}
         onClose={() => setIsQuickAddOpen(false)}
         onCompanyCreated={handleCompanyCreated}
+      />
+
+      <MultiTenantWorkspacesModal
+        isOpen={isWorkspacesHubOpen}
+        onClose={() => setIsWorkspacesHubOpen(false)}
+        state={state}
       />
     </>
   );

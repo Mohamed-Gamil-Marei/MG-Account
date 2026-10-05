@@ -70,7 +70,6 @@ import { PrintService } from '../services/PrintService';
 import { Wrench, Printer, UploadCloud, Camera, Zap, ShieldAlert, Check } from 'lucide-react';
 import { InvoiceOcrScannerView } from './accounting/InvoiceOcrScannerView';
 import { JournalErrorsAuditModal } from './audit/JournalErrorsAuditModal';
-import { JournalEntryNotesAuditorView } from './accounting/JournalEntryNotesAuditorView';
 import { SmartParsedEntryResult } from '../services/journalSuggestionEngine';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
@@ -143,7 +142,6 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
   // AI Journal Error Audit Modal State
   const [isAuditErrorsModalOpen, setIsAuditErrorsModalOpen] = useState(false);
-  const [isNotesAuditorModalOpen, setIsNotesAuditorModalOpen] = useState(false);
 
   // Quick Smart Entry Generator State (الوصف والقيمة فقط -> قيد متوازن فوري)
   const [isSmartGeneratorOpen, setIsSmartGeneratorOpen] = useState(false);
@@ -1723,9 +1721,11 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
   const filteredEntries = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     return state.journalEntries.filter((entry) => {
-      // If client filter is active and entry has clientId, filter by active client
-      if (isClientAutoFilterOn && entry.clientId && entry.clientId !== activeClient.clientId) {
-        return false;
+      // Strict multi-tenant isolation: When active client filter is active, only show this entity's entries
+      if (isClientAutoFilterOn && activeClient.clientId) {
+        if (entry.clientId !== activeClient.clientId) {
+          return false;
+        }
       }
 
       // Filter by active fiscal year if specified
@@ -1769,19 +1769,17 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     <div className="space-y-5">
       {/* Report Saved Feedback Alert */}
       {reportFeedback && (
-        <div className="bg-gradient-to-r from-teal-900 to-emerald-900 text-white px-5 py-3.5 rounded-2xl border border-teal-500/40 shadow-md flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 border border-teal-400/30">
-              <CheckCircle2 className="w-5 h-5 text-emerald-300" />
-            </div>
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 px-4 py-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 shadow-2xs flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
-              <div className="font-bold text-xs text-teal-100">تم التوثيق والربط بنجاح</div>
-              <div className="text-xs text-teal-200">{reportFeedback}</div>
+              <span className="font-bold text-xs">تم التوثيق والربط بنجاح: </span>
+              <span className="text-xs">{reportFeedback}</span>
             </div>
           </div>
           <button
             onClick={() => setReportFeedback(null)}
-            className="text-xs px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-white font-bold transition-colors cursor-pointer"
+            className="text-xs px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 rounded-lg font-bold border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
             إغلاق
           </button>
@@ -1825,12 +1823,6 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
             icon: ShieldAlert,
             variant: 'warning',
             onClick: () => setIsAuditErrorsModalOpen(true),
-          },
-          {
-            id: 'btn-notes-auditor-modal',
-            label: 'فحص التوجيه والرقابة الجنائية (Notes & Fraud)',
-            icon: Sparkles,
-            onClick: () => setIsNotesAuditorModalOpen(true),
           },
           {
             isDivider: true,
@@ -2147,23 +2139,23 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
       {/* Automatic Balance Validator Alert Banner (كاشف التوازن الآلي والإصلاح الفوري) */}
       {unbalancedEntries.length > 0 && (
-        <div className="bg-gradient-to-r from-rose-900 to-amber-900 text-white rounded-2xl p-4 sm:p-5 border border-rose-500/40 shadow-lg animate-in fade-in slide-in-from-top-3 duration-200">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-300 flex items-center justify-center shrink-0 border border-rose-400/30">
-                <AlertTriangle className="w-6 h-6 text-rose-300" />
+        <div className="bg-rose-50 dark:bg-rose-950/40 text-rose-950 dark:text-rose-100 rounded-xl p-3.5 border border-rose-200 dark:border-rose-900/60 shadow-2xs animate-in fade-in slide-in-from-top-3 duration-200">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0 border border-rose-200 dark:border-rose-800">
+                <AlertTriangle className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-black text-white">
-                    كاشف التوازن المحاسبي التلقائي (Automatic Balance Validator)
+                  <h3 className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                    كاشف التوازن المحاسبي التلقائي
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
                     {unbalancedEntries.length} قيود غير متزنة
                   </span>
                 </div>
-                <p className="text-xs text-rose-200 mt-1">
-                  تم رصد قيود يومية تحتوي على فروق بين إجمالي المدين والدائن. يمكنك إصلاح الفروق فورياً بترحيلها لحساب التسوية المعتمد (<span className="font-mono font-bold text-amber-300">1999 - حساب تسوية الفروق المعلقة</span>).
+                <p className="text-[11px] text-rose-800 dark:text-rose-300 mt-0.5">
+                  تم رصد قيود تحتوي على فروق بين المدين والدائن. يمكن إصلاح الفروق بترحيلها لحساب التسوية (<span className="font-mono font-bold text-rose-900 dark:text-rose-100">1999 - حساب تسوية الفروق المعلقة</span>).
                 </p>
               </div>
             </div>
@@ -2172,18 +2164,18 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
               <button
                 type="button"
                 onClick={() => setIsUnbalancedExpanded(!isUnbalancedExpanded)}
-                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs transition-all cursor-pointer"
+                className="px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs transition-colors cursor-pointer"
               >
-                {isUnbalancedExpanded ? 'إخفاء التفاصيل ▲' : 'عرض القيود ▼'}
+                {isUnbalancedExpanded ? 'إخفاء ▲' : 'عرض القيود ▼'}
               </button>
 
               <button
                 type="button"
                 onClick={handleAutoFixAllUnbalancedEntries}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 cursor-pointer transition-all"
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
               >
-                <Wrench className="w-4 h-4" />
-                <span>إصلاح جميع الفروق بضغطة واحدة (1-Click Fix)</span>
+                <Wrench className="w-3.5 h-3.5" />
+                <span>إصلاح الفروق بضغطة واحدة</span>
               </button>
             </div>
           </div>
@@ -2230,28 +2222,28 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
         </div>
       )}
 
-      {/* Entries List Cards (American / Full Journal view) */}
-      <div className="space-y-4">
+      {/* Entries List Cards (American / Full Journal view) - High Density Compact Mode */}
+      <div className="space-y-2.5">
         {filteredEntries.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-500">
-            <Receipt className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-            <p className="font-bold text-sm">لا توجد قيود يومية مطابقة للبحث</p>
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-800 text-slate-500">
+            <Receipt className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="font-bold text-xs">لا توجد قيود يومية مطابقة للبحث</p>
           </div>
         ) : (
           paginatedEntries.map((entry) => (
             <div
               key={entry.id}
-              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden hover:border-emerald-500/50 dark:hover:border-emerald-500/40 transition-all"
             >
-              {/* Entry Card Header */}
-              <div className="bg-slate-50/80 dark:bg-slate-800/60 px-4 py-2 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-xs font-black px-2 py-0.5 rounded-lg bg-emerald-800 text-white shadow-2xs">
+              {/* Entry Card Header Compact */}
+              <div className="bg-slate-50/90 dark:bg-slate-800/60 px-3 py-1.5 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-1.5 text-xs">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-mono text-[11px] font-black px-1.5 py-0.2 rounded bg-emerald-800 text-white shadow-2xs">
                     {entry.serialNumber}
                   </span>
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{entry.date}</span>
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">{entry.date}</span>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${
                       entry.isPosted
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
                         : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
@@ -2259,33 +2251,33 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                   >
                     {entry.isPosted ? '✓ مرحل للأستاذ' : 'مسودة'}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
+                  <span className="text-[9.5px] text-slate-400 font-mono">
                     {entry.entryType}
                   </span>
 
                   {/* Client Tag Badge */}
                   {entry.clientName && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-900 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                    <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-900 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1">
                       <span>🏢 {entry.clientName}</span>
                     </span>
                   )}
 
                   {/* Multi-Currency Badge */}
                   {entry.currency && entry.currency !== 'EGP' && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1 font-mono">
-                      <Globe className="w-3 h-3 text-blue-600" />
+                    <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1 font-mono">
+                      <Globe className="w-2.5 h-2.5 text-blue-600" />
                       <span>{entry.currency} {entry.foreignTotalDebit ? Number(entry.foreignTotalDebit).toLocaleString() : ''} (سعر: {entry.exchangeRate || 1} ج.م)</span>
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 ml-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 ml-1">
                     الإجمالي: <span className="font-mono text-emerald-700 dark:text-emerald-400">{formatEgyptianCurrency(entry.totalDebit)}</span>
                   </div>
                   <button
                     onClick={() => db.togglePostEntry(entry.id)}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    className={`text-[11px] px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
                       entry.isPosted
                         ? 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
                         : 'bg-emerald-600 hover:bg-emerald-500 text-white'
@@ -2295,7 +2287,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                   </button>
 
                   <QuickRowActionDropdown
-                    title="خيارات القيد"
+                    title="خيارات"
                     actions={[
                       {
                         label: 'عرض التفاصيل',
@@ -2320,58 +2312,58 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                 </div>
               </div>
 
-              {/* Description */}
-              <div className="px-4 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
-                <div>
+              {/* Description Compact */}
+              <div className="px-3 py-1 text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+                <div className="truncate">
                   <span className="text-slate-400 ml-1">البيان:</span> {entry.description}
                 </div>
                 {entry.currency && entry.currency !== 'EGP' && (
-                  <span className="text-[11px] text-blue-700 dark:text-blue-300 font-semibold bg-blue-50/80 dark:bg-blue-950/50 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800">
-                    معاملة بالعملة الأجنبية: <strong>{SUPPORTED_CURRENCIES.find(c => c.code === entry.currency)?.nameAr || entry.currency}</strong> (معيار EAS 13)
+                  <span className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold bg-blue-50/80 dark:bg-blue-950/50 px-1.5 py-0.2 rounded border border-blue-100 dark:border-blue-800 shrink-0">
+                    معاملة بالعملة الأجنبية: <strong>{SUPPORTED_CURRENCIES.find(c => c.code === entry.currency)?.nameAr || entry.currency}</strong> (EAS 13)
                   </span>
                 )}
               </div>
 
-              {/* Journal Lines Table - Compact Mode with Zebra Striping */}
+              {/* Journal Lines Table - High Density */}
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs accounting-table">
+                <table className="w-full text-right text-[11px] accounting-table">
                   <thead>
-                    <tr className="bg-slate-50/90 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200/80 dark:border-slate-800">
-                      <th className="py-1.5 px-3">كود الحساب</th>
-                      <th className="py-1.5 px-3">اسم الحساب</th>
+                    <tr className="bg-slate-50/90 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200/80 dark:border-slate-800 text-[10px]">
+                      <th className="py-1 px-2.5">كود الحساب</th>
+                      <th className="py-1 px-2.5">اسم الحساب</th>
                       {entry.currency && entry.currency !== 'EGP' && (
                         <>
-                          <th className="py-1.5 px-3 text-left text-blue-700 dark:text-blue-400">مدين ({entry.currency})</th>
-                          <th className="py-1.5 px-3 text-left text-amber-700 dark:text-amber-400">دائن ({entry.currency})</th>
+                          <th className="py-1 px-2.5 text-left text-blue-700 dark:text-blue-400">مدين ({entry.currency})</th>
+                          <th className="py-1 px-2.5 text-left text-amber-700 dark:text-amber-400">دائن ({entry.currency})</th>
                         </>
                       )}
-                      <th className="py-1.5 px-3 text-left">مدين (ج.م)</th>
-                      <th className="py-1.5 px-3 text-left">دائن (ج.م)</th>
-                      <th className="py-1.5 px-3">شرح الطرف</th>
+                      <th className="py-1 px-2.5 text-left">مدين (ج.م)</th>
+                      <th className="py-1 px-2.5 text-left">دائن (ج.م)</th>
+                      <th className="py-1 px-2.5">شرح الطرف</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {entry.lines.map((line, idx) => (
-                      <tr key={line.id || idx} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors">
-                        <td className="py-1.5 px-3 font-mono text-slate-600 dark:text-slate-300">{line.accountCode}</td>
-                        <td className="py-1.5 px-3 font-medium text-slate-900 dark:text-slate-100">{line.accountName}</td>
+                      <tr key={line.id || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors">
+                        <td className="py-1 px-2.5 font-mono text-slate-600 dark:text-slate-300 text-[10.5px]">{line.accountCode}</td>
+                        <td className="py-1 px-2.5 font-medium text-slate-900 dark:text-slate-100">{line.accountName}</td>
                         {entry.currency && entry.currency !== 'EGP' && (
                           <>
-                            <td className="py-1.5 px-3 font-mono font-semibold text-left text-blue-700 dark:text-blue-400">
+                            <td className="py-1 px-2.5 font-mono font-semibold text-left text-blue-700 dark:text-blue-400">
                               {line.foreignDebit && line.foreignDebit > 0 ? Number(line.foreignDebit).toLocaleString() : '-'}
                             </td>
-                            <td className="py-1.5 px-3 font-mono font-semibold text-left text-amber-700 dark:text-amber-400">
+                            <td className="py-1 px-2.5 font-mono font-semibold text-left text-amber-700 dark:text-amber-400">
                               {line.foreignCredit && line.foreignCredit > 0 ? Number(line.foreignCredit).toLocaleString() : '-'}
                             </td>
                           </>
                         )}
-                        <td className="py-1.5 px-3 font-mono font-bold text-left text-blue-800 dark:text-blue-400">
+                        <td className="py-1 px-2.5 font-mono font-bold text-left text-blue-800 dark:text-blue-400">
                           {line.debit > 0 ? formatEgyptianCurrency(line.debit) : '-'}
                         </td>
-                        <td className="py-1.5 px-3 font-mono font-bold text-left text-amber-800 dark:text-amber-400">
+                        <td className="py-1 px-2.5 font-mono font-bold text-left text-amber-800 dark:text-amber-400">
                           {line.credit > 0 ? formatEgyptianCurrency(line.credit) : '-'}
                         </td>
-                        <td className="py-1.5 px-3 text-slate-500 dark:text-slate-400 text-[11px]">{line.description || '-'}</td>
+                        <td className="py-1 px-2.5 text-slate-500 dark:text-slate-400 text-[10px]">{line.description || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2789,12 +2781,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
                     {/* Expandable AI Box */}
                     {showAiAssistant && (
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950 to-slate-900 text-white space-y-3 animate-in fade-in duration-150">
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 space-y-2.5 animate-in fade-in duration-150">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-emerald-400" />
-                            <span className="text-xs font-bold text-emerald-300">
-                              صياغة القيد واقتراح الحسابات الذكي بالمعايير المصرية
+                            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              صياغة القيد واقتراح الحسابات بالمعايير المصرية
                             </span>
                           </div>
                         </div>
@@ -4132,26 +4124,6 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           }
         }}
       />
-
-      {/* Smart Notes & Narration Reclassification Auditor Modal */}
-      {isNotesAuditorModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in">
-          <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-5 relative">
-            <button
-              type="button"
-              onClick={() => setIsNotesAuditorModalOpen(false)}
-              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors z-20 cursor-pointer"
-              title="إغلاق النافذة"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <JournalEntryNotesAuditorView
-              state={state}
-              onNavigateToJournal={() => setIsNotesAuditorModalOpen(false)}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

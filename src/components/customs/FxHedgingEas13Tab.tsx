@@ -176,46 +176,35 @@ export const FxHedgingEas13Tab: React.FC<FxHedgingEas13TabProps> = ({ state, sho
 
   return (
     <div className="space-y-6 text-right font-sans">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0 shadow-lg shadow-indigo-500/20">
-              <TrendingUp className="w-8 h-8" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-white">
-                  محرك تسوية فروق أسعار الصرف والتحوط (EAS 13 FX Settlement Engine)
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold font-mono">
-                  معيار المحاسبة المصري 13
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                احتساب الفروق الناتجة عن تذبذب أسعار الصرف للعملات الأجنبية بين تاريخ فتح الاعتماد المستندي، تاريخ الشحن، وتاريخ الإفراج الجمركي والسداد البنكي النهائي،
-                وتوليد مذكرة التسوية وقيد اليومية المحاسبي التلقائي وفقاً لأحكام معيار المحاسبة المصري رقم (13) وقانون الضرائب 91 لسنة 2005.
-              </p>
-            </div>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 shrink-0">
+            <TrendingUp className="w-4 h-4" />
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handlePrintFxMemo}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs border border-slate-700 flex items-center gap-2 cursor-pointer shadow"
-            >
-              <Printer className="w-4 h-4 text-cyan-400" />
-              <span>طباعة مذكرة التسوية</span>
-            </button>
-
-            <button
-              onClick={handleGenerateFxJournalEntry}
-              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl font-bold text-xs shadow-lg flex items-center gap-2 cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>توليد قيد التسوية فوراً</span>
-            </button>
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              تسوية فروق أسعار الصرف الجمركية (EAS 13)
+            </h2>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrintFxMemo}
+            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <Printer className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span>طباعة المذكرة</span>
+          </button>
+
+          <button
+            onClick={handleGenerateFxJournalEntry}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>توليد قيد اليومية</span>
+          </button>
         </div>
       </div>
 

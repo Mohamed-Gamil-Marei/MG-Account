@@ -380,148 +380,111 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
         </div>
       )}
 
-      {/* Top Banner: Auditor Inspection Center Letterhead */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-2xl p-6 text-white shadow-xl border border-slate-800 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                معايير المراجعة المصرية (ESA 240 / 320 / 500)
-              </span>
-              <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                محرك الفحص والتدقيق الآلي المتقدم
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-3">
-              <span>مركز الفحص الآلي وتحليل قيود اليومية</span>
-            </h1>
-            <p className="text-slate-300 text-xs sm:text-sm max-w-3xl leading-relaxed">
-              تحليل خوارزمي دقيق لدفاتر اليومية لكشف القيود المتكررة، عدم التوازن المحاسبي، القيود المفتقرة للمستندات المؤيدة، وتوليد مذكرات استيفاء وتنبيهات مباشرة للمراجع القانوني.
-            </p>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 shrink-0">
+            <ShieldCheck className="w-4 h-4" />
           </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              onClick={handleTriggerScan}
-              disabled={isScanning}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shadow-md cursor-pointer ${
-                isScanning
-                  ? 'bg-slate-700 text-slate-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-amber-900/30 active:scale-98'
-              }`}
-            >
-              <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
-              <span>{isScanning ? 'جاري الفحص الشامل...' : '⚡ تشغيل الفحص الآلي الفوري'}</span>
-            </button>
-
-            <button
-              onClick={handleExportAuditToExcel}
-              className="px-3.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-emerald-950/20"
-              title="تصدير شيت إكسيل بجميع القيود التي بها ملاحظات أو مشاكل مع التوصيات والإجراءات التصحيحية"
-            >
-              <Download className="w-4 h-4 text-emerald-200" />
-              <span>تصدير شيت التصحيح (Excel)</span>
-            </button>
-
-            <button
-              onClick={handlePrintAuditReport}
-              className="px-3.5 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-slate-300" />
-              <span>طباعة المذكرة</span>
-            </button>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              مركز الفحص والتدقيق الآلي لقيود اليومية
+            </h1>
           </div>
         </div>
 
-        {/* Real-time Scanning Progress Bar */}
-        {isScanning && (
-          <div className="mt-5 space-y-1.5 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between text-xs text-slate-300">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                جاري مسح قيود الدفاتر المحاسبية والتحقق من التكرار والمرفقات...
-              </span>
-              <span className="font-mono font-bold text-amber-300">{scanProgress}%</span>
-            </div>
-            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 transition-all duration-300 rounded-full"
-                style={{ width: `${scanProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleTriggerScan}
+            disabled={isScanning}
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+              isScanning
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                : 'bg-amber-600 hover:bg-amber-500 text-white active:scale-95'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+            <span>{isScanning ? 'جاري الفحص...' : 'تشغيل الفحص'}</span>
+          </button>
 
-        {/* Quick Letterhead Status Footer */}
-        <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400">
-          <div className="flex items-center gap-4">
-            <span>
-              <strong>المراجع القانوني:</strong> {state.officeProfile.auditorName || 'أ/ محمد جميل مرعي'}
-            </span>
-            <span>
-              <strong>آخر فحص:</strong> {lastScanTime}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>محرك فحص المعايير المصرية نشط ومفعل</span>
-          </div>
+          <button
+            onClick={handleExportAuditToExcel}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="تصدير شيت إكسيل"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>تصدير Excel</span>
+          </button>
+
+          <button
+            onClick={handlePrintAuditReport}
+            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>طباعة المذكرة</span>
+          </button>
         </div>
       </div>
 
+      {/* Real-time Scanning Progress Bar */}
+      {isScanning && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-1.5 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between text-xs text-slate-300">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              جاري فحص وتدقيق القيود...
+            </span>
+            <span className="font-mono font-bold text-amber-300">{scanProgress}%</span>
+          </div>
+          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-amber-500 transition-all duration-300 rounded-full"
+              style={{ width: `${scanProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Audit Health Overview & KPI Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Health Score Gauge Card */}
-        <div
-          className={`p-5 rounded-2xl border shadow-xs flex flex-col justify-between ${
-            summary.healthGrade === 'EXCELLENT'
-              ? 'bg-gradient-to-br from-emerald-950 to-slate-900 border-emerald-500/40 text-white'
-              : summary.healthGrade === 'GOOD'
-              ? 'bg-gradient-to-br from-indigo-950 to-slate-900 border-indigo-500/40 text-white'
-              : summary.healthGrade === 'NEEDS_REVIEW'
-              ? 'bg-gradient-to-br from-amber-950 to-slate-900 border-amber-500/40 text-white'
-              : 'bg-gradient-to-br from-red-950 to-slate-900 border-red-500/50 text-white'
-          }`}
-        >
+        <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold text-slate-300">مؤشر السلامة والنزاهة</span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">مؤشر السلامة والنزاهة</span>
             <ShieldCheck
-              className={`w-5 h-5 ${
+              className={`w-4 h-4 ${
                 summary.healthGrade === 'EXCELLENT'
-                  ? 'text-emerald-400'
+                  ? 'text-emerald-500'
                   : summary.healthGrade === 'GOOD'
-                  ? 'text-indigo-400'
+                  ? 'text-indigo-500'
                   : summary.healthGrade === 'NEEDS_REVIEW'
-                  ? 'text-amber-400'
-                  : 'text-red-400'
+                  ? 'text-amber-500'
+                  : 'text-red-500'
               }`}
             />
           </div>
-          <div className="my-2 flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono tracking-tight">{summary.auditHealthScore}%</span>
-            <span className="text-[11px] font-bold text-slate-300">درجة الاعتماد</span>
+          <div className="my-1.5 flex items-baseline gap-2">
+            <span className="text-2xl font-black font-mono tracking-tight text-slate-900 dark:text-white">{summary.auditHealthScore}%</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">درجة الاعتماد</span>
           </div>
-          <div className="text-[11px] font-medium text-slate-300 line-clamp-1">{summary.healthLabelAr}</div>
+          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 line-clamp-1">{summary.healthLabelAr}</div>
         </div>
 
         {/* Unbalanced Entries KPI */}
         <button
           onClick={() => setSelectedTypeFilter(selectedTypeFilter === 'UNBALANCED_ENTRY' ? 'ALL' : 'UNBALANCED_ENTRY')}
-          className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
-            summary.unbalancedCount > 0
-              ? 'bg-red-50/90 border-red-300 text-red-950 hover:bg-red-100 shadow-xs ring-1 ring-red-400/30'
-              : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'
+          className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between bg-white dark:bg-slate-900 shadow-2xs ${
+            selectedTypeFilter === 'UNBALANCED_ENTRY'
+              ? 'border-red-500 ring-1 ring-red-500'
+              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
           }`}
         >
           <div className="flex items-center justify-between text-xs mb-1">
-            <span className="font-bold">قيود غير متوازنة</span>
+            <span className="font-bold text-slate-700 dark:text-slate-300">قيود غير متوازنة</span>
             <Scale className={`w-4 h-4 ${summary.unbalancedCount > 0 ? 'text-red-600 animate-pulse' : 'text-slate-400'}`} />
           </div>
-          <div className="text-2xl font-black font-mono my-1 text-red-700">
-            {summary.unbalancedCount} <span className="text-xs font-normal text-slate-600">قيد</span>
+          <div className={`text-2xl font-black font-mono my-1 ${summary.unbalancedCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
+            {summary.unbalancedCount} <span className="text-xs font-normal text-slate-500">قيد</span>
           </div>
           <div className="text-[11px] text-slate-500 font-medium">
             {summary.unbalancedCount > 0 ? '❌ تخل بميزان المراجعة' : '✅ كافة القيود متوازنة'}
@@ -531,39 +494,39 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
         {/* Duplicate Entries KPI */}
         <button
           onClick={() => setSelectedTypeFilter(selectedTypeFilter === 'DUPLICATE_ENTRY' ? 'ALL' : 'DUPLICATE_ENTRY')}
-          className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
-            summary.duplicatesCount > 0
-              ? 'bg-purple-50/90 border-purple-300 text-purple-950 hover:bg-purple-100 shadow-xs ring-1 ring-purple-400/30'
-              : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'
+          className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between bg-white dark:bg-slate-900 shadow-2xs ${
+            selectedTypeFilter === 'DUPLICATE_ENTRY'
+              ? 'border-purple-500 ring-1 ring-purple-500'
+              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
           }`}
         >
           <div className="flex items-center justify-between text-xs mb-1">
-            <span className="font-bold">قيود مكررة مشبوهة</span>
+            <span className="font-bold text-slate-700 dark:text-slate-300">قيود مكررة مشبوهة</span>
             <Copy className={`w-4 h-4 ${summary.duplicatesCount > 0 ? 'text-purple-600' : 'text-slate-400'}`} />
           </div>
-          <div className="text-2xl font-black font-mono my-1 text-purple-800">
-            {summary.duplicatesCount} <span className="text-xs font-normal text-slate-600">حالة</span>
+          <div className={`text-2xl font-black font-mono my-1 ${summary.duplicatesCount > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-slate-900 dark:text-white'}`}>
+            {summary.duplicatesCount} <span className="text-xs font-normal text-slate-500">حالة</span>
           </div>
           <div className="text-[11px] text-slate-500 font-medium">
-            {summary.duplicatesCount > 0 ? '⚠️ اشتباه تكرار تسجيل فواتير' : '✅ لا يوجد تكرار مسجل'}
+            {summary.duplicatesCount > 0 ? '⚠️ اشتباه تكرار' : '✅ لا يوجد تكرار مسجل'}
           </div>
         </button>
 
         {/* Missing Attachments KPI */}
         <button
           onClick={() => setSelectedTypeFilter(selectedTypeFilter === 'MISSING_ATTACHMENT' ? 'ALL' : 'MISSING_ATTACHMENT')}
-          className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
-            summary.missingAttachmentsCount > 0
-              ? 'bg-amber-50/90 border-amber-300 text-amber-950 hover:bg-amber-100 shadow-xs'
-              : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'
+          className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between bg-white dark:bg-slate-900 shadow-2xs ${
+            selectedTypeFilter === 'MISSING_ATTACHMENT'
+              ? 'border-amber-500 ring-1 ring-amber-500'
+              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
           }`}
         >
           <div className="flex items-center justify-between text-xs mb-1">
-            <span className="font-bold">تفتقر للمرفقات</span>
+            <span className="font-bold text-slate-700 dark:text-slate-300">تفتقر للمرفقات</span>
             <Paperclip className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-2xl font-black font-mono my-1 text-amber-800">
-            {summary.missingAttachmentsCount} <span className="text-xs font-normal text-slate-600">قيد</span>
+          <div className={`text-2xl font-black font-mono my-1 ${summary.missingAttachmentsCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
+            {summary.missingAttachmentsCount} <span className="text-xs font-normal text-slate-500">قيد</span>
           </div>
           <div className="text-[11px] text-slate-500 font-medium">
             نسبة التوثيق: {summary.attachmentRate}% من القيود
@@ -571,16 +534,16 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
         </button>
 
         {/* Financial Scrutiny Exposure KPI */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs mb-1 text-slate-600">
+        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs mb-1 text-slate-600 dark:text-slate-400">
             <span className="font-bold">المبالغ محل الملاحظات</span>
-            <AlertTriangle className="w-4 h-4 text-indigo-600" />
+            <AlertTriangle className="w-4 h-4 text-indigo-500" />
           </div>
-          <div className="text-lg font-black font-mono my-1 text-indigo-950 truncate">
+          <div className="text-lg font-black font-mono my-1 text-slate-900 dark:text-white truncate">
             {formatEgyptianCurrency(summary.flaggedFinancialExposure)}
           </div>
           <div className="text-[11px] text-slate-500 font-medium">
-            من إجمالي حجم معاملات: {formatEgyptianCurrency(summary.totalFinancialVolume)}
+            من إجمالي: {formatEgyptianCurrency(summary.totalFinancialVolume)}
           </div>
         </div>
       </div>

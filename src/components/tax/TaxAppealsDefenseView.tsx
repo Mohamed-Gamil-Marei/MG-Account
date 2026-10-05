@@ -78,38 +78,27 @@ export const TaxAppealsDefenseView: React.FC<TaxAppealsDefenseViewProps> = ({
 
   return (
     <div className="space-y-6 text-right font-sans">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-rose-950/30 to-slate-900 border border-rose-500/30 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0 shadow-lg shadow-rose-500/20">
-              <Scale className="w-8 h-8" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-white">
-                  المساعد الذكي للطعون والمذكرات الضريبية ومخاطر الفحص (Tax Appeals & Defense Engine)
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold font-mono">
-                  قانون 206 لسنة 2020 & قانون 91
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                صياغة قانونية وفنية متخصصة لمذكرات الطعن على نماذج الفحص والربط الضريبي (نموذج 19 ضرائب، نموذج 15 ق.م، ومذكرات لجان الطعن)،
-                مستندة إلى نصوص قانون الإجراءات الضريبية الموحد وقانون الضريبة على الدخل والقيمة المضافة وأحكام محكمة النقض.
-              </p>
-            </div>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-700 dark:text-rose-400 shrink-0">
+            <Scale className="w-4 h-4" />
           </div>
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              المساعد الذكي للطعون والمذكرات الضريبية
+            </h2>
+          </div>
+        </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handlePrintAppealMemo}
-              className="px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-xl font-bold text-xs shadow-lg flex items-center gap-2 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>طباعة مذكرة الطعن الرسمية</span>
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrintAppealMemo}
+            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>طباعة مذكرة الطعن</span>
+          </button>
         </div>
       </div>
 

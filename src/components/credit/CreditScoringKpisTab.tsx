@@ -966,20 +966,20 @@ export const CreditScoringKpisTab: React.FC<CreditScoringKpisTabProps> = ({
             </div>
 
             {/* Bank Rating Card */}
-            <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-2xl p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-indigo-200 mb-1">
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
                 <span className="font-bold">التصنيف المصرفي المقدر</span>
-                <Award className="w-4 h-4 text-amber-400" />
+                <Award className="w-4 h-4 text-blue-600" />
               </div>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+                <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
                   {latestMetric.grade}
                 </span>
-                <span className="text-[10px] font-bold text-indigo-200">
+                <span className="text-[10px] font-bold text-slate-500">
                   تصنيف استثماري
                 </span>
               </div>
-              <div className="mt-2 text-[10px] text-indigo-200 truncate">
+              <div className="mt-2 text-[10px] text-slate-500 truncate">
                 {latestMetric.gradeDescription}
               </div>
             </div>

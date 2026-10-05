@@ -237,18 +237,18 @@ export const SmartNotificationCenter: React.FC<SmartNotificationCenterProps> = (
         <div className="absolute left-0 sm:right-auto sm:left-0 mt-2 w-[340px] sm:w-[420px] max-w-[95vw] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden text-right animate-in fade-in slide-in-from-top-2 duration-150">
           
           {/* Header */}
-          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 flex items-center justify-between border-b border-indigo-500/20">
+          <div className="bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 p-3.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center border border-amber-400/30">
-                <Bell className="w-4 h-4" />
+              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200 dark:border-blue-800">
+                <Bell className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h3 className="text-xs sm:text-sm font-bold text-white">
-                  التنبيهات الذكية وجدول المواعيد
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  التنبيهات وجدول المواعيد
                 </h3>
-                <p className="text-[10px] text-slate-300">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
                   {urgentCount > 0
-                    ? `يوجد (${urgentCount}) استحقاقات عاجلة تتطلب تدخلاً فورياً`
+                    ? `يوجد (${urgentCount}) استحقاقات عاجلة`
                     : 'كافة الالتزامات الضريبية والبنكية مستقرة'}
                 </p>
               </div>
@@ -256,7 +256,7 @@ export const SmartNotificationCenter: React.FC<SmartNotificationCenterProps> = (
 
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

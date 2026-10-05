@@ -173,12 +173,15 @@ export interface ClientDocumentFolder {
   createdAt: string;
 }
 
+export type ClientDocumentCategory = 'TAX' | 'LEGAL' | 'CONTRACTUAL' | 'FINANCIAL' | 'GENERAL';
+
 export interface ClientDocument {
   id: string;
   clientId?: string;
   folderId?: string;
   folderName?: string;
   title: string;
+  category?: ClientDocumentCategory | string; // تصنيف المستند: ضريبي، قانوني، تعاقدي، مالي، عام
   documentType: 'TAX_CARD' | 'COMMERCIAL_REG' | 'ARTICLES_OF_INC' | 'FINANCIAL_REPORT' | 'POWER_OF_ATTORNEY' | 'RECEIPT' | 'AUDIT_REPORT' | 'TAX_RETURN' | 'CONTRACT' | 'OTHER';
   fileDataUrl: string; // Base64 or Blob URL
   fileName: string;
@@ -193,6 +196,7 @@ export type ClientRelationshipType = 'PERMANENT' | 'TEMPORARY'; // دائم (س�
 export interface ActiveClientContext {
   clientId: string | null;
   clientName?: string;
+  companyName?: string;
   clientCode?: string;
   relationshipType?: ClientRelationshipType;
   selectedFiscalYear?: number;
@@ -226,6 +230,7 @@ export interface PortalCredentials {
     password?: string;
     pinOtp?: string;
     expiryDate?: string;
+    portalUrl?: string;
     notes?: string;
   };
   sapPortal?: {
@@ -233,6 +238,7 @@ export interface PortalCredentials {
     password?: string;
     pinOtp?: string;
     expiryDate?: string;
+    portalUrl?: string;
     notes?: string;
   };
   // منظومة ضريبة المرتبات والأجور (كسب العمل)
@@ -240,6 +246,7 @@ export interface PortalCredentials {
     username?: string;
     password?: string;
     expiryDate?: string;
+    portalUrl?: string;
     notes?: string;
   };
   etaGeneralTax?: {
@@ -247,12 +254,14 @@ export interface PortalCredentials {
     password?: string;
     pinOtp?: string;
     expiryDate?: string;
+    portalUrl?: string;
     notes?: string;
   };
   etaPayrollTax?: {
     username?: string;
     password?: string;
     expiryDate?: string;
+    portalUrl?: string;
     notes?: string;
   };
   // منظومة نافذة (الجمارك والتجارة الخارجية)
@@ -361,6 +370,7 @@ export interface TaxDeclarationRecord {
   id: string;
   declarationType: 'VAT_10' | 'INCOME_27_CORP' | 'INCOME_28_INDIV' | 'PAYROLL_4' | 'WHT_41' | 'ANNUAL_PAYROLL_SETTLEMENT';
   period: string; // e.g. "شهر يناير 2026", "الربع الأول 2026", "سنة 2025"
+  periodMonth?: string; // e.g. "2026-03"
   taxYear: number;
   clientId: string;
   clientName: string;
@@ -374,17 +384,64 @@ export interface TaxDeclarationRecord {
   vatInputTax?: number; // ضريبة المدخلات المخصومة
   netVatPayable?: number;
   netVatDue?: number;
+  // VAT Balance & Nature specifics (الرصيد السابق والحالي وطبيعة الإقرار)
+  declarationNature?: 'STANDARD_14' | 'ZERO_RETURN' | 'TABLE_TAX' | 'EXEMPT' | 'EXPORT_ZERO';
+  previousCreditBalance?: number; // الرصيد الدائن السابق المرحل من الشهر الماضي
+  netCurrentPeriodTax?: number; // صافي ضريبة الفترة (مخرجات - مدخلات)
+  creditCarriedForward?: number; // الرصيد الدائن المرحل للشهر التالي
   // Income / Payroll specifics
   grossTaxableIncome?: number;
   taxDue?: number;
   totalTaxDue?: number;
   whtDeducted?: number; // مسدد تحت حساب الضريبة
   netTaxPayable?: number;
+  // Amendment fields (إقرار أصلي أو معدل - مادة 33 قانون 206)
+  amendmentType?: 'ORIGINAL' | 'AMENDED';
+  originalDeclarationId?: string;
+  originalDeclarationRef?: string;
+  amendmentReason?: string;
+  amendmentDifferenceAmount?: number;
+  amendmentDate?: string;
   receiptNumber?: string;
+  etaReferenceNumber?: string;
   paymentProofUrl?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Invoices Harmonizer & Categorization Types (مجمع ومنسق فواتير المبيعات والمشتريات والإشعارات)
+export type InvoiceDocType = 'SALES' | 'PURCHASE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
+
+export type InvoiceNatureCategory = 
+  | 'GOODS_RAW'      // شراء بضاعة ومواد خام
+  | 'OPERATING_SERV' // خدمات لازمة للنشاط
+  | 'CAPITAL_ASSETS' // أصول ومعدات رأسمالية
+  | 'GA_SUPPLIES'    // مصروفات ومستلزمات عمومية
+  | 'IMPORT_GOODS'   // مشتريات استيرادية ACI
+  | 'GOODS_SALES'    // مبيعات سلع تجارية ومصنعة
+  | 'SERVICE_SALES'  // تأدية خدمات للغير
+  | 'TABLE_TAX'      // ضريبة جدول / مقاولات
+  | 'EXPORT';        // صادرات (سعر صفر%)
+
+export interface HarmonizedTaxInvoice {
+  id: string;
+  clientId: string;
+  clientName: string;
+  period: string; // e.g. "مارس 2026"
+  invoiceNumber: string;
+  invoiceDate: string;
+  docType: InvoiceDocType;
+  category: InvoiceNatureCategory;
+  partnerName: string;
+  partnerTaxId?: string;
+  itemDescription?: string;
+  taxableAmount: number;
+  taxRate: number; // 14, 5, 0
+  vatAmount: number;
+  whtAmount?: number; // 1%
+  totalAmount: number;
+  notes?: string;
 }
 
 export type CertificateBeneficiaryType = 'NATURAL_PERSON' | 'LEGAL_ENTITY'; // شخص طبيعي (فرد / مهنة حرة / موظف) | شخص اعتباري (شركة / منشأة)
@@ -744,6 +801,7 @@ export interface TaxMandateTask {
   actualTaxAmount?: number;
   receiptNumber?: string;
   etaSubmissionRef?: string;
+  etaReferenceNumber?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -756,6 +814,27 @@ export type BrandColor = 'blue' | 'emerald' | 'indigo' | 'slate' | 'amber';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type AppLanguage = 'ar' | 'en';
 
+export interface ReportLayoutConfig {
+  paperSize: 'A4' | 'LETTER' | 'LEGAL';
+  orientation: 'PORTRAIT' | 'LANDSCAPE';
+  margins: 'DEFAULT' | 'NARROW' | 'WIDE' | 'NONE';
+  includeLetterhead?: boolean;
+  includeStamp?: boolean;
+  includeQr?: boolean;
+}
+
+export type StandardReportType =
+  | 'TRIAL_BALANCE'
+  | 'BALANCE_SHEET'
+  | 'INCOME_STATEMENT'
+  | 'UNIFIED_FINANCIAL_REPORT'
+  | 'AUDITOR_REPORT'
+  | 'INVOICE'
+  | 'TAX_DECLARATION'
+  | 'CERTIFICATE'
+  | 'CREDIT_DOSSIER'
+  | 'FEASIBILITY_STUDY';
+
 export interface PrintSettings {
   paperSize: 'A4' | 'LETTER' | 'LEGAL';
   orientation: 'PORTRAIT' | 'LANDSCAPE' | 'AUTO';
@@ -767,6 +846,20 @@ export interface PrintSettings {
   includeSignatureStamp: boolean;
   autoPrintDelayMs: number; // تأخير زمني بالملي ثانية للتأكد من ريندر الـ DOM كاملاً قبل الطباعة
   showPreviewModalByDefault: boolean;
+  // نظام التحكم المتقدم في الـ QR وأساليب الطباعة والتصدير
+  qrMode?: 'OFFLINE_TEXT' | 'URL_LINK'; // نمط الـ QR: بطاقة نصية أوفلاين معتمدة أو رابط ويب
+  qrSizePx?: number; // حجم رمز الـ QR بالبكسل (90, 115, 135)
+  stampStyle?: 'CIRCULAR_SEAL' | 'RECTANGLE_FORMAL' | 'SIGNATURE_ONLY'; // نمط الختم
+  showPageNumbers?: boolean; // إظهار ترقيم الصفحات
+  showDocumentTimestamp?: boolean; // إظهار ختم التوقيت الرقمي وتاريخ الطباعة
+  watermark?: 'NONE' | 'DRAFT' | 'OFFICIAL' | 'CONFIDENTIAL'; // العلامة المائية للطباعة
+  inkSaver?: boolean; // نمط توفير الحبر (أبيض وأسود عالي التباين)
+  // تخصيص الترويسة والشعار وتنسيقات كل تقرير
+  headerStyle?: 'standard' | 'formal-classic' | 'two-column' | 'compact';
+  headerColorTheme?: 'navy' | 'emerald' | 'indigo' | 'gold' | 'slate';
+  logoPosition?: 'RIGHT' | 'CENTER' | 'LEFT';
+  logoSizePx?: number; // 48, 64, 80
+  reportDefaults?: Partial<Record<StandardReportType, ReportLayoutConfig>>;
 }
 
 export interface SapApiConfig {
@@ -913,6 +1006,7 @@ export interface FixedAsset {
 export type NavigationTab =
   | 'DASHBOARD'
   | 'MOBILE_COMPANION'
+  | 'MULTI_TENANT_WORKSPACES'
   | 'ACCOUNTING_HUB'
   | 'FINANCIAL_REPORTING_HUB'
   | 'TAX_AUDIT_HUB'
@@ -927,6 +1021,7 @@ export type NavigationTab =
   | 'BANK_RECONCILIATION'
   | 'OCR_INVOICE_SCANNER'
   | 'FINANCIAL_STATEMENTS'
+  | 'FINANCIAL_DOSSIER_GENERATOR'
   | 'BUDGET_PLANNER'
   | 'FINANCIAL_NOTES'
   | 'AUDITOR_REPORT'
@@ -946,6 +1041,7 @@ export type NavigationTab =
   | 'PRACTICE_MANAGEMENT'
   | 'WHATSAPP_BOT'
   | 'TAX_TRACKER'
+  | 'TAX_FILING_CELLS'
   | 'CERTIFICATES'
   | 'FEASIBILITY_STUDY'
   | 'INVOICING'

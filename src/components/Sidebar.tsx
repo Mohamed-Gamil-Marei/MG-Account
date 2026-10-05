@@ -34,6 +34,7 @@ import {
   Film,
   Smartphone,
   ChevronDown,
+  Factory,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, OfficeProfile } from '../types';
@@ -69,28 +70,34 @@ export const getParentHub = (tabId: string): string => {
     case 'BANK_RECONCILIATION':
     case 'CURRENCY_EXCHANGE_RATES':
     case 'OCR_INVOICE_SCANNER':
+    case 'EXCEL_AUDIT_SENTINEL':
+    case 'JOURNAL_AUDIT_SCANNER':
+    case 'AUDIT_WORKING_PAPERS':
     case 'ACCOUNTING_HUB':
       return 'ACCOUNTING_HUB';
 
     case 'FINANCIAL_STATEMENTS':
+    case 'ANNUAL_FINANCIAL_DOSSIER':
+    case 'FINANCIAL_DOSSIER_GENERATOR':
     case 'BUDGET_PLANNER':
+    case 'BUDGET_AND_CASHFLOW':
     case 'FINANCIAL_NOTES':
     case 'AUDITOR_REPORT':
     case 'FINANCIAL_SIMULATOR':
     case 'CREDIT_SIMULATOR':
     case 'CASH_FLOW_PREDICTOR':
+    case 'CERTIFICATES':
+    case 'FEASIBILITY_STUDY':
     case 'FINANCIAL_REPORTING_HUB':
       return 'FINANCIAL_REPORTING_HUB';
 
     case 'TAX_TRACKER':
+    case 'TAX_FILING_CELLS':
     case 'TAX_PENALTY_SIMULATOR':
     case 'TAX_EXPOSURE_SIMULATOR':
     case 'ETA_RECONCILIATION':
     case 'PAYROLL_INSURANCE':
-    case 'AUDIT_WORKING_PAPERS':
-    case 'JOURNAL_AUDIT_SCANNER':
     case 'FRAUD_AUDIT_SENTINEL':
-    case 'EXCEL_AUDIT_SENTINEL':
     case 'AUDIT_CONSISTENCY_SENTINEL':
     case 'TAX_AUDIT_HUB':
       return 'TAX_AUDIT_HUB';
@@ -99,8 +106,6 @@ export const getParentHub = (tabId: string): string => {
     case 'PRACTICE_MANAGEMENT':
     case 'WHATSAPP_BOT':
     case 'OFFICE_TREASURY':
-    case 'CERTIFICATES':
-    case 'FEASIBILITY_STUDY':
     case 'OFFICE_HUB':
       return 'OFFICE_HUB';
 
@@ -122,6 +127,9 @@ export const getParentHub = (tabId: string): string => {
 
     case 'MOBILE_COMPANION':
       return 'MOBILE_COMPANION';
+
+    case 'MULTI_TENANT_WORKSPACES':
+      return 'MULTI_TENANT_WORKSPACES';
 
     case 'DASHBOARD':
     default:
@@ -185,99 +193,67 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const parentHub = getParentHub(activeTab);
 
-  // 1. The 3 Primary Core Menus (الواجهات الرئيسية الثلاث فقط)
-  const coreThreeHubs = [
+  // 1. The 4 Unified Primary Workspaces (محطات العمل الأربعة الرئيسية الموحدة)
+  const coreFourHubs = [
     {
       id: 'ACCOUNTING_HUB',
       defaultTab: 'JOURNAL_ENTRIES',
       number: '1',
       label: 'الحسابات وقيود اليومية',
-      labelEn: 'General Ledger & Journals',
+      labelEn: 'Accounting & Journals',
       icon: Layers,
+      description: 'القيود، الفواتير، الأستاذ، الميزان، الأصول، والتسويات',
       badge: unpostedEntriesCount > 0 
         ? (isEn ? `${unpostedEntriesCount} Unposted` : `${unpostedEntriesCount} غير مرحل`) 
         : `${state.journalEntries.length}`,
       badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-      subItems: [
-        { id: 'JOURNAL_ENTRIES', label: 'قيود اليومية', labelEn: 'Journal Entries' },
-        { id: 'OCR_INVOICE_SCANNER', label: 'مسح الفواتير (OCR)', labelEn: 'OCR Invoice Scanner' },
-        { id: 'CHART_OF_ACCOUNTS', label: 'دليل الحسابات', labelEn: 'Chart of Accounts' },
-        { id: 'GENERAL_LEDGER', label: 'دفتر الأستاذ العام', labelEn: 'General Ledger' },
-        { id: 'TRIAL_BALANCE', label: 'ميزان المراجعة', labelEn: 'Trial Balance' },
-        { id: 'FIXED_ASSETS', label: 'الأصول الثابتة والإهلاك', labelEn: 'Fixed Assets (EAS 10)' },
-        { id: 'BANK_RECONCILIATION', label: 'مذكرة التسوية البنكية', labelEn: 'Bank Reconciliation' },
-        { id: 'CURRENCY_EXCHANGE_RATES', label: 'أسعار الصرف اليومية (EAS 13)', labelEn: 'Daily Exchange Rates' },
-      ],
-    },
-    {
-      id: 'FINANCIAL_REPORTING_HUB',
-      defaultTab: 'FINANCIAL_STATEMENTS',
-      number: '2',
-      label: 'القوائم والتقارير المالية',
-      labelEn: 'Financial Reports & EAS',
-      icon: FileSpreadsheet,
-      badge: 'EAS 1',
-      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-      subItems: [
-        { id: 'FINANCIAL_STATEMENTS', label: 'القوائم المالية (EAS 1)', labelEn: 'Financial Statements' },
-        { id: 'FINANCIAL_NOTES', label: 'الإيضاحات المتممة', labelEn: 'Financial Notes' },
-        { id: 'AUDITOR_REPORT', label: 'تقرير مراقب الحسابات (700)', labelEn: 'Auditor Report (ESA 700)' },
-        { id: 'FINANCIAL_SIMULATOR', label: 'محاكي النسب المالية', labelEn: 'Financial Ratios' },
-        { id: 'BUDGET_PLANNER', label: 'الموازنة التقديرية', labelEn: 'Budget Planner' },
-        { id: 'CASH_FLOW_PREDICTOR', label: 'التدفقات النقدية التقديرية', labelEn: 'Cash Flow Forecast' },
-        { id: 'CREDIT_SIMULATOR', label: 'التحليل والملف الائتماني', labelEn: 'Credit Rating & Analysis' },
-      ],
     },
     {
       id: 'TAX_AUDIT_HUB',
-      defaultTab: 'EXCEL_AUDIT_SENTINEL',
-      number: '3',
-      label: 'الفحص الضريبي والمراجعة',
-      labelEn: 'Tax Declarations & Audit',
+      defaultTab: 'TAX_TRACKER',
+      number: '2',
+      label: 'الضرائب والفحص والمراجعة',
+      labelEn: 'Tax & Audit Hub',
       icon: Percent,
+      description: 'الإقرارات (SAP)، فحص الإكسيل XAI، كسب العمل، والفاتورة ETA',
       badge: pendingTaxesCount > 0 
         ? (isEn ? `${pendingTaxesCount} Due` : `${pendingTaxesCount} مستحق`) 
         : (isEn ? 'Audit' : 'فحص ومراجعة'),
       badgeColor: pendingTaxesCount > 0 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-      subItems: [
-        { id: 'EXCEL_AUDIT_SENTINEL', label: 'مختبر مراجعة الإكسيل الذكي (XAI)', labelEn: 'AI Smart Excel Audit' },
-        { id: 'TAX_TRACKER', label: 'أجندة الإقرارات الضريبية', labelEn: 'Tax Declarations' },
-        { id: 'JOURNAL_AUDIT_SCANNER', label: 'الفحص الآلي للقيود', labelEn: 'Journal Scanner' },
-        { id: 'FRAUD_AUDIT_SENTINEL', label: 'الفحص والتحليل الإحصائي', labelEn: 'Audit Sentinel' },
-        { id: 'AUDIT_WORKING_PAPERS', label: 'أوراق عمل المراجعة', labelEn: 'Working Papers' },
-        { id: 'ETA_RECONCILIATION', label: 'مطابقة الفاتورة الإلكترونية', labelEn: 'ETA E-Invoice Matcher' },
-        { id: 'PAYROLL_INSURANCE', label: 'كسب العمل والتأمينات', labelEn: 'Payroll & Social Ins.' },
-        { id: 'TAX_PENALTY_SIMULATOR', label: 'مقابل التأخير والغرامات', labelEn: 'Delay Penalties' },
-        { id: 'TAX_EXPOSURE_SIMULATOR', label: 'محاكي الفحص الضريبي', labelEn: 'Tax Exposure' },
-      ],
     },
-  ];
-
-  // 2. Secondary & Administrative Tools (أدوات وخدمات مساعدة)
-  const secondaryHubs = [
     {
-      id: 'DASHBOARD',
-      label: 'لوحة المؤشرات',
-      labelEn: 'Executive Dashboard',
-      icon: LayoutDashboard,
-      badge: null,
-      subItems: [],
+      id: 'FINANCIAL_REPORTING_HUB',
+      defaultTab: 'FINANCIAL_STATEMENTS',
+      number: '3',
+      label: 'القوائم والملف المالي المعتمد',
+      labelEn: 'Financial Reports & EAS',
+      icon: FileSpreadsheet,
+      description: 'القوائم الأربعة، الإيضاحات، تقرير المراقب، والملف الائتماني',
+      badge: 'EAS 1',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
     },
     {
       id: 'OFFICE_HUB',
       defaultTab: 'CLIENTS_ARCHIVE',
+      number: '4',
       label: 'إدارة المكتب والعملاء',
       labelEn: 'Clients & Practice Mgmt',
       icon: Building2,
-      badge: `${state.clients.length}`,
-      subItems: [
-        { id: 'CLIENTS_ARCHIVE', label: 'ملفات العملاء والشركات', labelEn: 'Client Companies' },
-        { id: 'PRACTICE_MANAGEMENT', label: 'عقود المراجعة والارتباط', labelEn: 'Audit Engagements' },
-        { id: 'WHATSAPP_BOT', label: 'مراسلات الواتساب', labelEn: 'WhatsApp Assistant' },
-        { id: 'OFFICE_TREASURY', label: 'خزنة وحسابات المكتب', labelEn: 'Office Treasury' },
-        { id: 'CERTIFICATES', label: 'الشهادات المهنية المعتمدة', labelEn: 'Certified Attestations' },
-        { id: 'FEASIBILITY_STUDY', label: 'دراسات الجدوى المالية', labelEn: 'Feasibility Studies' },
-      ],
+      description: 'ملفات الشركات، الفواتير، الخزينة، والمراسلات',
+      badge: `${state.clients.length} منشأة`,
+      badgeColor: 'bg-slate-700 text-slate-300',
+    },
+  ];
+
+  // 2. Quick Essential Tools (أدوات سريعة مساندة)
+  const secondaryTools = [
+    {
+      id: 'MULTI_TENANT_WORKSPACES',
+      defaultTab: 'MULTI_TENANT_WORKSPACES',
+      label: 'بيئات الشركات والمصانع',
+      labelEn: 'Multi-Tenant Hub',
+      icon: Factory,
+      badge: `${state.clients.length} منشأة`,
     },
     {
       id: 'INVOICING',
@@ -286,29 +262,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       labelEn: 'Invoicing & Sales',
       icon: CreditCard,
       badge: `${state.invoices.length}`,
-      subItems: [],
     },
     {
       id: 'CUSTOMS_HUB',
       defaultTab: 'CUSTOMS_SHIPMENTS',
-      label: 'الجمارك والتجارة الخارجية',
+      label: 'الجمارك والتجارة الخارجية (ACI)',
       labelEn: 'Customs & Global Trade',
       icon: Ship,
       badge: 'ACI',
-      subItems: [
-        { id: 'CUSTOMS_SHIPMENTS', label: 'سجل الشحنات والعمليات', labelEn: 'Shipments Registry' },
-        { id: 'CUSTOMS_LANDED_COST', label: 'حاسبة التكلفة الإنزالية', labelEn: 'Landed Cost (EAS 2)' },
-        { id: 'CUSTOMS_NAFEZA_ACI', label: 'منظومة نافذة والتسجيل ACI', labelEn: 'Nafeza ACI Hub' },
-      ],
-    },
-    {
-      id: 'SAP_ERP',
-      defaultTab: 'SAP_ERP',
-      label: 'منظومة ساب المحاسبية',
-      labelEn: 'SAP S/4HANA & B1',
-      icon: Globe2,
-      badge: 'SAP',
-      subItems: [],
     },
     {
       id: 'AUDIT_SECURITY_HUB',
@@ -317,9 +278,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       labelEn: 'Audit Trail & Compliance',
       icon: ShieldCheck,
       badge: `${state.auditLogs.length}`,
-      subItems: [
-        { id: 'AUDIT_TRAIL', label: 'سجل التدقيق والحركات', labelEn: 'Security Audit Log' },
-      ],
     },
     {
       id: 'MOBILE_COMPANION',
@@ -327,12 +285,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       labelEn: 'Mobile Field Companion',
       icon: Smartphone,
       badge: '📱',
-      subItems: [],
     },
   ];
 
-  const isSecondaryActive = secondaryHubs.some(
-    (h) => parentHub === h.id || h.subItems?.some((s) => s.id === activeTab)
+  const isSecondaryActive = secondaryTools.some(
+    (h) => parentHub === h.id || activeTab === h.id || (h.defaultTab && activeTab === h.defaultTab)
   );
   const [showSecondaryTools, setShowSecondaryTools] = useState(isSecondaryActive);
 
@@ -385,26 +342,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation Items List - Focus on the 3 Core Interfaces */}
+        {/* Navigation Items List - 4 Core Powerhouses + Dashboard */}
         <nav className="flex-1 py-3 px-2.5 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
-          {/* Header Badge for The 3 Main Interfaces */}
-          <div className="px-2 pt-0.5 pb-1.5 flex items-center justify-between text-[11px] font-bold text-slate-400 tracking-wide border-b border-slate-800/60 mb-1">
-            <span className="text-slate-200">{isEn ? 'PRIMARY MENUS (3)' : 'الواجهات الرئيسية (3)'}</span>
+          {/* Dashboard Button */}
+          <button
+            id="nav-item-DASHBOARD"
+            title={isEn ? 'Executive Dashboard' : 'لوحة المؤشرات التنفيذية'}
+            onClick={() => {
+              handleSelectTab('DASHBOARD');
+              if (window.innerWidth < 1024) handleClose();
+            }}
+            className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+              isEn ? 'text-left' : 'text-right'
+            } ${
+              activeTab === 'DASHBOARD'
+                ? `bg-gradient-to-r from-blue-900/60 to-slate-800/90 text-white font-black border ${
+                    isEn ? 'border-blue-500 border-l-4' : 'border-blue-500 border-r-4'
+                  } shadow-sm`
+                : 'text-slate-300 hover:bg-slate-800/80 hover:text-white border border-transparent'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <LayoutDashboard className={`w-4 h-4 shrink-0 ${activeTab === 'DASHBOARD' ? 'text-blue-400' : 'text-slate-400'}`} />
+              <span className="text-xs font-bold leading-tight truncate">
+                {isEn ? 'Executive Dashboard' : 'لوحة المؤشرات'}
+              </span>
+            </div>
+          </button>
+
+          {/* Header Badge for The 4 Main Hubs */}
+          <div className="px-2 pt-2 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-400 tracking-wide border-b border-slate-800/60 mb-1">
+            <span className="text-slate-200">{isEn ? 'CORE HUBS (4)' : 'محطات العمل الرئيسية (4)'}</span>
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
-              {isEn ? 'Core' : 'الأساسية'}
+              {isEn ? 'Integrated' : 'الموحدة'}
             </span>
           </div>
 
-          {/* 1. The 3 Primary Interfaces (Prominent, Elegant, Direct) */}
-          {coreThreeHubs.map((hub) => {
+          {/* 1. The 4 Primary Interfaces (Prominent, Direct, Clean) */}
+          {coreFourHubs.map((hub) => {
             const Icon = hub.icon;
             const isHubActive = parentHub === hub.id;
-            const hasSubItems = hub.subItems && hub.subItems.length > 0;
             const hubTitle = isEn ? (hub.labelEn || hub.label) : hub.label;
 
             return (
               <div key={hub.id} className="space-y-0.5">
-                {/* Main Hub Button */}
                 <button
                   id={`nav-item-${hub.id}`}
                   title={hubTitle}
@@ -431,9 +412,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {hub.number}
                     </div>
                     <Icon className={`w-4 h-4 shrink-0 ${isHubActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
-                    <span className="text-xs font-bold leading-tight truncate">
-                      {hubTitle}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold leading-tight truncate">
+                        {hubTitle}
+                      </div>
+                      <div className="text-[10px] text-slate-400 group-hover:text-slate-300 truncate font-normal">
+                        {hub.description}
+                      </div>
+                    </div>
                   </div>
 
                   {hub.badge && (
@@ -448,46 +434,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   )}
                 </button>
-
-                {/* Sub-item quick pills */}
-                {hasSubItems && isHubActive && (
-                  <div className={`py-1 space-y-0.5 ${
-                    isEn 
-                      ? 'pl-6 pr-1 border-l-2 border-blue-500/40 ml-3' 
-                      : 'pr-6 pl-1 border-r-2 border-blue-500/40 mr-3'
-                  }`}>
-                    {hub.subItems.map((sub) => {
-                      const isSubActive = activeTab === sub.id;
-                      const subTitle = isEn ? (sub.labelEn || sub.label) : sub.label;
-                      return (
-                        <button
-                          key={sub.id}
-                          onClick={() => {
-                            handleSelectTab(sub.id);
-                            if (window.innerWidth < 1024) handleClose();
-                          }}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                            isEn ? 'text-left' : 'text-right'
-                          } ${
-                            isSubActive
-                              ? 'text-white bg-blue-600/30 font-bold border border-blue-500/40'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              isSubActive ? 'bg-blue-400' : 'bg-slate-600'
-                            }`}
-                          />
-                          <span className="truncate">{subTitle}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             );
           })}
+
+          {/* Prominent Enterprise Multi-Tenant Workspace Switcher */}
+          <div className="pt-2 px-0.5">
+            <button
+              id="nav-item-MULTI_TENANT_WORKSPACES"
+              title={isEn ? 'Multi-Tenant Workspaces & Factory Management' : 'بيئات عمل الشركات والمصانع المتعددة (Multi-Tenant)'}
+              onClick={() => {
+                handleSelectTab('MULTI_TENANT_WORKSPACES');
+                if (window.innerWidth < 1024) handleClose();
+              }}
+              className={`w-full p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                activeTab === 'MULTI_TENANT_WORKSPACES'
+                  ? 'bg-amber-500/20 border-amber-500 text-white font-bold shadow-xs'
+                  : 'bg-slate-800/70 hover:bg-slate-800 border-amber-500/40 text-amber-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Factory className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className={isEn ? 'text-left min-w-0' : 'text-right min-w-0'}>
+                  <div className="text-xs font-bold text-white truncate">
+                    {isEn ? 'Multi-Tenant Workspaces' : 'بيئات الشركات والمصانع'}
+                  </div>
+                  <div className="text-[10px] text-amber-300/80 truncate">
+                    {state.activeClientContext?.clientName || state.activeClientContext?.companyName || (isEn ? 'Isolate Records & Balances' : 'فصل الأرصدة والقيود 100%')}
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40 font-bold shrink-0">
+                {state.clients.length} {isEn ? 'Entities' : 'كيان'}
+              </span>
+            </button>
+          </div>
 
           {/* 2. Secondary Tools Accordion (Discreet, Organized, Collapsed by default) */}
           <div className="pt-2 border-t border-slate-800/80 mt-2">
@@ -495,7 +476,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setShowSecondaryTools(!showSecondaryTools)}
               className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors cursor-pointer"
             >
-              <span>{isEn ? 'Auxiliary Tools & Practice' : 'أدوات مساعدة وإدارة المكتب'}</span>
+              <span>{isEn ? 'Auxiliary Tools & Companion' : 'أدوات مساندة ومساعد الميدان'}</span>
               <ChevronDown
                 className={`w-3.5 h-3.5 transition-transform duration-150 ${
                   showSecondaryTools ? 'rotate-180 text-blue-400' : ''
@@ -505,62 +486,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {showSecondaryTools && (
               <div className="space-y-0.5 mt-1 animate-in fade-in slide-in-from-top-1 duration-150">
-                {secondaryHubs.map((hub) => {
-                  const Icon = hub.icon;
-                  const isHubActive = parentHub === hub.id;
-                  const hasSubItems = hub.subItems && hub.subItems.length > 0;
-                  const hubTitle = isEn ? (hub.labelEn || hub.label) : hub.label;
+                {secondaryTools.map((tool) => {
+                  const Icon = tool.icon;
+                  const isToolActive = activeTab === tool.id || (tool.defaultTab && activeTab === tool.defaultTab);
+                  const toolTitle = isEn ? (tool.labelEn || tool.label) : tool.label;
 
                   return (
-                    <div key={hub.id} className="space-y-0.5">
-                      <button
-                        onClick={() => {
-                          handleSelectTab(hub.defaultTab || hub.id);
-                          if (window.innerWidth < 1024) handleClose();
-                        }}
-                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
-                          isEn ? 'text-left' : 'text-right'
-                        } ${
-                          isHubActive
-                            ? 'bg-slate-800 text-white font-bold shadow-2xs'
-                            : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <Icon className={`w-3.5 h-3.5 shrink-0 ${isHubActive ? 'text-blue-400' : 'text-slate-500'}`} />
-                          <span className="truncate">{hubTitle}</span>
-                        </div>
-                        {hub.badge && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
-                            {hub.badge}
-                          </span>
-                        )}
-                      </button>
-
-                      {hasSubItems && isHubActive && (
-                        <div className={`py-0.5 space-y-0.5 ${
-                          isEn ? 'pl-5 ml-2 border-l border-slate-700/60' : 'pr-5 mr-2 border-r border-slate-700/60'
-                        }`}>
-                          {hub.subItems.map((sub) => (
-                            <button
-                              key={sub.id}
-                              onClick={() => {
-                                handleSelectTab(sub.id);
-                                if (window.innerWidth < 1024) handleClose();
-                              }}
-                              className={`w-full flex items-center gap-2 px-2 py-1 rounded text-[11px] cursor-pointer ${
-                                activeTab === sub.id
-                                  ? 'text-blue-400 font-bold'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              <span className="w-1 h-1 rounded-full bg-slate-500" />
-                              <span className="truncate">{isEn ? (sub.labelEn || sub.label) : sub.label}</span>
-                            </button>
-                          ))}
-                        </div>
+                    <button
+                      key={tool.id}
+                      onClick={() => {
+                        handleSelectTab(tool.defaultTab || tool.id);
+                        if (window.innerWidth < 1024) handleClose();
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
+                        isEn ? 'text-left' : 'text-right'
+                      } ${
+                        isToolActive
+                          ? 'bg-slate-800 text-white font-bold shadow-2xs'
+                          : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Icon className={`w-3.5 h-3.5 shrink-0 ${isToolActive ? 'text-blue-400' : 'text-slate-500'}`} />
+                        <span className="truncate">{toolTitle}</span>
+                      </div>
+                      {tool.badge && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                          {tool.badge}
+                        </span>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>

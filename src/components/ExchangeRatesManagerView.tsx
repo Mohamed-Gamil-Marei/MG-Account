@@ -178,70 +178,64 @@ export const ExchangeRatesManagerView: React.FC<ExchangeRatesManagerViewProps> =
 
   return (
     <div className="space-y-6">
-      {/* Top Header Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
-                <DollarSign className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                  إدارة وتحديث أسعار الصرف اليومية (EAS 13)
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                  تحديث يومي فوري لأسعار العملات المعتمدة، وسجلات تاريخية لإقفال الميزانيات، وعرض القوائم المالية بعملة التقرير والعملة الأصلية
-                </p>
-              </div>
-            </div>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-400 shrink-0">
+            <DollarSign className="w-4 h-4" />
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
-            <button
-              onClick={handleLiveSync}
-              disabled={isSyncing}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all ${
-                isSyncing
-                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-95'
-              }`}
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'جاري سحب أسعار اليوم...' : 'تحديث أسعار اليوم لحظياً (CBE)'}</span>
-            </button>
-
-            <button
-              onClick={handleOpenAddModal}
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/20 active:scale-95 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>تسجيل سعر صرف يدوي</span>
-            </button>
-
-            {onNavigateToFinancialStatements && (
-              <button
-                onClick={onNavigateToFinancialStatements}
-                className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all"
-              >
-                <BookOpen className="w-4 h-4 text-indigo-500" />
-                <span className="hidden sm:inline">عرض القوائم المالية</span>
-              </button>
-            )}
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+              أسعار الصرف والعملات (EAS 13)
+            </h1>
           </div>
         </div>
 
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleLiveSync}
+            disabled={isSyncing}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition-all ${
+              isSyncing
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'جاري التحديث...' : 'تحديث أسعار اليوم (CBE)'}</span>
+          </button>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-2xs active:scale-95 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>سعر صرف يدوي</span>
+          </button>
+
+          {onNavigateToFinancialStatements && (
+            <button
+              onClick={onNavigateToFinancialStatements}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+              <span>القوائم المالية</span>
+            </button>
+          )}
+        </div>
+      </div>
+
         {/* Sync Success / Error Banner */}
         {syncFeedback && (
-          <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm flex items-center gap-2.5 animate-fadeIn">
+          <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm flex items-center gap-2.5 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
             <span className="font-semibold">{syncFeedback}</span>
           </div>
         )}
 
         {/* Global Reporting Currency Context Bar */}
-        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-slate-500 dark:text-slate-400 font-medium">عملة التقرير والعرض المعتمدة للنظام:</span>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 font-bold text-blue-700 dark:text-blue-300">
@@ -268,7 +262,6 @@ export const ExchangeRatesManagerView: React.FC<ExchangeRatesManagerViewProps> =
             ))}
           </div>
         </div>
-      </div>
 
       {/* Main Grid: Live Rate Cards + Currency Converter */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -457,13 +450,13 @@ export const ExchangeRatesManagerView: React.FC<ExchangeRatesManagerViewProps> =
             </div>
 
             {/* Converted Result Display */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800/60 p-4 rounded-xl border border-blue-100 dark:border-slate-700 text-center space-y-1">
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 text-center space-y-1">
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">القيمة المحولة الصافية:</span>
-              <div className="text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-400">
+              <div className="text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-400 font-mono">
                 {formatFinancialCurrency(calculatedConversion, calcToCurrency)}
               </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                سعر الصرف المطبق: 1 {calcFromCurrency} ={' '}
+              <div className="text-[11px] text-slate-500 mt-1 font-mono">
+                سعر الصرف: 1 {calcFromCurrency} ={' '}
                 {(
                   db.getExchangeRateValue(calcFromCurrency) / db.getExchangeRateValue(calcToCurrency)
                 ).toFixed(4)}{' '}

@@ -38,34 +38,67 @@ import {
   Layers,
   FileSpreadsheet,
   Percent,
+  Calculator,
+  FolderTree,
+  Factory,
 } from 'lucide-react';
 
-// Primary views and hubs loaded statically for instant tab switching and zero dynamic fetch failures
+// Primary view loaded directly for immediate startup render
 import AccountingHubView from './components/hubs/AccountingHubView';
-import FinancialReportingHubView from './components/hubs/FinancialReportingHubView';
-import TaxAuditHubView from './components/hubs/TaxAuditHubView';
-import OfficePracticeHubView from './components/hubs/OfficePracticeHubView';
-import SecurityAuditHubView from './components/hubs/SecurityAuditHubView';
-import InvoicingView from './components/InvoicingView';
-import CustomsHubView from './components/CustomsHubView';
-import SapErpHubView from './components/sap/SapErpHubView';
-import MobileFieldCompanionView from './components/mobile/MobileFieldCompanionView';
 
-// All modals are imported statically to ensure 100% reliable opening without network chunk fetch failures in iframe
-import PinAuthModal from './components/PinAuthModal';
-import { GlobalCommandPalette } from './components/common/GlobalCommandPalette';
-import { MgOfficePromoModal } from './components/common/MgOfficePromoModal';
-import { BackupExportModal } from './components/BackupExportModal';
-import { DesktopAppModal } from './components/DesktopAppModal';
-import { UpdateNotificationModal } from './components/UpdateNotificationModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { UserManagementModal } from './components/UserManagementModal';
-import { DeviceLockModal } from './components/DeviceLockModal';
-import { PurgeDatabaseModal } from './components/PurgeDatabaseModal';
-import { DocumentVerificationModal } from './components/common/DocumentVerificationModal';
-import { SystemManualModal } from './components/common/SystemManualModal';
-import { LogoInspectionModal } from './components/common/LogoInspectionModal';
-import { AppSettingsModal } from './components/AppSettingsModal';
+// Resilient dynamic loader that safely handles both default and named exports with network retry
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<any>
+): React.LazyExoticComponent<any> {
+  return React.lazy(async () => {
+    try {
+      const res = await factory();
+      if (res && res.default) return res;
+      const comp = Object.values(res).find(
+        (v: any) => typeof v === 'function' || (typeof v === 'object' && v !== null && !Array.isArray(v))
+      );
+      return { default: comp || res };
+    } catch (err) {
+      console.warn('Retrying dynamic import:', err);
+      await new Promise((r) => setTimeout(r, 250));
+      const res = await factory();
+      if (res && res.default) return res;
+      const comp = Object.values(res).find(
+        (v: any) => typeof v === 'function' || (typeof v === 'object' && v !== null && !Array.isArray(v))
+      );
+      return { default: comp || res };
+    }
+  });
+}
+
+// Secondary hubs loaded on demand to make initial startup instantaneous
+const FinancialReportingHubView = lazyWithRetry(() => import('./components/hubs/FinancialReportingHubView'));
+const TaxAuditHubView = lazyWithRetry(() => import('./components/hubs/TaxAuditHubView'));
+const OfficePracticeHubView = lazyWithRetry(() => import('./components/hubs/OfficePracticeHubView'));
+const SecurityAuditHubView = lazyWithRetry(() => import('./components/hubs/SecurityAuditHubView'));
+const InvoicingView = lazyWithRetry(() => import('./components/InvoicingView'));
+const CustomsHubView = lazyWithRetry(() => import('./components/CustomsHubView'));
+const SapErpHubView = lazyWithRetry(() => import('./components/sap/SapErpHubView'));
+const MobileFieldCompanionView = lazyWithRetry(() => import('./components/mobile/MobileFieldCompanionView'));
+const FinancialDossierGeneratorView = lazyWithRetry(() => import('./components/financial/FinancialDossierGeneratorView'));
+const MultiTenantWorkspacesView = lazyWithRetry(() => import('./components/workspaces/MultiTenantWorkspacesView').then(m => ({ default: m.MultiTenantWorkspacesView })));
+
+// Modals loaded on demand only when opened
+const PinAuthModal = lazyWithRetry(() => import('./components/PinAuthModal'));
+const GlobalCommandPalette = lazyWithRetry(() => import('./components/common/GlobalCommandPalette').then(m => ({ default: m.GlobalCommandPalette })));
+const MgOfficePromoModal = lazyWithRetry(() => import('./components/common/MgOfficePromoModal'));
+const BackupExportModal = lazyWithRetry(() => import('./components/BackupExportModal').then(m => ({ default: m.BackupExportModal })));
+const DesktopAppModal = lazyWithRetry(() => import('./components/DesktopAppModal').then(m => ({ default: m.DesktopAppModal })));
+const UpdateNotificationModal = lazyWithRetry(() => import('./components/UpdateNotificationModal').then(m => ({ default: m.UpdateNotificationModal })));
+const KeyboardShortcutsModal = lazyWithRetry(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
+const UserManagementModal = lazyWithRetry(() => import('./components/UserManagementModal').then(m => ({ default: m.UserManagementModal })));
+const DeviceLockModal = lazyWithRetry(() => import('./components/DeviceLockModal').then(m => ({ default: m.DeviceLockModal })));
+const PurgeDatabaseModal = lazyWithRetry(() => import('./components/PurgeDatabaseModal').then(m => ({ default: m.PurgeDatabaseModal })));
+const DocumentVerificationModal = lazyWithRetry(() => import('./components/common/DocumentVerificationModal').then(m => ({ default: m.DocumentVerificationModal })));
+const SystemManualModal = lazyWithRetry(() => import('./components/common/SystemManualModal').then(m => ({ default: m.SystemManualModal })));
+const LogoInspectionModal = lazyWithRetry(() => import('./components/common/LogoInspectionModal').then(m => ({ default: m.LogoInspectionModal })));
+const AppSettingsModal = lazyWithRetry(() => import('./components/AppSettingsModal').then(m => ({ default: m.AppSettingsModal })));
+const QuickAccountingToolsDrawer = lazyWithRetry(() => import('./components/common/QuickAccountingToolsDrawer').then(m => ({ default: m.QuickAccountingToolsDrawer })));
 
 import { LanguageToggle } from './components/LanguageToggle';
 import { CloudSyncHeaderWidget } from './components/CloudSyncHeaderWidget';
@@ -106,14 +139,12 @@ export default function App() {
     try {
       const saved = localStorage.getItem('mg_app_view_mode');
       if (saved === 'mobile') return 'MOBILE_COMPANION';
-      if (saved === 'desktop') return 'DASHBOARD';
-      if (typeof window !== 'undefined' && window.innerWidth < 768) {
-        return 'MOBILE_COMPANION';
-      }
+      const savedTab = localStorage.getItem('mg_active_tab');
+      if (savedTab && savedTab !== 'DASHBOARD') return savedTab;
     } catch {
       // Fallback
     }
-    return 'DASHBOARD';
+    return 'JOURNAL_ENTRIES';
   });
 
   const handleSwitchToMobileMode = () => {
@@ -126,38 +157,42 @@ export default function App() {
     setActiveTab('MOBILE_COMPANION');
   };
 
-  const handleSwitchToDesktopMode = (targetTab: string = 'DASHBOARD') => {
+  const handleSwitchToDesktopMode = (targetTab: string = 'JOURNAL_ENTRIES') => {
     setViewMode('DESKTOP');
     try {
       localStorage.setItem('mg_app_view_mode', 'desktop');
     } catch {
       // Safe fallback
     }
-    setActiveTab(targetTab === 'MOBILE_COMPANION' ? 'DASHBOARD' : targetTab);
+    setActiveTab(targetTab === 'MOBILE_COMPANION' ? 'JOURNAL_ENTRIES' : targetTab);
   };
 
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(2026);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-      return false;
-    }
-    return true;
-  });
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDesktopModalOpen, setIsDesktopModalOpen] = useState<boolean>(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
   const [isSystemManualOpen, setIsSystemManualOpen] = useState<boolean>(false);
   const [isUserManagerOpen, setIsUserManagerOpen] = useState<boolean>(false);
-  const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(true);
-  const [allowPinCancel, setAllowPinCancel] = useState<boolean>(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(false);
+  const [allowPinCancel, setAllowPinCancel] = useState<boolean>(true);
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState<boolean>(false);
   const [isDeviceEnforcedLocked, setIsDeviceEnforcedLocked] = useState<boolean>(false);
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState<boolean>(false);
   const [unlockedTabs, setUnlockedTabs] = useState<string[]>([]);
   const [verificationData, setVerificationData] = useState<VerificationPayloadData | null>(null);
   const [isMgPromoModalOpen, setIsMgPromoModalOpen] = useState<boolean>(false);
-  const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(true);
+  const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(false);
+
+  // Non-blocking initialization of print header injection
+  useEffect(() => {
+    import('./services/printHeaderInjector')
+      .then((m) => {
+        m.initPrintHeaderInjection();
+      })
+      .catch(() => {});
+  }, []);
 
   // Check if user set promo as welcome screen on startup
   useEffect(() => {
@@ -183,6 +218,7 @@ export default function App() {
   const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState<boolean>(false);
+  const [isQuickToolsDrawerOpen, setIsQuickToolsDrawerOpen] = useState<boolean>(false);
 
   // Active Interface Language & Dynamic RTL/LTR Direction
   const currentLanguage: AppLanguage = state.preferences?.language || 'ar';
@@ -510,6 +546,8 @@ export default function App() {
       // 2. Financial Reporting Hub (القوائم والتقارير المالية)
       case 'FINANCIAL_REPORTING_HUB':
         return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
+      case 'FINANCIAL_DOSSIER_GENERATOR':
+        return <FinancialDossierGeneratorView state={state} onNavigate={(tab) => setActiveTab(tab)} />;
       case 'FINANCIAL_STATEMENTS':
         return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
       case 'BUDGET_PLANNER':
@@ -524,14 +562,18 @@ export default function App() {
         return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_SIMULATOR" fiscalYear={selectedFiscalYear} />;
       case 'CREDIT_SIMULATOR':
         return <FinancialReportingHubView state={state} initialSubTab="CREDIT_SIMULATOR" fiscalYear={selectedFiscalYear} />;
+      case 'CERTIFICATES':
+        return <FinancialReportingHubView state={state} initialSubTab="CERTIFICATES" fiscalYear={selectedFiscalYear} />;
+      case 'FEASIBILITY_STUDY':
+        return <FinancialReportingHubView state={state} initialSubTab="FEASIBILITY_STUDY" fiscalYear={selectedFiscalYear} />;
 
       // 3. Tax & Audit Hub (الضرائب والمراجعة والامتثال)
       case 'TAX_AUDIT_HUB':
-        return <TaxAuditHubView state={state} initialSubTab="EXCEL_AUDIT_SENTINEL" />;
-      case 'EXCEL_AUDIT_SENTINEL':
-        return <TaxAuditHubView state={state} initialSubTab="EXCEL_AUDIT_SENTINEL" />;
+      case 'TAX_FILING_CELLS':
       case 'TAX_TRACKER':
         return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
+      case 'EXCEL_AUDIT_SENTINEL':
+        return <TaxAuditHubView state={state} initialSubTab="EXCEL_AUDIT_SENTINEL" />;
       case 'TAX_PENALTY_SIMULATOR':
         return <TaxAuditHubView state={state} initialSubTab="TAX_PENALTY_SIMULATOR" />;
       case 'FRAUD_AUDIT_SENTINEL':
@@ -549,19 +591,22 @@ export default function App() {
 
       // 4. Office Practice Hub (إدارة المكتب والعملاء)
       case 'OFFICE_HUB':
-        return <OfficePracticeHubView state={state} initialSubTab="CLIENTS_ARCHIVE" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
       case 'CLIENTS_ARCHIVE':
-        return <OfficePracticeHubView state={state} initialSubTab="CLIENTS_ARCHIVE" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
       case 'PRACTICE_MANAGEMENT':
-        return <OfficePracticeHubView state={state} initialSubTab="PRACTICE_MANAGEMENT" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
       case 'WHATSAPP_BOT':
-        return <OfficePracticeHubView state={state} initialSubTab="WHATSAPP_BOT" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
       case 'OFFICE_TREASURY':
-        return <OfficePracticeHubView state={state} initialSubTab="OFFICE_TREASURY" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
-      case 'CERTIFICATES':
-        return <OfficePracticeHubView state={state} initialSubTab="CERTIFICATES" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
-      case 'FEASIBILITY_STUDY':
-        return <OfficePracticeHubView state={state} initialSubTab="FEASIBILITY_STUDY" onOpenPromoModal={() => setIsMgPromoModalOpen(true)} />;
+        return (
+          <OfficePracticeHubView
+            state={state}
+            initialSubTab={activeTab === 'OFFICE_HUB' ? 'CLIENTS_ARCHIVE' : (activeTab as any)}
+            onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
+            onNavigateToTab={(tab) => setActiveTab(tab)}
+          />
+        );
+
+      // Multi-Tenant Workspaces & Industrial Hub (بيئات عمل الشركات والمصانع)
+      case 'MULTI_TENANT_WORKSPACES':
+        return <MultiTenantWorkspacesView state={state} onNavigateToTab={(tab) => setActiveTab(tab)} />;
 
       // 5. Invoicing Hub
       case 'INVOICING':
@@ -691,6 +736,15 @@ export default function App() {
         />
       )}
 
+      {/* Quick Accounting & Tax Calculators Drawer (كسب العمل، الإهلاك الضريبي، القيمة المضافة، وأعمار الديون) */}
+      {isQuickToolsDrawerOpen && (
+        <QuickAccountingToolsDrawer
+          isOpen={isQuickToolsDrawerOpen}
+          onClose={() => setIsQuickToolsDrawerOpen(false)}
+          state={state}
+        />
+      )}
+
       {/* PIN Authentication & Screen Lock Modal */}
       {isPinModalOpen && (
         <PinAuthModal
@@ -768,14 +822,16 @@ export default function App() {
       )}
 
       {/* Global Command Palette (Ctrl + K) */}
-      <GlobalCommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onNavigateTab={(tab) => setActiveTab(tab)}
-        onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
-        onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
-        onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
-      />
+      {isCommandPaletteOpen && (
+        <GlobalCommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigateTab={(tab) => setActiveTab(tab)}
+          onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
+          onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
+          onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
+        />
+      )}
     </Suspense>
   );
 
@@ -833,52 +889,14 @@ export default function App() {
 
         {/* Main Workspace Area */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-          {/* Top Update Alert Banner (if update available) */}
-          {updateBannerVisible && availableUpdate && (
-            <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white px-3 sm:px-4 py-2 text-xs flex items-center justify-between shadow-xs border-b border-emerald-700/50 shrink-0 animate-in slide-in-from-top-2 duration-200">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-black text-[10px] shrink-0">
-                  NEW
-                </div>
-                <span className="font-semibold text-white truncate text-[11px] sm:text-xs">
-                  {!isRtl ? 'New System Update Available:' : 'يوجد تحديث وإصدار جديد متاح للمنظومة:'}
-                </span>
-                <span className="font-mono font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded text-emerald-300 border border-emerald-700 text-[10px] sm:text-xs shrink-0">
-                  v{availableUpdate.version}
-                </span>
-                <span className="hidden md:inline text-slate-200 text-[11px] truncate">
-                  ({availableUpdate.changelog.title})
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0 mr-2">
-                <button
-                  onClick={() => setIsUpdateModalOpen(true)}
-                  id="banner-btn-view-update"
-                  className="px-2.5 sm:px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-md font-bold text-[10px] sm:text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-xs whitespace-nowrap"
-                >
-                  <Sparkles className="w-3 h-3 text-slate-950" />
-                  <span>{!isRtl ? 'Install Update' : 'تثبيت التحديث'}</span>
-                </button>
-                <button
-                  onClick={() => setUpdateBannerVisible(false)}
-                  className="p-1 text-slate-300 hover:text-white rounded hover:bg-white/10 transition-colors"
-                  title={!isRtl ? 'Close' : 'إغلاق التنبيه'}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Top Header Bar - Clean, Minimalist & Focused with Navigation Dropdown */}
+          {/* Top Header Bar - Professional, Focused & Clean */}
           <header
             className={`h-14 border-b px-3 sm:px-5 lg:px-6 flex items-center justify-between z-20 shrink-0 shadow-2xs gap-2 sm:gap-3 transition-colors ${
               isDark ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'
             }`}
           >
-            {/* Left Side: Sidebar Toggle + Office & Auditor Badge */}
-            <div className="flex items-center gap-2 shrink-0 min-w-0">
+            {/* Left Side: Sidebar Toggle + Office & Auditor Title */}
+            <div className="flex items-center gap-2.5 shrink-0 min-w-0">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                 className={`p-2 rounded-xl transition-colors cursor-pointer border shrink-0 ${
@@ -891,126 +909,116 @@ export default function App() {
                 <Menu className="w-4 h-4" />
               </button>
 
-              {/* Authority / Auditor Profile Snippet */}
-              <div className="flex items-center gap-1.5 min-w-0">
+              {/* Auditor & Office Badge */}
+              <div className="flex items-center gap-2 min-w-0">
                 <div
-                  className={`px-2 py-0.5 rounded-md hidden sm:flex items-center gap-1.5 border shrink-0 ${
-                    isDark ? 'bg-slate-800 border-slate-700' : 'bg-emerald-50 border-emerald-200'
+                  className={`px-2 py-0.5 rounded-md flex items-center gap-1 border shrink-0 ${
+                    isDark ? 'bg-slate-800 border-slate-700' : 'bg-indigo-50 border-indigo-200'
                   }`}
                 >
-                  <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    EAS
+                  <span className="text-[10px] font-mono font-bold text-indigo-700 dark:text-indigo-400">
+                    CPA
                   </span>
                 </div>
 
-                <div className="hidden md:block min-w-0">
-                  <h1 className={`text-xs font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                <div className="hidden sm:block min-w-0">
+                  <h1 className={`text-xs font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {!isRtl ? 'Auditor / ' : 'أ/ '}{state.officeProfile.auditorName}
                   </h1>
+                  <span className="text-[9.5px] text-slate-400 block truncate font-medium">
+                    محاسب قانوني وخبير ضرائب
+                  </span>
                 </div>
-
-                {/* Instant 1-Click MG Promo & Brand Badge */}
-                <button
-                  onClick={() => setIsMgPromoModalOpen(true)}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-emerald-500/10 hover:border-amber-400 text-amber-400 hover:text-amber-300 transition-all cursor-pointer shrink-0 text-xs font-bold shadow-2xs"
-                  title={!isRtl ? 'View MG Office Cinematic Promo' : 'عرض البرومو السينمائي والهوية الرسمية لمكتب MG'}
-                >
-                  <div className="w-5 h-5 rounded-md bg-gradient-to-br from-emerald-900 to-slate-950 border border-amber-400/80 flex items-center justify-center text-[10px] font-serif font-black text-amber-300 shrink-0">
-                    MG
-                  </div>
-                  <span className="hidden xl:inline text-[11px] text-amber-300">
-                    {!isRtl ? 'Promo' : 'برومو المكتب'}
-                  </span>
-                </button>
-
-                {/* Instant Inspection of Isolated Logo & Seal */}
-                <button
-                  onClick={() => setIsLogoInspectionModalOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 hover:border-amber-400 text-amber-400 hover:text-amber-300 transition-all cursor-pointer shrink-0 text-xs font-bold shadow-2xs"
-                  title="معاينة تجربة تفريغ الشعار والختم الرسمي (أ/ محمد جميل مرعي)"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  <span className="hidden sm:inline text-[11px] text-amber-200">
-                    معاينة تفريغ الشعار والختم
-                  </span>
-                  <span className="sm:hidden text-[10px] text-amber-200">
-                    تفريغ الشعار
-                  </span>
-                </button>
               </div>
             </div>
 
-            {/* Center: Quick Screen Navigation Dropdown & Global Search Bar */}
-            <div className="flex items-center gap-2 flex-1 max-w-xl mx-1 sm:mx-2 min-w-0">
-              {/* Screen Dropdown Switcher (Simplifies UI) */}
-              <HeaderNavigationDropdown
-                activeTab={activeTab as NavigationTab}
-                onSelectTab={(tab) => setActiveTab(tab)}
-              />
+            {/* Center: Clean Direct Navigation Tabs & Quick Calculators */}
+            <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0 mx-2">
+              {[
+                { id: 'JOURNAL_ENTRIES', label: 'قيود اليومية', icon: Layers },
+                { id: 'CHART_OF_ACCOUNTS', label: 'دليل الحسابات', icon: FolderTree },
+                { id: 'TRIAL_BALANCE', label: 'التقارير المالية الموحدة والميزان', icon: FileSpreadsheet },
+                { id: 'MULTI_TENANT_WORKSPACES', label: 'بيئات الشركات والمصانع', icon: Factory },
+                { id: 'FINANCIAL_DOSSIER_GENERATOR', label: 'المولد المالي ومختبر الفحص', icon: Sparkles },
+                { id: 'TAX_TRACKER', label: 'الفحص والضرائب', icon: Percent },
+                { id: 'CLIENTS_ARCHIVE', label: 'الشركات والعملاء', icon: Building },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      try {
+                        localStorage.setItem('mg_active_tab', tab.id);
+                      } catch {}
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                      isActive
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : isDark
+                        ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
 
-              {/* Expansive Global Search Bar */}
-              <div className="flex-1 min-w-0">
-                <GlobalSearchBar
-                  state={state}
-                  onNavigate={(tab) => {
-                    setActiveTab(tab);
-                  }}
-                />
-              </div>
-            </div>
+              {/* Quick Accountant Calculators Drawer Trigger */}
+              <button
+                onClick={() => setIsQuickToolsDrawerOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                  isQuickToolsDrawerOpen
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : isDark
+                    ? 'bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 border-amber-800/80'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-300/80 shadow-2xs'
+                }`}
+                title="حاسبات فورية: كسب العمل والتأمينات، الإهلاك الضريبي (قانون 91)، القيمة المضافة العكسية مع ترحيل آلي"
+              >
+                <Calculator className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span>حاسبات فورية</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-800 dark:text-amber-200 font-bold font-mono">
+                  ⚡ قيد آلي
+                </span>
+              </button>
+            </nav>
 
             {/* Right Side: Clean Control Suite */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Device View Mode Switcher: Desktop vs Mobile Field */}
+              {/* Active Client Context Pill - Clickable to open workspaces manager */}
               <button
-                onClick={handleSwitchToMobileMode}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:border-emerald-500/50 shadow-2xs active:scale-95"
-                title={!isRtl ? 'Switch to Mobile Field Mode' : 'التبديل إلى وضع الهاتف الميداني (سداد وإجراءات)'}
+                type="button"
+                onClick={() => {
+                  setActiveTab('MULTI_TENANT_WORKSPACES');
+                  try {
+                    localStorage.setItem('mg_active_tab', 'MULTI_TENANT_WORKSPACES');
+                  } catch {}
+                }}
+                title="اضغط للتنقل السريع بين بيئات عمل الشركات والمصانع (Multi-Tenant Hub)"
+                className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold shrink-0 cursor-pointer transition-all hover:scale-102 ${
+                  isDark 
+                    ? 'bg-slate-800 hover:bg-slate-700/80 border-slate-700 text-slate-200' 
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
+                }`}
               >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">{!isRtl ? 'Mobile Field Mode' : 'وضع الهاتف الميداني'}</span>
-                <span className="md:hidden text-[11px]">ميداني 📱</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="truncate max-w-[130px]">
+                  {state.activeClientContext?.companyName || 'الشركة الحالية'}
+                </span>
+                <Factory className="w-3 h-3 text-amber-500 shrink-0" />
               </button>
 
-              {/* CPA Office Practice Badge: Replaces global company/year selector with office multi-client identity */}
-              <div
-                className={`hidden xl:flex items-center gap-2 px-3 py-1.5 border rounded-xl shrink-0 transition-colors shadow-2xs ${
-                  isDark ? 'bg-slate-800/80 border-slate-700/70' : 'bg-slate-50 border-slate-200'
-                }`}
-                title={!isRtl ? 'CPA Practice Office Suite • Auditing Multiple Client Companies' : 'منظومة مكتب المحاسب القانوني • مراجعة وتدقيق حسابات الشركات المتعددة'}
-              >
-                <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20">
-                  <Building className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex flex-col text-right">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">
-                      {!isRtl ? 'CPA Audit Practice' : 'مكتب المحاسبة والمراجعة'}
-                    </span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title={!isRtl ? 'Active Firm Suite' : 'منظومة مهنية نشطة'}></span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                    {!isRtl ? `${state.clients.length} Registered Clients` : `مراجعة ${state.clients.length} شركة ومنشأة`}
-                  </span>
-                </div>
-              </div>
-
-              {/* Theme & Brand Color Dropdown */}
+              {/* Theme Toggle */}
               <ThemeToggle
                 themeMode={themeMode}
                 onThemeChange={handleThemeChange}
                 brandColor={brandColor}
                 onBrandColorChange={handleBrandColorChange}
-              />
-
-              {/* Cloud Real-Time Sync Indicator & Quick Controls */}
-              <CloudSyncHeaderWidget isDark={isDark} />
-
-              {/* Language Switcher */}
-              <LanguageToggle
-                currentLanguage={currentLanguage}
-                onLanguageChange={(lang) => db.setLanguage(lang)}
-                onOpenSettings={() => setIsSettingsModalOpen(true)}
               />
 
               {/* Consolidated Tools & Options Dropdown Menu */}
@@ -1197,125 +1205,6 @@ export default function App() {
               </button>
             </div>
           </header>
-
-          {/* ========================================================================= */}
-          {/* THE 3 CORE PRIMARY INTERFACES RIBBON (شريط الواجهات الرئيسية الثلاث)       */}
-          {/* ========================================================================= */}
-          <div
-            id="app-core-three-hubs-bar"
-            className={`px-3 sm:px-5 lg:px-6 py-2 border-b flex items-center justify-between gap-2 sm:gap-3 shrink-0 transition-colors z-20 ${
-              isDark ? 'bg-slate-900/95 border-slate-800 backdrop-blur-xs' : 'bg-white border-slate-200/90 shadow-2xs'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar scrollbar-none py-0.5 min-w-0">
-              <div className="hidden sm:flex items-center gap-1 text-[11px] font-bold text-slate-400 pl-1 shrink-0">
-                <span>{!isRtl ? 'Core Interfaces:' : 'الواجهات الرئيسية:'}</span>
-              </div>
-
-              {/* Hub 1: Accounting & Journals */}
-              <button
-                onClick={() => setActiveTab('ACCOUNTING_HUB')}
-                id="top-nav-accounting-hub"
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 border ${
-                  currentParentHub === 'ACCOUNTING_HUB'
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                    : isDark
-                    ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
-                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
-                }`}
-                title={!isRtl ? 'Accounting & Journal Entries Core' : 'الحسابات ودفاتر اليومية والدورة المحاسبية العامة'}
-              >
-                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-black ${
-                  currentParentHub === 'ACCOUNTING_HUB' ? 'bg-black/25 text-white' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                }`}>
-                  1
-                </span>
-                <Layers className="w-3.5 h-3.5 shrink-0" />
-                <span>{!isRtl ? 'General Ledger & Journals' : 'الحسابات وقيود اليومية'}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                  currentParentHub === 'ACCOUNTING_HUB'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                }`}>
-                  {state.journalEntries.length}
-                </span>
-              </button>
-
-              {/* Hub 2: Financial Reporting */}
-              <button
-                onClick={() => setActiveTab('FINANCIAL_REPORTING_HUB')}
-                id="top-nav-financial-hub"
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 border ${
-                  currentParentHub === 'FINANCIAL_REPORTING_HUB'
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                    : isDark
-                    ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
-                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
-                }`}
-                title={!isRtl ? 'Financial Statements & EAS Compliance' : 'القوائم والتقارير المالية المعتمدة (EAS 1)'}
-              >
-                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-black ${
-                  currentParentHub === 'FINANCIAL_REPORTING_HUB' ? 'bg-black/25 text-white' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                }`}>
-                  2
-                </span>
-                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
-                <span>{!isRtl ? 'Financial Statements & Reports' : 'القوائم والتقارير المالية'}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                  currentParentHub === 'FINANCIAL_REPORTING_HUB'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                }`}>
-                  EAS 1
-                </span>
-              </button>
-
-              {/* Hub 3: Tax & Audit Hub */}
-              <button
-                onClick={() => setActiveTab('TAX_AUDIT_HUB')}
-                id="top-nav-tax-audit-hub"
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 border ${
-                  currentParentHub === 'TAX_AUDIT_HUB'
-                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                    : isDark
-                    ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80'
-                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
-                }`}
-                title={!isRtl ? 'Tax Declarations & ESA Audit Sentinel' : 'الفحص الضريبي والمراجعة والامتثال المهني'}
-              >
-                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-black ${
-                  currentParentHub === 'TAX_AUDIT_HUB' ? 'bg-black/25 text-white' : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                }`}>
-                  3
-                </span>
-                <Percent className="w-3.5 h-3.5 shrink-0" />
-                <span>{!isRtl ? 'Tax & Audit Sentinel' : 'الفحص الضريبي والمراجعة'}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                  currentParentHub === 'TAX_AUDIT_HUB'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
-                }`}>
-                  XAI
-                </span>
-              </button>
-            </div>
-
-            {/* Quick Hub State / Client Context Pill */}
-            <div className="hidden md:flex items-center gap-2 shrink-0">
-              <div className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
-                isDark ? 'bg-slate-800/70 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'
-              }`}>
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span className="truncate max-w-[160px] font-bold">
-                  {state.activeClientContext?.companyName || 'الشركة الحالية'}
-                </span>
-                <span className="text-slate-400">|</span>
-                <span className="font-mono text-slate-500 dark:text-slate-400">
-                  {state.activeClientContext?.selectedFiscalYear || selectedFiscalYear}
-                </span>
-              </div>
-            </div>
-          </div>
 
         {/* Scrollable Main Content Container */}
         <main

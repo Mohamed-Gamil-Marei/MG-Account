@@ -589,43 +589,41 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 border border-emerald-800/40 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-emerald-400 text-xs font-black uppercase tracking-wider mb-1">
-            <Calculator className="w-4 h-4 text-emerald-400" />
-            <span>وحدة تقدير الأتعاب المهنية الذكية | Smart Fee Estimator & Quotations</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-400 shrink-0">
+            <Calculator className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">
-            مقدّر أتعاب الإجراءات وعروض الأسعار التلقائية
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            تحديد معايير الإجراء المحاسبي والضريبي (ساعات العمل، نوع الكيان القانوني، درجة التعقيد، وجودة الدفاتر) وتوليد عرض سعر مهني معتمد وإرساله مباشرة عبر واتساب بيزنس أو البريد الإلكتروني.
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              مقدّر أتعاب الإجراءات وعروض الأسعار
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('CALCULATOR')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'CALCULATOR'
-                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-700/30'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
-            <Sparkles className="w-4 h-4" />
-            <span>حاسبة وتقدير جديد</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>تقدير جديد</span>
           </button>
           <button
             onClick={() => setActiveTab('QUOTATIONS_HISTORY')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'QUOTATIONS_HISTORY'
-                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-700/30'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
-            <FileText className="w-4 h-4" />
-            <span>سجل عروض الأسعار ({quotations.length})</span>
+            <FileText className="w-3.5 h-3.5" />
+            <span>سجل العروض ({quotations.length})</span>
           </button>
         </div>
       </div>
@@ -1072,34 +1070,34 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
           </div>
 
           {/* Right Column: Live Quotation Summary & Dispatch Deck (5 Cols) */}
-          <div className="lg:col-span-5 space-y-6 sticky top-6">
+          <div className="lg:col-span-5 space-y-4 sticky top-6">
             {/* Real-time Summary Card */}
-            <div className="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs space-y-4 text-slate-800 dark:text-slate-100">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
-                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">معاينة عرض السعر الفوري</span>
-                  <h3 className="text-base font-black text-white">{clientName || 'عرض سعر جديد'}</h3>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">معاينة عرض السعر الفوري</span>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">{clientName || 'عرض سعر جديد'}</h3>
                 </div>
-                <div className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
+                <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-mono font-bold">
                   {calculations.totalHours} ساعة عمل
                 </div>
               </div>
 
               {/* Financial Breakdown Table */}
-              <div className="space-y-3 text-xs font-mono">
-                <div className="flex justify-between text-slate-300">
+              <div className="space-y-2.5 text-xs font-mono">
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
                   <span className="font-sans">تكلفة ساعات العمل الأساسية:</span>
                   <span>{calculations.baseLaborCost.toLocaleString('ar-EG')} ج.م</span>
                 </div>
 
-                <div className="flex justify-between text-slate-400 text-[11px]">
+                <div className="flex justify-between text-slate-500 text-[11px]">
                   <span className="font-sans">معامل التعقيد القانوني ({calculations.compMultiplier}x):</span>
-                  <span className="text-emerald-400">+{((calculations.compMultiplier - 1) * 100).toFixed(0)}%</span>
+                  <span className="text-blue-600 dark:text-blue-400">+{((calculations.compMultiplier - 1) * 100).toFixed(0)}%</span>
                 </div>
 
-                <div className="flex justify-between text-slate-400 text-[11px]">
+                <div className="flex justify-between text-slate-500 text-[11px]">
                   <span className="font-sans">معامل جودة الدفاتر ({calculations.qualMultiplier}x):</span>
-                  <span className="text-emerald-400">+{((calculations.qualMultiplier - 1) * 100).toFixed(0)}%</span>
+                  <span className="text-blue-600 dark:text-blue-400">+{((calculations.qualMultiplier - 1) * 100).toFixed(0)}%</span>
                 </div>
 
                 <div className="flex justify-between text-slate-300 border-t border-slate-800/80 pt-2 font-bold">

@@ -28,8 +28,13 @@ export function injectPrintHeader(customTitle?: string): void {
     removeInjectedPrintHeader();
 
     // Check if the printable content already includes an official header
-    const activePrintable = document.querySelector('[data-printable="true"], #printable-document-root, #credit-financials-container');
-    const hasInternalOfficialHeader = activePrintable?.querySelector('.official-header, .injected-official-print-header');
+    const activePrintable = document.querySelector('[data-printable="true"], #printable-document-root, #credit-financials-container, [data-letterhead="true"]');
+    const hasInternalOfficialHeader = activePrintable?.querySelector('.official-header, .injected-official-print-header, [data-official-header="true"]');
+
+    // If an official header already exists inside the printable document, skip injection completely
+    if (hasInternalOfficialHeader) {
+      return;
+    }
 
     // Create container
     injectedHeaderContainer = document.createElement('div');
@@ -40,7 +45,6 @@ export function injectPrintHeader(customTitle?: string): void {
     const rootEl = document.getElementById('root') || document.body;
     rootEl.insertBefore(injectedHeaderContainer, rootEl.firstChild);
 
-    // If target container already has a visible header, mark this as fallback/print-aware
     injectedRoot = createRoot(injectedHeaderContainer);
     injectedRoot.render(
       <DensityProvider>
@@ -51,9 +55,8 @@ export function injectPrintHeader(customTitle?: string): void {
               clientProfile={clientProfile}
               fiscalYear={fiscalYear}
               documentTitle={customTitle || document.title || 'تقرير مالي محاسبي معتمد'}
-              documentSubtitle="مستخرج رسمي صادر من المنظومة ومطابق لمعايير المحاسبة والمراجعة المصرية (EAS/ESA)"
               variant="print-only"
-              className={hasInternalOfficialHeader ? 'print:hidden' : 'w-full'}
+              className="w-full"
             />
           </div>
         </I18nProvider>

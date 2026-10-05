@@ -262,38 +262,32 @@ export const SmartCreditSuite: React.FC<SmartCreditSuiteProps> = ({
   };
 
   return (
-    <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-slate-100 rounded-2xl border border-indigo-500/30 p-4 sm:p-6 shadow-xl mb-6 space-y-6">
-      {/* Top Banner & Control Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-indigo-500/20 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/40">
-            <Sparkles className="w-5 h-5" />
+    <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 shadow-2xs mb-5 space-y-4">
+      {/* Top Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-200 dark:border-indigo-800 shrink-0">
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-base font-black text-white flex items-center gap-2">
-              <span>المحرك الائتماني الذكي ومحاكي قرارات البنوك المصرية</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-900/80 text-indigo-300 border border-indigo-600 font-mono">
-                Bank Intelligence v3.5
-              </span>
+            <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span>المحرك الائتماني ومحاكي قرارات البنوك</span>
             </h3>
-            <p className="text-xs text-slate-400">
-              هندسة عكسية لمتطلبات الائتمان، مطابقة حركة كشف الحساب، وفحص معايير قبول البنك في ثوانٍ.
-            </p>
           </div>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold">
           <button
             type="button"
             onClick={() => setActiveTab('REVERSE_ENGINEERING')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'REVERSE_ENGINEERING'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Zap className="w-3.5 h-3.5 text-amber-300" />
+            <Zap className="w-3.5 h-3.5 text-amber-500 dark:text-amber-300" />
             <span>الهندسة العكسية للقرض</span>
           </button>
 

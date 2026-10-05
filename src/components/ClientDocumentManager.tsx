@@ -33,7 +33,7 @@ import {
   CheckCircle2,
   Check,
 } from 'lucide-react';
-import { ClientArchiveRecord, ClientDocument, ClientDocumentFolder } from '../types';
+import { ClientArchiveRecord, ClientDocument, ClientDocumentFolder, ClientDocumentCategory } from '../types';
 import { db } from '../db/localDatabase';
 import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
 import { AutoArchiverService, HeaderVerificationResult } from '../services/AutoArchiver';
@@ -89,17 +89,91 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
   // Upload Doc Form
   const [docTitle, setDocTitle] = useState('');
   const [docFolderId, setDocFolderId] = useState<string>('');
-  const [docType, setDocType] = useState<ClientDocument['documentType']>('FINANCIAL_REPORT');
+  const [docCategory, setDocCategory] = useState<ClientDocumentCategory>('TAX');
+  const [docType, setDocType] = useState<ClientDocument['documentType']>('TAX_RETURN');
   const [docTag, setDocTag] = useState('');
   const [docNotes, setDocNotes] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('');
   const [selectedFileSize, setSelectedFileSize] = useState('');
   const [selectedFileDataUrl, setSelectedFileDataUrl] = useState('');
 
+  // Category Quick Filter
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const folders = client.folders || [];
   const documents = client.documents || [];
+
+  // Helper: infer or get effective category for document
+  const getEffectiveCategory = (d: ClientDocument): ClientDocumentCategory => {
+    if (d.category) {
+      const c = d.category.toUpperCase();
+      if (c === 'TAX' || c === 'ضريبي') return 'TAX';
+      if (c === 'LEGAL' || c === 'قانوني') return 'LEGAL';
+      if (c === 'CONTRACTUAL' || c === 'تعاقدي') return 'CONTRACTUAL';
+      if (c === 'FINANCIAL' || c === 'مالي' || c === 'مالي ومحاسبي') return 'FINANCIAL';
+      if (c === 'GENERAL' || c === 'عام') return 'GENERAL';
+    }
+    // Infer based on documentType if missing
+    if (d.documentType === 'TAX_CARD' || d.documentType === 'TAX_RETURN') return 'TAX';
+    if (d.documentType === 'COMMERCIAL_REG' || d.documentType === 'ARTICLES_OF_INC' || d.documentType === 'POWER_OF_ATTORNEY') return 'LEGAL';
+    if (d.documentType === 'CONTRACT') return 'CONTRACTUAL';
+    if (d.documentType === 'FINANCIAL_REPORT' || d.documentType === 'AUDIT_REPORT') return 'FINANCIAL';
+    return 'GENERAL';
+  };
+
+  const getCategoryLabel = (cat: ClientDocumentCategory | string): string => {
+    switch (cat) {
+      case 'TAX':
+      case 'ضريبي':
+        return 'ضريبي';
+      case 'LEGAL':
+      case 'قانوني':
+        return 'قانوني';
+      case 'CONTRACTUAL':
+      case 'تعاقدي':
+        return 'تعاقدي';
+      case 'FINANCIAL':
+      case 'مالي':
+      case 'مالي ومحاسبي':
+        return 'مالي ومحاسبي';
+      case 'GENERAL':
+      case 'عام':
+        return 'عام ومراسلات';
+      default:
+        return String(cat);
+    }
+  };
+
+  const getCategoryBadgeClass = (cat: ClientDocumentCategory | string): string => {
+    switch (cat) {
+      case 'TAX':
+      case 'ضريبي':
+        return 'bg-emerald-50 text-emerald-800 border-emerald-300';
+      case 'LEGAL':
+      case 'قانوني':
+        return 'bg-purple-50 text-purple-800 border-purple-300';
+      case 'CONTRACTUAL':
+      case 'تعاقدي':
+        return 'bg-blue-50 text-blue-800 border-blue-300';
+      case 'FINANCIAL':
+      case 'مالي':
+      case 'مالي ومحاسبي':
+        return 'bg-indigo-50 text-indigo-800 border-indigo-300';
+      case 'GENERAL':
+      case 'عام':
+        return 'bg-slate-100 text-slate-800 border-slate-300';
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  // Count documents per category
+  const getDocCountForCategory = (cat: string) => {
+    if (cat === 'ALL') return documents.length;
+    return documents.filter((d) => getEffectiveCategory(d) === cat).length;
+  };
 
   // Count documents per folder
   const getDocCountForFolder = (folderId: string) => {
@@ -108,7 +182,7 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
 
   const unassignedCount = documents.filter((d) => !d.folderId).length;
 
-  // Filtered documents
+  // Filtered documents with instant category and text search
   const filteredDocs = documents.filter((d) => {
     const matchesFolder =
       selectedFolderId === 'ALL'
@@ -117,16 +191,25 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
         ? !d.folderId
         : d.folderId === selectedFolderId;
 
+    const effCat = getEffectiveCategory(d);
+    const matchesCategory =
+      selectedCategoryFilter === 'ALL' ? true : effCat === selectedCategoryFilter;
+
     const q = (searchDocQuery || '').toLowerCase().trim();
+    const catLabel = getCategoryLabel(effCat).toLowerCase();
+    const rawCat = (d.category || '').toLowerCase();
+
     const matchesSearch =
       !q ||
       (d.title || '').toLowerCase().includes(q) ||
       (d.fileName && d.fileName.toLowerCase().includes(q)) ||
       (d.tag && d.tag.toLowerCase().includes(q)) ||
       (d.notes && d.notes.toLowerCase().includes(q)) ||
-      (d.folderName && d.folderName.toLowerCase().includes(q));
+      (d.folderName && d.folderName.toLowerCase().includes(q)) ||
+      rawCat.includes(q) ||
+      catLabel.includes(q);
 
-    return matchesFolder && matchesSearch;
+    return matchesFolder && matchesCategory && matchesSearch;
   });
 
   // Handle folder creation / edit
@@ -212,6 +295,7 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
       folderId: docFolderId || undefined,
       folderName: targetFolder ? targetFolder.name : undefined,
       title: docTitle.trim(),
+      category: docCategory,
       documentType: docType,
       fileDataUrl: selectedFileDataUrl || '#',
       fileName: selectedFileName || `${docTitle.trim()}.pdf`,
@@ -222,6 +306,8 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
 
     // Reset
     setDocTitle('');
+    setDocCategory('TAX');
+    setDocType('TAX_RETURN');
     setSelectedFileName('');
     setSelectedFileSize('');
     setSelectedFileDataUrl('');
@@ -505,17 +591,65 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
             </span>
           </div>
 
-          {/* Search Bar within docs */}
-          <div className="relative w-full sm:w-72">
+          {/* Real-time Search Bar within docs */}
+          <div className="relative w-full sm:w-80">
             <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
             <input
               type="text"
               value={searchDocQuery}
               onChange={(e) => setSearchDocQuery(e.target.value)}
-              placeholder="بحث في أسماء المستندات والوسوم..."
+              placeholder="بحث فوري في المستندات، التصنيفات، والوسوم..."
               className="w-full pl-3 pr-9 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-indigo-500 outline-none font-medium"
             />
+            {searchDocQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchDocQuery('')}
+                className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs"
+              >
+                ✕
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* Instant Category Filter Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 text-xs border-t border-slate-100">
+          <span className="text-slate-400 font-bold text-[11px] shrink-0 ml-1 flex items-center gap-1">
+            <Filter className="w-3 h-3 text-slate-400" />
+            <span>التصنيف:</span>
+          </span>
+          {[
+            { id: 'ALL', label: 'الكل', count: getDocCountForCategory('ALL') },
+            { id: 'TAX', label: 'ضريبي', count: getDocCountForCategory('TAX') },
+            { id: 'LEGAL', label: 'قانوني', count: getDocCountForCategory('LEGAL') },
+            { id: 'CONTRACTUAL', label: 'تعاقدي', count: getDocCountForCategory('CONTRACTUAL') },
+            { id: 'FINANCIAL', label: 'مالي ومحاسبي', count: getDocCountForCategory('FINANCIAL') },
+            { id: 'GENERAL', label: 'عام ومراسلات', count: getDocCountForCategory('GENERAL') },
+          ].map((cat) => {
+            const isSelected = selectedCategoryFilter === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategoryFilter(cat.id)}
+                className={`px-3 py-1 rounded-xl font-bold text-xs shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-slate-900 text-white shadow-xs scale-[1.02]'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                <span>{cat.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    isSelected ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  {cat.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Documents Table / Grid List */}
@@ -549,6 +683,18 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-xs">{doc.title}</span>
+
+                        {/* Category Badge */}
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-bold border flex items-center gap-1 ${getCategoryBadgeClass(
+                            doc.category || getEffectiveCategory(doc)
+                          )}`}
+                          title={`تصنيف المستند: ${getCategoryLabel(doc.category || getEffectiveCategory(doc))}`}
+                        >
+                          <Tag className="w-2.5 h-2.5 shrink-0" />
+                          <span>{getCategoryLabel(doc.category || getEffectiveCategory(doc))}</span>
+                        </span>
+
                         {isAutoArchived && (
                           <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold border border-emerald-300 flex items-center gap-1 font-mono">
                             <Clock className="w-3 h-3 text-emerald-700" />
@@ -799,20 +945,44 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
         ) : (
           <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
             <Folder className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <h5 className="text-xs font-bold text-slate-700">لا توجد مستندات في هذا المجلد</h5>
+            <h5 className="text-xs font-bold text-slate-700">
+              {searchDocQuery || selectedCategoryFilter !== 'ALL'
+                ? 'لا توجد مستندات مطابقة لمعايير البحث أو التصنيف المحدد'
+                : 'لا توجد مستندات في هذا المجلد'}
+            </h5>
             <p className="text-[11px] text-slate-400 mt-1">
-              انقر على زر "رفع وأرشفة مستند" لإضافة القوائم المالية، الفواتير، أو السجلات القانونية.
+              {searchDocQuery || selectedCategoryFilter !== 'ALL'
+                ? `التصنيف الحالي: [${getCategoryLabel(selectedCategoryFilter)}] ${searchDocQuery ? `• كلمة البحث: "${searchDocQuery}"` : ''}`
+                : 'انقر على زر "رفع وأرشفة مستند" لإضافة القوائم المالية، الفواتير، أو السجلات القانونية.'}
             </p>
-            <button
-              onClick={() => {
-                setDocFolderId(selectedFolderId !== 'ALL' && selectedFolderId !== 'UNASSIGNED' ? selectedFolderId : (folders[0]?.id || ''));
-                setIsUploadDocModalOpen(true);
-              }}
-              className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>رفع مستند الآن</span>
-            </button>
+            <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+              {(searchDocQuery || selectedCategoryFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchDocQuery('');
+                    setSelectedCategoryFilter('ALL');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>إعادة ضبط الفلاتر والبحث</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setDocFolderId(selectedFolderId !== 'ALL' && selectedFolderId !== 'UNASSIGNED' ? selectedFolderId : (folders[0]?.id || ''));
+                  if (selectedCategoryFilter !== 'ALL') {
+                    setDocCategory(selectedCategoryFilter as ClientDocumentCategory);
+                  }
+                  setIsUploadDocModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>رفع مستند جديد</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -974,42 +1144,81 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Category & Document Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-200">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">المجلد / التصنيف المستهدف</label>
+                  <label className="block text-slate-800 font-bold mb-1 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>تصنيف المستند (Category) *</span>
+                  </label>
                   <select
-                    value={docFolderId}
-                    onChange={(e) => setDocFolderId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                    value={docCategory}
+                    onChange={(e) => {
+                      const newCat = e.target.value as ClientDocumentCategory;
+                      setDocCategory(newCat);
+                      if (newCat === 'TAX') {
+                        setDocType('TAX_RETURN');
+                      } else if (newCat === 'LEGAL') {
+                        setDocType('COMMERCIAL_REG');
+                      } else if (newCat === 'CONTRACTUAL') {
+                        setDocType('CONTRACT');
+                      } else if (newCat === 'FINANCIAL') {
+                        setDocType('FINANCIAL_REPORT');
+                      } else {
+                        setDocType('OTHER');
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 focus:border-indigo-600 outline-none shadow-2xs"
                   >
-                    <option value="">-- بدون مجلد (الأرشيف العام) --</option>
-                    {folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
+                    <option value="TAX">📋 ضريبي (إقرارات، بطاقة ضريبية، فحص)</option>
+                    <option value="LEGAL">⚖️ قانوني (سجل تجاري، عقد تأسيس، توكيلات)</option>
+                    <option value="CONTRACTUAL">✍️ تعاقدي (عقود واتفاقيات، إيجار، توريد)</option>
+                    <option value="FINANCIAL">📊 مالي ومحاسبي (قوائم، ميزانيات، تقارير مراقب)</option>
+                    <option value="GENERAL">📁 عام ومراسلات (مراسلات رسمية، مستندات أخرى)</option>
                   </select>
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    يحدد التصنيف الأساسي لسهولة البحث والفلترة الفورية داخل الأرشيف
+                  </span>
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">نوع الوثيقة</label>
+                  <label className="block text-slate-800 font-bold mb-1">نوع المحرر / الوثيقة</label>
                   <select
                     value={docType}
                     onChange={(e) => setDocType(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 focus:border-indigo-600 outline-none shadow-2xs"
                   >
-                    <option value="FINANCIAL_REPORT">قوائم مالية وميزانيات</option>
+                    <option value="TAX_RETURN">إقرار / إشعار سداد ضريبي</option>
                     <option value="TAX_CARD">بطاقة ضريبية</option>
                     <option value="COMMERCIAL_REG">سجل تجاري</option>
-                    <option value="AUDIT_REPORT">تقرير مراقب الحسابات</option>
-                    <option value="TAX_RETURN">إقرار / إشعار ضريبي</option>
-                    <option value="ARTICLES_OF_INC">عقد تأسيس / تعديل</option>
+                    <option value="ARTICLES_OF_INC">عقد تأسيس / تعديل ملخص</option>
                     <option value="POWER_OF_ATTORNEY">توكيل رسمي عام / خاص</option>
                     <option value="CONTRACT">عقود واتفاقيات</option>
-                    <option value="RECEIPT">إيصال سداد رسوم</option>
+                    <option value="FINANCIAL_REPORT">قوائم مالية وميزانيات</option>
+                    <option value="AUDIT_REPORT">تقرير مراقب الحسابات</option>
+                    <option value="RECEIPT">إيصال سداد رسوم حكومية</option>
                     <option value="OTHER">مستند ومحرر رسمي آخر</option>
                   </select>
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    طبيعة المستند المرفق بالملف
+                  </span>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">المجلد المستهدف (اختياري)</label>
+                <select
+                  value={docFolderId}
+                  onChange={(e) => setDocFolderId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                >
+                  <option value="">-- بدون مجلد (الأرشيف العام) --</option>
+                  {folders.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      📁 {f.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

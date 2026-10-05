@@ -217,11 +217,6 @@ export const ActionButton: React.FC<ActionButtonProps> = ({
                       </span>
                     )}
                   </div>
-                  {item.description && (
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-                      {item.description}
-                    </div>
-                  )}
                 </div>
               </button>
             );

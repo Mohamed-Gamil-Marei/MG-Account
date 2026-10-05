@@ -4,8 +4,8 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
-import { etaMiddleware } from "./server/etaMiddleware.js";
-import { whatsappServerEngine } from "./server/whatsappServerEngine.js";
+import { etaMiddleware } from "./server/etaMiddleware.ts";
+import { whatsappServerEngine } from "./server/whatsappServerEngine.ts";
 
 dotenv.config();
 

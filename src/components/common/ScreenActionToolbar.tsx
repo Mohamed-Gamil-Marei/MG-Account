@@ -471,13 +471,10 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
                           showFeedback('error', res.error || 'تعذر إتمام الأرشفة');
                         }
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold transition-all text-right cursor-pointer"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold transition-all text-right cursor-pointer"
                     >
                       <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-                      <div className="flex-1 truncate">
-                        <div className="font-bold text-xs">أرشفة آلية في ملف العميل</div>
-                        <div className="text-[10px] text-emerald-700 font-normal">AutoArchiver بترميز زمني موثق</div>
-                      </div>
+                      <span className="font-bold text-xs truncate">أرشفة آلية في ملف العميل</span>
                     </button>
                   </div>
                 </>
@@ -491,17 +488,14 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
                       fileInputRef.current?.click();
                     }}
                     disabled={isImporting}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-50 hover:bg-emerald-50 text-slate-800 hover:text-emerald-950 font-bold transition-all text-right cursor-pointer"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-emerald-50 text-slate-800 hover:text-emerald-950 font-bold transition-all text-right cursor-pointer"
                   >
                     {isImporting ? (
                       <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
                     ) : (
                       <Upload className="w-4 h-4 text-emerald-700 shrink-0" />
                     )}
-                    <div className="flex-1 truncate">
-                      <div className="font-bold text-xs">استيراد بيانات من ملف</div>
-                      <div className="text-[10px] text-slate-400">Excel أو CSV أو JSON</div>
-                    </div>
+                    <span className="font-bold text-xs truncate">استيراد بيانات من ملف</span>
                   </button>
                 </div>
               )}
@@ -514,8 +508,8 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
       {showWhatsApp && (
         <button
           onClick={() => setIsWhatsAppModalOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-lg font-bold text-xs shadow-2xs border border-emerald-500/40 transition-all cursor-pointer active:scale-95"
-          title="إرسال إشعار واتساب مباشر من داخل البرنامج"
+          className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold text-xs border border-emerald-600 transition-all cursor-pointer active:scale-95"
+          title="إرسال إشعار واتساب مباشر"
         >
           <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
           <span>واتساب مباشر</span>

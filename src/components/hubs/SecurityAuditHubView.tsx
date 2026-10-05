@@ -20,7 +20,7 @@ import {
 import { DatabaseState, db } from '../../db/localDatabase';
 import { AuditTrailView } from '../AuditTrailView';
 import { BackupExportModal } from '../BackupExportModal';
-import { UserManagerModal } from '../UserManagerModal';
+import { UserManagementModal } from '../UserManagementModal';
 import { DeviceLockModal } from '../DeviceLockModal';
 import { PurgeDatabaseModal } from '../PurgeDatabaseModal';
 import { AccessRestrictedGate } from '../AccessRestrictedGate';
@@ -93,40 +93,10 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Hub Top Navigation Header - Modern Sleek Pill Navigation */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-800 to-slate-950 text-white flex items-center justify-center shadow-xs shrink-0">
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-black text-slate-900 dark:text-white">مركز الرقابة والأمان وإدارة البيانات</h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-emerald-400 border border-slate-700">
-                  Security & Audit
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                سجل الرقابة والتدقيق الصارم، النسخ الاحتياطي المشفر، وصلاحيات المستخدمين
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs shrink-0">
-            <button
-              onClick={() => setIsBackupModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>نسخة احتياطية فورية</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Sub-Tabs Selector - Clean Horizontal Segmented Tab Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
+    <div className="space-y-2.5">
+      {/* Compact Sub-Tabs Toolbar */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
@@ -134,13 +104,13 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 border ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
                   isActive
-                    ? 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700 shadow-xs'
+                    ? 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700 shadow-2xs'
                     : 'bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`} />
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
                 <span className="whitespace-nowrap">{tab.label}</span>
                 {tab.badge !== undefined && (
                   <span
@@ -156,6 +126,16 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
               </button>
             );
           })}
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-xs shrink-0 pl-1">
+          <button
+            onClick={() => setIsBackupModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors text-[11px]"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>نسخة احتياطية</span>
+          </button>
         </div>
       </div>
 
@@ -417,7 +397,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
         <BackupExportModal state={state} onClose={() => setIsBackupModalOpen(false)} />
       )}
       {isUserManagerOpen && (
-        <UserManagerModal isOpen={isUserManagerOpen} onClose={() => setIsUserManagerOpen(false)} state={state} />
+        <UserManagementModal isOpen={isUserManagerOpen} onClose={() => setIsUserManagerOpen(false)} />
       )}
       {isDeviceModalOpen && (
         <DeviceLockModal isOpen={isDeviceModalOpen} onClose={() => setIsDeviceModalOpen(false)} isEnforced={false} />

@@ -289,65 +289,49 @@ export const TaxPenaltySimulatorView: React.FC<TaxPenaltySimulatorViewProps> = (
         ]}
       />
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 text-white rounded-2xl p-5 sm:p-6 border border-amber-500/30 shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0">
-              <Clock className="w-7 h-7 text-amber-400 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-black">محاكي مقابل التأخير والضريبة الإضافية للفواتير الضريبية</h2>
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
-                  قانون 206 / 2020 & قانون 67 / 2016
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-3xl">
-                حساب دقيق لغرامات ومقابل تأخير السداد للفواتير الضريبية، إقرارات القيمة المضافة، ضريبة الدخل، وكسب العمل، بناءً على تاريخ الاستحقاق وتاريخ السداد الفعلي مع دعم نسب التجاوز ومبادرات الإعفاء الحكومية.
-              </p>
-            </div>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
+            <Clock className="w-4 h-4" />
           </div>
-
-          {/* Quick Stats in Banner */}
-          <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10 shrink-0">
-            <div className="text-right">
-              <div className="text-[10px] text-amber-300 font-bold">سعر البنك المركزي المعتمد</div>
-              <div className="text-lg font-black font-mono text-white">
-                {cbeDiscountRate}% <span className="text-xs font-normal text-slate-300">+ {cbeLegalMargin}% هامش</span>
-              </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+                محاكي مقابل التأخير والضريبة الإضافية
+              </h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                مركزي: {cbeDiscountRate}% + {cbeLegalMargin}%
+              </span>
             </div>
           </div>
         </div>
 
         {/* Preset Buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t border-white/10 text-xs">
-          <span className="font-bold text-amber-300 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" /> قوالب سريعة شائعة:
-          </span>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <button
             onClick={() => handleApplyPreset('VAT_LAST_MONTH')}
-            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium border border-white/10 transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
-            إقرار ق.م (1.5% شهرياً)
+            إقرار ق.م (1.5%)
           </button>
           <button
             onClick={() => handleApplyPreset('INCOME_TAX_ANNUAL')}
-            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium border border-white/10 transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
-            ضريبة الدخل السنوية (30 أبريل)
+            ضريبة الدخل
           </button>
           <button
             onClick={() => handleApplyPreset('WHT_Q4')}
-            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium border border-white/10 transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
-            خصم وتحصيل نموذج 41
+            نموذج 41
           </button>
           <button
             onClick={() => handleApplyPreset('PAYROLL')}
-            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium border border-white/10 transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
-            ضريبة المرتبات (كسب العمل)
+            المرتبات
           </button>
         </div>
       </div>
@@ -646,13 +630,7 @@ export const TaxPenaltySimulatorView: React.FC<TaxPenaltySimulatorViewProps> = (
           {/* Right Column: Simulation Results & Analytics (7 Cols) */}
           <div className="lg:col-span-7 space-y-4">
             {/* Main Status & Hero KPI Card */}
-            <div
-              className={`rounded-2xl p-5 border shadow-xs transition-all ${
-                singleResult.isDelayed
-                  ? 'bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 border-amber-300'
-                  : 'bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/50 border-emerald-300'
-              }`}
-            >
+            <div className="rounded-xl p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs transition-all">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
                 <div>
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -1055,10 +1033,10 @@ export const TaxPenaltySimulatorView: React.FC<TaxPenaltySimulatorViewProps> = (
               return (
                 <div
                   key={idx}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
                     sc.isImmediate
-                      ? 'bg-gradient-to-b from-emerald-50 to-teal-50 border-emerald-300 shadow-xs'
-                      : 'bg-white border-slate-200 hover:border-amber-300'
+                      ? 'bg-slate-50 dark:bg-slate-800 border-emerald-500 shadow-2xs'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
                   }`}
                 >
                   <div>

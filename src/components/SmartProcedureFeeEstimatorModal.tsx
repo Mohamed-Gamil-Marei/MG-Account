@@ -689,7 +689,7 @@ ${selectedPreset.notesTemplate}
           {/* Right Column: Financial Breakdown & Action Output (5 Cols) */}
           <div className="lg:col-span-5 space-y-4 flex flex-col justify-between">
             {/* The Main Calculation Card */}
-            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white p-5 rounded-3xl shadow-xl border border-slate-800 space-y-4">
+            <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-4 rounded-xl shadow-2xs border border-slate-200 dark:border-slate-800 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5" />

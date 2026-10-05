@@ -197,54 +197,64 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
       <div className="space-y-4">
         {/* KPI Row Compact */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-          <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-emerald-700 text-[11px] block">إجمالي المقبوضات</span>
-              <span className="text-base font-black text-emerald-900 font-mono mt-0.5 block">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px] block">إجمالي المقبوضات</span>
+              <span className="text-base font-black text-slate-900 dark:text-white font-mono mt-0.5 block">
                 {formatEgyptianCurrency(totalIncome)}
               </span>
             </div>
-            <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+              <ArrowDownLeft className="w-4 h-4" />
+            </div>
           </div>
 
-          <div className="bg-rose-50/70 p-3 rounded-xl border border-rose-200 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-rose-700 text-[11px] block">رسوم حكومية</span>
-              <span className="text-base font-black text-rose-900 font-mono mt-0.5 block">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px] block">رسوم حكومية</span>
+              <span className="text-base font-black text-slate-900 dark:text-white font-mono mt-0.5 block">
                 {formatEgyptianCurrency(totalGovFeesPaid)}
               </span>
             </div>
-            <ArrowUpRight className="w-4 h-4 text-rose-600" />
+            <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
+              <ArrowUpRight className="w-4 h-4" />
+            </div>
           </div>
 
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-slate-600 text-[11px] block">مصروفات التشغيل</span>
-              <span className="text-base font-black text-slate-900 font-mono mt-0.5 block">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px] block">مصروفات التشغيل</span>
+              <span className="text-base font-black text-slate-900 dark:text-white font-mono mt-0.5 block">
                 {formatEgyptianCurrency(totalOfficeExpenses)}
               </span>
             </div>
-            <Building2 className="w-4 h-4 text-slate-500" />
+            <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+              <Building2 className="w-4 h-4" />
+            </div>
           </div>
 
-          <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-purple-700 text-[11px] block">مسحوبات الشركاء</span>
-              <span className="text-base font-black text-purple-900 font-mono mt-0.5 block">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px] block">مسحوبات الشركاء</span>
+              <span className="text-base font-black text-slate-900 dark:text-white font-mono mt-0.5 block">
                 {formatEgyptianCurrency(totalPartnerDrawings)}
               </span>
             </div>
-            <Coins className="w-4 h-4 text-purple-600" />
+            <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Coins className="w-4 h-4" />
+            </div>
           </div>
 
-          <div className="col-span-2 lg:col-span-1 bg-gradient-to-r from-amber-600 to-amber-700 text-white p-3 rounded-xl shadow-xs flex items-center justify-between">
+          <div className="col-span-2 lg:col-span-1 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-amber-100 text-[11px] block">صافي رصيد الخزنة</span>
-              <span className="text-base font-black font-mono mt-0.5 block">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-semibold">صافي رصيد الخزنة</span>
+              <span className="text-base font-black text-blue-700 dark:text-blue-400 font-mono mt-0.5 block">
                 {formatEgyptianCurrency(netCashBalance)}
               </span>
             </div>
-            <Wallet className="w-4 h-4 text-amber-200" />
+            <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <Wallet className="w-4 h-4" />
+            </div>
           </div>
         </div>
 

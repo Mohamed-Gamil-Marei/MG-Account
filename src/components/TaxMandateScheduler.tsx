@@ -243,42 +243,35 @@ export const TaxMandateScheduler: React.FC<TaxMandateSchedulerProps> = ({ state 
   };
 
   return (
-    <div className="space-y-4">
-      {/* Urgent Notifications Banner */}
+    <div className="space-y-3">
+      {/* Urgent Notifications Alert */}
       {urgentMandates.length > 0 && (
-        <div className="p-4 bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 rounded-2xl border border-rose-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs animate-pulse">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
-                <span>تنبيه المواعيد الضريبية العاجلة: يوجد ({urgentMandates.length}) استحقاقات وتكليفات ضريبية وشيكة!</span>
-              </h4>
-              <p className="text-[11px] text-rose-700 mt-0.5">
-                يرجى استيفاء الإقرارات ونماذج الخصم وسداد المستحقات لتفادي غرامات التأخير ومقابل التأخير المنصوص عليه بقانون الإجراءات 206 لسنة 2020.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end md:self-center">
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-200 text-rose-900">
-              {urgentMandates.length} تكليف عاجل
+        <div className="px-3.5 py-2 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900/60 shadow-2xs flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="font-bold text-rose-900 dark:text-rose-200">
+              تنبيه المواعيد الضريبية: يوجد ({urgentMandates.length}) استحقاقات وتكليفات وشيكة
             </span>
           </div>
+
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-600 text-white font-mono">
+            {urgentMandates.length} عاجل
+          </span>
         </div>
       )}
 
       {/* Header & Controls */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-indigo-700" />
-            <h3 className="text-sm font-bold text-slate-900">جدول التكليفات والمواعيد الضريبية (Tax Mandates Scheduler)</h3>
+      <div className="bg-white dark:bg-slate-900 rounded-xl px-4 py-2.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center shrink-0">
+            <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            متابعة دقيقة لمواعيد تقديم إقرارات القيمة المضافة، ضريبة الدخل، المرتبات، ونموذج 41 مع العد التنازلي ونظام المراحل
-          </p>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">جدول التكليفات والمواعيد الضريبية</h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              متابعة مواعيد إقرارات القيمة المضافة، الدخل، المرتبات، ونموذج 41
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">

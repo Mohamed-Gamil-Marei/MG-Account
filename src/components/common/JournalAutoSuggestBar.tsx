@@ -142,23 +142,20 @@ export const JournalAutoSuggestBar: React.FC<JournalAutoSuggestBarProps> = ({
   }, [difference, totalDebit, totalCredit, entries, accounts]);
 
   return (
-    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-4 border border-indigo-900/50 shadow-md space-y-3.5">
+    <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
       {/* Header Info */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/60 pb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
-            <Sparkles className="w-4 h-4" />
+          <div className="p-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-md border border-blue-200 dark:border-blue-800">
+            <Sparkles className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h4 className="text-xs font-black text-white flex items-center gap-2">
-              محرك الاقتراح التلقائي استناداً إلى سجل العمليات السابقة
-              <span className="text-[10px] font-mono font-bold bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full border border-indigo-400/20">
-                {entries.length} قيد تاريخي محلل
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              محرك الاقتراح التلقائي استناداً إلى سجل العمليات
+              <span className="text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700">
+                {entries.length} قيد محلل
               </span>
             </h4>
-            <p className="text-[11px] text-slate-300">
-              اقتراح فوري للأطراف المقابلة (مدينة/دائنة) ونسب التكرار لسرعة ودقة التوجيه المحاسبي.
-            </p>
           </div>
         </div>
 
@@ -166,11 +163,11 @@ export const JournalAutoSuggestBar: React.FC<JournalAutoSuggestBarProps> = ({
           <button
             type="button"
             onClick={() => setIsPatternsExpanded((prev) => !prev)}
-            className="text-[11px] px-2.5 py-1 bg-slate-700/80 hover:bg-slate-700 text-indigo-200 hover:text-white rounded-lg border border-slate-600 font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="text-[11px] px-2 py-0.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 rounded-md border border-slate-200 dark:border-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
           >
-            <History className="w-3.5 h-3.5 text-indigo-400" />
+            <History className="w-3 h-3 text-blue-600" />
             <span>
-              {historicalPatterns.length} أنماط سابقة متطابقة
+              {historicalPatterns.length} أنماط سابقة
             </span>
             {isPatternsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>

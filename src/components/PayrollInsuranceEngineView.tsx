@@ -264,22 +264,17 @@ export const PayrollInsuranceEngineView: React.FC<PayrollInsuranceEngineProps> =
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-xs font-bold border border-sky-500/30 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
-              قانون التأمينات 148 لسنة 2019 وقانون الضريبة على الدخل
-            </span>
-            <span className="text-slate-400 text-xs font-mono">الشرائح الضريبية المعدلة ونموذج (4) واستمارة (2)</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-700 dark:text-sky-400 shrink-0">
+            <ShieldCheck className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            محرك كسب العمل والتأمينات الاجتماعية الشامل
-          </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1">
-            احتساب دقيق لضريبة المرتبات، حصص التأمينات (11% و 18.75%)، مسير الرواتب الشهري ونماذج مصلحة الضرائب
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              محرك كسب العمل والتأمينات الاجتماعية
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

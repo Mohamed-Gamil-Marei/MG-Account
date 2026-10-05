@@ -514,41 +514,39 @@ export const BudgetPlannerView: React.FC<BudgetPlannerViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn text-right" dir="rtl">
-      {/* Top Banner & Control Suite */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-5 sm:p-6 text-white border border-indigo-800/40 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5">
-              <Calculator className="w-3.5 h-3.5" />
-              <span>الموازنة التقديرية السنوية ومصفوفة الانحرافات | Annual Budget Planner (EAS)</span>
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
-              سنة مالية: {selectedYear}
-            </span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 shrink-0">
+            <Calculator className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            الموازنة التقديرية السنوية ومقارنة الأرقام الفعلية بالمستهدف
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
-            منظومة محاسبية متقدمة لمقارنة الأداء المالي الفعلي المستخرج من قيود اليومية بالقوائم التقديرية، وحساب انحرافات الإيرادات والمصروفات، وتحليل كفاءة التشغيل وفق معايير المحاسبة المصرية (EAS).
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+                الموازنة التقديرية السنوية ومصفوفة الانحرافات
+              </h1>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                {selectedYear}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-stretch sm:self-auto justify-end">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Print & Verify Button */}
           <button
             onClick={() => setIsPrintModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold border border-slate-600 transition-all cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
           >
-            <Printer className="w-4 h-4 text-indigo-400" />
-            <span>طباعة الموازنة الرسمية</span>
+            <Printer className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>طباعة الموازنة</span>
           </button>
 
           <button
             onClick={() => setIsVerificationModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs shadow-emerald-700/20"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
           >
-            <FileCheck2 className="w-4 h-4" />
+            <FileCheck2 className="w-3.5 h-3.5" />
             <span>الختم الرقمي QR</span>
           </button>
         </div>
@@ -1074,31 +1072,31 @@ export const BudgetPlannerView: React.FC<BudgetPlannerViewProps> = ({
           </div>
 
           {/* Right Col: EAS Professional Audit Insights & Actionable Steps */}
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 border border-indigo-800/60 shadow-md space-y-4">
-              <div className="flex items-center gap-2 text-indigo-300">
-                <Sparkles className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-black text-sm sm:text-base">تحليل المراقب المالي (EAS Variance Audit)</h3>
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <Sparkles className="w-4 h-4" />
+                <h3 className="font-bold text-sm">تحليل المراقب المالي (EAS Variance Audit)</h3>
               </div>
 
-              <div className="space-y-3 text-xs leading-relaxed text-slate-200">
-                <div className="p-3 bg-white/10 rounded-xl border border-white/10 space-y-1">
-                  <div className="font-bold text-white flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <div className="space-y-2.5 text-xs leading-relaxed">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>كفاءة توليد الإيرادات</span>
                   </div>
-                  <p className="text-slate-300">
+                  <p className="text-slate-600 dark:text-slate-300">
                     حققت المنشأة نسبة {aggregates.overallAchievementPct.toFixed(1)}% من إجمالي مستهدف المبيعات السنوية، بفارق انحراف قدره{' '}
-                    <strong className="text-emerald-400 font-mono">{formatEgyptianCurrency(aggregates.revVariance)}</strong>.
+                    <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatEgyptianCurrency(aggregates.revVariance)}</strong>.
                   </p>
                 </div>
 
-                <div className="p-3 bg-white/10 rounded-xl border border-white/10 space-y-1">
-                  <div className="font-bold text-white flex items-center gap-1.5">
-                    <Scale className="w-4 h-4 text-blue-400" />
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Scale className="w-4 h-4 text-blue-600" />
                     <span>انضباط المصروفات التشغيلية</span>
                   </div>
-                  <p className="text-slate-300">
+                  <p className="text-slate-600 dark:text-slate-300">
                     تم استهلاك {aggregates.expenseControlPct.toFixed(1)}% من الموازنة المخصصة للمصروفات العمومية والتسويقية، مما يعكس{' '}
                     {aggregates.expenseControlPct <= 100
                       ? 'ترشيداً والتزاماً بحدود الموازنة المعتمدة.'

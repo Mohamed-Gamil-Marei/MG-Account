@@ -13,6 +13,8 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "paths": {
       "@/*": [
         "./src/*"

@@ -122,35 +122,33 @@ export const PracticeManagementHubView: React.FC<PracticeManagementHubViewProps>
 
   return (
     <div className="space-y-6 animate-fadeIn text-right" dir="rtl">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-slate-950 border border-emerald-800/40 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-emerald-400 text-xs font-black uppercase tracking-wider mb-1">
-            <Briefcase className="w-4 h-4 text-emerald-400" />
-            <span>إدارة ممارسة المهنة وعقود المراجعة | Practice & Inspection Management</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-400 shrink-0">
+            <Briefcase className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">
-            إدارة عقود الأتعاب وغرفة الفحص الضريبي
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            إدارة عقود المراجعة والخدمات الضريبية والاستشارية، جدولة المطالبات المالية وإرسال إشعارات واتساب، وتجهيز ملفات الفحص الضريبي للمأموريات.
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              إدارة عقود الأتعاب وغرفة الفحص الضريبي
+            </h1>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveSubView('FEE_ESTIMATOR')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-700/30 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
           >
-            <Calculator className="w-4 h-4" />
-            <span>مقدّر الأتعاب وعروض الأسعار الذكية</span>
+            <Calculator className="w-3.5 h-3.5" />
+            <span>مقدّر الأتعاب</span>
           </button>
           <button
             onClick={() => setIsPrintDossierOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold border border-slate-700 shadow-md transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-2xs transition-all cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            <span>طباعة ملف الفحص الضريبي الميداني</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span>طباعة ملف الفحص الضريبي</span>
           </button>
         </div>
       </div>

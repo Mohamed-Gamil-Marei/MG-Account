@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 import {
   Account,
@@ -130,7 +129,15 @@ export class LocalDatabase {
 
   constructor() {
     this.state = this.loadInitialState();
-    this.initCloudSync();
+    if (typeof window !== 'undefined') {
+      setTimeout(() => {
+        try {
+          this.initCloudSync();
+        } catch (err) {
+          console.warn('Deferred CloudSync init notice:', err);
+        }
+      }, 500);
+    }
   }
 
   private initCloudSync() {
@@ -371,38 +378,18 @@ export class LocalDatabase {
 
       let loadedOfficeProfile: OfficeProfile = officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE;
       if (loadedOfficeProfile) {
-        if (!loadedOfficeProfile.firmName || loadedOfficeProfile.firmName === 'منظومة المحاسب القانوني المتكامل' || loadedOfficeProfile.firmName.trim() === '') {
-          loadedOfficeProfile.firmName = 'مكتب المحاسب القانوني ومراقب الحسابات';
+        // Only set default if field is completely absent
+        if (!loadedOfficeProfile.firmName) {
+          loadedOfficeProfile.firmName = DEFAULT_OFFICE_PROFILE.firmName;
         }
-        if (!loadedOfficeProfile.auditorName || loadedOfficeProfile.auditorName.trim() === '') {
-          loadedOfficeProfile.auditorName = 'محمد جميل مرعي';
-        }
-        if (!loadedOfficeProfile.phone || loadedOfficeProfile.phone === '02-27945620' || loadedOfficeProfile.mobile?.includes('01001234567') || loadedOfficeProfile.phone.trim() === '') {
-          loadedOfficeProfile.phone = '01003335360';
-          loadedOfficeProfile.mobile = '01003335360';
-        }
-        if (!loadedOfficeProfile.licenseNumber || loadedOfficeProfile.licenseNumber.includes('18492') || loadedOfficeProfile.licenseNumber.includes('18452') || loadedOfficeProfile.licenseNumber.trim() === '') {
-          loadedOfficeProfile.licenseNumber = 'س.م.م / 43122 - ترخيص وزارة المالية';
-        }
-        if (!loadedOfficeProfile.taxAuthorityRegNo || loadedOfficeProfile.taxAuthorityRegNo.trim() === '' || loadedOfficeProfile.taxAuthorityRegNo.includes('200-145-890')) {
-          loadedOfficeProfile.taxAuthorityRegNo = 'م.ض. 492-817-302';
-        }
-        if (!loadedOfficeProfile.mainOfficeAddress || loadedOfficeProfile.mainOfficeAddress.trim() === '' || loadedOfficeProfile.mainOfficeAddress.includes('ميدان التحرير') || loadedOfficeProfile.address?.includes('ميدان التحرير')) {
-          loadedOfficeProfile.mainOfficeAddress = 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية';
-          loadedOfficeProfile.showMainOfficeAddress = true;
-        }
-        if (!loadedOfficeProfile.branchOfficeAddress || loadedOfficeProfile.branchOfficeAddress.trim() === '') {
-          loadedOfficeProfile.branchOfficeAddress = 'المباركية مول - مدينة العاشر من رمضان - الشرقية';
-          loadedOfficeProfile.showBranchOfficeAddress = true;
+        if (!loadedOfficeProfile.auditorName) {
+          loadedOfficeProfile.auditorName = DEFAULT_OFFICE_PROFILE.auditorName;
         }
         if (loadedOfficeProfile.showMainOfficeAddress === undefined) {
           loadedOfficeProfile.showMainOfficeAddress = true;
         }
         if (loadedOfficeProfile.showBranchOfficeAddress === undefined) {
           loadedOfficeProfile.showBranchOfficeAddress = true;
-        }
-        if (!loadedOfficeProfile.address || loadedOfficeProfile.address.includes('ميدان التحرير') || loadedOfficeProfile.address.trim() === '') {
-          loadedOfficeProfile.address = 'المكتب الرئيسي: ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية | الفرع: المباركية مول - مدينة العاشر من رمضان - الشرقية';
         }
       }
 
@@ -982,6 +969,174 @@ export class LocalDatabase {
     }
   }
 
+  // --- Industrial & Multi-Tenant Helpers ---
+  public applyIndustrialChartOfAccounts(targetClientId?: string): { addedCount: number; message: string } {
+    const industrialAccounts: Account[] = [
+      {
+        id: 'acc-1131-raw',
+        code: '1131',
+        name: 'مخزون خامات ومواد أولية (صناعي)',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-113',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'المواد الخام ومستلزمات الإنتاج والتصنيع بالمستودعات',
+      },
+      {
+        id: 'acc-1132-wip',
+        code: '1132',
+        name: 'مخزون إنتاج تحت التشغيل (WIP)',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-113',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'المنتجات في مراحل التصنيع وخطوط الإنتاج الجارية',
+      },
+      {
+        id: 'acc-1133-finished',
+        code: '1133',
+        name: 'مخزون إنتاج تام الصنع',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-113',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'المنتجات الجاهزة للبيع والتسليم للعملاء',
+      },
+      {
+        id: 'acc-1134-spares',
+        code: '1134',
+        name: 'مخزون قطع غيار ومهمات تشغيل المصنع',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-113',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'قطع الغيار والزيوت والمهمات التشغيلية لخطوط الإنتاج',
+      },
+      {
+        id: 'acc-311-direct-wages',
+        code: '3110',
+        name: 'أجور ومرتبات عمال الإنتاج المباشرة',
+        category: 'EXPENSES',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-31',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'أجور وحوافز عمال الورش وعنابر التصنيع المباشرة',
+      },
+      {
+        id: 'acc-312-power',
+        code: '3120',
+        name: 'قوى محركة وكهرباء ووقود المصنع',
+        category: 'EXPENSES',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-31',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'استهلاك الكهرباء الصناعية والسولار والغاز الطبيعي للغلايات والآلات',
+      },
+      {
+        id: 'acc-313-maint',
+        code: '3130',
+        name: 'صيانة وإصلاح آلات وخطوط الإنتاج',
+        category: 'EXPENSES',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-31',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'مصاريف الصيانة الدورية وقطع غيار الماكينات',
+      },
+      {
+        id: 'acc-314-mach-deprec',
+        code: '3140',
+        name: 'إهلاك آلات ومعدات المصنع الإنتاجية',
+        category: 'EXPENSES',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-31',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'الإهلاك المحاسبي والصناعي لخطوط الإنتاج والتصنيع',
+      },
+      {
+        id: 'acc-315-foh',
+        code: '3150',
+        name: 'تكاليف صناعية غير مباشرة أخرى (FOH)',
+        category: 'EXPENSES',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-31',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'الأعباء الصناعية غير المباشرة الموزعة على عنابر التشغيل',
+      },
+      {
+        id: 'acc-316-subcontract',
+        code: '3160',
+        name: 'تشغيل وتصنيع لدى الغير (Subcontracting)',
+        category: 'EXPENSES',
+        nature: 'DEBIT',
+        level: 3,
+        parentId: 'acc-31',
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        description: 'تكاليف المراحل الصناعية المنفذة في مصانع وورش خارجية',
+      },
+    ];
+
+    let addedCount = 0;
+    for (const acc of industrialAccounts) {
+      const exists = this.state.accounts.some((a) => a.code === acc.code);
+      if (!exists) {
+        this.state.accounts.push(acc);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      this.logAudit('UPDATE', `تطبيق شجرة الحسابات الصناعية للمصانع (${addedCount} حساب جديد)`);
+      this.saveState('ACCOUNTS');
+    }
+
+    return {
+      addedCount,
+      message: addedCount > 0 ? `تم إضافة ${addedCount} حساب صناعي متخصص بنجاح` : 'كافة الحسابات الصناعية مسجلة ومفعلة بالفعل في شجرة الحسابات',
+    };
+  }
+
+  public exportClientIsolatedBackup(clientId: string): string {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) throw new Error('العميل أو المنشأة غير موجودة');
+
+    const clientEntries = this.state.journalEntries.filter((e) => e.clientId === clientId);
+    const clientAssets = (this.state.fixedAssets || []).filter((a) => (a as any).clientId === clientId);
+    const clientInvoices = (this.state.invoices || []).filter((inv) => (inv as any).clientId === clientId);
+    const clientDeclarations = (this.state.taxDeclarations || []).filter((t) => t.clientId === clientId);
+
+    const bundle = {
+      version: '1.0.0',
+      exportType: 'ISOLATED_CLIENT_WORKSPACE_BACKUP',
+      exportedAt: new Date().toISOString(),
+      client,
+      journalEntries: clientEntries,
+      fixedAssets: clientAssets,
+      invoices: clientInvoices,
+      taxDeclarations: clientDeclarations,
+    };
+
+    return JSON.stringify(bundle, null, 2);
+  }
+
   // --- Client Procedures & Treasury Integration ---
   public addClientProcedure(
     clientId: string,
@@ -1284,6 +1439,17 @@ export class LocalDatabase {
     this.logAudit('UPDATE', `تحديث حالة الإقرار الضريبي: ${old.period}`);
     this.saveState();
     return this.state.taxDeclarations[index];
+  }
+
+  public deleteTaxDeclaration(id: string): boolean {
+    const prevLen = this.state.taxDeclarations.length;
+    this.state.taxDeclarations = this.state.taxDeclarations.filter((t) => t.id !== id);
+    if (this.state.taxDeclarations.length < prevLen) {
+      this.logAudit('DELETE', `حذف إقرار ضريبي: ${id}`);
+      this.saveState();
+      return true;
+    }
+    return false;
   }
 
   // --- Client Document Folders & Categorization ---
@@ -1626,11 +1792,8 @@ export class LocalDatabase {
       ...this.state.officeProfile,
       ...profile,
     };
-    this.dirtyKeys.add(STORAGE_KEYS.OFFICE_PROFILE);
-    this.logAudit('UPDATE', 'تحديث بيانات وترويسة وشعار مكتب المحاسب القانوني');
-    this.saveState('OFFICE_PROFILE');
-    this.flushDirtyStorage(true);
-    this.notify();
+    this.logAudit('UPDATE', 'تحديث بيانات وترويسة مكتب المحاسب القانوني');
+    this.saveState();
   }
 
   // --- Reset to Demo Data ---
@@ -1889,7 +2052,8 @@ export class LocalDatabase {
   }
 
   // --- Excel Exports ---
-  public exportTableToExcel(tableName: 'ACCOUNTS' | 'JOURNAL' | 'CLIENTS' | 'TREASURY' | 'TAXES' | 'CERTIFICATES' | 'INVOICES' | 'FIXED_ASSETS') {
+  public async exportTableToExcel(tableName: 'ACCOUNTS' | 'JOURNAL' | 'CLIENTS' | 'TREASURY' | 'TAXES' | 'CERTIFICATES' | 'INVOICES' | 'FIXED_ASSETS') {
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
 
     if (tableName === 'ACCOUNTS') {

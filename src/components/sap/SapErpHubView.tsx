@@ -161,37 +161,37 @@ export const SapErpHubView: React.FC<SapErpHubViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200" dir="rtl">
-      {/* 1. TOP SAP S/4HANA ENTERPRISE HEADER BANNER */}
-      <div className="bg-gradient-to-r from-[#031d44] via-[#04395e] to-[#0d2137] text-white p-5 rounded-3xl border border-blue-800 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg font-black text-lg tracking-wider border border-blue-400/40">
+    <div className="space-y-4 animate-in fade-in duration-200" dir="rtl">
+      {/* 1. COMPACT SAP S/4HANA ERP HEADER */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center font-black text-xs text-blue-700 dark:text-blue-300 shrink-0">
             SAP
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-black tracking-tight text-white">
+              <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
                 منظومة الربط والتكامل مع ساب (SAP S/4HANA ERP Connector)
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-blue-500/20 text-blue-200 border border-blue-400/40">
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                 OData v4 & BAPI Ready
               </span>
             </div>
-            <p className="text-xs text-blue-200">
-              ربط ومزامنة دفاتر الأستاذ العام، مراكز التكلفة، وتصدير قيود اليومية المتوافقة مع بنية ساب العالمية
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              ربط ومزامنة دفاتر الأستاذ العام، مراكز التكلفة، وتصدير قيود اليومية المتوافقة مع بنية ساب
             </p>
           </div>
         </div>
 
         {/* Action Controls & Return Button */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={onReturnToStandardMode}
-            className="px-4 py-2 bg-blue-950 hover:bg-blue-900 text-blue-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-blue-700 transition-colors shadow-sm cursor-pointer"
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
-            <ArrowRightLeft className="w-4 h-4 text-amber-400" />
-            <span>العودة للوضع القياسي للمكتب</span>
+            <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>العودة للوضع القياسي</span>
           </button>
         </div>
       </div>

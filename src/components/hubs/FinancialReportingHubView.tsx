@@ -10,9 +10,12 @@ import {
   Calendar,
   Calculator,
   DollarSign,
+  LineChart,
+  Layers,
 } from 'lucide-react';
 import { DatabaseState } from '../../db/localDatabase';
 import { FinancialStatementsView } from '../FinancialStatementsView';
+import { UnifiedFinancialReportsView } from '../UnifiedFinancialReportsView';
 import { FinancialNotesBuilderView } from '../FinancialNotesBuilderView';
 import { AuditorReportView } from '../AuditorReportView';
 import { CreditFinancialsSimulator } from '../CreditFinancialsSimulator';
@@ -20,19 +23,22 @@ import { FinancialSimulatorView } from '../FinancialSimulatorView';
 import { CashFlowPredictorView } from '../financial/CashFlowPredictorView';
 import { BudgetPlannerView } from '../financial/BudgetPlannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
+import { CertificatesGeneratorView } from '../CertificatesGeneratorView';
+import { FeasibilityStudyView } from '../FeasibilityStudyView';
 import { ClientSelector } from '../common/ClientSelector';
 import { AuditConsistencySentinelModal } from '../audit/AuditConsistencySentinelModal';
 import { ShieldCheck } from 'lucide-react';
 
 export type FinancialReportingSubTab =
-  | 'FINANCIAL_STATEMENTS'
+  | 'ANNUAL_FINANCIAL_DOSSIER'
+  | 'CERTIFICATES'
+  | 'FEASIBILITY_STUDY'
+  | 'CREDIT_SIMULATOR'
+  | 'BUDGET_AND_CASHFLOW'
   | 'CURRENCY_RATES'
-  | 'BUDGET_PLANNER'
-  | 'CASH_FLOW_PREDICTOR'
-  | 'FINANCIAL_SIMULATOR'
+  | 'FINANCIAL_STATEMENTS'
   | 'FINANCIAL_NOTES'
-  | 'AUDITOR_REPORT'
-  | 'CREDIT_SIMULATOR';
+  | 'AUDITOR_REPORT';
 
 interface FinancialReportingHubViewProps {
   state: DatabaseState;
@@ -42,15 +48,28 @@ interface FinancialReportingHubViewProps {
 
 export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps> = ({
   state,
-  initialSubTab = 'FINANCIAL_STATEMENTS',
+  initialSubTab = 'ANNUAL_FINANCIAL_DOSSIER',
   fiscalYear = 2026,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<FinancialReportingSubTab>(initialSubTab);
+  const [dossierSection, setDossierSection] = useState<'STATEMENTS' | 'NOTES' | 'AUDITOR_REPORT'>('STATEMENTS');
+  const [budgetSection, setBudgetSection] = useState<'BUDGET' | 'CASH_FLOW'>('BUDGET');
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialSubTab) {
-      setActiveSubTab(initialSubTab);
+      if (initialSubTab === 'FINANCIAL_STATEMENTS') {
+        setActiveSubTab('ANNUAL_FINANCIAL_DOSSIER');
+        setDossierSection('STATEMENTS');
+      } else if (initialSubTab === 'FINANCIAL_NOTES') {
+        setActiveSubTab('ANNUAL_FINANCIAL_DOSSIER');
+        setDossierSection('NOTES');
+      } else if (initialSubTab === 'AUDITOR_REPORT') {
+        setActiveSubTab('ANNUAL_FINANCIAL_DOSSIER');
+        setDossierSection('AUDITOR_REPORT');
+      } else {
+        setActiveSubTab(initialSubTab);
+      }
     }
   }, [initialSubTab]);
 
@@ -62,94 +81,50 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
     badgeColor?: string;
   }[] = [
     {
-      id: 'CREDIT_SIMULATOR',
-      label: 'ملف الائتمان والقوائم البنكية المعتمدة',
-      icon: TrendingUp,
-      badge: 'مسار معتمد',
+      id: 'ANNUAL_FINANCIAL_DOSSIER',
+      label: 'الملف المالي السنوي المعتمد (القوائم + الإيضاحات + تقرير المراقب)',
+      icon: FileSpreadsheet,
+      badge: 'الملف الكامل EAS 1 & 700',
       badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
     },
     {
-      id: 'FINANCIAL_STATEMENTS',
-      label: 'القوائم المالية الداخلية والمقارنة',
-      icon: FileSpreadsheet,
-    },
-    {
-      id: 'AUDITOR_REPORT',
-      label: 'تقرير مراقب الحسابات (ESA)',
-      icon: FileCheck2,
-    },
-    {
-      id: 'FINANCIAL_NOTES',
-      label: 'الإيضاحات المتممة',
-      icon: FileText,
-      badge: 'معيار 1',
-      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
-    },
-    {
-      id: 'CURRENCY_RATES',
-      label: 'أسعار الصرف والعملات (EAS 13)',
-      icon: DollarSign,
-      badge: 'متعدد العملات',
+      id: 'CERTIFICATES',
+      label: 'الشهادات المهنية المعتمدة (شهادات بنكية ودخل)',
+      icon: Award,
+      badge: 'باركود معتمد',
       badgeColor: 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-800',
     },
     {
-      id: 'BUDGET_PLANNER',
-      label: 'الموازنة التقديرية',
+      id: 'FEASIBILITY_STUDY',
+      label: 'دراسات الجدوى المالية والاقتصادية',
+      icon: LineChart,
+      badge: 'تحليل مالي',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
+    },
+    {
+      id: 'CREDIT_SIMULATOR',
+      label: 'ملف الائتمان والتحليل المالي للبنوك',
+      icon: TrendingUp,
+      badge: 'تسهيلات بنكية',
+      badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+    },
+    {
+      id: 'BUDGET_AND_CASHFLOW',
+      label: 'الموازنة التقديرية وتوقعات السيولة النقدية',
       icon: Calculator,
-    },
-    {
-      id: 'CASH_FLOW_PREDICTOR',
-      label: 'التدفقات النقدية التقديرية',
-      icon: Calendar,
-    },
-    {
-      id: 'FINANCIAL_SIMULATOR',
-      label: 'محاكي القوائم والنسب',
-      icon: Sliders,
+      badge: 'تخطيط مالي',
+      badgeColor: 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800',
     },
   ];
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-2.5">
       {/* Central Active Client Context Selector */}
       <ClientSelector state={state} />
 
-      {/* Hub Top Navigation Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-200/60 dark:border-blue-900/50">
-              <FileSpreadsheet className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">القوائم والتقارير المالية</h2>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  EAS
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                المركز المالي، الدخل، التدفقات النقدية، الإيضاحات المتممة وتقرير مراقب الحسابات
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 self-end sm:self-auto">
-            <button
-              onClick={() => setIsAuditModalOpen(true)}
-              className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>فحص الاتساق والنزاهة</span>
-            </button>
-            <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 font-semibold text-[11px]">
-              السنة المالية: {fiscalYear}
-            </span>
-          </div>
-        </div>
-
-        {/* Sub-Tabs Selector */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar">
+      {/* Compact Sub-Tabs Toolbar */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
@@ -180,41 +155,141 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
             );
           })}
         </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-xs shrink-0 pl-1">
+          <button
+            onClick={() => setIsAuditModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>فحص الاتساق</span>
+          </button>
+        </div>
       </div>
 
       {/* Render Active Sub-View */}
       <div>
-        {activeSubTab === 'FINANCIAL_STATEMENTS' && (
-          <FinancialStatementsView
-            state={state}
-            fiscalYear={fiscalYear}
-            onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
-            onNavigateToCreditSimulator={() => setActiveSubTab('CREDIT_SIMULATOR')}
-          />
+        {activeSubTab === 'ANNUAL_FINANCIAL_DOSSIER' && (
+          <div className="space-y-3">
+            {/* Sub-Navigator between the 3 elements of the Dossier */}
+            <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 max-w-xl">
+              <button
+                type="button"
+                onClick={() => setDossierSection('STATEMENTS')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  dossierSection === 'STATEMENTS'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>1. التقارير المالية الموحدة (الميزان + القوائم)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDossierSection('NOTES')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  dossierSection === 'NOTES'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>2. الإيضاحات المتممة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDossierSection('AUDITOR_REPORT')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  dossierSection === 'AUDITOR_REPORT'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <FileCheck2 className="w-3.5 h-3.5" />
+                <span>3. تقرير مراقب الحسابات (700)</span>
+              </button>
+            </div>
+
+            {/* Render selected section of the Dossier */}
+            {dossierSection === 'STATEMENTS' && (
+              <UnifiedFinancialReportsView
+                state={state}
+                fiscalYear={fiscalYear}
+                initialMode="FINANCIAL_STATEMENTS"
+                onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
+                onNavigateToCreditSimulator={() => setActiveSubTab('CREDIT_SIMULATOR')}
+              />
+            )}
+            {dossierSection === 'NOTES' && (
+              <FinancialNotesBuilderView state={state} />
+            )}
+            {dossierSection === 'AUDITOR_REPORT' && (
+              <AuditorReportView state={state} fiscalYear={fiscalYear} />
+            )}
+          </div>
         )}
+
+        {activeSubTab === 'CERTIFICATES' && (
+          <CertificatesGeneratorView state={state} />
+        )}
+
+        {activeSubTab === 'FEASIBILITY_STUDY' && (
+          <FeasibilityStudyView state={state} />
+        )}
+
+        {activeSubTab === 'CREDIT_SIMULATOR' && (
+          <CreditFinancialsSimulator state={state} />
+        )}
+
+        {activeSubTab === 'BUDGET_AND_CASHFLOW' && (
+          <div className="space-y-3">
+            <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 max-w-md">
+              <button
+                type="button"
+                onClick={() => setBudgetSection('BUDGET')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  budgetSection === 'BUDGET'
+                    ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span>الموازنة التقديرية للعام</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBudgetSection('CASH_FLOW')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  budgetSection === 'CASH_FLOW'
+                    ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>توقعات التدفقات النقدية</span>
+              </button>
+            </div>
+
+            {budgetSection === 'BUDGET' ? (
+              <BudgetPlannerView state={state} fiscalYear={fiscalYear} />
+            ) : (
+              <CashFlowPredictorView state={state} />
+            )}
+          </div>
+        )}
+
         {activeSubTab === 'CURRENCY_RATES' && (
           <ExchangeRatesManagerView
             state={state}
-            onNavigateToFinancialStatements={() => setActiveSubTab('FINANCIAL_STATEMENTS')}
+            onNavigateToFinancialStatements={() => {
+              setActiveSubTab('ANNUAL_FINANCIAL_DOSSIER');
+              setDossierSection('STATEMENTS');
+            }}
           />
-        )}
-        {activeSubTab === 'BUDGET_PLANNER' && (
-          <BudgetPlannerView state={state} fiscalYear={fiscalYear} />
-        )}
-        {activeSubTab === 'CASH_FLOW_PREDICTOR' && (
-          <CashFlowPredictorView state={state} />
-        )}
-        {activeSubTab === 'FINANCIAL_SIMULATOR' && (
-          <FinancialSimulatorView state={state} fiscalYear={fiscalYear} />
-        )}
-        {activeSubTab === 'FINANCIAL_NOTES' && (
-          <FinancialNotesBuilderView state={state} />
-        )}
-        {activeSubTab === 'AUDITOR_REPORT' && (
-          <AuditorReportView state={state} fiscalYear={fiscalYear} />
-        )}
-        {activeSubTab === 'CREDIT_SIMULATOR' && (
-          <CreditFinancialsSimulator state={state} />
         )}
       </div>
 

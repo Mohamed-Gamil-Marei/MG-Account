@@ -133,22 +133,17 @@ export const TaxExposureSimulatorView: React.FC<TaxExposureSimulatorProps> = ({ 
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 text-xs font-bold border border-red-500/30 flex items-center gap-1">
-              <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-              منظومة الرقابة والتحوط الضريبي الوقائي
-            </span>
-            <span className="text-slate-400 text-xs font-mono">قانون 91 لسنة 2005 وقانون 206 لسنة 2020</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 flex items-center justify-center text-red-700 dark:text-red-400 shrink-0">
+            <ShieldAlert className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            محاكي الفحص الضريبي وكشف المخاطر والمطابقة الثلاثية
-          </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1">
-            كشف الفروق بين الدفاتر المحاسبية وإقرارات القيمة المضافة وبوابة الفاتورة الإلكترونية مع حساب مقابل التأخير والغرامات
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              محاكي الفحص الضريبي وكشف المخاطر والمطابقة الثلاثية
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -203,63 +198,69 @@ export const TaxExposureSimulatorView: React.FC<TaxExposureSimulatorProps> = ({ 
       </div>
 
       {/* Top Summary KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
         {/* Risk Score */}
-        <div className={`p-4 rounded-xl border ${riskLevel.color} shadow-xs flex flex-col justify-between`}>
+        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold text-slate-700">مؤشر مخاطر الفحص (Risk Score)</span>
-              <riskLevel.icon className="w-5 h-5" />
+            <div className="flex items-center justify-between mb-1 text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold">مؤشر مخاطر الفحص</span>
+              <riskLevel.icon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
             </div>
-            <div className="flex items-baseline gap-2 mt-2">
-              <span className="text-3xl font-black font-mono">{riskScore}</span>
-              <span className="text-xs font-bold">/ 100</span>
+            <div className="flex items-baseline gap-2 mt-1.5">
+              <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">{riskScore}</span>
+              <span className="text-xs font-bold text-slate-500">/ 100</span>
             </div>
           </div>
-          <div className="mt-3 pt-2 border-t border-current/20 text-[11px] font-bold">
+          <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
             {riskLevel.label}
           </div>
         </div>
 
         {/* Total Principal Tax Exposure */}
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between mb-1 text-slate-500">
-            <span className="text-xs font-semibold">فروق الضريبة الأصلية</span>
-            <Scale className="w-4 h-4 text-blue-600" />
+        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1 text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold">فروق الضريبة الأصلية</span>
+              <Scale className="w-4 h-4 text-blue-600" />
+            </div>
+            <div className="text-2xl font-black font-mono text-slate-900 dark:text-white mt-1.5">
+              {formatEgyptianCurrency(totalPrincipalExposure)}
+            </div>
           </div>
-          <div className="text-2xl font-black font-mono text-slate-900 mt-2">
-            {formatEgyptianCurrency(totalPrincipalExposure)}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1">
-            قيمة مضافة + دخل + كسب عمل/خصم
+          <div className="text-[11px] text-slate-500 mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+            قيمة مضافة + دخل + كسب عمل
           </div>
         </div>
 
         {/* Delay Penalties (Article 110) */}
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 shadow-2xs">
-          <div className="flex items-center justify-between mb-1 text-amber-800">
-            <span className="text-xs font-bold">مقابل التأخير (م. 110)</span>
-            <Clock className="w-4 h-4 text-amber-600" />
+        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1 text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold">مقابل التأخير (م. 110)</span>
+              <Clock className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400 mt-1.5">
+              {formatEgyptianCurrency(totalDelayPenalties)}
+            </div>
           </div>
-          <div className="text-2xl font-black font-mono text-amber-900 mt-2">
-            {formatEgyptianCurrency(totalDelayPenalties)}
-          </div>
-          <div className="text-[11px] text-amber-700 mt-1 font-medium">
-            عن فترة {delayMonths} شهراً بنسبة {((centralBankInterestRate + 2) / 12).toFixed(2)}% شهرياً
+          <div className="text-[11px] text-slate-500 mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+            عن فترة {delayMonths} شهراً
           </div>
         </div>
 
         {/* Grand Total Financial Exposure */}
-        <div className="p-4 rounded-xl bg-gradient-to-br from-red-600 to-rose-800 text-white shadow-md">
-          <div className="flex items-center justify-between mb-1 text-red-100">
-            <span className="text-xs font-bold">إجمالي المطالبة المتوقعة</span>
-            <Flame className="w-4 h-4 text-red-200" />
+        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1 text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">إجمالي المطالبة المتوقعة</span>
+              <Flame className="w-4 h-4 text-rose-600" />
+            </div>
+            <div className="text-2xl font-black font-mono text-rose-600 dark:text-rose-400 mt-1.5">
+              {formatEgyptianCurrency(grandTotalTaxExposure)}
+            </div>
           </div>
-          <div className="text-2xl font-black font-mono mt-2">
-            {formatEgyptianCurrency(grandTotalTaxExposure)}
-          </div>
-          <div className="text-[11px] text-red-100 mt-1">
-            شامل الفروق ومقابل التأخير والغرامات
+          <div className="text-[11px] text-slate-500 mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+            شامل الفروق ومقابل التأخير
           </div>
         </div>
       </div>

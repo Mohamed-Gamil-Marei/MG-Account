@@ -53,28 +53,26 @@ export const FraudAuditSentinelView: React.FC<FraudAuditSentinelViewProps> = ({ 
 
   return (
     <div className="space-y-6 animate-fadeIn text-right" dir="rtl">
-      {/* Top Forensic Header Banner */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-red-900/40 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-red-400 text-xs font-black uppercase tracking-wider mb-1">
-            <ShieldAlert className="w-4 h-4 text-red-400" />
-            <span>نظام التدقيق الجنائي المالي ورصد الاحتيال | Benford's Law Forensic Sentinel</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 flex items-center justify-center text-red-700 dark:text-red-400 shrink-0">
+            <ShieldAlert className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">
-            حارس الرقابة المالية وكشف الأنماط المشبوهة
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            تطبيق قانون بنفورد الإحصائي (Benford's Law) وخوارزميات الرصد الذاتي لاكتشاف التلاعب المحاسبي، الأرقام الدائرية المصطنعة، والسحوبات المخالفة.
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              حارس الرقابة المالية وكشف الأنماط المشبوهة
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsPrintModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-red-700 hover:bg-red-600 text-white rounded-xl text-xs font-black shadow-lg shadow-red-700/30 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            <span>طباعة ملف الرقابة الجنائية</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span>طباعة ملف الرقابة</span>
           </button>
         </div>
       </div>

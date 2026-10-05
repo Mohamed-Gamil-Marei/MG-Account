@@ -9,6 +9,7 @@ import {
   UploadCloud,
   LayoutList,
   Network,
+  Sparkles,
 } from 'lucide-react';
 import { Account, AccountCategory, AccountNature } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
@@ -17,6 +18,7 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
+import { IndustryCoaTemplateModal } from './common/IndustryCoaTemplateModal';
 
 interface ChartOfAccountsViewProps {
   state: DatabaseState;
@@ -27,6 +29,7 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ state 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'TREE' | 'TABLE'>('TREE');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isIndustryModalOpen, setIsIndustryModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
   // Form State
@@ -158,6 +161,12 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ state 
         }}
         actionMenuItems={[
           {
+            id: 'btn-industry-templates',
+            label: 'أدلة الأنشطة المتخصصة (مقاولات، مصانع، مطاعم، عيادات...)',
+            icon: Sparkles,
+            onClick: () => setIsIndustryModalOpen(true),
+          },
+          {
             id: 'btn-toggle-tree-view',
             label: viewMode === 'TREE' ? 'عرض الجدول المفصل' : 'عرض الشجرة الهرمية',
             icon: viewMode === 'TREE' ? LayoutList : Network,
@@ -205,27 +214,38 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ state 
           },
         ]}
         headerControls={
-          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setViewMode('TREE')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'TREE'
-                  ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
+              onClick={() => setIsIndustryModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-850 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+              title="تطبيق شجرة حسابات متخصصة لنشاط الشركة بضغطة زر"
             >
-              شجري
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>أدلة الأنشطة المتخصصة</span>
             </button>
-            <button
-              onClick={() => setViewMode('TABLE')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'TABLE'
-                  ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              جدول
-            </button>
+
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setViewMode('TREE')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'TREE'
+                    ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                شجري
+              </button>
+              <button
+                onClick={() => setViewMode('TABLE')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'TABLE'
+                    ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                جدول
+              </button>
+            </div>
           </div>
         }
         searchTerm={searchTerm}
@@ -697,6 +717,13 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ state 
           </div>
         </div>
       )}
+
+      {/* Specialized Industry Chart of Accounts Modal (المقاولات، المصانع، المطاعم، العيادات، التجارة الإلكترونية) */}
+      <IndustryCoaTemplateModal
+        isOpen={isIndustryModalOpen}
+        onClose={() => setIsIndustryModalOpen(false)}
+        state={state}
+      />
     </>
   );
 };

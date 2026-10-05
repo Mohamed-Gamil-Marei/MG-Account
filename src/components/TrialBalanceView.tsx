@@ -33,8 +33,11 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
 
   const filteredEntries = useMemo(() => {
     return state.journalEntries.filter((e) => {
-      if (activeClientId && e.clientId && e.clientId !== activeClientId) {
-        return false;
+      // Strict multi-tenant isolation: When a company/factory is active, isolate its records strictly
+      if (activeClientId) {
+        if (e.clientId !== activeClientId) {
+          return false;
+        }
       }
       if (e.date && !e.date.startsWith(String(currentFiscalYear))) {
         return false;

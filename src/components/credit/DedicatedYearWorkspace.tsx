@@ -264,25 +264,22 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
   return (
     <div className="space-y-6">
       {/* 1. Header Toolbar: Year Tabs & Quick KPI Badges */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-800">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-5 border-b border-slate-700/60">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 shadow-2xs">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-blue-500/20 rounded-xl border border-blue-400/30 text-blue-300">
-                <Building className="w-5 h-5" />
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400">
+                <Building className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-black text-white tracking-wide">
-                    الملف المالي المستقل والمعزول — سنة {activeYear}
+                  <h2 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 tracking-wide">
+                    الملف المالي المستقل — سنة {activeYear}
                   </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-500/30 text-blue-200 border border-blue-400/30">
-                    ملف محاسبي مستقل 100%
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    ملف محاسبي مستقل
                   </span>
                 </div>
-                <p className="text-xs text-slate-300">
-                  قائمة الدخل، المركز المالي، التدفقات النقدية، توزيع الأرباح، وكافة الإيضاحات المتممة (1 - 20) معزولة تماماً لهذه السنة.
-                </p>
               </div>
             </div>
           </div>
@@ -644,27 +641,27 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
 
       {/* 4. SECTION 2: BALANCE SHEET */}
       {(activeSection === 'ALL_IN_ONE' || activeSection === 'BALANCE_SHEET') && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 text-white flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-300">
-                <Scale className="w-5 h-5" />
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/60 rounded-lg text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                <Scale className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="font-bold text-sm">
-                  2. قائمة المركز المالي المستقلة — سنة {activeYear} (Balance Sheet)
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  2. قائمة المركز المالي المستقلة — سنة {activeYear}
                 </h3>
-                <p className="text-[11px] text-slate-300">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   وفقاً لمعيار المحاسبة المصري رقم (1) — في 31 ديسمبر {activeYear}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
                   isBalanced
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
                 }`}
               >
                 {isBalanced ? 'الميزان متزن 100%' : `فارق ميزان: ${formatEgyptianCurrency(Math.abs(balanceDiff))}`}
@@ -1098,22 +1095,22 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
 
       {/* 7. SECTION 5: SUPPLEMENTARY NOTES (1 - 20) FOR ACTIVE YEAR */}
       {(activeSection === 'ALL_IN_ONE' || activeSection === 'NOTES') && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-300">
-                <BookOpen className="w-5 h-5" />
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/60 rounded-lg text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                <BookOpen className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="font-bold text-sm">
-                  5. الإيضاحات المتممة للقوائم المالية — سنة {activeYear} (Notes 1 to 20)
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  5. الإيضاحات المتممة للقوائم المالية — سنة {activeYear}
                 </h3>
-                <p className="text-[11px] text-slate-300">
-                  عرض تحليلي مفصل ومعزول لكافة الإيضاحات الخاصة بالسنة المالية {activeYear} فقط
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  عرض تحليلي مفصل لكافة الإيضاحات الخاصة بالسنة المالية {activeYear}
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-200 border border-blue-400/30 text-xs font-bold font-mono">
+            <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold font-mono">
               {supplementaryNotes.length} إيضاحاً معتمداً
             </span>
           </div>

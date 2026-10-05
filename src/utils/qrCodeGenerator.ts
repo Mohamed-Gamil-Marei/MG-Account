@@ -400,12 +400,27 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
  * Compliant with international scanning standards: 4-module quiet zone, pure vector crispness,
  * and automatic URL normalization for 1-tap phone camera detection.
  */
-export function generateQrCodeSvg(text: string, sizePx: number = 100): string {
+export function generateQrCodeSvg(
+  text: string,
+  sizePx: number = 100,
+  options?: { mode?: 'OFFLINE_TEXT' | 'URL_LINK'; forceOfflineText?: boolean }
+): string {
   let targetText = (text || '').trim();
+  const printPrefs = db.getState?.()?.preferences?.printSettings;
+  const activeQrMode = options?.mode || (options?.forceOfflineText ? 'OFFLINE_TEXT' : (printPrefs?.qrMode || 'OFFLINE_TEXT'));
+
   if (!targetText) {
-    targetText = `${getSystemVerificationBaseUrl()}/#verify`;
-  } else if (!targetText.startsWith('http://') && !targetText.startsWith('https://')) {
-    targetText = formatPayloadAsVerificationUrl(targetText);
+    targetText = `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]\nمكتب المحاسب القانوني ومراقب الحسابات\nمحمد جميل مرعي - س.م.م 43122\nاعتماد رسمي مطابق للمعايير ✓`;
+  } else if (activeQrMode === 'URL_LINK') {
+    if (!targetText.startsWith('http://') && !targetText.startsWith('https://')) {
+      targetText = formatPayloadAsVerificationUrl(targetText);
+    }
+  } else {
+    // OFFLINE_TEXT mode: Ensure clean readable lines for phone cameras
+    if (targetText.includes('|') && !targetText.includes('\n')) {
+      const parts = targetText.split('|');
+      targetText = `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]\nالمرجع: ${parts[1] || parts[0]}\nالمحاسب القانوني: محمد جميل مرعي\nرقم القيد: س.م.م 43122\nالحالة: معتمد وموثق رسمياً ✓`;
+    }
   }
 
   try {

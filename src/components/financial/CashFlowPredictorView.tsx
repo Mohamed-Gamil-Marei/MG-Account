@@ -45,28 +45,26 @@ export const CashFlowPredictorView: React.FC<CashFlowPredictorViewProps> = ({ st
 
   return (
     <div className="space-y-6 animate-fadeIn text-right" dir="rtl">
-      {/* Top Header Banner */}
-      <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 border border-indigo-800/40 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-indigo-400 text-xs font-black uppercase tracking-wider mb-1">
-            <TrendingUp className="w-4 h-4 text-indigo-400" />
-            <span>محاكي التدفقات النقدية التنبؤي لـ 12 شهراً | Predictive Liquidity & Cash Flow Engine</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 shrink-0">
+            <TrendingUp className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">
-            خريطة السيولة والتدفقات النقدية المستقبلية
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            محاكاة رياضية ذكية للتنبؤ بالتدفقات النقدية الداخلة والخارجة شهرياً، والتنبؤ بمواسم الضغط الضريبي وسداد الموردين قبل حدوث عجز السيولة.
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              خريطة السيولة والتدفقات النقدية المتوقعة
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsPrintModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            <span>طباعة تقرير توقعات السيولة</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span>طباعة تقرير السيولة</span>
           </button>
         </div>
       </div>

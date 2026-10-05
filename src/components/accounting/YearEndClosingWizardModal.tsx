@@ -308,34 +308,34 @@ export const YearEndClosingWizardModal: React.FC<YearEndClosingWizardModalProps>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto font-['Cairo',sans-serif]">
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-4xl overflow-hidden my-6">
         {/* Header */}
-        <div className="bg-linear-to-r from-slate-900 via-indigo-950 to-blue-950 text-white p-6 relative">
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white px-6 py-4 relative">
           <button
             onClick={onClose}
-            className="absolute top-5 left-5 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+            className="absolute top-4 left-4 p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shrink-0">
-              <Lock className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+              <Lock className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black">
+                <h2 className="text-base sm:text-lg font-bold">
                   معالج الإقفال المالي وتدوير الحسابات السنوية
                 </h2>
                 {isYearLocked ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/30 text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
                     <Lock className="w-3 h-3" /> مقفلة ومعتمدة
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                     جاهزة للإقفال
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-300 mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 تصفية الحسابات الاسمية (إيرادات ومصروفات) وترحيل الأرباح وحماية الدفاتر من التعديل الرجعي
               </p>
             </div>

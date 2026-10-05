@@ -34,7 +34,7 @@ export const OfficeProfileCustomizerModal: React.FC<OfficeProfileCustomizerModal
   onSavePermanent,
 }) => {
   const [formData, setFormData] = useState<OfficeProfile>({ ...currentProfile });
-  const [savePermanentChoice, setSavePermanentChoice] = useState(false);
+  const [savePermanentChoice, setSavePermanentChoice] = useState(true);
   const [activePreset, setActivePreset] = useState<string>('CUSTOM');
 
   if (!isOpen) return null;

@@ -194,22 +194,17 @@ export const FinancialNotesBuilderView: React.FC<FinancialNotesBuilderProps> = (
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              كراسة الإيضاحات المتممة المعتمدة (EAS Notes to Financials)
-            </span>
-            <span className="text-slate-400 text-xs font-mono">الهيئة العامة للاستثمار ومصلحة الشركات</span>
+      {/* Compact ERP Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-400 shrink-0">
+            <ShieldCheck className="w-4 h-4" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            منشئ الإيضاحات المتممة للقوائم المالية المصرية
-          </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1">
-            صياغة وتوليد الإيضاحات والسياسات المحاسبية الإلزامية المرفقة بالميزانية وقائمة الدخل وفق معايير المحاسبة المصرية
-          </p>
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
+              الإيضاحات المتممة للقوائم المالية (EAS)
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

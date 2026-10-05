@@ -9,7 +9,7 @@
     <meta property="og:description" content="منظومة المحاسب القانوني المتكامل - برنامج محاسبة ومراجعة مالية متكامل يدعم المعايير المحاسبية المصرية (EAS)، تعدد العملات وأسعار الصرف اليومية، منظومة الفاتورة والإيصال الإلكتروني (ETA SDK v1.0)، القوائم المالية، قيود اليومية، وإدارة المستخدمين والرقابة المهنية." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     <meta name="theme-color" content="#059669">
@@ -17,8 +17,29 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="منظومة المحاسب القانوني المتكامل">
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased font-['Cairo',sans-serif] selection:bg-emerald-500 selection:text-white">
-    <div id="root"></div>
+  <body class="bg-slate-50 text-slate-900 antialiased font-['Cairo',system-ui,sans-serif] selection:bg-emerald-500 selection:text-white">
+    <div id="root">
+      <!-- Clean Pre-React Pure CSS Shell: Instant 0.05s visual feedback -->
+      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e293b 100%); font-family: 'Cairo', system-ui, -apple-system, sans-serif; color: #f8fafc; padding: 24px; text-align: center; direction: rtl;">
+        <div style="width: 72px; height: 72px; background: rgba(16, 185, 129, 0.15); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 20px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.3);">
+          <svg style="width: 40px; height: 40px; color: #10b981;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        </div>
+        <h1 style="font-size: 21px; font-weight: 900; margin: 0 0 6px 0; color: #ffffff; letter-spacing: -0.3px;">منظومة المحاسب والمراجع القانوني المتكامل</h1>
+        <p style="font-size: 12.5px; color: #94a3b8; margin: 0 0 20px 0; font-weight: 500;">المعايير المحاسبية المصرية (EAS) • منظومة الفاتورة والإيصال (ETA) • مصلحة الضرائب</p>
+        <div style="width: 240px; height: 5px; background: #0f172a; border-radius: 9999px; overflow: hidden; border: 1px solid #1e293b; margin-bottom: 12px; position: relative;">
+          <div style="width: 60%; height: 100%; border-radius: 9999px; background: linear-gradient(90deg, #10b981, #06b6d4); animation: preReactPulse 0.9s infinite ease-in-out;"></div>
+        </div>
+        <span style="font-size: 11.5px; color: #64748b; font-weight: 600;">جاري الإقلاع الفوري...</span>
+        <style>
+          @keyframes preReactPulse {
+            0% { transform: translateX(140%); }
+            100% { transform: translateX(-140%); }
+          }
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
