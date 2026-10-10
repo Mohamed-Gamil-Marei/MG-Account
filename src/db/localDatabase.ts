@@ -36,7 +36,6 @@ import {
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
 import { SecurityAuthService } from '../services/securityAuth';
-import { CloudSync } from '../services/cloudSyncService';
 import {
   DEFAULT_OFFICE_PROFILE,
   DEFAULT_CLIENT_FOLDERS,
@@ -135,125 +134,175 @@ export class LocalDatabase {
     if (typeof window !== 'undefined') {
       setTimeout(() => {
         try {
-          this.initCloudSync();
+          this.initServerSync();
         } catch (err) {
-          console.warn('Deferred CloudSync init notice:', err);
+          console.warn('Deferred ServerSync init notice:', err);
         }
       }, 500);
     }
   }
 
-  private initCloudSync() {
-    // Start real-time remote listener
-    CloudSync.startRealTimeListener();
+  private initServerSync() {
+    this.pullFromServer();
+    setInterval(() => {
+      this.pullFromServer();
+    }, 10000);
+  }
 
-    // Listen for changes pushed from mobile or other computers
-    CloudSync.onRemoteUpdate((remoteState) => {
-      this.applyCloudState(remoteState);
-    });
+  public async pullFromServer() {
+    try {
+      const entityMap: Record<string, keyof DatabaseState> = {
+        clients: 'clients',
+        accounts: 'accounts',
+        journalEntries: 'journalEntries',
+        treasury: 'treasuryTransactions',
+        taxDeclarations: 'taxDeclarations',
+        taxMandates: 'taxMandates',
+        certificates: 'certificates',
+        invoices: 'invoices',
+        feasibilityStudies: 'feasibilityStudies',
+        creditSimulations: 'creditSimulations',
+        fixedAssets: 'fixedAssets',
+        officeProfile: 'officeProfile',
+        auditLogs: 'auditLogs',
+        systemUsers: 'users',
+        preferences: 'preferences',
+        whatsappMessages: 'whatsappMessages',
+        whatsappBotSettings: 'whatsappBotSettings',
+        exchangeRates: 'exchangeRates',
+        fiscalPeriodLocks: 'fiscalPeriodLocks',
+        feeEstimates: 'feeEstimates',
+        customsShipments: 'customsShipments',
+        financialActivityLogs: 'financialActivityLogs',
+      };
 
-    // Check if cloud has newer data on first load
-    setTimeout(async () => {
-      try {
-        const cloudData = await CloudSync.pullFromCloud();
-        if (cloudData) {
-          this.applyCloudState(cloudData);
-        } else {
-          // If cloud is empty, seed it with current local state
-          const currentUser = this.getCurrentUser();
-          CloudSync.pushToCloud(this.state, currentUser?.name);
+      let hasChanged = false;
+      for (const [entityType, stateKey] of Object.entries(entityMap)) {
+        try {
+          const res = await fetch(`/api/data/${entityType}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && Array.isArray(json.data)) {
+              if (entityType === 'officeProfile' || entityType === 'preferences' || entityType === 'whatsappBotSettings') {
+                if (json.data.length > 0) {
+                  this.state[stateKey] = json.data[0];
+                  hasChanged = true;
+                }
+              } else {
+                this.state[stateKey] = json.data as any;
+                hasChanged = true;
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore network errors during polling
         }
-      } catch (err) {
-        console.warn('Initial cloud sync check:', err);
       }
-    }, 1000);
-  }
 
-  public applyCloudState(cloudState: Partial<DatabaseState>) {
-    let hasChanged = false;
-    if (cloudState.accounts && Array.isArray(cloudState.accounts) && cloudState.accounts.length > 0) {
-      this.state.accounts = cloudState.accounts;
-      hasChanged = true;
-    }
-    if (cloudState.journalEntries && Array.isArray(cloudState.journalEntries)) {
-      this.state.journalEntries = cloudState.journalEntries;
-      hasChanged = true;
-    }
-    if (cloudState.clients && Array.isArray(cloudState.clients)) {
-      this.state.clients = cloudState.clients;
-      hasChanged = true;
-    }
-    if (cloudState.treasuryTransactions && Array.isArray(cloudState.treasuryTransactions)) {
-      this.state.treasuryTransactions = cloudState.treasuryTransactions;
-      hasChanged = true;
-    }
-    if (cloudState.taxDeclarations && Array.isArray(cloudState.taxDeclarations)) {
-      this.state.taxDeclarations = cloudState.taxDeclarations;
-      hasChanged = true;
-    }
-    if (cloudState.invoices && Array.isArray(cloudState.invoices)) {
-      this.state.invoices = cloudState.invoices;
-      hasChanged = true;
-    }
-    if (cloudState.certificates && Array.isArray(cloudState.certificates)) {
-      this.state.certificates = cloudState.certificates;
-      hasChanged = true;
-    }
-    if (cloudState.feasibilityStudies && Array.isArray(cloudState.feasibilityStudies)) {
-      this.state.feasibilityStudies = cloudState.feasibilityStudies;
-      hasChanged = true;
-    }
-    if (cloudState.creditSimulations && Array.isArray(cloudState.creditSimulations)) {
-      this.state.creditSimulations = cloudState.creditSimulations;
-      hasChanged = true;
-    }
-    if (cloudState.fixedAssets && Array.isArray(cloudState.fixedAssets)) {
-      this.state.fixedAssets = cloudState.fixedAssets;
-      hasChanged = true;
-    }
-    if (cloudState.feeEstimates && Array.isArray(cloudState.feeEstimates)) {
-      this.state.feeEstimates = cloudState.feeEstimates;
-      hasChanged = true;
-    }
-    if (cloudState.officeProfile) {
-      this.state.officeProfile = cloudState.officeProfile;
-      hasChanged = true;
-    }
-    if (cloudState.users && Array.isArray(cloudState.users) && cloudState.users.length > 0) {
-      this.state.users = cloudState.users;
-      hasChanged = true;
-    }
-    if (cloudState.taxMandates && Array.isArray(cloudState.taxMandates)) {
-      this.state.taxMandates = cloudState.taxMandates;
-      hasChanged = true;
-    }
-    if (cloudState.exchangeRates && Array.isArray(cloudState.exchangeRates)) {
-      this.state.exchangeRates = cloudState.exchangeRates;
-      hasChanged = true;
-    }
-    if (cloudState.fiscalPeriodLocks && Array.isArray(cloudState.fiscalPeriodLocks)) {
-      this.state.fiscalPeriodLocks = cloudState.fiscalPeriodLocks;
-      hasChanged = true;
-    }
-
-    if (hasChanged) {
-      this.flushDirtyStorage(false);
-      this.notify();
+      if (hasChanged) {
+        this.notify();
+      }
+    } catch (e) {
+      // ignore
     }
   }
 
-  public async syncToCloudNow(): Promise<boolean> {
-    const currentUser = this.getCurrentUser();
-    return await CloudSync.pushToCloud(this.state, currentUser?.name);
+  public async migrateLocalStorageToServer() {
+    try {
+      const payload = {
+        clients: this.state.clients,
+        accounts: this.state.accounts,
+        journalEntries: this.state.journalEntries,
+        treasury: this.state.treasuryTransactions,
+        taxDeclarations: this.state.taxDeclarations,
+        taxMandates: this.state.taxMandates,
+        certificates: this.state.certificates,
+        invoices: this.state.invoices,
+        feasibilityStudies: this.state.feasibilityStudies,
+        creditSimulations: this.state.creditSimulations,
+        fixedAssets: this.state.fixedAssets,
+        officeProfile: this.state.officeProfile,
+        auditLogs: this.state.auditLogs,
+        systemUsers: this.state.users,
+        preferences: this.state.preferences,
+        whatsappMessages: this.state.whatsappMessages,
+        whatsappBotSettings: this.state.whatsappBotSettings,
+        exchangeRates: this.state.exchangeRates,
+        fiscalPeriodLocks: this.state.fiscalPeriodLocks,
+        feeEstimates: this.state.feeEstimates,
+        customsShipments: this.state.customsShipments,
+        financialActivityLogs: this.state.financialActivityLogs,
+      };
+
+      const res = await fetch('/api/data/migrate-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'فشل ترحيل البيانات.');
+      }
+      return json.summary;
+    } catch (err: any) {
+      throw err;
+    }
   }
 
-  public async pullFromCloudNow(): Promise<boolean> {
-    const data = await CloudSync.pullFromCloud();
-    if (data) {
-      this.applyCloudState(data);
-      return true;
+  public async pushDirtyToServer() {
+    const entityMapping: Record<string, { endpoint: string, data: any }> = {
+      [STORAGE_KEYS.CLIENTS]: { endpoint: 'clients', data: this.state.clients },
+      [STORAGE_KEYS.JOURNAL]: { endpoint: 'journalEntries', data: this.state.journalEntries },
+      [STORAGE_KEYS.ACCOUNTS]: { endpoint: 'accounts', data: this.state.accounts },
+      [STORAGE_KEYS.TREASURY]: { endpoint: 'treasury', data: this.state.treasuryTransactions },
+      [STORAGE_KEYS.TAXES]: { endpoint: 'taxDeclarations', data: this.state.taxDeclarations },
+      [STORAGE_KEYS.TAX_MANDATES]: { endpoint: 'taxMandates', data: this.state.taxMandates },
+      [STORAGE_KEYS.CERTIFICATES]: { endpoint: 'certificates', data: this.state.certificates },
+      [STORAGE_KEYS.INVOICES]: { endpoint: 'invoices', data: this.state.invoices },
+      [STORAGE_KEYS.FEASIBILITY]: { endpoint: 'feasibilityStudies', data: this.state.feasibilityStudies },
+      [STORAGE_KEYS.CREDIT_SIM]: { endpoint: 'creditSimulations', data: this.state.creditSimulations },
+      [STORAGE_KEYS.FIXED_ASSETS]: { endpoint: 'fixedAssets', data: this.state.fixedAssets },
+      [STORAGE_KEYS.OFFICE_PROFILE]: { endpoint: 'officeProfile', data: [this.state.officeProfile] },
+      [STORAGE_KEYS.AUDIT_LOGS]: { endpoint: 'auditLogs', data: this.state.auditLogs },
+      [STORAGE_KEYS.SYSTEM_USERS]: { endpoint: 'systemUsers', data: this.state.users },
+      [STORAGE_KEYS.USER_PREFERENCES]: { endpoint: 'preferences', data: [this.state.preferences] },
+      [STORAGE_KEYS.WHATSAPP_MESSAGES]: { endpoint: 'whatsappMessages', data: this.state.whatsappMessages },
+      [STORAGE_KEYS.WHATSAPP_SETTINGS]: { endpoint: 'whatsappBotSettings', data: [this.state.whatsappBotSettings] },
+      [STORAGE_KEYS.EXCHANGE_RATES]: { endpoint: 'exchangeRates', data: this.state.exchangeRates },
+      [STORAGE_KEYS.PERIOD_LOCKS]: { endpoint: 'fiscalPeriodLocks', data: this.state.fiscalPeriodLocks },
+      [STORAGE_KEYS.FEE_ESTIMATES]: { endpoint: 'feeEstimates', data: this.state.feeEstimates },
+      [STORAGE_KEYS.CUSTOMS_SHIPMENTS]: { endpoint: 'customsShipments', data: this.state.customsShipments },
+      [STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS]: { endpoint: 'financialActivityLogs', data: this.state.financialActivityLogs },
+    };
+
+    for (const [key, mapping] of Object.entries(entityMapping)) {
+      if (this.dirtyKeys.has(key as any)) {
+        const records = Array.isArray(mapping.data) ? mapping.data : [mapping.data];
+        for (const rec of records) {
+          const recId = rec.id || 'main';
+          try {
+            const res = await fetch(`/api/data/${mapping.endpoint}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: recId,
+                data: rec,
+                version: rec._version || 1,
+              }),
+            });
+            if (res.status === 409) {
+              const errJson = await res.json();
+              console.warn('Version conflict:', errJson.error);
+              if (typeof window !== 'undefined') {
+                window.alert(errJson.error || 'تعارض إصدار (Version Conflict): تم تعديل هذا السجل من قبل مستخدم آخر.');
+              }
+            }
+          } catch (err) {
+            console.warn('Error pushing record to server:', err);
+          }
+        }
+      }
     }
-    return false;
   }
 
   private loadInitialState(): DatabaseState {
@@ -637,11 +686,7 @@ export class LocalDatabase {
       }
       this.dirtyKeys.clear();
 
-      // Trigger debounced cloud synchronization
-      if (pushToCloud) {
-        const currentUser = this.getCurrentUser();
-        CloudSync.queueAutoSync(this.state, currentUser?.name);
-      }
+      this.pushDirtyToServer();
     } catch (e: any) {
       // Handle storage quota exceeded gracefully
       console.warn('Storage write warning (handling high-volume data safely):', e);
@@ -657,6 +702,16 @@ export class LocalDatabase {
     }
   }
 
+  public async syncToCloudNow(): Promise<boolean> {
+    await this.pushDirtyToServer();
+    return true;
+  }
+
+  public async pullFromCloudNow(): Promise<boolean> {
+    await this.pullFromServer();
+    return true;
+  }
+
   // --- Preferences & Theme ---
   public getPreferences(): UserPreferences {
     return this.state.preferences || DEFAULT_USER_PREFERENCES;
@@ -667,10 +722,6 @@ export class LocalDatabase {
       ...(this.state.preferences || DEFAULT_USER_PREFERENCES),
       ...updates,
     };
-    if (updates.customFirebaseConfig !== undefined) {
-      CloudSync.initFirebase(this.state.preferences.customFirebaseConfig);
-      CloudSync.startRealTimeListener();
-    }
     this.saveState();
   }
 
@@ -1833,39 +1884,9 @@ export class LocalDatabase {
     this.saveState();
   }
 
-  // --- Reset to Demo Data ---
-  public resetToDemoData() {
-    this.state = {
-      accounts: DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
-      journalEntries: SAMPLE_JOURNAL_ENTRIES,
-      clients: SAMPLE_CLIENTS,
-      treasuryTransactions: SAMPLE_TREASURY_TRANSACTIONS,
-      taxDeclarations: SAMPLE_TAX_DECLARATIONS,
-      taxMandates: SAMPLE_TAX_MANDATES,
-      certificates: SAMPLE_CERTIFICATES,
-      invoices: SAMPLE_INVOICES,
-      feasibilityStudies: [SAMPLE_FEASIBILITY_STUDY],
-      creditSimulations: [SAMPLE_CREDIT_SIMULATION],
-      fixedAssets: SAMPLE_FIXED_ASSETS,
-      feeEstimates: SAMPLE_FEE_ESTIMATES,
-      customsShipments: SAMPLE_CUSTOMS_SHIPMENTS,
-      users: SAMPLE_SYSTEM_USERS,
-      currentUserId: 'user-admin',
-      preferences: DEFAULT_USER_PREFERENCES,
-      officeProfile: DEFAULT_OFFICE_PROFILE,
-      whatsappMessages: SAMPLE_WHATSAPP_MESSAGES,
-      whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
-      exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
-      fiscalPeriodLocks: [],
-      auditLogs: [
-        {
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'محمد جميل مرعي',
-          action: 'CREATE',
-          details: 'إعادة تعيين البيانات وتحميل النموذج التجريبي المصري المتكامل',
-        },
-      ],
-    };
+  // --- Merge Remote State ---
+  public mergeRemoteState(remote: Partial<DatabaseState>) {
+    Object.assign(this.state, remote);
     this.saveState();
   }
 
@@ -3354,6 +3375,26 @@ export class LocalDatabase {
     }
 
     return doc;
+  }
+
+  public resetToDemoData(): boolean {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return false;
+    }
+    this.state.clients = [...SAMPLE_CLIENTS];
+    this.state.journalEntries = [...SAMPLE_JOURNAL_ENTRIES];
+    this.state.treasuryTransactions = [...SAMPLE_TREASURY_TRANSACTIONS];
+    this.state.taxDeclarations = [...SAMPLE_TAX_DECLARATIONS];
+    this.state.taxMandates = [...SAMPLE_TAX_MANDATES];
+    this.state.certificates = [...SAMPLE_CERTIFICATES];
+    this.state.invoices = [...SAMPLE_INVOICES];
+    this.state.feasibilityStudies = [SAMPLE_FEASIBILITY_STUDY];
+    this.state.creditSimulations = [SAMPLE_CREDIT_SIMULATION];
+    this.state.fixedAssets = [...SAMPLE_FIXED_ASSETS];
+    this.saveState();
+    this.logAudit('CREATE', 'استعادة البيانات التجريبية الشاملة بواسطة المدير');
+    return true;
   }
 }
 

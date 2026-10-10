@@ -34,11 +34,18 @@ service cloud.firestore {
     // --- 1. User Profiles & Permissions ---
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId && (
-        request.resource.data.role == 'PENDING' || request.resource.data.role == 'ADMIN'
-      );
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.role == 'PENDING' &&
+        request.resource.data.canManageUsers == false &&
+        request.resource.data.canAccessTreasury == false &&
+        request.resource.data.canAccessAuditTrail == false &&
+        request.resource.data.canPostEntries == false &&
+        request.resource.data.canEditPostedEntries == false &&
+        request.resource.data.canDeleteRecords == false &&
+        request.resource.data.canAccessCreditFiles == false &&
+        request.resource.data.canAccessTaxReports == false;
       allow update: if isSignedIn() && (
-        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'canManageUsers', 'canAccessTreasury', 'canAccessAuditTrail', 'canPostEntries', 'canEditPostedEntries', 'canDeleteRecords'])) ||
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'canManageUsers', 'canAccessTreasury', 'canAccessAuditTrail', 'canPostEntries', 'canEditPostedEntries', 'canDeleteRecords', 'canAccessCreditFiles', 'canAccessTaxReports'])) ||
         isAdmin()
       );
       allow delete: if isAdmin();
@@ -46,19 +53,16 @@ service cloud.firestore {
 
     // --- 2. Clients Dossiers & Tax Archives ---
     match /clients/{clientId} {
-      // Secretary can read clients for receptionist lookup; only accountant/admin can edit
       allow read: if isSecretary();
       allow write: if isAccountant();
     }
 
     // --- 3. Journal Entries (قيود اليومية) ---
-    // Strictly confidential: only Accountants and Managers can view or record journal entries
     match /journalEntries/{entryId} {
       allow read, write: if isAccountant();
     }
 
     // --- 4. Office Treasury & Cash Box (خزنة المكتب) ---
-    // Manager has full access; Accountant has access if permitted; Secretary strictly read-only if permitted
     match /treasury/{txId} {
       allow read: if isAccountant() || (isSecretary() && getUserData().canAccessTreasury == true);
       allow write: if isAdmin() || (isAccountant() && getUserData().canAccessTreasury == true);
@@ -96,7 +100,6 @@ service cloud.firestore {
     }
 
     // --- 11. Audit Trail Logs (سجل العمليات والرقابة) ---
-    // Tamper-proof: append-only for authenticated actions; only Manager can read audit logs
     match /auditLogs/{logId} {
       allow read: if isAdmin();
       allow create: if isSignedIn();
@@ -111,10 +114,10 @@ service cloud.firestore {
 
     // --- 13. System Workspace Snapshots ---
     match /workspaces/{workspaceId} {
-      allow read, write: if isSignedIn() && getUserRole() != 'PENDING';
+      allow read, write: if isSignedIn() && (isAdmin() || getUserRole() == 'ACCOUNTANT');
     }
     match /accounting_workspaces/{workspaceId} {
-      allow read, write: if isSignedIn() && getUserRole() != 'PENDING';
+      allow read, write: if isSignedIn() && (isAdmin() || getUserRole() == 'ACCOUNTANT');
     }
 
     // --- Default Deny All Unauthenticated or Unmatched Requests ---

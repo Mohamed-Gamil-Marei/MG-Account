@@ -1,29 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   Mail,
   KeyRound,
   ShieldCheck,
   User,
-  Users,
   Eye,
   EyeOff,
   Building2,
   AlertCircle,
   Loader2,
-  Sparkles,
   CheckCircle2,
-  ArrowRight,
 } from 'lucide-react';
 import { firebaseAuth, FirebaseUserProfile } from '../../services/firebaseAuthService';
-import { UserRole } from '../../types';
 
 interface FirebaseAuthGateProps {
   onAuthenticated: (profile: FirebaseUserProfile) => void;
 }
 
 export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthenticated }) => {
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [isSetupMode, setIsSetupMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -31,6 +27,16 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    firebaseAuth.checkSetup().then((needsSetup) => {
+      setIsSetupMode(needsSetup);
+      if (needsSetup) {
+        setName('أ.د. محمد جميل مرعي');
+        setEmail('admin@mg-office.com');
+      }
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,47 +55,26 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
     setIsLoading(true);
     try {
-      if (isRegisterMode) {
+      if (isSetupMode) {
         if (!name.trim()) {
-          setError('يرجى كتابة الاسم الكامل للمستخدم.');
+          setError('يرجى كتابة الاسم الكامل للمدير.');
           setIsLoading(false);
           return;
         }
-        const profile = await firebaseAuth.register(email, password, name.trim());
-        setSuccessMsg('تم إنشاء الحساب بنجاح. حسابك بانتظار تفعيل المدير.');
-        setTimeout(() => onAuthenticated(profile), 1200);
+        const profile = await firebaseAuth.setupAdmin(name.trim(), email.trim(), password);
+        setSuccessMsg('تم إنشاء حساب المدير الرئيسي بنجاح.');
+        setTimeout(() => onAuthenticated(profile), 800);
       } else {
         const profile = await firebaseAuth.signIn(email, password);
         setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
         setTimeout(() => onAuthenticated(profile), 600);
       }
     } catch (err: any) {
-      console.error('Firebase Auth Error:', err);
-      let msg = 'حدث خطأ أثناء المصادقة، يرجى المحاولة مرة أخرى.';
-      const code = err?.code || '';
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-        msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التحقق أو إنشاء حساب جديد.';
-      } else if (code === 'auth/email-already-in-use') {
-        msg = 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول بدلاً من التسجيل.';
-      } else if (code === 'auth/invalid-email') {
-        msg = 'صيغة البريد الإلكتروني غير صحيحة.';
-      } else if (code === 'auth/weak-password') {
-        msg = 'كلمة المرور ضعيفة جداً. استخدم 6 رموز على الأقل.';
-      } else if (err?.message) {
-        msg = err.message;
-      }
-      setError(msg);
+      console.error('Auth Error:', err);
+      setError(err?.message || 'حدث خطأ أثناء المصادقة، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Quick helper to fill test credentials
-  const fillPreset = (presetEmail: string, presetName: string) => {
-    setEmail(presetEmail);
-    setPassword('Pass123456');
-    setName(presetName);
-    setError(null);
   };
 
   return (
@@ -110,7 +95,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             منظومة المحاسب القانوني ومراقب الحسابات
           </h1>
           <p className="text-xs text-slate-400 mt-1 font-medium">
-            تسجيل الدخول الإجباري المؤمن عبر Firebase Auth & RBAC
+            {isSetupMode ? 'شاشة الإعداد الأولي - إنشاء حساب المدير الرئيسي' : 'تسجيل الدخول الإجباري المؤمن عبر نظام السيرفر المحلي'}
           </p>
         </div>
 
@@ -131,10 +116,10 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
-            {isRegisterMode && (
+            {isSetupMode && (
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  الاسم الكامل للمستخدم:
+                  الاسم الكامل للمدير الرئيسي:
                 </label>
                 <div className="relative">
                   <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -143,6 +128,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="أ.د. محمد جميل مرعي"
+                    required
                     className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -159,16 +145,16 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="midotota580@gmail.com"
+                  placeholder="admin@mg-office.com"
                   required
-                  className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
+                  className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                كلمة المرور (Password):
+                كلمة المرور (6 أحرف على الأقل):
               </label>
               <div className="relative">
                 <KeyRound className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -178,12 +164,12 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pr-9 pl-10 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
+                  className="w-full pr-9 pl-10 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -193,83 +179,27 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 mt-2"
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs mt-2 disabled:opacity-50"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>جاري التحقق والاتصال بـ Firebase...</span>
-                </>
-              ) : isRegisterMode ? (
-                <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>إنشاء الحساب وتحديد الدور في Firestore</span>
+                  <span>جاري المعالجة...</span>
                 </>
               ) : (
                 <>
-                  <Lock className="w-4 h-4" />
-                  <span>دخول المنظومة (Firebase Sign-In)</span>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isSetupMode ? 'إنشاء حساب المدير الرئيسي' : 'تسجيل الدخول'}</span>
                 </>
               )}
             </button>
           </form>
 
-          {/* Switch Mode */}
-          <div className="pt-2 text-center border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => {
-                setIsRegisterMode(!isRegisterMode);
-                setError(null);
-                setSuccessMsg(null);
-              }}
-              className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors cursor-pointer"
-            >
-              {isRegisterMode
-                ? 'لديك حساب بالفعل؟ انقر لتسجيل الدخول'
-                : 'مستخدم جديد؟ إنشاء حساب جديد وتحديد الصلاحيات'}
-            </button>
-          </div>
-
-          {/* Quick Presets for Dev / Testing */}
-          <div className="pt-3 border-t border-slate-800/80">
-            <div className="text-[11px] font-bold text-slate-500 mb-1.5 flex items-center justify-between">
-              <span>حسابات تجريبية سريعة للاختبار:</span>
-              <span className="text-[10px] text-slate-600 font-mono">Pass123456</span>
+          {!isSetupMode && (
+            <div className="pt-2 text-center text-[11px] text-slate-400">
+              ملاحظة: يتم إنشاء الحسابات الجديدة وتفعيل أدوارها حصرياً بواسطة مدير المنظومة من شاشة إدارة المستخدمين.
             </div>
-            <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-              <button
-                type="button"
-                onClick={() => fillPreset('midotota580@gmail.com', 'محمد جميل مرعي')}
-                className="py-1 px-1.5 bg-slate-950 hover:bg-slate-800 border border-blue-900/50 rounded-lg text-blue-300 font-medium truncate cursor-pointer text-center"
-              >
-                👑 مدير (Owner)
-              </button>
-              <button
-                type="button"
-                onClick={() => fillPreset('accountant@cpa-office.com', 'أحمد مراجعة - محاسب')}
-                className="py-1 px-1.5 bg-slate-950 hover:bg-slate-800 border border-emerald-900/50 rounded-lg text-emerald-300 font-medium truncate cursor-pointer text-center"
-              >
-                📊 محاسب (Accountant)
-              </button>
-              <button
-                type="button"
-                onClick={() => fillPreset('secretary@cpa-office.com', 'منى استقبال - سكرتارية')}
-                className="py-1 px-1.5 bg-slate-950 hover:bg-slate-800 border border-purple-900/50 rounded-lg text-purple-300 font-medium truncate cursor-pointer text-center"
-              >
-                📋 سكرتارية (Secretary)
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Security Footer */}
-        <div className="px-6 py-3 bg-slate-950 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>مشفر بمعايير Firebase TLS 1.3</span>
-          </div>
-          <span className="font-mono text-[10px]">Firestore RBAC v2.0</span>
+          )}
         </div>
       </div>
     </div>

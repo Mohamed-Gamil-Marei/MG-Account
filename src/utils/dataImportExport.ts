@@ -1298,29 +1298,88 @@ export function exportModelData(
 }
 
 /**
+ * Sanitizes text to prevent formula injection in Excel/CSV exports (=, +, -, @)
+ */
+export function sanitizeExcelText(val: any): any {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^[=+\-@]/.test(trimmed)) {
+      return "'" + trimmed;
+    }
+  }
+  return val;
+}
+
+/**
  * Universal Importer for files (.json, .xlsx, .xls, .csv)
  */
 export async function importModelData(
   file: File,
   targetModel: ModelType
 ): Promise<ImportResult> {
+  // 1. Max file size limit: 10MB
+  if (file && file.size > 10 * 1024 * 1024) {
+    return {
+      success: false,
+      model: targetModel,
+      recordsCount: 0,
+      message: 'حجم الملف يتجاوز الحد الأقصى المسموح به (10 ميجابايت)',
+    };
+  }
+
   const extension = (file && file.name ? file.name.split('.').pop()?.toLowerCase() : '') || '';
 
   try {
-    // 1. JSON Import
+    // 2. JSON Import (Restoration)
     if (extension === 'json') {
+      const currentUser = db.getCurrentUser();
+      if (!currentUser || currentUser.role !== 'ADMIN') {
+        return {
+          success: false,
+          model: targetModel,
+          recordsCount: 0,
+          message: 'استعادة النسخ الاحتياطية وإلغاء البيانات متاح للمدير (ADMIN) فقط',
+        };
+      }
+
       const text = await file.text();
-      const parsed = JSON.parse(text);
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return {
+          success: false,
+          model: targetModel,
+          recordsCount: 0,
+          message: 'ملف JSON تالف أو غير صالح البنية',
+        };
+      }
 
       // Check if it's a full DB backup
-      if (parsed.data || (parsed.accounts && parsed.journalEntries)) {
+      if (parsed.data || (parsed.accounts && parsed.journalEntries) || (parsed.clients)) {
+        const dbData = parsed.data || parsed;
+        // Validate basic structure and array types
+        if (!Array.isArray(dbData.accounts || []) || !Array.isArray(dbData.journalEntries || []) || !Array.isArray(dbData.clients || [])) {
+          return {
+            success: false,
+            model: targetModel,
+            recordsCount: 0,
+            message: 'بنية ملف JSON غير صالحة: الأقسام الأساسية مفقودة أو أنواع البيانات غير صحيحة',
+          };
+        }
+
+        // Save automatic backup of current state
+        try {
+          localStorage.setItem(`mg_auto_backup_snapshot_${Date.now()}`, JSON.stringify(db.getState()));
+        } catch {}
+
         const ok = db.importFullBackupJson(text);
         if (ok) {
           return {
             success: true,
             model: 'ALL_DATA',
-            recordsCount: (parsed.data?.accounts?.length || parsed.accounts?.length || 0),
-            message: 'تم استعادة واستيراد كامل قاعدة البيانات والملفات بنجاح',
+            recordsCount: (dbData.accounts?.length || dbData.clients?.length || 0),
+            message: 'تم التحقق من البنية وحفظ نسخة احتياطية تلقائية واستعادة كامل قاعدة البيانات بنجاح',
           };
         }
       }
@@ -1328,6 +1387,11 @@ export async function importModelData(
       // Check if it's a single model export
       const records = parsed.records || (Array.isArray(parsed) ? parsed : null);
       if (records && Array.isArray(records)) {
+        // Save automatic backup
+        try {
+          localStorage.setItem(`mg_auto_backup_snapshot_${Date.now()}`, JSON.stringify(db.getState()));
+        } catch {}
+
         const modelToApply = parsed.modelType || targetModel;
         return applyImportedRecords(modelToApply, records);
       }
@@ -1340,7 +1404,7 @@ export async function importModelData(
       };
     }
 
-    // 2. Excel / CSV Import using SheetJS
+    // 3. Excel / CSV Import using SheetJS
     if (['xlsx', 'xls', 'csv'].includes(extension)) {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array' });
@@ -1357,7 +1421,23 @@ export async function importModelData(
         };
       }
 
-      return parseAndImportTabularRows(targetModel, rawRows);
+      // Check for duplicate rows
+      const seen = new Set<string>();
+      let hasDuplicates = false;
+      for (const r of rawRows) {
+        const key = JSON.stringify(r);
+        if (seen.has(key)) {
+          hasDuplicates = true;
+          break;
+        }
+        seen.add(key);
+      }
+
+      const res = parseAndImportTabularRows(targetModel, rawRows);
+      if (hasDuplicates) {
+        res.message += ' (تحذير: تم رصد صفوف مكررة في الملف المرفق).';
+      }
+      return res;
     }
 
     return {

@@ -1,8 +1,12 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import Database from "better-sqlite3";
+import bcrypt from "bcryptjs";
+import cookieParser from "cookie-parser";
 import { GoogleGenAI } from "@google/genai";
 import { etaMiddleware } from "./server/etaMiddleware.ts";
 import { whatsappServerEngine } from "./server/whatsappServerEngine.ts";
@@ -27,17 +31,220 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  app.use(cookieParser());
 
-  // Load Firebase API key for ID token verification
-  let firebaseApiKey = "";
-  try {
-    const cfgPath = path.resolve(process.cwd(), "firebase-applet-config.json");
-    if (fs.existsSync(cfgPath)) {
-      const parsed = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
-      firebaseApiKey = parsed.apiKey || "";
+  // --- SQLite Database & Local Auth Setup ---
+  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), "data");
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const dbPath = path.join(dataDir, "app.db");
+  const db = new Database(dbPath);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'PENDING',
+      can_manage_users INTEGER DEFAULT 0,
+      can_access_treasury INTEGER DEFAULT 0,
+      can_access_audit_trail INTEGER DEFAULT 0,
+      can_post_entries INTEGER DEFAULT 0,
+      can_edit_posted_entries INTEGER DEFAULT 0,
+      can_delete_records INTEGER DEFAULT 0,
+      can_access_credit_files INTEGER DEFAULT 0,
+      can_access_tax_reports INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+  `);
+
+  const entityTypes = [
+    "clients",
+    "accounts",
+    "journalEntries",
+    "treasury",
+    "taxDeclarations",
+    "taxAudits",
+    "invoices",
+    "certificates",
+    "officeProfile",
+    "auditLogs",
+    "taxMandates",
+    "fixedAssets",
+    "feeEstimates",
+    "whatsappMessages",
+    "whatsappBotSettings",
+    "exchangeRates",
+    "fiscalPeriodLocks",
+    "customsShipments",
+    "financialActivityLogs",
+    "preferences",
+    "systemUsers"
+  ];
+
+  for (const type of entityTypes) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ${type} (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_by TEXT
+      );
+    `);
+  }
+
+  // --- Documents Storage & Table Setup (Phase 3) ---
+  const documentsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, "documents");
+  if (!fs.existsSync(documentsDir)) {
+    fs.mkdirSync(documentsDir, { recursive: true });
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      year TEXT NOT NULL,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'مطلوب',
+      original_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      uploaded_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  const storage = multer.diskStorage({
+    destination: (req, _file, cb) => {
+      const clientId = String(req.body.clientId || req.query.clientId || "general").replace(/[^a-zA-Z0-9_-]/g, "");
+      const year = String(req.body.year || req.query.year || new Date().getFullYear()).replace(/[^a-zA-Z0-9_-]/g, "");
+      const targetDir = path.join(documentsDir, clientId, year);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      cb(null, targetDir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const uniqueName = `${crypto.randomUUID()}${ext}`;
+      cb(null, uniqueName);
+    },
+  });
+
+  const upload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (_req, file, cb) => {
+      const allowedMimes = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ];
+      const allowedExts = [".pdf", ".jpg", ".jpeg", ".png", ".xlsx", ".docx"];
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (allowedMimes.includes(file.mimetype) || allowedExts.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error("نوع الملف غير مسموح به. الأنواع المقبولة: PDF, JPG, PNG, XLSX, DOCX فقط."));
+      }
+    },
+  });
+
+  // --- Backup System Setup (Phase 4) ---
+  const backupDir = process.env.BACKUP_DIR || path.join(dataDir, "backups");
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+
+  function runDailyBackup() {
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, "-");
+      const backupName = `backup_${dateStr}_${timeStr}`;
+      const targetBackupPath = path.join(backupDir, backupName);
+      fs.mkdirSync(targetBackupPath, { recursive: true });
+
+      const dbBackupPath = path.join(targetBackupPath, "app.db");
+      db.backup(dbBackupPath);
+
+      const docsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, "documents");
+      if (fs.existsSync(docsDir)) {
+        const targetDocsPath = path.join(targetBackupPath, "documents");
+        fs.cpSync(docsDir, targetDocsPath, { recursive: true, force: true });
+      }
+
+      console.log(`Daily automatic backup completed: ${backupName}`);
+      cleanupOldBackups(backupDir);
+      return backupName;
+    } catch (err) {
+      console.error("Daily backup error:", err);
+      throw err;
     }
-  } catch (e) {
-    console.warn("Could not load firebase config in server:", e);
+  }
+
+  function cleanupOldBackups(dir: string) {
+    try {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      const backups = items
+        .filter(item => item.isDirectory() && item.name.startsWith("backup_"))
+        .map(item => ({
+          name: item.name,
+          path: path.join(dir, item.name),
+          time: fs.statSync(path.join(dir, item.name)).mtimeMs,
+        }))
+        .sort((a, b) => b.time - a.time);
+
+      if (backups.length > 30) {
+        const toDelete = backups.slice(30);
+        for (const b of toDelete) {
+          fs.rmSync(b.path, { recursive: true, force: true });
+        }
+      }
+    } catch (err) {
+      console.error("Cleanup backups error:", err);
+    }
+  }
+
+  // Daily backup scheduler at 11:00 PM (23:00)
+  setInterval(() => {
+    const now = new Date();
+    if (now.getHours() === 23 && now.getMinutes() === 0) {
+      const todayStr = now.toISOString().slice(0, 10);
+      const backups = fs.readdirSync(backupDir);
+      const alreadyDone = backups.some(b => b.includes(todayStr));
+      if (!alreadyDone) {
+        runDailyBackup();
+      }
+    }
+  }, 60 * 1000);
+
+  // --- Rate Limiter for Login (/api/auth/login) - 5 attempts per minute ---
+  const loginRateLimits = new Map<string, number[]>();
+  function loginRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
+    const now = Date.now();
+    let timestamps = loginRateLimits.get(ip) || [];
+    timestamps = timestamps.filter(ts => now - ts < 60 * 1000);
+    if (timestamps.length >= 5) {
+      return res.status(429).json({
+        success: false,
+        error: "تم تجاوز الحد المسموح لمحاولات تسجيل الدخول (5 محاولات في الدقيقة). يرجى الانتظار.",
+      });
+    }
+    timestamps.push(now);
+    loginRateLimits.set(ip, timestamps);
+    next();
   }
 
   // --- Rate Limiter for AI Endpoints (/api/ai/* and /api/ocr/*) ---
@@ -45,8 +252,8 @@ async function startServer() {
     timestamps: number[];
   }
   const aiRateLimits = new Map<string, RateLimitRecord>();
-  const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-  const AI_MAX_REQUESTS_PER_WINDOW = 30; // 30 requests per minute
+  const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+  const AI_MAX_REQUESTS_PER_WINDOW = 30;
 
   function aiRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
     const key = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
@@ -58,7 +265,6 @@ async function startServer() {
       aiRateLimits.set(key, record);
     }
 
-    // Filter timestamps within the rolling window
     record.timestamps = record.timestamps.filter((ts) => now - ts < AI_RATE_LIMIT_WINDOW_MS);
 
     if (record.timestamps.length >= AI_MAX_REQUESTS_PER_WINDOW) {
@@ -73,72 +279,567 @@ async function startServer() {
     next();
   }
 
-  // --- Firebase ID Token Verification Middleware for all /api/* routes ---
-  async function requireFirebaseAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-    // Whitelisted public endpoints
+  // --- Local SQLite Auth Middleware for all /api/* routes ---
+  function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
     const publicPaths = [
       "/api/health",
       "/api/currency/rates",
       "/api/auth/verify-master",
+      "/api/auth/check-setup",
+      "/api/auth/setup-admin",
+      "/api/auth/login",
     ];
 
     if (publicPaths.includes(req.path) || req.path.startsWith("/api/whatsapp/webhook")) {
       return next();
     }
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const token = req.cookies?.session_token;
+    if (!token) {
       return res.status(401).json({
         success: false,
-        error: "غير مصرح: يجب تسجيل الدخول وتمرير Firebase ID Token صالح للوصول إلى هذا المسار.",
+        error: "غير مصرح: يجب تسجيل الدخول للوصول إلى هذا المسار.",
       });
     }
 
-    const idToken = authHeader.slice(7).trim();
-    if (!idToken) {
+    const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(token) as any;
+    if (!session || new Date(session.expires_at) < new Date()) {
       return res.status(401).json({
         success: false,
-        error: "رمز المصادقة (ID Token) فارغ أو غير صالح.",
+        error: "انتهت صلاحية الجلسة أو أن الرمز غير صالح. يرجى إعادة تسجيل الدخول.",
       });
     }
 
-    try {
-      if (firebaseApiKey) {
-        const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`;
-        const resp = await fetch(verifyUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken }),
-        });
-
-        if (resp.ok) {
-          const data: any = await resp.json();
-          if (data.users && data.users.length > 0) {
-            (req as any).user = data.users[0];
-            return next();
-          }
-        }
-      }
-
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(session.user_id) as any;
+    if (!user) {
       return res.status(401).json({
         success: false,
-        error: "انتهت صلاحية رمز المصادقة أو أنه غير صالح. يرجى إعادة تسجيل الدخول.",
-      });
-    } catch (err: any) {
-      return res.status(401).json({
-        success: false,
-        error: "تعذر التحقق من رمز المصادقة: " + (err.message || err),
+        error: "المستخدم غير موجود.",
       });
     }
+
+    (req as any).user = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      canManageUsers: !!user.can_manage_users,
+      canAccessTreasury: !!user.can_access_treasury,
+      canAccessAuditTrail: !!user.can_access_audit_trail,
+      canPostEntries: !!user.can_post_entries,
+      canEditPostedEntries: !!user.can_edit_posted_entries,
+      canDeleteRecords: !!user.can_delete_records,
+      canAccessCreditFiles: !!user.can_access_credit_files,
+      canAccessTaxReports: !!user.can_access_tax_reports,
+      createdAt: user.created_at,
+    };
+
+    next();
   }
 
   // Apply middlewares
-  app.use("/api", requireFirebaseAuth);
+  app.use("/api", requireAuth);
   app.use("/api/ai", aiRateLimiter);
   app.use("/api/ocr", aiRateLimiter);
 
+  // --- Auth Endpoints ---
+  app.get("/api/auth/check-setup", (_req, res) => {
+    const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+    res.json({ success: true, needsSetup: row.count === 0 });
+  });
+
+  app.post("/api/auth/setup-admin", loginRateLimiter, async (req, res) => {
+    try {
+      const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+      if (row.count > 0) {
+        return res.status(400).json({ success: false, error: "تم إعداد حساب المدير مسبقاً ولا يمكن إنشاء مدير عبر هذا الرابط." });
+      }
+
+      const { name, email, password } = req.body;
+      if (!name || !email || !password || password.length < 6) {
+        return res.status(400).json({ success: false, error: "بيانات الإعداد غير مكتملة أو كلمة المرور قصيرة (6 أحرف على الأقل)." });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(password, salt);
+      const createdAt = new Date().toISOString();
+
+      const stmt = db.prepare(`
+        INSERT INTO users (name, email, password_hash, role, can_manage_users, can_access_treasury, can_access_audit_trail, can_post_entries, can_edit_posted_entries, can_delete_records, can_access_credit_files, can_access_tax_reports, created_at)
+        VALUES (?, ?, ?, 'ADMIN', 1, 1, 1, 1, 1, 1, 1, 1, ?)
+      `);
+      const info = stmt.run(name.trim(), email.trim().toLowerCase(), hash, createdAt);
+      const userId = info.lastInsertRowid;
+
+      const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(token, userId, expiresAt);
+
+      res.cookie("session_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      const user = db.prepare("SELECT id, name, email, role, can_manage_users, can_access_treasury, can_access_audit_trail, can_post_entries, can_edit_posted_entries, can_delete_records, can_access_credit_files, can_access_tax_reports, created_at FROM users WHERE id = ?").get(userId);
+
+      res.json({ success: true, user, message: "تم إنشاء حساب المدير الرئيسي بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/auth/login", loginRateLimiter, async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: "يرجى إدخال البريد الإلكتروني وكلمة المرور." });
+      }
+
+      const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email.trim().toLowerCase()) as any;
+      if (!user) {
+        return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
+      }
+
+      const match = await bcrypt.compare(password, user.password_hash);
+      if (!match) {
+        return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
+      }
+
+      const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(token, user.id, expiresAt);
+
+      res.cookie("session_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      const userProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        canManageUsers: !!user.can_manage_users,
+        canAccessTreasury: !!user.can_access_treasury,
+        canAccessAuditTrail: !!user.can_access_audit_trail,
+        canPostEntries: !!user.can_post_entries,
+        canEditPostedEntries: !!user.can_edit_posted_entries,
+        canDeleteRecords: !!user.can_delete_records,
+        canAccessCreditFiles: !!user.can_access_credit_files,
+        canAccessTaxReports: !!user.can_access_tax_reports,
+        createdAt: user.created_at,
+      };
+
+      res.json({ success: true, user: userProfile, message: "تم تسجيل الدخول بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    const token = req.cookies?.session_token;
+    if (token) {
+      db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+    }
+    res.clearCookie("session_token");
+    res.json({ success: true, message: "تم تسجيل الخروج بنجاح." });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    const token = req.cookies?.session_token;
+    if (!token) {
+      return res.status(401).json({ success: false, error: "غير مسجل الدخول." });
+    }
+
+    const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(token) as any;
+    if (!session || new Date(session.expires_at) < new Date()) {
+      return res.status(401).json({ success: false, error: "انتهت صلاحية الجلسة." });
+    }
+
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(session.user_id) as any;
+    if (!user) {
+      return res.status(401).json({ success: false, error: "المستخدم غير موجود." });
+    }
+
+    const userProfile = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      canManageUsers: !!user.can_manage_users,
+      canAccessTreasury: !!user.can_access_treasury,
+      canAccessAuditTrail: !!user.can_access_audit_trail,
+      canPostEntries: !!user.can_post_entries,
+      canEditPostedEntries: !!user.can_edit_posted_entries,
+      canDeleteRecords: !!user.can_delete_records,
+      canAccessCreditFiles: !!user.can_access_credit_files,
+      canAccessTaxReports: !!user.can_access_tax_reports,
+      createdAt: user.created_at,
+    };
+
+    res.json({ success: true, user: userProfile });
+  });
+
+  // User Management Endpoints (ADMIN only)
+  app.get("/api/users", (req, res) => {
+    const currentUser = (req as any).user;
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+    }
+
+    const users = db.prepare("SELECT id, name, email, role, can_manage_users, can_access_treasury, can_access_audit_trail, can_post_entries, can_edit_posted_entries, can_delete_records, can_access_credit_files, can_access_tax_reports, created_at FROM users").all() as any[];
+    const formatted = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      canManageUsers: !!u.can_manage_users,
+      canAccessTreasury: !!u.can_access_treasury,
+      canAccessAuditTrail: !!u.can_access_audit_trail,
+      canPostEntries: !!u.can_post_entries,
+      canEditPostedEntries: !!u.can_edit_posted_entries,
+      canDeleteRecords: !!u.can_delete_records,
+      canAccessCreditFiles: !!u.can_access_credit_files,
+      canAccessTaxReports: !!u.can_access_tax_reports,
+      createdAt: u.created_at,
+    }));
+
+    res.json({ success: true, users: formatted });
+  });
+
+  app.post("/api/users", async (req, res) => {
+    const currentUser = (req as any).user;
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "صلاحية مرفوضة." });
+    }
+
+    const { name, email, password, role, permissions } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, error: "الاسم والبريد وكلمة المرور مطلوبة." });
+    }
+
+    try {
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(password, salt);
+      const createdAt = new Date().toISOString();
+      const assignedRole = role || 'PENDING';
+
+      const p = permissions || {};
+      const stmt = db.prepare(`
+        INSERT INTO users (name, email, password_hash, role, can_manage_users, can_access_treasury, can_access_audit_trail, can_post_entries, can_edit_posted_entries, can_delete_records, can_access_credit_files, can_access_tax_reports, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const info = stmt.run(
+        name.trim(),
+        email.trim().toLowerCase(),
+        hash,
+        assignedRole,
+        p.canManageUsers ? 1 : 0,
+        p.canAccessTreasury ? 1 : 0,
+        p.canAccessAuditTrail ? 1 : 0,
+        p.canPostEntries ? 1 : 0,
+        p.canEditPostedEntries ? 1 : 0,
+        p.canDeleteRecords ? 1 : 0,
+        p.canAccessCreditFiles ? 1 : 0,
+        p.canAccessTaxReports ? 1 : 0,
+        createdAt
+      );
+
+      res.json({ success: true, id: info.lastInsertRowid, message: "تم إنشاء المستخدم بنجاح." });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: "البريد الإلكتروني مسجل مسبقاً أو حدث خطأ." });
+    }
+  });
+
+  app.put("/api/users/:id", async (req, res) => {
+    const currentUser = (req as any).user;
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "صلاحية مرفوضة." });
+    }
+
+    const userId = req.params.id;
+    const { role, permissions, password, name } = req.body;
+
+    try {
+      const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
+      if (!existing) {
+        return res.status(404).json({ success: false, error: "المستخدم غير موجود." });
+      }
+
+      const updatedRole = role !== undefined ? role : existing.role;
+      const updatedName = name !== undefined ? name : existing.name;
+      const p = permissions !== undefined ? permissions : {
+        canManageUsers: existing.can_manage_users,
+        canAccessTreasury: existing.can_access_treasury,
+        canAccessAuditTrail: existing.can_access_audit_trail,
+        canPostEntries: existing.can_post_entries,
+        canEditPostedEntries: existing.can_edit_posted_entries,
+        canDeleteRecords: existing.can_delete_records,
+        canAccessCreditFiles: existing.can_access_credit_files,
+        canAccessTaxReports: existing.can_access_tax_reports,
+      };
+
+      if (password && password.length >= 6) {
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+        db.prepare(`
+          UPDATE users SET name = ?, role = ?, password_hash = ?, can_manage_users = ?, can_access_treasury = ?, can_access_audit_trail = ?, can_post_entries = ?, can_edit_posted_entries = ?, can_delete_records = ?, can_access_credit_files = ?, can_access_tax_reports = ?
+          WHERE id = ?
+        `).run(
+          updatedName,
+          updatedRole,
+          hash,
+          p.canManageUsers ? 1 : 0,
+          p.canAccessTreasury ? 1 : 0,
+          p.canAccessAuditTrail ? 1 : 0,
+          p.canPostEntries ? 1 : 0,
+          p.canEditPostedEntries ? 1 : 0,
+          p.canDeleteRecords ? 1 : 0,
+          p.canAccessCreditFiles ? 1 : 0,
+          p.canAccessTaxReports ? 1 : 0,
+          userId
+        );
+      } else {
+        db.prepare(`
+          UPDATE users SET name = ?, role = ?, can_manage_users = ?, can_access_treasury = ?, can_access_audit_trail = ?, can_post_entries = ?, can_edit_posted_entries = ?, can_delete_records = ?, can_access_credit_files = ?, can_access_tax_reports = ?
+          WHERE id = ?
+        `).run(
+          updatedName,
+          updatedRole,
+          p.canManageUsers ? 1 : 0,
+          p.canAccessTreasury ? 1 : 0,
+          p.canAccessAuditTrail ? 1 : 0,
+          p.canPostEntries ? 1 : 0,
+          p.canEditPostedEntries ? 1 : 0,
+          p.canDeleteRecords ? 1 : 0,
+          p.canAccessCreditFiles ? 1 : 0,
+          p.canAccessTaxReports ? 1 : 0,
+          userId
+        );
+      }
+
+      res.json({ success: true, message: "تم تحديث بيانات المستخدم بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/users/:id", (req, res) => {
+    const currentUser = (req as any).user;
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "صلاحية مرفوضة." });
+    }
+
+    const userId = req.params.id;
+    if (String(currentUser.id) === String(userId)) {
+      return res.status(400).json({ success: false, error: "لا يمكنك حذف حساب المدير الحالي." });
+    }
+
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    res.json({ success: true, message: "تم حذف المستخدم وإلغاء جلساته بنجاح." });
+  });
+
+  // --- Data Storage Endpoints (/api/data/:entityType) ---
+  const restrictedSecretaryEntities = ["journalEntries", "treasury", "financialActivityLogs"];
+
+  app.get("/api/data/:entityType", (req, res) => {
+    try {
+      const { entityType } = req.params;
+      if (!entityTypes.includes(entityType)) {
+        return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
+      }
+      const user = (req as any).user;
+      if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
+        return res.status(403).json({ success: false, error: "غير مصرح: حساب السكرتارية ليس له صلاحية الوصول للقيود أو الخزنة." });
+      }
+
+      const rows = db.prepare(`SELECT * FROM ${entityType}`).all() as any[];
+      const data = rows.map((r) => {
+        try {
+          const parsed = JSON.parse(r.data);
+          if (typeof parsed === "object" && parsed !== null) {
+            return { ...parsed, _version: r.version, _updatedAt: r.updated_at, _updatedBy: r.updated_by };
+          }
+          return parsed;
+        } catch {
+          return r.data;
+        }
+      });
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/data/:entityType/changes", (req, res) => {
+    try {
+      const { entityType } = req.params;
+      const since = req.query.since ? parseInt(req.query.since as string, 10) : 0;
+      if (!entityTypes.includes(entityType)) {
+        return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
+      }
+      const user = (req as any).user;
+      if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
+        return res.status(403).json({ success: false, error: "غير مصرح." });
+      }
+
+      const rows = db.prepare(`SELECT * FROM ${entityType} WHERE version > ? OR updated_at > ?`).all(since, new Date(since).toISOString()) as any[];
+      const data = rows.map((r) => {
+        try {
+          const parsed = JSON.parse(r.data);
+          return { ...parsed, _version: r.version, _updatedAt: r.updated_at, _updatedBy: r.updated_by };
+        } catch {
+          return r.data;
+        }
+      });
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/data/:entityType", (req, res) => {
+    try {
+      const { entityType } = req.params;
+      if (!entityTypes.includes(entityType)) {
+        return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
+      }
+      const user = (req as any).user;
+      if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
+        return res.status(403).json({ success: false, error: "غير مصرح." });
+      }
+
+      const { id, data, version } = req.body;
+      if (!id || data === undefined) {
+        return res.status(400).json({ success: false, error: "معرف السجل والبيانات مطلوبة." });
+      }
+
+      const existing = db.prepare(`SELECT version FROM ${entityType} WHERE id = ?`).get(id) as any;
+      if (existing && version !== undefined && version < existing.version) {
+        return res.status(409).json({
+          success: false,
+          error: "تعارض إصدار (Version Conflict): تم تعديل هذا السجل بواسطة مستخدم آخر مسبقاً. يرجى تحديث الصفحة.",
+        });
+      }
+
+      const newVersion = existing ? existing.version + 1 : 1;
+      const updatedAt = new Date().toISOString();
+      const updatedBy = user ? user.name : "System";
+      const dataStr = typeof data === "string" ? data : JSON.stringify(data);
+
+      db.prepare(`
+        INSERT INTO ${entityType} (id, data, updated_at, version, updated_by)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = ?, updated_by = ?
+      `).run(id, dataStr, updatedAt, newVersion, updatedBy, dataStr, updatedAt, newVersion, updatedBy);
+
+      // Write audit log if important
+      if (entityType !== "auditLogs") {
+        const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+        const auditRecord = {
+          id: auditId,
+          action: existing ? "UPDATE" : "CREATE",
+          entity: entityType,
+          recordId: id,
+          userName: updatedBy,
+          timestamp: updatedAt,
+          details: `تم ${existing ? "تعديل" : "إضافة"} سجل في ${entityType} (${id})`
+        };
+        db.prepare(`
+          INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
+          VALUES (?, ?, ?, 1, ?)
+          ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
+        `).run(auditId, JSON.stringify(auditRecord), updatedAt, updatedBy, JSON.stringify(auditRecord), updatedAt, updatedBy);
+      }
+
+      res.json({ success: true, version: newVersion, updatedAt });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/data/:entityType/:id", (req, res) => {
+    try {
+      const { entityType, id } = req.params;
+      if (!entityTypes.includes(entityType)) {
+        return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
+      }
+      const user = (req as any).user;
+      if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
+        return res.status(403).json({ success: false, error: "غير مصرح." });
+      }
+
+      db.prepare(`DELETE FROM ${entityType} WHERE id = ?`).run(id);
+
+      if (entityType !== "auditLogs") {
+        const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+        const auditRecord = {
+          id: auditId,
+          action: "DELETE",
+          entity: entityType,
+          recordId: id,
+          userName: user ? user.name : "System",
+          timestamp: new Date().toISOString(),
+          details: `تم حذف سجل من ${entityType} (${id})`
+        };
+        db.prepare(`
+          INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
+          VALUES (?, ?, ?, 1, ?)
+          ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
+        `).run(auditId, JSON.stringify(auditRecord), auditRecord.timestamp, auditRecord.userName, JSON.stringify(auditRecord), auditRecord.timestamp, auditRecord.userName);
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/data/migrate-all", (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || user.role !== "ADMIN") {
+        return res.status(403).json({ success: false, error: "فقط المدير يمكنه ترحيل البيانات." });
+      }
+
+      const allState = req.body;
+      let summary = { clientsCount: 0, journalEntriesCount: 0, accountsCount: 0 };
+
+      for (const [key, value] of Object.entries(allState)) {
+        if (!entityTypes.includes(key)) continue;
+        const records = Array.isArray(value) ? value : [value];
+        if (key === "clients") summary.clientsCount = records.length;
+        if (key === "journalEntries") summary.journalEntriesCount = records.length;
+        if (key === "accounts") summary.accountsCount = records.length;
+
+        const insertStmt = db.prepare(`
+          INSERT INTO ${key} (id, data, updated_at, version, updated_by)
+          VALUES (?, ?, ?, 1, ?)
+          ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
+        `);
+
+        for (const rec of records) {
+          const recId = rec.id || (key === 'officeProfile' ? 'profile-main' : Math.random().toString(36).substring(2));
+          const dataStr = JSON.stringify(rec);
+          const now = new Date().toISOString();
+          insertStmt.run(recId, dataStr, now, user.name, dataStr, now, user.name);
+        }
+      }
+
+      res.json({ success: true, summary, message: "تم ترحيل البيانات إلى السيرفر بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Endpoint to verify master password from server environment without client leaks
   app.post("/api/auth/verify-master", (req, res) => {
+
     const { passcode, type } = req.body;
     if (!passcode) {
       return res.status(400).json({ success: false, authorized: false });
@@ -1013,6 +1714,226 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       }
       const result = whatsappServerEngine.simulateIncomingClientReply(phone, text, clientName);
       res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- Documents Endpoints (Phase 3) ---
+  app.post("/api/documents/upload", upload.single("file"), (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: "لم يتم رفع أي ملف أو الملف تجاوز الحد الأقصى (10MB)." });
+      }
+      const { clientId, year, type, status } = req.body;
+      if (!clientId || !year || !type) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+        return res.status(400).json({ success: false, error: "بيانات المستند غير مكتملة (رقم العميل، السنة، والنوع مطلوبة)." });
+      }
+
+      const id = crypto.randomUUID();
+      const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+      const filePath = req.file.path;
+      const uploadedBy = req.user?.name || "مستخدم نظام";
+      const createdAt = new Date().toISOString();
+      const docStatus = status || 'وصل';
+
+      const stmt = db.prepare(`
+        INSERT INTO documents (id, client_id, year, type, status, original_name, file_path, uploaded_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(id, String(clientId), String(year), String(type), String(docStatus), originalName, filePath, uploadedBy, createdAt);
+
+      res.json({
+        success: true,
+        data: {
+          id,
+          clientId,
+          year,
+          type,
+          status: docStatus,
+          originalName,
+          uploadedBy,
+          createdAt,
+        },
+        message: "تم رفع المستند بنجاح.",
+      });
+    } catch (err: any) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/documents", (req, res) => {
+    try {
+      const clientId = req.query.clientId as string;
+      let query = "SELECT * FROM documents";
+      let params: any[] = [];
+      if (clientId) {
+        query += " WHERE client_id = ?";
+        params.push(clientId);
+      }
+      query += " ORDER BY created_at DESC";
+      const rows = db.prepare(query).all(...params) as any[];
+      const formatted = rows.map(r => ({
+        id: r.id,
+        clientId: r.client_id,
+        year: r.year,
+        type: r.type,
+        status: r.status,
+        originalName: r.original_name,
+        uploadedBy: r.uploaded_by,
+        createdAt: r.created_at,
+      }));
+      res.json({ success: true, data: formatted });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/documents/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const doc = db.prepare("SELECT * FROM documents WHERE id = ?").get(id) as any;
+      if (!doc || !fs.existsSync(doc.file_path)) {
+        return res.status(404).json({ success: false, error: "المستند غير موجود على الخادم." });
+      }
+      res.download(doc.file_path, doc.original_name);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.patch("/api/documents/:id/status", (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ success: false, error: "الحالة الجديدة مطلوبة." });
+      }
+      const doc = db.prepare("SELECT * FROM documents WHERE id = ?").get(id);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: "المستند غير موجود." });
+      }
+      db.prepare("UPDATE documents SET status = ? WHERE id = ?").run(status, id);
+      res.json({ success: true, message: "تم تحديث حالة المستند بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/documents/:id", (req: any, res) => {
+    try {
+      const user = req.user;
+      if (user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: حذف المستندات متاح للمدير فقط." });
+      }
+      const { id } = req.params;
+      const doc = db.prepare("SELECT * FROM documents WHERE id = ?").get(id) as any;
+      if (!doc) {
+        return res.status(404).json({ success: false, error: "المستند غير موجود." });
+      }
+      if (fs.existsSync(doc.file_path)) {
+        try { fs.unlinkSync(doc.file_path); } catch {}
+      }
+      db.prepare("DELETE FROM documents WHERE id = ?").run(id);
+      res.json({ success: true, message: "تم حذف المستند بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- Server Backups Management Endpoints (Phase 4) ---
+  app.get("/api/server-backups", (req: any, res) => {
+    try {
+      if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: إدارة النسخ الاحتياطي متاحة للمدير فقط." });
+      }
+      if (!fs.existsSync(backupDir)) {
+        return res.json({ success: true, data: [] });
+      }
+      const items = fs.readdirSync(backupDir, { withFileTypes: true });
+      const backups = items
+        .filter(item => item.isDirectory() && item.name.startsWith("backup_"))
+        .map(item => {
+          const itemPath = path.join(backupDir, item.name);
+          const stat = fs.statSync(itemPath);
+          let sizeBytes = 0;
+          try {
+            const dbSize = fs.statSync(path.join(itemPath, "app.db")).size;
+            sizeBytes += dbSize;
+          } catch {}
+          return {
+            name: item.name,
+            createdAt: stat.mtime.toISOString(),
+            sizeMB: (sizeBytes / (1024 * 1024)).toFixed(2),
+          };
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      res.json({ success: true, data: backups });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/server-backups/create", (req: any, res) => {
+    try {
+      if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: إنشاء النسخ الاحتياطي متاح للمدير فقط." });
+      }
+      const backupName = runDailyBackup();
+      res.json({ success: true, message: `تم إنشاء النسخة الاحتياطية [${backupName}] بنجاح.` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/server-backups/restore", (req: any, res) => {
+    try {
+      if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: استعادة النسخ الاحتياطية متاحة للمدير فقط." });
+      }
+      const { backupName, confirmationText } = req.body;
+      if (confirmationText !== "تأكيد الاستعادة") {
+        return res.status(400).json({ success: false, error: "يرجى كتابة جملة التأكيد الصحيحة 'تأكيد الاستعادة' للمتابعة." });
+      }
+      if (!backupName) {
+        return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية مطلوب." });
+      }
+
+      const targetPath = path.join(backupDir, backupName);
+      const backupDbPath = path.join(targetPath, "app.db");
+      if (!fs.existsSync(targetPath) || !fs.existsSync(backupDbPath)) {
+        return res.status(404).json({ success: false, error: "ملف النسخة الاحتياطية غير موجود أو تالف (فشل التحقق من السلامة)." });
+      }
+
+      // 1. Emergency backup of current state
+      runDailyBackup();
+
+      // 2. Close db & replace db file
+      db.close();
+
+      const currentDbPath = path.join(dataDir, "app.db");
+      fs.copyFileSync(backupDbPath, currentDbPath);
+
+      // Restore documents if exist
+      const backupDocsPath = path.join(targetPath, "documents");
+      const docsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, "documents");
+      if (fs.existsSync(backupDocsPath)) {
+        if (!fs.existsSync(docsDir)) {
+          fs.mkdirSync(docsDir, { recursive: true });
+        }
+        fs.cpSync(backupDocsPath, docsDir, { recursive: true, force: true });
+      }
+
+      res.json({ success: true, message: "تمت استعادة النسخة الاحتياطية بنجاح. يتم إعادة تشغيل النظام الآن..." });
+
+      setTimeout(() => {
+        process.exit(0);
+      }, 1000);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

@@ -36,13 +36,80 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
   state,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'EXPORT' | 'IMPORT' | 'OVERVIEW'>('EXPORT');
+  const [activeTab, setActiveTab] = useState<'EXPORT' | 'IMPORT' | 'OVERVIEW' | 'SERVER_BACKUPS'>('EXPORT');
   const [selectedModel, setSelectedModel] = useState<ModelType>('ALL_DATA');
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('XLSX');
   const [importTargetModel, setImportTargetModel] = useState<ModelType>('ACCOUNTS');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+
+  // Server backups state
+  const [serverBackups, setServerBackups] = useState<{ name: string; createdAt: string; sizeMB: string }[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [restoreConfirmText, setRestoreConfirmText] = useState('');
+  const [selectedBackupToRestore, setSelectedBackupToRestore] = useState<string | null>(null);
+
+  const loadServerBackups = async () => {
+    try {
+      setIsLoadingBackups(true);
+      const res = await fetch('/api/server-backups');
+      const data = await res.json();
+      if (data.success) {
+        setServerBackups(data.data || []);
+      }
+    } catch (err: any) {
+      console.error('Failed to load server backups:', err);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  const handleCreateServerBackup = async () => {
+    try {
+      setIsProcessing(true);
+      const res = await fetch('/api/server-backups/create', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setStatusMessage({ type: 'success', text: data.message });
+        loadServerBackups();
+      } else {
+        setStatusMessage({ type: 'error', text: data.error || 'فشل إنشاء النسخة الاحتياطية' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRestoreServerBackup = async (backupName: string) => {
+    if (restoreConfirmText !== "تأكيد الاستعادة") {
+      setStatusMessage({ type: 'error', text: "يرجى كتابة جملة التأكيد الصحيحة 'تأكيد الاستعادة' للمتابعة." });
+      return;
+    }
+    try {
+      setIsProcessing(true);
+      const res = await fetch('/api/server-backups/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backupName, confirmationText: restoreConfirmText }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatusMessage({ type: 'success', text: data.message });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        setStatusMessage({ type: 'error', text: data.error || 'فشل استعادة النسخة الاحتياطية' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const modelsList: { id: ModelType; name: string; icon: string; count: number; serialPrefix: string }[] = [
     { id: 'ALL_DATA', name: 'النسخة الكاملة الشاملة لكافة النماذج', icon: '🗄️', count: state.accounts.length + state.journalEntries.length + state.clients.length, serialPrefix: 'ALL' },
@@ -77,9 +144,53 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const currentUser = db.getCurrentUser();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      setStatusMessage({ type: 'error', text: 'استعادة النسخ الاحتياطية متاح للمدير (ADMIN) فقط.' });
+      e.target.value = '';
+      return;
+    }
+
     try {
       setIsProcessing(true);
       setStatusMessage(null);
+
+      // If JSON file, validate structure & show summary before confirming
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (extension === 'json') {
+        const text = await file.text();
+        let parsed: any;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          setStatusMessage({ type: 'error', text: 'ملف JSON تالف أو غير صالح.' });
+          setIsProcessing(false);
+          e.target.value = '';
+          return;
+        }
+
+        const dbData = parsed.data || parsed;
+        const clientsCount = dbData.clients?.length || 0;
+        const journalCount = dbData.journalEntries?.length || 0;
+        const accountsCount = dbData.accounts?.length || 0;
+
+        if (!Array.isArray(dbData.accounts || []) || !Array.isArray(dbData.journalEntries || []) || !Array.isArray(dbData.clients || [])) {
+          setStatusMessage({ type: 'error', text: 'بنية ملف JSON غير صالحة: الأقسام الأساسية مفقودة أو غير صحيحة.' });
+          setIsProcessing(false);
+          e.target.value = '';
+          return;
+        }
+
+        const confirmed = window.confirm(
+          `ملخص البيانات الواردة في النسخة الاحتياطية:\n• عدد العملاء: ${clientsCount}\n• عدد القيود المحاسبية: ${journalCount}\n• عدد الحسابات: ${accountsCount}\n\nهل تريد المتابعة واستعادة هذه النسخة الاحتياطية؟`
+        );
+        if (!confirmed) {
+          setIsProcessing(false);
+          e.target.value = '';
+          return;
+        }
+      }
+
       const res = await importModelData(file, importTargetModel);
       if (res.success) {
         setStatusMessage({ type: 'success', text: res.message });
@@ -156,6 +267,18 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
           >
             <QrCode className="w-4 h-4" />
             <span>معايير السيريال والـ QR</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('SERVER_BACKUPS'); setStatusMessage(null); loadServerBackups(); }}
+            className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'SERVER_BACKUPS'
+                ? 'bg-white text-indigo-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>النسخ على الخادم</span>
           </button>
         </div>
 
@@ -337,21 +460,30 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
 
               {/* Reset & Danger Zone Buttons */}
               <div className="pt-3 border-t border-slate-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500">هل ترغب في استرجاع التهيئة التجريبية؟</span>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('هل أنت متأكد من إعادة ضبط البيانات إلى النماذج التجريبية الشاملة للمكتب؟')) {
-                        db.resetToDemoData();
-                        setStatusMessage({ type: 'success', text: 'تم استعادة البيانات التجريبية الشاملة لجميع النماذج.' });
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-amber-700 hover:bg-amber-50 rounded-xl text-xs font-semibold border border-amber-200 transition-all cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>إعادة تعيين البيانات النموذجية</span>
-                  </button>
-                </div>
+                {db.getCurrentUser()?.role === 'ADMIN' && state.clients.length === 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">هل ترغب في استرجاع التهيئة التجريبية؟</span>
+                    <button
+                      onClick={() => {
+                        const userText = window.prompt('لاستعادة البيانات التجريبية، يرجى كتابة عبارة "تأكيد المسح" حرفياً:');
+                        if (userText === 'تأكيد المسح') {
+                          const ok = db.resetToDemoData();
+                          if (ok) {
+                            setStatusMessage({ type: 'success', text: 'تم استعادة البيانات التجريبية الشاملة لجميع النماذج.' });
+                          } else {
+                            setStatusMessage({ type: 'error', text: 'فشل العملية: تتطلب صلاحيات المدير (ADMIN).' });
+                          }
+                        } else if (userText !== null) {
+                          setStatusMessage({ type: 'error', text: 'كلمة التأكيد غير صحيحة. تم إلغاء العملية.' });
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-amber-700 hover:bg-amber-50 rounded-xl text-xs font-semibold border border-amber-200 transition-all cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>إعادة تعيين البيانات النموذجية</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* Complete Database Purge Button */}
                 <div className="p-3 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between gap-2">
@@ -412,6 +544,84 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 4: SERVER BACKUPS */}
+          {activeTab === 'SERVER_BACKUPS' && (
+            <div className="space-y-4 text-xs">
+              <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">إدارة النسخ الاحتياطية الآلية على السيرفر (SQLite + Documents)</h4>
+                  <p className="text-slate-500 text-[11px] mt-0.5">
+                    يتم أخذ نسخة احتياطية تلقائية يومياً الساعة 11 مساءً، مع الاحتفاظ بآخر 30 نسخة وحذف الأقدم تلقائياً.
+                  </p>
+                </div>
+                <button
+                  onClick={handleCreateServerBackup}
+                  disabled={isProcessing}
+                  className="px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                  <span>نسخة الآن</span>
+                </button>
+              </div>
+
+              {isLoadingBackups ? (
+                <div className="text-center py-10 text-slate-400">جاري تحميل قائمة النسخ الاحتياطية...</div>
+              ) : serverBackups.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 rounded-xl border border-slate-200 text-slate-400">
+                  لا توجد نسخ احتياطية مسجلة على السيرفر حتى الآن.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <h5 className="font-bold text-slate-800">النسخ الاحتياطية المتاحة ({serverBackups.length} / 30):</h5>
+                  <div className="space-y-2">
+                    {serverBackups.map((b) => (
+                      <div key={b.name} className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="font-mono font-bold text-slate-900">{b.name}</span>
+                          <span className="text-[10px] text-slate-500 block">وقت الإنشاء: {new Date(b.createdAt).toLocaleString('ar-EG')} | الحجم: {b.sizeMB} MB</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {selectedBackupToRestore === b.name ? (
+                            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                              <input
+                                type="text"
+                                placeholder="اكتب: تأكيد الاستعادة"
+                                value={restoreConfirmText}
+                                onChange={(e) => setRestoreConfirmText(e.target.value)}
+                                className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none"
+                              />
+                              <button
+                                onClick={() => handleRestoreServerBackup(b.name)}
+                                disabled={isProcessing || restoreConfirmText !== "تأكيد الاستعادة"}
+                                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white rounded-lg font-bold text-xs cursor-pointer"
+                              >
+                                تأكيد الاستعادة
+                              </button>
+                              <button
+                                onClick={() => { setSelectedBackupToRestore(null); setRestoreConfirmText(''); }}
+                                className="p-1 text-slate-500 hover:text-slate-800"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setSelectedBackupToRestore(b.name); setRestoreConfirmText(''); }}
+                              className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl font-bold border border-amber-200 cursor-pointer"
+                            >
+                              استعادة النسخة
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

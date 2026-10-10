@@ -851,6 +851,67 @@ export default function App() {
     </Suspense>
   );
 
+  // 1. If verificationData is present (#verify), allow public access without login
+  if (verificationData) {
+    return (
+      <I18nProvider language={currentLanguage} onLanguageChange={(l) => db.setLanguage(l)}>
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4" dir="rtl">
+          <Suspense fallback={<HubLoadingFallback />}>
+            <DocumentVerificationModal
+              initialData={verificationData}
+              onClose={() => setVerificationData(null)}
+            />
+          </Suspense>
+        </div>
+      </I18nProvider>
+    );
+  }
+
+  // 2. If auth not resolved yet, show loading
+  if (!authResolved) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white" dir="rtl">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs font-semibold text-slate-400">جاري التحقق من المصادقة...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. If not logged in, show FirebaseAuthGate
+  if (!firebaseProfile) {
+    return <FirebaseAuthGate onAuthenticated={(profile) => setFirebaseProfile(profile)} />;
+  }
+
+  // 4. If logged in but role is PENDING
+  if (firebaseProfile.role === 'PENDING') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4" dir="rtl">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+          <div className="w-14 h-14 bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-amber-400">
+            <Lock className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-black text-white">حسابك بانتظار تفعيل المدير</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            تم استلام طلب تسجيل حسابك بنجاح. يرجى انتظار قيام مدير المنظومة بمراجعة وتفعيل صلاحيات حسابك (دور PENDING).
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={async () => {
+                await firebaseAuth.signOut();
+                setFirebaseProfile(null);
+              }}
+              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition-colors cursor-pointer text-xs"
+            >
+              تسجيل الخروج
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // If user is in Mobile Field Companion mode or activeTab is MOBILE_COMPANION, render a clean full-screen mobile app
   if (viewMode === 'MOBILE' || activeTab === 'MOBILE_COMPANION') {
     return (

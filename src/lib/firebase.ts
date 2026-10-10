@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeFirestore, getFirestore, Firestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, Firestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAuth, Auth } from 'firebase/auth';
 import config from '../../firebase-applet-config.json';
 
@@ -20,6 +20,9 @@ let firestoreDb: Firestore;
 try {
   firestoreDb = initializeFirestore(app, {
     experimentalForceLongPolling: true,
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
   }, config.firestoreDatabaseId || undefined);
 } catch {
   firestoreDb = getFirestore(app, config.firestoreDatabaseId || undefined);
