@@ -1,34 +1,168 @@
 {
   "entities": {
-    "AccountingWorkspace": {
-      "title": "AccountingWorkspace",
-      "description": "The complete cloud synchronized accounting workspace for the office",
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account and role in Firestore (manager, accountant, secretary)",
       "type": "object",
       "properties": {
-        "version": { "type": "number", "description": "Schema version" },
-        "lastSyncedAt": { "type": "string", "description": "ISO timestamp of sync" },
-        "updatedBy": { "type": "string", "description": "Auditor or user name who performed the sync" },
-        "accounts": { "type": "array", "description": "Chart of accounts" },
-        "journalEntries": { "type": "array", "description": "Double entry journal entries" },
-        "clients": { "type": "array", "description": "Companies and client folders" },
-        "treasuryTransactions": { "type": "array", "description": "Office cash box & bank transactions" },
-        "taxDeclarations": { "type": "array", "description": "Tax declarations (VAT 10, Form 41, etc.)" },
-        "invoices": { "type": "array", "description": "E-invoices and receipts" },
-        "certificates": { "type": "array", "description": "Auditor certified certificates" },
-        "feasibilityStudies": { "type": "array", "description": "Feasibility studies" },
-        "creditSimulations": { "type": "array", "description": "Banking credit simulations" },
-        "fixedAssets": { "type": "array", "description": "Fixed assets and depreciation" },
-        "officeProfile": { "type": "object", "description": "Office profile and branding" },
-        "users": { "type": "array", "description": "System users and access keys" },
-        "auditLogs": { "type": "array", "description": "Audit trail logs" }
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "ACCOUNTANT", "SECRETARY", "AUDITOR"] },
+        "roleTitleArabic": { "type": "string" },
+        "canAccessTreasury": { "type": "boolean" },
+        "canAccessAuditTrail": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Client company dossier and corporate profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "commercialRegistrationNo": { "type": "string" },
+        "taxCardNo": { "type": "string" },
+        "taxOffice": { "type": "string" },
+        "legalForm": { "type": "string" },
+        "fiscalYear": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "JournalEntry": {
+      "title": "JournalEntry",
+      "description": "Double entry accounting journal entry with client and fiscal year",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "entryNumber": { "type": "number" },
+        "serialNumber": { "type": "string" },
+        "date": { "type": "string" },
+        "clientId": { "type": "string" },
+        "fiscalYear": { "type": "number" },
+        "description": { "type": "string" },
+        "lines": { "type": "array" }
+      },
+      "required": ["id", "entryNumber", "date", "clientId", "fiscalYear"]
+    },
+    "TreasuryTransaction": {
+      "title": "TreasuryTransaction",
+      "description": "Office cash box or bank treasury transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["INCOME", "EXPENSE", "RECEIPT", "PAYMENT"] },
+        "amount": { "type": "number" },
+        "clientId": { "type": "string" },
+        "fiscalYear": { "type": "number" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "date", "type", "amount", "clientId", "fiscalYear"]
+    },
+    "TaxDeclaration": {
+      "title": "TaxDeclaration",
+      "description": "Corporate tax return declaration (VAT 10, Form 41, etc.)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "declarationType": { "type": "string" },
+        "clientId": { "type": "string" },
+        "fiscalYear": { "type": "number" },
+        "period": { "type": "string" },
+        "totalTaxAmount": { "type": "number" }
+      },
+      "required": ["id", "declarationType", "clientId", "fiscalYear"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Chart of accounts ledger definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "code", "name"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Electronic sales invoice or professional fee bill",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "date": { "type": "string" },
+        "clientId": { "type": "string" },
+        "fiscalYear": { "type": "number" },
+        "grandTotal": { "type": "number" }
+      },
+      "required": ["id", "invoiceNumber", "date", "clientId", "fiscalYear"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Tamper-evident audit activity log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "userId", "action"]
+    },
+    "AccountingWorkspace": {
+      "title": "AccountingWorkspace",
+      "description": "Cloud synchronized accounting workspace snapshot",
+      "type": "object",
+      "properties": {
+        "version": { "type": "number" },
+        "lastSyncedAt": { "type": "string" }
       },
       "required": ["version", "lastSyncedAt"]
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "System user profiles and role assignments"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Client folders and tax profiles"
+    },
+    "/journalEntries/{entryId}": {
+      "schema": "JournalEntry",
+      "description": "Double entry journal records"
+    },
+    "/treasury/{txId}": {
+      "schema": "TreasuryTransaction",
+      "description": "Treasury and cash movement records"
+    },
+    "/taxDeclarations/{declId}": {
+      "schema": "TaxDeclaration",
+      "description": "Tax returns and declarations"
+    },
+    "/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "Chart of accounts"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Office fee invoices"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable system audit trail"
+    },
     "/workspaces/{workspaceId}": {
       "schema": "AccountingWorkspace",
-      "description": "Cloud synchronized accounting workspace"
+      "description": "Legacy and backup snapshots"
     }
   }
 }

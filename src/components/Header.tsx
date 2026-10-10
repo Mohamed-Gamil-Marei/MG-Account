@@ -22,9 +22,11 @@ import {
   Globe2,
   BookOpen,
   Smartphone,
+  LogOut,
 } from 'lucide-react';
 import { db } from '../db/localDatabase';
 import { cloudSync, SyncStatus } from '../lib/cloudSync';
+import { firebaseAuth } from '../services/firebaseAuthService';
 import { OfficeProfile, NavigationTab, SystemUser, AppLanguage } from '../types';
 import { GlobalSearchBar } from './GlobalSearchBar';
 import { UserManagementModal } from './UserManagementModal';
@@ -188,6 +190,20 @@ export const Header: React.FC<HeaderProps> = ({
                 {isEn ? currentUser.role : currentUser.roleTitleArabic.split('(')[0]}
               </span>
             </div>
+          </button>
+
+          {/* Firebase Sign Out Button */}
+          <button
+            onClick={async () => {
+              if (window.confirm(isEn ? 'Sign out of Firebase system?' : 'هل تريد تسجيل الخروج من منظومة Firebase؟')) {
+                await firebaseAuth.signOut();
+              }
+            }}
+            id="btn-firebase-signout"
+            className="p-1.5 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 rounded-xl border border-slate-700 transition-colors cursor-pointer"
+            title={isEn ? 'Sign Out' : 'تسجيل الخروج من المنظومة'}
+          >
+            <LogOut className="w-4 h-4" />
           </button>
 
           {/* Smart Notification Center */}

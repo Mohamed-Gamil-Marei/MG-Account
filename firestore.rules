@@ -1,8 +1,120 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // --- Authentication & Role-Based Access Control (RBAC) Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() ? getUserData().role : null;
+    }
+
+    // Role Hierarchy:
+    // 1. ADMIN (مدير النظام والشريك المسؤول)
+    function isAdmin() {
+      return isSignedIn() && (getUserRole() == 'ADMIN' || getUserRole() == 'MANAGER');
+    }
+
+    // 2. ACCOUNTANT (محاسب مالي ومراقب حسابات)
+    function isAccountant() {
+      return isSignedIn() && (isAdmin() || getUserRole() == 'ACCOUNTANT' || getUserRole() == 'AUDITOR');
+    }
+
+    // 3. SECRETARY (سكرتارية واستقبال)
+    function isSecretary() {
+      return isSignedIn() && (isAccountant() || getUserRole() == 'SECRETARY');
+    }
+
+    // --- 1. User Profiles & Permissions ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // --- 2. Clients Dossiers & Tax Archives ---
+    match /clients/{clientId} {
+      // Secretary can read clients for receptionist lookup; only accountant/admin can edit
+      allow read: if isSecretary();
+      allow write: if isAccountant();
+    }
+
+    // --- 3. Journal Entries (قيود اليومية) ---
+    // Strictly confidential: only Accountants and Managers can view or record journal entries
+    match /journalEntries/{entryId} {
+      allow read, write: if isAccountant();
+    }
+
+    // --- 4. Office Treasury & Cash Box (خزنة المكتب) ---
+    // Manager has full access; Accountant has access if permitted; Secretary strictly read-only if permitted
+    match /treasury/{txId} {
+      allow read: if isAccountant() || (isSecretary() && getUserData().canAccessTreasury == true);
+      allow write: if isAdmin() || (isAccountant() && getUserData().canAccessTreasury == true);
+    }
+
+    // --- 5. Tax Declarations & Returns (الإقرارات الضريبية) ---
+    match /taxDeclarations/{declId} {
+      allow read, write: if isAccountant();
+    }
+
+    // --- 6. Tax Audits (الفحص الضريبي ولجان الطعن) ---
+    match /taxAudits/{auditId} {
+      allow read, write: if isAccountant();
+    }
+
+    // --- 7. Chart of Accounts (دليل الحسابات) ---
+    match /accounts/{accountId} {
+      allow read, write: if isAccountant();
+    }
+
+    // --- 8. Professional Invoices (فواتير الأتعاب والمبيعات) ---
+    match /invoices/{invoiceId} {
+      allow read, write: if isSecretary();
+    }
+
+    // --- 9. Certified Certificates & Reports (الشهادات والتقارير المعتمدة) ---
+    match /certificates/{certId} {
+      allow read: if isSecretary();
+      allow write: if isAccountant();
+    }
+
+    // --- 10. Financial Statements (القوائم المالية والمركز المالي) ---
+    match /financialStatements/{statementId} {
+      allow read, write: if isAccountant();
+    }
+
+    // --- 11. Audit Trail Logs (سجل العمليات والرقابة) ---
+    // Tamper-proof: append-only for authenticated actions; only Manager can read audit logs
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // --- 12. Office Profile & Settings ---
+    match /officeProfile/{profileId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- 13. System Workspace Snapshots ---
+    match /workspaces/{workspaceId} {
+      allow read, write: if isAdmin();
+    }
+    match /accounting_workspaces/{workspaceId} {
+      allow read, write: if isAdmin();
+    }
+
+    // --- Default Deny All Unauthenticated or Unmatched Requests ---
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

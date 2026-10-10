@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   Sparkles,
 } from 'lucide-react';
-import { SecurityAuthService, MASTER_EDIT_PASSWORD } from '../services/securityAuth';
+import { SecurityAuthService } from '../services/securityAuth';
 
 interface SecurityAuthModalProps {
   isOpen?: boolean;

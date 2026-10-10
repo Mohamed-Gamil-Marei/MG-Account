@@ -105,6 +105,9 @@ import { CloudSyncHeaderWidget } from './components/CloudSyncHeaderWidget';
 import { HeaderNavigationDropdown } from './components/common/HeaderNavigationDropdown';
 import { I18nProvider, getTranslation } from './utils/i18n';
 import { parseVerificationFromUrl, VerificationPayloadData } from './utils/qrCodeGenerator';
+import { firebaseAuth, FirebaseUserProfile } from './services/firebaseAuthService';
+import { FirebaseAuthGate } from './components/auth/FirebaseAuthGate';
+import { cloudSync } from './lib/cloudSync';
 
 function HubLoadingFallback() {
   return (
@@ -184,6 +187,23 @@ export default function App() {
   const [verificationData, setVerificationData] = useState<VerificationPayloadData | null>(null);
   const [isMgPromoModalOpen, setIsMgPromoModalOpen] = useState<boolean>(false);
   const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(false);
+
+  const [firebaseProfile, setFirebaseProfile] = useState<FirebaseUserProfile | null>(() => firebaseAuth.getCurrentProfile());
+  const [authResolved, setAuthResolved] = useState<boolean>(false);
+
+  // Mandatory Firebase Authentication & Firestore Partitioned Sync Listener
+  useEffect(() => {
+    const unsubAuth = firebaseAuth.subscribe((profile) => {
+      setFirebaseProfile(profile);
+      setAuthResolved(true);
+      if (profile) {
+        cloudSync.initRealtimeSync((remote) => {
+          db.mergeRemoteState(remote);
+        });
+      }
+    });
+    return unsubAuth;
+  }, []);
 
   // Non-blocking initialization of print header injection
   useEffect(() => {

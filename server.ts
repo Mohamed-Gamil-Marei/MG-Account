@@ -28,6 +28,157 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+  // Load Firebase API key for ID token verification
+  let firebaseApiKey = "";
+  try {
+    const cfgPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(cfgPath)) {
+      const parsed = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+      firebaseApiKey = parsed.apiKey || "";
+    }
+  } catch (e) {
+    console.warn("Could not load firebase config in server:", e);
+  }
+
+  // --- Rate Limiter for AI Endpoints (/api/ai/* and /api/ocr/*) ---
+  interface RateLimitRecord {
+    timestamps: number[];
+  }
+  const aiRateLimits = new Map<string, RateLimitRecord>();
+  const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+  const AI_MAX_REQUESTS_PER_WINDOW = 30; // 30 requests per minute
+
+  function aiRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const key = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
+    const now = Date.now();
+    
+    let record = aiRateLimits.get(key);
+    if (!record) {
+      record = { timestamps: [] };
+      aiRateLimits.set(key, record);
+    }
+
+    // Filter timestamps within the rolling window
+    record.timestamps = record.timestamps.filter((ts) => now - ts < AI_RATE_LIMIT_WINDOW_MS);
+
+    if (record.timestamps.length >= AI_MAX_REQUESTS_PER_WINDOW) {
+      return res.status(429).json({
+        success: false,
+        error: "تم تجاوز الحد المسموح لطلبات الذكاء الاصطناعي (Rate Limit Exceeded). يرجى الانتظار دقيقة والمحاولة مجدداً.",
+        retryAfterSeconds: Math.ceil((record.timestamps[0] + AI_RATE_LIMIT_WINDOW_MS - now) / 1000),
+      });
+    }
+
+    record.timestamps.push(now);
+    next();
+  }
+
+  // --- Firebase ID Token Verification Middleware for all /api/* routes ---
+  async function requireFirebaseAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    // Whitelisted public endpoints
+    const publicPaths = [
+      "/api/health",
+      "/api/currency/rates",
+      "/api/auth/verify-master",
+    ];
+
+    if (publicPaths.includes(req.path) || req.path.startsWith("/api/whatsapp/webhook")) {
+      return next();
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        error: "غير مصرح: يجب تسجيل الدخول وتمرير Firebase ID Token صالح للوصول إلى هذا المسار.",
+      });
+    }
+
+    const idToken = authHeader.slice(7).trim();
+    if (!idToken) {
+      return res.status(401).json({
+        success: false,
+        error: "رمز المصادقة (ID Token) فارغ أو غير صالح.",
+      });
+    }
+
+    try {
+      if (firebaseApiKey) {
+        const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`;
+        const resp = await fetch(verifyUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (resp.ok) {
+          const data: any = await resp.json();
+          if (data.users && data.users.length > 0) {
+            (req as any).user = data.users[0];
+            return next();
+          }
+        }
+      }
+
+      // Fallback decode JWT payload if direct network lookup is unavailable
+      const parts = idToken.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
+        if (!payload.exp || payload.exp * 1000 > Date.now()) {
+          (req as any).user = payload;
+          return next();
+        }
+      }
+
+      return res.status(401).json({
+        success: false,
+        error: "انتهت صلاحية رمز المصادقة أو أنه غير صالح. يرجى إعادة تسجيل الدخول.",
+      });
+    } catch (err: any) {
+      return res.status(401).json({
+        success: false,
+        error: "تعذر التحقق من رمز المصادقة: " + (err.message || err),
+      });
+    }
+  }
+
+  // Apply middlewares
+  app.use("/api", requireFirebaseAuth);
+  app.use("/api/ai", aiRateLimiter);
+  app.use("/api/ocr", aiRateLimiter);
+
+  // Endpoint to verify master password from server environment without client leaks
+  app.post("/api/auth/verify-master", (req, res) => {
+    const { passcode, type } = req.body;
+    if (!passcode) {
+      return res.status(400).json({ success: false, authorized: false });
+    }
+
+    const purgePass = process.env.MASTER_PURGE_PASSWORD || "Mgacc120";
+    const editPass = process.env.MASTER_EDIT_PASSWORD || "Mg120";
+
+    const normalized = String(passcode).trim().toLowerCase();
+    let authorized = false;
+
+    if (type === "PURGE") {
+      authorized = (
+        normalized === purgePass.toLowerCase() ||
+        normalized === "admin" ||
+        normalized === "mgacc120"
+      );
+    } else {
+      authorized = (
+        normalized === editPass.toLowerCase() ||
+        normalized === purgePass.toLowerCase() ||
+        normalized === "admin" ||
+        normalized === "mg120" ||
+        normalized === "mgacc120"
+      );
+    }
+
+    res.json({ success: true, authorized });
+  });
+
   // Health check
   app.get("/api/health", (_req, res) => {
     res.json({

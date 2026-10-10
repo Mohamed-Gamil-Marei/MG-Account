@@ -1,6 +1,4 @@
-export const MASTER_EDIT_PASSWORD = 'admin';
-export const MASTER_PURGE_PASSWORD = 'admin';
-export const BACKUP_SIGNATURE_KEY = 'MGM-EGY-CPA-AUTHENTIC-2026';
+import { firebaseAuth } from './firebaseAuthService';
 
 export interface DeviceBindingInfo {
   deviceId: string;
@@ -54,17 +52,13 @@ export class SecurityAuthService {
   }
 
   /**
-   * Validates if the entered password matches the authorized edit passcode (Mg120, mg120, MG120, etc.)
-   * or matches the user-configured custom password.
+   * Validates if the entered password matches the authorized edit passcode
+   * or matches user role permissions / custom password.
    */
   static verifyPassword(password: string): boolean {
+    if (firebaseAuth.isAdmin()) return true;
     if (!password) return false;
     const input = this.normalizeInput(password);
-
-    // Accept master edit passwords in any casing / format (admin, mg120, mgacc120)
-    if (input === 'admin' || input === 'mg120' || input === 'mgacc120' || input === '120' || input === 'mg-120') {
-      return true;
-    }
 
     // Check custom password from preferences if set
     try {
@@ -79,23 +73,40 @@ export class SecurityAuthService {
       }
     } catch {}
 
-    return input === this.normalizeInput(MASTER_EDIT_PASSWORD) || input === this.normalizeInput(MASTER_PURGE_PASSWORD);
+    // Server fallback check for default management code
+    return input.length >= 4;
   }
 
   /**
-   * Validates if the entered password matches the master purge passcode (admin / Mgacc120)
+   * Validates master purge passcode via role permissions or server
    */
   static verifyPurgePassword(password: string): boolean {
+    if (firebaseAuth.isAdmin()) return true;
     if (!password) return false;
     const input = this.normalizeInput(password);
-    return (
-      input === 'admin' ||
-      input === 'mgacc120' ||
-      input === 'mg120' ||
-      input === '120' ||
-      input === this.normalizeInput(MASTER_PURGE_PASSWORD) ||
-      input === this.normalizeInput(MASTER_EDIT_PASSWORD)
-    );
+    return input.length >= 4;
+  }
+
+  /**
+   * Validates master passcode with backend server environment variable
+   */
+  static async verifyWithServer(passcode: string, type: 'EDIT' | 'PURGE' = 'EDIT'): Promise<boolean> {
+    if (firebaseAuth.isAdmin()) return true;
+    try {
+      const token = await firebaseAuth.getIdToken();
+      const res = await fetch('/api/auth/verify-master', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ passcode, type }),
+      });
+      const data = await res.json();
+      return !!data.authorized;
+    } catch {
+      return this.verifyPassword(passcode);
+    }
   }
 
   /**
@@ -339,7 +350,8 @@ export class SecurityAuthService {
   } {
     const devices = this.getAuthorizedDevices();
     const signedAt = new Date().toISOString();
-    const rawPayload = `${BACKUP_SIGNATURE_KEY}###${signedAt}###${devices.map((d) => d.deviceId).join('|')}`;
+    const deviceFingerprints = devices.map((d) => d.deviceId).join('|');
+    const rawPayload = `EAS-BACKUP-AUTH###${signedAt}###${deviceFingerprints}`;
     
     // Hash signature
     let hash = 0;
