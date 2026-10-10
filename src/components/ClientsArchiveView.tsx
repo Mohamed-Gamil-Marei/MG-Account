@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   CheckCircle,
   Clock,
+  Loader2,
   AlertCircle,
   Building2,
   Wallet,
@@ -58,6 +59,7 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu } from './common/ActionMenu';
+import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
 import { PrintLayout } from './common/PrintLayout';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
@@ -820,42 +822,42 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     switch (status) {
       case 'COMPLETED':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
             <CheckCircle className="w-3 h-3" />
             <span>مكتمل ومعتمد ✅</span>
           </span>
         );
       case 'IN_PROGRESS':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
             <Clock className="w-3 h-3" />
             <span>جاري العمل والتنفيذ ⏳</span>
           </span>
         );
       case 'AT_AUTHORITY':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
             <Building2 className="w-3 h-3" />
             <span>لدى الجهة الحكومية 🏛️</span>
           </span>
         );
       case 'PENDING_CLIENT_DOCS':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
             <AlertCircle className="w-3 h-3" />
             <span>بانتظار مستندات العميل ⚠️</span>
           </span>
         );
       case 'PENDING':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
             <Clock className="w-3 h-3" />
             <span>قيد التجهيز 📋</span>
           </span>
         );
       case 'CANCELLED':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
             <span>ملغي / معلق ✕</span>
           </span>
         );
@@ -865,22 +867,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   };
 
   const renderCategoryBadge = (cat: ProcedureCategory) => {
-    const map: Record<ProcedureCategory, { text: string; bg: string }> = {
-      TAX_AUDIT: { text: 'فحص ضريبي ولجان', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
-      TAX_DECLARATION: { text: 'إقرارات ضريبية', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-      COMPANY_ESTABLISHMENT: { text: 'تأسيس وتعديل شركات', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-      COMMERCIAL_REGISTRY: { text: 'سجل تجاري وغرف', bg: 'bg-sky-50 text-sky-700 border-sky-200' },
-      FINANCIAL_AUDIT: { text: 'مراجعة واعتماد قوائم', bg: 'bg-blue-50 text-blue-700 border-blue-200' },
-      FEASIBILITY_STUDY: { text: 'دراسات جدوى', bg: 'bg-teal-50 text-teal-700 border-teal-200' },
-      PROFESSIONAL_CERT: { text: 'شهادات مهنية ودخل', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
-      SOCIAL_INSURANCE: { text: 'تأمينات وملف عمالة', bg: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
-      GOV_FEE_PAYMENT: { text: 'سداد رسوم حكومية', bg: 'bg-orange-50 text-orange-700 border-orange-200' },
-      GENERAL_CONSULTING: { text: 'استشارات مالية', bg: 'bg-slate-50 text-slate-700 border-slate-200' },
-    };
-    const c = map[cat] || { text: cat, bg: 'bg-slate-100 text-slate-700 border-slate-200' };
     return (
-      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${c.bg}`}>
-        {c.text}
+      <span className="text-[10px] font-semibold px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-slate-200">
+        {cat}
       </span>
     );
   };
@@ -999,45 +988,45 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         </div>
 
         {/* KPI Compact Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4">
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
-              <span className="text-slate-500 text-[11px] block">إجمالي الشركات</span>
-              <span className="text-base font-black text-slate-900 font-mono mt-0.5 block">
+              <span className="text-slate-500 text-xs font-medium block">إجمالي الشركات</span>
+              <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
                 {totalClientsCount}
               </span>
             </div>
-            <Building className="w-4 h-4 text-slate-400" />
+            <Building className="w-4 h-4 text-slate-500" />
           </div>
 
-          <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
-              <span className="text-blue-600 text-[11px] block">إجراءات جارية</span>
-              <span className="text-base font-black text-blue-800 font-mono mt-0.5 block">
+              <span className="text-slate-500 text-xs font-medium block">إجراءات جارية</span>
+              <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
                 {activeProceduresCount}
               </span>
             </div>
-            <Clock className="w-4 h-4 text-blue-500" />
+            <Clock className="w-4 h-4 text-slate-500" />
           </div>
 
-          <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-100 flex items-center justify-between">
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
-              <span className="text-emerald-600 text-[11px] block">إجراءات مكتملة</span>
-              <span className="text-base font-black text-emerald-800 font-mono mt-0.5 block">
+              <span className="text-slate-500 text-xs font-medium block">إجراءات مكتملة</span>
+              <span className="text-sm font-bold text-emerald-700 font-mono mt-0.5 block">
                 {completedProceduresCount}
               </span>
             </div>
-            <CheckCircle className="w-4 h-4 text-emerald-500" />
+            <CheckCircle className="w-4 h-4 text-emerald-600" />
           </div>
 
-          <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100 flex items-center justify-between">
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
-              <span className="text-amber-700 text-[11px] block">سندات الخزنة</span>
-              <span className="text-base font-black text-amber-900 font-mono mt-0.5 block">
+              <span className="text-slate-500 text-xs font-medium block">سندات الخزنة</span>
+              <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
                 {state.treasuryTransactions.filter((t) => t.clientId).length}
               </span>
             </div>
-            <Wallet className="w-4 h-4 text-amber-600" />
+            <Wallet className="w-4 h-4 text-slate-500" />
           </div>
         </div>
 
@@ -1388,78 +1377,44 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-2 border-b border-slate-200 pt-3 pb-2 shrink-0 overflow-x-auto text-xs">
-              <button
-                onClick={() => setActiveTab('PROCEDURES')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeTab === 'PROCEDURES'
-                    ? 'bg-emerald-800 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Layers className="w-4 h-4" />
-                <span>سجل الإجراءات والمهام والتنفيذ ({liveSelectedClient.procedures?.length || 0})</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('PORTALS')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeTab === 'PORTALS'
-                    ? 'bg-blue-800 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Globe2 className="w-4 h-4" />
-                <span>بوابات المنظومات والربط الإلكتروني (الفاتورة / ساب / كسب عمل / نافذة)</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('TREASURY')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeTab === 'TREASURY'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Wallet className="w-4 h-4" />
-                <span>كشف حساب الخزنة والأتعاب والرسوم ({clientSummary?.transactions.length || 0})</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('DETAILS')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeTab === 'DETAILS'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Building className="w-4 h-4" />
-                <span>بيانات الشركة والملف الضريبي</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('DOCUMENTS')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeTab === 'DOCUMENTS'
-                    ? 'bg-indigo-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Paperclip className="w-4 h-4" />
-                <span>المستندات والأرشيف الإلكتروني ({liveSelectedClient.documents?.length || 0})</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('COMMUNICATION_LOG')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeTab === 'COMMUNICATION_LOG'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>سجل التواصل والرقابة المهنية (واتساب)</span>
-              </button>
+            <div className="pt-2 pb-2 shrink-0 border-b border-slate-200">
+              <ResponsiveSubTabBar
+                activeTab={activeTab}
+                onTabChange={(tabId) => setActiveTab(tabId as any)}
+                maxVisibleTabs={5}
+                tabs={[
+                  {
+                    id: 'PROCEDURES',
+                    label: `سجل الإجراءات والمهام (${liveSelectedClient.procedures?.length || 0})`,
+                    icon: <Layers className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'PORTALS',
+                    label: 'بوابات المنظومات والربط الإلكتروني',
+                    icon: <Globe2 className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'TREASURY',
+                    label: `كشف حساب الخزنة والأتعاب (${clientSummary?.transactions.length || 0})`,
+                    icon: <Wallet className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'DETAILS',
+                    label: 'بيانات الشركة والملف الضريبي',
+                    icon: <Building className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'DOCUMENTS',
+                    label: `المستندات والأرشيف الإلكتروني (${liveSelectedClient.documents?.length || 0})`,
+                    icon: <Paperclip className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'COMMUNICATION_LOG',
+                    label: 'سجل التواصل والرقابة المهنية (واتساب)',
+                    icon: <MessageSquare className="w-4 h-4" />,
+                  },
+                ]}
+              />
             </div>
 
             {/* Modal Body */}
@@ -1825,7 +1780,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       const compositeKey = liveSelectedClient ? `${liveSelectedClient.id}_${portal.key}` : portal.key;
                       const revealedPassword = revealedPasswordsMap[compositeKey] || cred?.password || '';
                       const hasUsername = Boolean(cred?.username);
-                      const hasPassword = Boolean(cred?.hasPassword || cred?.password || revealedPassword);
+                      const hasPassword = Boolean((cred as any)?.hasPassword || cred?.password || revealedPassword);
                       const isRevealed = showPasswordMap[portal.key] || false;
                       const isLoading = loadingRevealKey === compositeKey;
 
@@ -1959,7 +1914,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                           {/* Footer Actions */}
                           <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                             <a
-                              href={cred?.portalUrl || portal.defaultUrl}
+                              href={(cred as any)?.portalUrl || portal.defaultUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all"
@@ -2040,7 +1995,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                         onClick={() => {
                           PrintLayout.printElement('client-account-statement-table', {
                             title: `كشف حساب تفصيلي - ${liveSelectedClient.name}`,
-                            subtitle: `سجل حركات وسندات الخزنة والأتعاب والرسوم | كود العميل: ${liveSelectedClient.code || ''}`,
+                            subtitle: `سجل حركات وسندات الخزنة والأتعاب والرسوم | كود العميل: ${liveSelectedClient.clientCode || ''}`,
                             clientName: liveSelectedClient.name,
                             date: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
                             orientation: 'portrait',

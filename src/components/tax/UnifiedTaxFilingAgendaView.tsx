@@ -2175,7 +2175,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
                                   netVatPayable: Number(drawer.netTaxPayable) || 0,
                                   status: drawer.isSubmitted ? 'SUBMITTED_TO_ETA' : (status.latestDecl?.status || 'DRAFT'),
                                   etaReferenceNumber: drawer.etaRef || status.latestDecl?.etaReferenceNumber || '',
-                                  paymentReceiptNumber: drawer.receiptNo || status.latestDecl?.paymentReceiptNumber || '',
+                                  receiptNumber: drawer.receiptNo || status.latestDecl?.receiptNumber || '',
                                   submissionDate: drawer.isSubmitted
                                     ? (status.latestDecl?.submissionDate || new Date().toISOString().slice(0, 10))
                                     : (status.latestDecl?.submissionDate || new Date().toISOString().slice(0, 10)),

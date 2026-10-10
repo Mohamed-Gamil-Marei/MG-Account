@@ -333,7 +333,7 @@ export const MultiTenantWorkspacesModal: React.FC<MultiTenantWorkspacesModalProp
                           <div>
                             <span className="text-[10px] text-slate-400 block font-sans">السنة المالية:</span>
                             <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                              {client.fiscalYear || '2026'}
+                              {(client as any).fiscalYear || state.activeClientContext?.selectedFiscalYear || 2026}
                             </span>
                           </div>
                         </div>

@@ -589,7 +589,7 @@ export const ResponsiveSubTabBar: React.FC<ResponsiveSubTabBarProps> = ({
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/60'
               }`}
             >
-              <span>المزيد</span>
+              <span className="truncate">{isOverflowActive ? activeItem.label : 'المزيد'}</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMoreOpen ? 'rotate-180' : ''}`} />
             </button>
 

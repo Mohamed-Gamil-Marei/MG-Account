@@ -77,7 +77,7 @@ export const AuditSamplingTool: React.FC<AuditSamplingToolProps> = ({ state, sel
       case 'CLIENTS':
         return state.clients.map((cl) => ({
           id: cl.id,
-          refNumber: cl.taxNumber || 'غير محدد',
+          refNumber: cl.taxCardNo || 'غير محدد',
           date: cl.createdAt?.substring(0, 10) || '2026-01-01',
           description: cl.name,
           amount: cl.capital || 100000,

@@ -6,6 +6,7 @@ interface SlideOverDrawerProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  icon?: React.ComponentType<{ className?: string }>;
   badge?: string;
   badgeVariant?: 'blue' | 'emerald' | 'amber' | 'purple' | 'slate' | 'rose';
   width?: string;

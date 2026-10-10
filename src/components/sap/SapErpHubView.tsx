@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { DatabaseState, db } from '../../db/localDatabase';
+import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 import { SapApiConfig, Account, JournalEntry } from '../../types';
 import { SapConnectorService, SapConnectionTestResult, SapSyncResult } from '../../services/SapConnectorService';
 import { PrintService } from '../../services/PrintService';
@@ -197,31 +198,19 @@ export const SapErpHubView: React.FC<SapErpHubViewProps> = ({
       </div>
 
       {/* 2. SUB-NAVIGATION TABS */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto text-xs font-bold">
-        {[
-          { id: 'DASHBOARD', label: 'لوحة التحكم والربط (Cockpit)', icon: Layers },
-          { id: 'CONNECTIONS', label: 'إعدادات وخادم SAP (Endpoint & Auth)', icon: Sliders },
-          { id: 'GL_SYNC', label: 'مزامنة الأستاذ العام (GL & Balances)', icon: RefreshCw },
-          { id: 'BAPI_EXPORT', label: 'تصدير BAPI و IDoc القياسي', icon: Download },
-          { id: 'COST_CENTERS', label: 'مراكز التكلفة والأرباح (Cost Centers)', icon: Building2 },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
-                isActive
-                  ? 'bg-blue-700 text-white shadow-sm font-black'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-blue-500'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-2">
+        <ResponsiveSubTabBar
+          activeTab={activeTab}
+          onTabChange={(tabId) => setActiveTab(tabId as any)}
+          maxVisibleTabs={5}
+          tabs={[
+            { id: 'DASHBOARD', label: 'لوحة التحكم والربط (Cockpit)', icon: <Layers className="w-4 h-4 text-blue-500" /> },
+            { id: 'CONNECTIONS', label: 'إعدادات وخادم SAP (Endpoint)', icon: <Sliders className="w-4 h-4 text-blue-500" /> },
+            { id: 'GL_SYNC', label: 'مزامنة الأستاذ العام (GL)', icon: <RefreshCw className="w-4 h-4 text-blue-500" /> },
+            { id: 'BAPI_EXPORT', label: 'تصدير BAPI و IDoc القياسي', icon: <Download className="w-4 h-4 text-blue-500" /> },
+            { id: 'COST_CENTERS', label: 'مراكز التكلفة والأرباح', icon: <Building2 className="w-4 h-4 text-blue-500" /> },
+          ]}
+        />
       </div>
 
       {/* 3. TAB CONTENTS */}

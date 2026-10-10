@@ -1,92 +1,75 @@
-// ==========================================
-// مَهام وتنسيقات النظام المحاسبي (CPA & Egyptian Accounting Theme)
-// ==========================================
+// src/theme.ts
+// Single minimalist theme configuration for the application
 
 export const theme = {
-  font: 'Cairo, "IBM Plex Sans Arabic", sans-serif',
+  // Base Layout & Colors
+  bg: {
+    app: 'bg-slate-50 text-slate-900',
+    card: 'bg-white',
+    hover: 'hover:bg-slate-50',
+    subtle: 'bg-slate-100',
+  },
+  
+  // Borders & Shadows
+  border: {
+    default: 'border border-slate-200',
+    subtle: 'border border-slate-100',
+    focus: 'focus:border-slate-400 focus:ring-1 focus:ring-slate-400',
+  },
+  
+  shadow: {
+    card: 'shadow-sm',
+    subtle: 'shadow-sm',
+    none: 'shadow-none',
+  },
+
+  // Colors
   colors: {
     primary: {
-      DEFAULT: '#0284c7', // Sky Blue / Professional Blue
-      dark: '#0369a1',
-      light: '#e0f2fe',
-      gradient: 'from-sky-600 to-blue-800',
+      text: 'text-slate-900',
+      bg: 'bg-slate-900 text-white',
+      hover: 'hover:bg-slate-800',
+      border: 'border-slate-900',
+      lightBg: 'bg-slate-100 text-slate-800',
     },
-    secondary: {
-      DEFAULT: '#0f172a', // Slate Dark
-      light: '#334155',
+    error: {
+      text: 'text-red-600',
+      bg: 'bg-red-50 text-red-700',
+      border: 'border-red-200',
+      badge: 'bg-red-50 text-red-700 border border-red-200',
+    },
+    success: {
+      text: 'text-emerald-600',
+      bg: 'bg-emerald-50 text-emerald-700',
+      border: 'border-emerald-200',
+      badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
     },
     neutral: {
-      bg: '#f8fafc',
-      cardBg: '#ffffff',
-      border: '#e2e8f0',
-      textPrimary: '#0f172a',
-      textSecondary: '#64748b',
-    },
-    status: {
-      success: { bg: '#dcfce7', text: '#166534', border: '#bbf7d0', hex: '#22c55e' },
-      warning: { bg: '#fef9c3', text: '#854d0e', border: '#fef08a', hex: '#eab308' },
-      error: { bg: '#fee2e2', text: '#991b1b', border: '#fecaca', hex: '#ef4444' },
-      info: { bg: '#e0f2fe', text: '#0369a1', border: '#bae6fd', hex: '#0284c7' },
-      pending: { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0', hex: '#64748b' }
+      text: 'text-slate-600',
+      muted: 'text-slate-500',
+      light: 'text-slate-400',
     }
   },
-  spacing: {
-    containerPadding: 'p-4 sm:p-6 lg:p-8',
-    cardPadding: 'p-5 sm:p-6',
-    sectionGap: 'space-y-6',
-    elementGap: 'gap-3 sm:gap-4',
+
+  // Stat Row & Cards: single compact row of simple numbers
+  statCard: 'bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col justify-between',
+  statRow: 'grid grid-cols-2 md:grid-cols-4 gap-3 mb-6',
+  
+  // Table Styling
+  table: {
+    wrapper: 'w-full overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm',
+    table: 'w-full text-right text-sm border-collapse',
+    thead: 'bg-slate-50 border-b border-slate-200 text-slate-700 font-medium text-xs',
+    th: 'py-2.5 px-3 text-right font-medium text-slate-700',
+    tr: 'border-b border-slate-100 hover:bg-slate-50/80 transition-colors',
+    td: 'py-2.5 px-3 text-slate-800 align-middle',
+    tdNum: 'py-2.5 px-3 text-slate-800 font-mono text-left align-middle', // fixed-width font for numbers
   },
-  borderRadius: {
-    card: 'rounded-2xl',
-    button: 'rounded-xl',
-    input: 'rounded-xl',
-    badge: 'rounded-lg',
-  },
-  shadows: {
-    card: 'shadow-sm hover:shadow-md transition-shadow duration-200',
-    modal: 'shadow-2xl',
-    dropdown: 'shadow-xl',
+
+  // Buttons
+  button: {
+    primary: 'px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm rounded-md transition-colors shadow-sm disabled:opacity-50 inline-flex items-center justify-center gap-1.5',
+    secondary: 'px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-sm rounded-md transition-colors shadow-sm disabled:opacity-50 inline-flex items-center justify-center gap-1.5',
+    danger: 'px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-medium text-sm rounded-md transition-colors shadow-sm disabled:opacity-50 inline-flex items-center justify-center gap-1.5',
   }
 };
-
-// ==========================================
-// تنسيق الأرقام المصرية والعملات والتاريخ
-// ==========================================
-
-/**
- * تنسيق الأرقام بصيغة مصرية مع فواصل الآلاف
- */
-export function formatEgyptianNumber(value: number | string | undefined | null, decimals = 2): string {
-  if (value === undefined || value === null || isNaN(Number(value))) {
-    return '0.00';
-  }
-  const num = Number(value);
-  return num.toLocaleString('ar-EG', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
-
-/**
- * تنسيق العملة (جنيه مصري)
- */
-export function formatEgyptianCurrency(value: number | string | undefined | null, decimals = 2): string {
-  return `${formatEgyptianNumber(value, decimals)} جنيه`;
-}
-
-/**
- * تنسيق التاريخ (يوم/شهر/سنة)
- */
-export function formatEgyptianDate(dateInput?: string | Date | number | null): string {
-  if (!dateInput) return '-';
-  try {
-    const d = new Date(dateInput);
-    if (isNaN(d.getTime())) return String(dateInput);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
-  } catch {
-    return String(dateInput);
-  }
-}

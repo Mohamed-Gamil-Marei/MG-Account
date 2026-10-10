@@ -36,6 +36,8 @@ import { AppLanguage, BrandColor, ThemeMode, UserPreferences, CustomFirebaseConf
 import { getTranslation } from '../utils/i18n';
 import defaultFirebaseConfig from '../../firebase-applet-config.json';
 import { CloudSync } from '../services/cloudSyncService';
+import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
+import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
 import { PrintExportSettingsPanel } from './common/PrintExportSettingsPanel';
 import { PrintExportSettingsUnit } from './common/PrintExportSettingsUnit';
 
@@ -238,71 +240,19 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
         </div>
 
         {/* Tab Selection Bar */}
-        <div className="px-6 pt-3 pb-2 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 text-xs overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setActiveSettingsTab('PREFERENCES')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-              activeSettingsTab === 'PREFERENCES'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>{currentLang === 'ar' ? 'المظهر واللغة والأمان' : 'Theme & Security'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSettingsTab('AUDITOR_PROFILE')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-              activeSettingsTab === 'AUDITOR_PROFILE'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>{currentLang === 'ar' ? 'بيانات واعتماد مراقب الحسابات' : 'Auditor Profile'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSettingsTab('TAX_SETTINGS')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-              activeSettingsTab === 'TAX_SETTINGS'
-                ? 'bg-teal-700 text-white shadow-xs'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            <span>{currentLang === 'ar' ? 'الضرائب ونسب القيمة المضافة' : 'Taxes & VAT Rates'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSettingsTab('FIREBASE_CLOUD')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-              activeSettingsTab === 'FIREBASE_CLOUD'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            <Cloud className="w-3.5 h-3.5" />
-            <span>{currentLang === 'ar' ? 'الربط السحابي Firebase' : 'Firebase Cloud Sync'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSettingsTab('PRINT_EXPORT')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-              activeSettingsTab === 'PRINT_EXPORT'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>{currentLang === 'ar' ? 'أساليب الطباعة والـ QR' : 'Print & QR Settings'}</span>
-          </button>
+        <div className="px-6 pt-3 pb-2 border-b border-slate-200 dark:border-slate-800">
+          <ResponsiveSubTabBar
+            activeTab={activeSettingsTab}
+            onTabChange={(id) => setActiveSettingsTab(id as any)}
+            maxVisibleTabs={5}
+            tabs={[
+              { id: 'PREFERENCES', label: currentLang === 'ar' ? 'المظهر واللغة والأمان' : 'Theme & Security', icon: <Sliders className="w-3.5 h-3.5" /> },
+              { id: 'AUDITOR_PROFILE', label: currentLang === 'ar' ? 'بيانات واعتماد مراقب الحسابات' : 'Auditor Profile', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+              { id: 'TAX_SETTINGS', label: currentLang === 'ar' ? 'الضرائب ونسب القيمة المضافة' : 'Taxes & VAT Rates', icon: <Receipt className="w-3.5 h-3.5" /> },
+              { id: 'FIREBASE_CLOUD', label: currentLang === 'ar' ? 'الربط السحابي Firebase' : 'Firebase Cloud Sync', icon: <Cloud className="w-3.5 h-3.5" /> },
+              { id: 'PRINT_EXPORT', label: currentLang === 'ar' ? 'أساليب الطباعة والـ QR' : 'Print & QR Settings', icon: <Printer className="w-3.5 h-3.5" /> },
+            ]}
+          />
         </div>
 
         {/* Modal Body */}

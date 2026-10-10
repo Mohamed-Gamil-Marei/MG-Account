@@ -117,7 +117,7 @@ export const WhatsAppDocumentShareModal: React.FC<WhatsAppDocumentShareModalProp
   const [isSendingApi, setIsSendingApi] = useState(false);
   const [apiResult, setApiResult] = useState<{ success: boolean; message: string; messageId?: string } | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [gatewayStatus, setGatewayStatus] = useState<'DISCONNECTED' | 'SCAN_QR' | 'CONNECTED'>('DISCONNECTED');
+  const [gatewayStatus, setGatewayStatus] = useState<'DISCONNECTED' | 'SCAN_QR' | 'CONNECTED' | 'SCAN_QR_CODE' | 'CONNECTING'>('DISCONNECTED');
 
   useEffect(() => {
     // Check initial gateway status
@@ -214,9 +214,9 @@ export const WhatsAppDocumentShareModal: React.FC<WhatsAppDocumentShareModalProp
 
     // Filter journal entries for this client and date range
     const clientEntries = (state.journalEntries || []).filter((entry) => {
-      const matchClient = entry.clientId === activeClient.id || entry.lines?.some((l) => l.clientId === activeClient.id);
+      const matchClient = entry.clientId === activeClient.id || entry.lines?.some((l: any) => l.clientId === activeClient.id);
       if (!matchClient) return false;
-      if (entry.status && entry.status !== 'POSTED') return false;
+      if (entry.isPosted === false) return false;
       return true;
     });
 

@@ -766,7 +766,9 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
                   <td className="p-2.5 text-center text-slate-400 font-mono">إيضاح (10)</td>
                   <td className="p-2.5 text-left font-mono font-black text-indigo-900 dark:text-indigo-300">
                     <div className="flex items-center justify-end gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-indigo-400 no-print" title="بند محمي ومربوط آلياً بصافي الربح بعد الضريبة" />
+                      <span title="بند محمي ومربوط آلياً بصافي الربح بعد الضريبة">
+                        <Lock className="w-3.5 h-3.5 text-indigo-400 no-print" />
+                      </span>
                       <span>{formatEgyptianCurrency(cd.retainedEarningsAndProfit || 0, true)}</span>
                     </div>
                   </td>

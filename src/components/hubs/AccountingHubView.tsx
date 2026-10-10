@@ -81,14 +81,14 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       label: 'قيود اليومية',
       icon: Receipt,
       badge: unpostedEntriesCount > 0 ? `${unpostedEntriesCount} غير مرحل` : `${state.journalEntries.length}`,
-      badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+      badgeColor: unpostedEntriesCount > 0 ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-700 border border-slate-200',
     },
     {
       id: 'CHART_OF_ACCOUNTS',
       label: 'دليل الحسابات',
       icon: FolderTree,
       badge: state.accounts.length,
-      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+      badgeColor: 'bg-slate-100 text-slate-700 border border-slate-200',
     },
     {
       id: 'GENERAL_LEDGER',
@@ -100,35 +100,35 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       label: 'ميزان المراجعة',
       icon: Scale,
       badge: 'فحص الاتزان',
-      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+      badgeColor: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
     },
     {
       id: 'FILE_REVIEW',
       label: 'مراجعة ملف (File Review)',
       icon: Sparkles,
       badge: 'وضع المراجعة',
-      badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800 font-bold',
+      badgeColor: 'bg-slate-100 text-slate-800 border border-slate-200 font-bold',
     },
     {
       id: 'FINANCIAL_STATEMENTS',
       label: 'القوائم المالية والملف المعتمد',
       icon: FileSpreadsheet,
       badge: 'EAS 1 معتمد',
-      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 font-bold',
+      badgeColor: 'bg-slate-100 text-slate-800 border border-slate-200 font-bold',
     },
     {
       id: 'OCR_INVOICE_SCANNER',
       label: 'مسح الفواتير (OCR)',
       icon: Sparkles,
       badge: 'قيد فوري',
-      badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+      badgeColor: 'bg-slate-100 text-slate-800 border border-slate-200',
     },
     {
       id: 'FIXED_ASSETS',
       label: 'الأصول والإهلاك',
       icon: Building,
       badge: fixedAssetsCount > 0 ? `${fixedAssetsCount}` : undefined,
-      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+      badgeColor: 'bg-slate-100 text-slate-700 border border-slate-200',
     },
     {
       id: 'BANK_RECONCILIATION',
@@ -140,7 +140,7 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       label: 'أسعار الصرف (EAS 13)',
       icon: DollarSign,
       badge: 'متعدد العملات',
-      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+      badgeColor: 'bg-slate-100 text-slate-800 border border-slate-200',
     },
   ];
 
@@ -150,11 +150,11 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       <ClientSelector state={state} />
 
       {/* Clear Direct Navigation Buttons Deck (بدون أي شريط جر أو سحب جانبي - أزرار واضحة مباشرة) */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-            <span className="text-xs font-black text-slate-900 dark:text-white">
+            <span className="w-2 h-2 rounded-full bg-slate-900"></span>
+            <span className="text-xs font-bold text-slate-900">
               نظام الحسابات والقوائم المالية المعتمدة:
             </span>
             <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
@@ -167,9 +167,9 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
               type="button"
               onClick={() => setIsWorkspacesModalOpen(true)}
               title="إدارة بيئات عمل الشركات والمصانع المتعددة (Multi-Tenant Hub)"
-              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[11px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <Factory className="w-3.5 h-3.5 text-amber-600" />
+              <Factory className="w-3.5 h-3.5 text-slate-700" />
               <span>بيئات الكيانات</span>
             </button>
 
@@ -177,9 +177,9 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
               type="button"
               onClick={() => setIsCostModalOpen(true)}
               title="محاسبة التكاليف ومراكز التكلفة الصناعية FOH"
-              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[11px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <Layers className="w-3.5 h-3.5 text-slate-700" />
               <span>تكاليف FOH</span>
             </button>
 
@@ -187,16 +187,16 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
               type="button"
               onClick={() => setIsDeprecModalOpen(true)}
               title="الإهلاك الصناعي المعجل 30% - المادة 27 قانون 91/2005"
-              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[11px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <Percent className="w-3.5 h-3.5 text-amber-600" />
+              <Percent className="w-3.5 h-3.5 text-slate-700" />
               <span>إهلاك 30%</span>
             </button>
 
             <span className="text-[11px] text-slate-500 font-mono mr-1">
-              مرحل: <strong className="text-emerald-600">{postedEntriesCount}</strong>
+              مرحل: <strong className="text-emerald-700">{postedEntriesCount}</strong>
               {unpostedEntriesCount > 0 && (
-                <> | غير مرحل: <strong className="text-amber-600">{unpostedEntriesCount}</strong></>
+                <> | غير مرحل: <strong className="text-red-600">{unpostedEntriesCount}</strong></>
               )}
             </span>
           </div>

@@ -247,7 +247,7 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
                 <option value="ALL">-- جميع الشركات والجهات الفرعية --</option>
                 {state.clients.map((cli) => (
                   <option key={cli.id} value={cli.id}>
-                    {cli.name} {cli.taxNumber ? `(ضريبة: ${cli.taxNumber})` : ''}
+                    {cli.name} {cli.taxCardNo ? `(ضريبة: ${cli.taxCardNo})` : ''}
                   </option>
                 ))}
               </select>

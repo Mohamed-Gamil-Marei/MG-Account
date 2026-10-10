@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   FileCheck2,
   TrendingUp,
   Wallet,
@@ -55,6 +56,7 @@ import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { CompanyHeaderSelector } from './common/CompanyHeaderSelector';
 import { ActionButton } from './common/ActionButton';
 import { ActionMenu } from './common/ActionMenu';
+import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
 import { BalanceSheetTable } from './financial/BalanceSheetTable';
 import { PrintYearsSelectorModal, PrintYearsConfig } from './financial/PrintYearsSelectorModal';
 import { PrintService } from '../services/PrintService';
@@ -875,8 +877,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         },
         summary: {
           totalAssets: computedBalance.totalAssets,
-          totalLiabilities: computedBalance.totalLiabilities,
-          totalEquity: computedBalance.totalEquity,
+          totalLiabilities: (computedBalance as any).totalLiabilities || (computedBalance as any).liabilities?.totalLiabilities || 0,
+          totalEquity: (computedBalance as any).totalEquity || (computedBalance as any).equity?.totalEquity || 0,
           netProfit: computedIncome.netProfitAfterTax,
           revenues: computedIncome.revenues,
           currency: reportingCurrency,
@@ -1139,9 +1141,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         <div className="space-y-3.5">
           {/* Critical Unbalanced Equation Alert Banner */}
           {!computedBalance.isBalanced && (
-            <div className="p-4 bg-rose-50 dark:bg-rose-950/70 border-2 border-rose-500 rounded-2xl shadow-sm flex items-start gap-3 text-rose-950 dark:text-rose-100 animate-in fade-in duration-200 no-print print:hidden">
-              <div className="p-2 bg-rose-600 text-white rounded-xl shrink-0 mt-0.5">
-                <AlertTriangle className="w-5 h-5 animate-pulse" />
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl shadow-sm flex items-start gap-3 text-red-950 no-print print:hidden">
+              <div className="p-2 bg-red-600 text-white rounded-lg shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="flex-1 space-y-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1398,87 +1400,31 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </div>
           </div>
 
-      {/* Tabs Selector (hidden when embedded inside Unified Master Workspace to prevent duplicate tabs) */}
+      {/* Tabs Selector */}
       {!hideStatementTabs && (
-        <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 gap-1 overflow-x-auto text-xs font-bold no-print print:hidden">
-          <button
-            onClick={() => setStatementTab('BALANCE_SHEET')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              statementTab === 'BALANCE_SHEET'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Scale className="w-3.5 h-3.5" />
-            <span>1. المركز المالي (Balance Sheet)</span>
-          </button>
-
-          <button
-            onClick={() => setStatementTab('INCOME')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              statementTab === 'INCOME'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>2. الدخل الشامل (Income Statement)</span>
-          </button>
-
-          <button
-            onClick={() => setStatementTab('CASH_FLOW')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              statementTab === 'CASH_FLOW'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Wallet className="w-3.5 h-3.5" />
-            <span>3. التدفقات النقدية (Cash Flows)</span>
-          </button>
-
-          <button
-            onClick={() => setStatementTab('NOTES')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              statementTab === 'NOTES'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <FileCheck2 className="w-3.5 h-3.5" />
-            <span>4. الإيضاحات والسياسات المحاسبية</span>
-          </button>
-
-          <button
-            onClick={() => setStatementTab('SMART_CPA_MODEL')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              statementTab === 'SMART_CPA_MODEL'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
-            }`}
-            title="قالب ونموذج شيت الإكسيل للمراجعة السريعة مع الاتزان وتوزيع المصروفات"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>⚡ نموذج المحاسب القانوني (Excel CPA)</span>
-          </button>
-
-          <button
-            onClick={() => setStatementTab('ACTIVITY_LOG')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              statementTab === 'ACTIVITY_LOG'
-                ? 'bg-indigo-700 text-white shadow-xs'
-                : 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800'
-            }`}
-            title="سجل النشاط المالي ورقابة التعديلات وتتبع ميزان المراجعة"
-          >
-            <History className="w-3.5 h-3.5 text-indigo-400" />
-            <span>5. سجل النشاط المالي</span>
-            {activityLogsCount > 0 && (
-              <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-mono">
-                {activityLogsCount}
-              </span>
-            )}
-          </button>
+        <div className="no-print print:hidden mb-3">
+          <ResponsiveSubTabBar
+            activeTab={statementTab}
+            onTabChange={(tabId) => setStatementTab(tabId as any)}
+            maxVisibleTabs={5}
+            tabs={[
+              { id: 'BALANCE_SHEET', label: '1. المركز المالي (Balance Sheet)', icon: <Scale className="w-3 h-3" /> },
+              { id: 'INCOME', label: '2. الدخل الشامل (Income Statement)', icon: <TrendingUp className="w-3 h-3" /> },
+              { id: 'CASH_FLOW', label: '3. التدفقات النقدية (Cash Flows)', icon: <Wallet className="w-3 h-3" /> },
+              { id: 'NOTES', label: '4. الإيضاحات والسياسات المحاسبية', icon: <FileCheck2 className="w-3 h-3" /> },
+              { id: 'SMART_CPA_MODEL', label: '⚡ نموذج المحاسب القانوني (Excel CPA)', icon: <Sparkles className="w-3 h-3 text-amber-400" /> },
+              {
+                id: 'ACTIVITY_LOG',
+                label: '5. سجل النشاط المالي',
+                icon: <History className="w-3 h-3 text-indigo-400" />,
+                badge: activityLogsCount > 0 ? (
+                  <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-mono">
+                    {activityLogsCount}
+                  </span>
+                ) : undefined,
+              },
+            ]}
+          />
         </div>
       )}
 
@@ -1548,7 +1494,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         {/* 0. SMART CPA EXCEL MODEL */}
         {statementTab === 'SMART_CPA_MODEL' && (
           <div className="pt-2">
-            <SmartCpaTemplateView companyName={activeClient?.name || state.systemSettings?.companyName} />
+            <SmartCpaTemplateView companyName={activeClient?.name || state.officeProfile?.firmName || 'شركة معتمدة'} />
           </div>
         )}
 

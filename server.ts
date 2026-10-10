@@ -669,10 +669,25 @@ async function startServer() {
   });
 
   // --- AES-256-GCM Credentials Encryption Setup ---
-  const CREDENTIALS_KEY_SECRET = process.env.CREDENTIALS_KEY || "egyptian_accounting_system_credentials_secret_key_2026_gcm";
-  const CREDENTIALS_KEY_BUFFER = crypto.createHash("sha256").update(CREDENTIALS_KEY_SECRET).digest();
+  const rawCredentialsKey = process.env.CREDENTIALS_KEY;
+  const isCredentialsKeyValid = Boolean(rawCredentialsKey && rawCredentialsKey.length >= 32);
+
+  if (!isCredentialsKeyValid) {
+    console.error("==========================================================================================");
+    console.error("FATAL SECURITY ERROR: CREDENTIALS_KEY environment variable is missing or shorter than 32 characters!");
+    console.error("Saving and encrypting client portal credentials (sapPortal / etaGeneralTax) is DISABLED.");
+    console.error("Please set a valid CREDENTIALS_KEY of at least 32 characters in process.env.");
+    console.error("==========================================================================================");
+  }
+
+  const CREDENTIALS_KEY_BUFFER = isCredentialsKeyValid
+    ? crypto.createHash("sha256").update(rawCredentialsKey!).digest()
+    : null;
 
   function encryptCredentials(data: any): string {
+    if (!isCredentialsKeyValid || !CREDENTIALS_KEY_BUFFER) {
+      throw new Error("خطأ حرج: متغير البيئة CREDENTIALS_KEY غير معرف أو طوله أقل من 32 حرفاً. تم تعطيل تشفير وحفظ بيانات البوابات.");
+    }
     if (data === undefined || data === null) return "";
     const jsonStr = typeof data === "string" ? data : JSON.stringify(data);
     const iv = crypto.randomBytes(12);
@@ -684,6 +699,10 @@ async function startServer() {
   }
 
   function decryptCredentials(encryptedStr: string): any {
+    if (!isCredentialsKeyValid || !CREDENTIALS_KEY_BUFFER) {
+      console.warn("Cannot decrypt credentials: CREDENTIALS_KEY environment variable is missing or invalid.");
+      return null;
+    }
     if (!encryptedStr || typeof encryptedStr !== "string" || !encryptedStr.includes(":")) return null;
     const parts = encryptedStr.split(":");
     if (parts.length !== 3) return null;

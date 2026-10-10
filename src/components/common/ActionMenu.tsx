@@ -24,6 +24,7 @@ export type ActionMenuPreset =
   | 'print'
   | 'export'
   | 'export_excel'
+  | 'import_excel'
   | 'export_pdf'
   | 'edit'
   | 'delete'
@@ -31,6 +32,7 @@ export type ActionMenuPreset =
   | 'send'
   | 'copy'
   | 'add'
+  | 'create'
   | 'refresh'
   | 'share'
   | 'settings';
@@ -41,14 +43,17 @@ export interface ActionMenuItem {
   icon?: LucideIcon | React.ComponentType<{ className?: string }>;
   preset?: ActionMenuPreset;
   onClick: () => void;
-  variant?: 'default' | 'danger' | 'warning' | 'primary' | 'success' | 'indigo' | 'amber';
+  variant?: 'default' | 'danger' | 'warning' | 'primary' | 'success' | 'indigo' | 'amber' | 'secondary';
   disabled?: boolean;
   isDivider?: boolean;
   badge?: string;
   description?: string;
 }
 
-interface ActionMenuProps {
+export interface ActionMenuProps {
+  id?: string;
+  label?: string;
+  triggerVariant?: string;
   items: ActionMenuItem[];
   title?: string;
   triggerType?: 'three_dots_vertical' | 'three_dots_horizontal' | 'button_with_dots' | 'button_text';
@@ -61,6 +66,9 @@ interface ActionMenuProps {
 }
 
 export const ActionMenu: React.FC<ActionMenuProps> = ({
+  id,
+  label,
+  triggerVariant,
   items,
   title = 'إجراءات',
   triggerType = 'three_dots_vertical',
@@ -71,6 +79,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
   className = '',
   menuWidth = 'w-48',
 }) => {
+  const displayLabel = buttonLabel || label;
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

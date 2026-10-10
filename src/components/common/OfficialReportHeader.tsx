@@ -25,8 +25,12 @@ export interface OfficialReportHeaderProps {
     activity?: string;
   } | null;
   documentTitle?: string;
+  title?: string; // alias for documentTitle
   reportTitle?: string; // alias for backwards compatibility
   documentSubtitle?: string;
+  subtitle?: string; // alias for documentSubtitle
+  referenceNumber?: string;
+  date?: string;
   fiscalYear?: number | string;
   periodStartDate?: string;
   periodEndDate?: string;
@@ -43,8 +47,11 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
   officeProfile: propOfficeProfile,
   clientProfile: propClientProfile,
   documentTitle: propDocumentTitle,
+  title,
   reportTitle,
-  documentSubtitle,
+  documentSubtitle: propDocumentSubtitle,
+  subtitle,
+  referenceNumber,
   fiscalYear,
   periodStartDate,
   periodEndDate,
@@ -68,7 +75,9 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
   const firmName = office?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
   const auditorName = office?.auditorName || 'محمد جميل مرعي';
   const licenseNumber = office?.licenseNumber || 'س.م.م 43122';
-  const title = office?.title || 'محاسب قانوني وخبير ضرائب ومراقب حسابات';
+  const officeTitle = office?.title || 'محاسب قانوني وخبير ضرائب ومراقب حسابات';
+  const finalDocTitle = propDocumentTitle || title || reportTitle || 'تقرير مالي محاسبي معتمد';
+  const finalDocSubtitle = propDocumentSubtitle || subtitle;
   const phone = office?.phone || office?.mobile || '';
   const email = office?.email || '';
   const logoUrl = office?.logoUrl;
@@ -245,9 +254,9 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
         </div>
       )}
 
-      {documentSubtitle && (
+      {finalDocSubtitle && (
         <div className="text-center text-[10.5px] text-slate-500 mt-1.5 italic">
-          {documentSubtitle}
+          {finalDocSubtitle}
         </div>
       )}
     </div>

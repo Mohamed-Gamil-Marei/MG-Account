@@ -72,8 +72,8 @@ export const WhatsAppCodeSenderModal: React.FC<WhatsAppCodeSenderModalProps> = (
       setSelectedClientId(initialClient.id);
       setPhoneNumber(initialClient.phone || '');
       setContactPerson(initialClient.contactPerson || '');
-    } else if (state.activeClientContext?.activeClientId) {
-      const active = clients.find((c) => c.id === state.activeClientContext.activeClientId);
+    } else if (state.activeClientContext?.clientId) {
+      const active = clients.find((c) => c.id === state.activeClientContext.clientId);
       if (active) {
         setSelectedClientId(active.id);
         setPhoneNumber(active.phone || '');
@@ -98,7 +98,7 @@ export const WhatsAppCodeSenderModal: React.FC<WhatsAppCodeSenderModalProps> = (
       setPhoneNumber(found.phone || '');
       setContactPerson(found.contactPerson || '');
       if (codeType === 'CLIENT_CODE') {
-        setCodeValue(found.code || `CL-${found.id.slice(0, 5)}`);
+        setCodeValue(found.clientCode || `CL-${found.id.slice(0, 5)}`);
       }
     }
   };
@@ -130,7 +130,7 @@ export const WhatsAppCodeSenderModal: React.FC<WhatsAppCodeSenderModalProps> = (
       setCodeValue(generateTransactionCode());
     } else if (codeType === 'CLIENT_CODE') {
       const active = clients.find((c) => c.id === selectedClientId);
-      setCodeValue(active?.code || `CL-2026-${Math.floor(100 + Math.random() * 900)}`);
+      setCodeValue(active?.clientCode || `CL-2026-${Math.floor(100 + Math.random() * 900)}`);
     }
   }, [codeType, selectedClientId]);
 
@@ -394,7 +394,7 @@ ${targetEntity ? `🏛️ *الجهة الموجه إليها:* ${targetEntity}\
                   <option value="">-- اختر العميل --</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} {c.code ? `(${c.code})` : ''}
+                      {c.name} {c.clientCode ? `(${c.clientCode})` : ''}
                     </option>
                   ))}
                 </select>
@@ -490,7 +490,7 @@ ${targetEntity ? `🏛️ *الجهة الموجه إليها:* ${targetEntity}\
                 id="type-client-code-btn"
                 onClick={() => {
                   setCodeType('CLIENT_CODE');
-                  setCodeValue(activeClient?.code || `CL-2026-001`);
+                  setCodeValue(activeClient?.clientCode || `CL-2026-001`);
                   setPurposeTitle('كود ملف الشركة بالأرشيف المحاسبي');
                   setValidity('كود مرجعي دائم');
                 }}
@@ -587,10 +587,10 @@ ${targetEntity ? `🏛️ *الجهة الموجه إليها:* ${targetEntity}\
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>توليد VER</span>
                 </button>
-                {activeClient?.code && (
+                {activeClient?.clientCode && (
                   <button
                     type="button"
-                    onClick={() => setCodeValue(activeClient.code!)}
+                    onClick={() => setCodeValue(activeClient.clientCode!)}
                     className="px-2.5 py-1.5 bg-blue-800 hover:bg-blue-700 rounded-lg text-white font-bold flex items-center gap-1 text-[11px] cursor-pointer"
                     title="كود ملف العميل"
                   >

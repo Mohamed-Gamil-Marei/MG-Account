@@ -1537,7 +1537,7 @@ ${opts.authority ? `🏛️ *الجهة الحكومية:* ${opts.authority}\n` 
             <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-0.5">
               {filteredClients.map((client) => {
                 const proceduresCount = (client.procedures || []).length;
-                const phone = client.phone || client.mobile || '';
+                const phone = client.phone || '';
                 const cleanPhone = phone.replace(/[^0-9]/g, '');
 
                 return (

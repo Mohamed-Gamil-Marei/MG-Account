@@ -307,10 +307,11 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
       setContactPerson(client.contactPerson || '');
       setPhone(client.phone || '01001234567');
       setEmail(client.email || '');
-      if (client.commercialType) {
-        if (client.commercialType.includes('مساهمة')) setLegalType('JOINT_STOCK');
-        else if (client.commercialType.includes('مسؤولية') || client.commercialType.includes('ذ.م.م')) setLegalType('LLC');
-        else if (client.commercialType.includes('فرد')) setLegalType('SOLE_PROPRIETORSHIP');
+      const form = client.legalForm || client.companyType || '';
+      if (form) {
+        if (form.includes('مساهمة') || form === 'JOINT_STOCK') setLegalType('JOINT_STOCK');
+        else if (form.includes('مسؤولية') || form.includes('ذ.م.م') || form === 'LLC') setLegalType('LLC');
+        else if (form.includes('فرد') || form === 'SOLE_PROPRIETORSHIP' || form === 'INDIVIDUAL') setLegalType('SOLE_PROPRIETORSHIP');
       }
     }
   };

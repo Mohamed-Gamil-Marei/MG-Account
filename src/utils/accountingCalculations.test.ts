@@ -629,4 +629,92 @@ describe('Accounting Calculations & Ledger Tests (اختبارات المحاس�
       db.addJournalEntry(unbalancedEntry as any);
     }).toThrowError(/تعذر حفظ القيد المحاسبي|القيد غير متزن/);
   });
+
+  // 6) ميزان مراجعة صغير وتأكيد طرد وتوازن القوائم بدون موازنة آليّة
+  it('6) Small Trial Balance Review Flow & Balance Sheet Verification without auto-plugging', () => {
+    const trialBalanceAccounts: Account[] = [
+      { id: 't-1110', code: '1110', name: 'أصول ثابتة', category: 'ASSETS', nature: 'DEBIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-1210', code: '1210', name: 'مخزون', category: 'ASSETS', nature: 'DEBIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-1220', code: '1220', name: 'عملاء', category: 'ASSETS', nature: 'DEBIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-1250', code: '1250', name: 'نقدية', category: 'ASSETS', nature: 'DEBIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-2210', code: '2210', name: 'موردين', category: 'LIABILITIES', nature: 'CREDIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-2250', code: '2250', name: 'مستحقات', category: 'LIABILITIES', nature: 'CREDIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-3100', code: '3100', name: 'رأس مال', category: 'EQUITY', nature: 'CREDIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-4110', code: '4110', name: 'إيرادات المبيعات', category: 'REVENUES', nature: 'CREDIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-5110', code: '5110', name: 'تكلفة المبيعات', category: 'EXPENSES', nature: 'DEBIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+      { id: 't-5300', code: '5300', name: 'مصروفات عمومية وإدارية', category: 'EXPENSES', nature: 'DEBIT', level: 2, openingBalanceDebit: 0, openingBalanceCredit: 0 },
+    ];
+
+    const trialBalanceRows = [
+      { code: '1110', debit: 100000, credit: 0 },
+      { code: '1210', debit: 50000, credit: 0 },
+      { code: '1220', debit: 30000, credit: 0 },
+      { code: '1250', debit: 20000, credit: 0 },
+      { code: '2210', debit: 0, credit: 40000 },
+      { code: '2250', debit: 0, credit: 10000 },
+      { code: '3100', debit: 0, credit: 100000 },
+      { code: '4110', debit: 0, credit: 80000 },
+      { code: '5110', debit: 20000, credit: 0 },
+      { code: '5300', debit: 10000, credit: 0 },
+    ];
+
+    const totDebit = trialBalanceRows.reduce((s, r) => s + r.debit, 0);
+    const totCredit = trialBalanceRows.reduce((s, r) => s + r.credit, 0);
+    expect(totDebit).toBe(230000);
+    expect(totCredit).toBe(230000);
+    expect(totDebit).toBe(totCredit);
+
+    // Create candidate JournalEntry line by line
+    const lines = trialBalanceRows.map((row, idx) => {
+      const acc = trialBalanceAccounts.find((a) => a.code === row.code)!;
+      return {
+        id: `tb-line-${idx}`,
+        accountId: acc.id,
+        accountCode: acc.code,
+        accountName: acc.name,
+        debit: row.debit,
+        credit: row.credit,
+        description: 'رصيد ميزان مراجعة مراجَع',
+      };
+    });
+
+    const directEntry: JournalEntry = makeEntry({
+      entryNumber: 99,
+      serialNumber: 'AUDIT-2026-TEST',
+      entryType: 'ADJUSTING',
+      date: '2026-12-31',
+      description: 'قيد ميزان المراجعة المباشر المعتمد',
+      totalDebit: totDebit,
+      totalCredit: totCredit,
+      isPosted: true,
+      source: 'AUDIT_DIRECT_ENTRY' as any,
+      lines,
+    });
+
+    const calculatedAccounts = computeAccountBalances(trialBalanceAccounts, [directEntry]);
+    const incomeData = generateIncomeStatement(calculatedAccounts);
+    const balanceData = generateBalanceSheet(calculatedAccounts, incomeData);
+
+    // Income Statement Verifications
+    expect(incomeData.revenuesTotal).toBe(80000);
+    expect(incomeData.costOfGoodsSold).toBe(20000);
+    expect(incomeData.administrativeExpenses).toBe(10000);
+    expect(incomeData.profitBeforeTax).toBe(50000);
+
+    // Balance Sheet Verifications
+    expect(balanceData.nonCurrentAssets.propertyPlantEquipment).toBe(100000);
+    expect(balanceData.currentAssets.inventory).toBe(50000);
+    expect(balanceData.currentAssets.tradeReceivables).toBe(30000);
+    expect(balanceData.currentAssets.cashAndBanks).toBe(20000);
+    expect(balanceData.totalAssets).toBe(200000);
+
+    expect(balanceData.equity.paidUpCapital).toBe(100000);
+    expect(balanceData.currentLiabilities.tradePayables).toBe(40000);
+    expect(balanceData.currentLiabilities.accruedExpenses).toBe(10000);
+    expect(balanceData.totalEquityAndLiabilities).toBe(200000);
+
+    // Balance Sheet is strictly balanced without auto-balancing
+    expect(balanceData.isBalanced).toBe(true);
+    expect(balanceData.variance).toBe(0);
+  });
 });

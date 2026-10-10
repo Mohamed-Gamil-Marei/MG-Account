@@ -35,6 +35,7 @@ import {
   Smartphone,
   ChevronDown,
   Factory,
+  MessageSquare,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, OfficeProfile } from '../types';
@@ -184,23 +185,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const unpostedEntriesCount = state.journalEntries.filter((e) => !e.isPosted).length;
 
-  const isItemRestricted = (itemId: string) => {
-    if (currentUser.role === 'ADMIN') return false;
-    if (itemId === 'OFFICE_TREASURY' && !currentUser.canAccessTreasury) return true;
-    if (itemId === 'AUDIT_TRAIL' && !currentUser.canAccessAuditTrail) return true;
-    if (currentUser.restrictedTabs?.includes(itemId as any)) return true;
-    return false;
-  };
-
   const parentHub = getParentHub(activeTab);
 
-  // --- The 6 Primary Core Sections (الأقسام الستة الأساسية للمنظومة) ---
-  const primarySixSections = [
+  // --- 7 Primary Items Requested (البنود الـ 7 الرئيسية) ---
+  const primarySevenSections = [
     {
       id: 'DASHBOARD',
       defaultTab: 'DASHBOARD',
       number: '1',
-      label: 'لوحة التحكم',
+      label: 'الرئيسية',
       labelEn: 'Dashboard',
       icon: LayoutDashboard,
       description: 'المؤشرات العامة وملخص النشاط',
@@ -222,54 +215,113 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'ACCOUNTING_HUB',
       defaultTab: 'JOURNAL_ENTRIES',
       number: '3',
-      label: 'المراجعة',
-      labelEn: 'Audit & Review',
-      icon: Layers,
-      description: 'القيود، الدفاتر، وميزان المراجعة EAS',
+      label: 'الدفتر',
+      labelEn: 'Journal & Ledger',
+      icon: BookOpen,
+      description: 'القيود، الدفاتر وميزان المراجعة',
       badge: unpostedEntriesCount > 0 
         ? (isEn ? `${unpostedEntriesCount} Unposted` : `${unpostedEntriesCount} غير مرحل`) 
         : `${state.journalEntries.length}`,
       badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
     },
     {
+      id: 'FILE_REVIEW',
+      defaultTab: 'FILE_REVIEW',
+      number: '4',
+      label: 'مراجعة شركة',
+      labelEn: 'Company Audit',
+      icon: FileCheck2,
+      description: 'مراجعة وقراءة الملفات والموازين والربط',
+      badge: isEn ? 'Audit' : 'فحص ميزان',
+      badgeColor: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
+    },
+    {
+      id: 'CREDIT_SIMULATOR',
+      defaultTab: 'CREDIT_SIMULATOR',
+      number: '5',
+      label: 'ملف بنكي سريع',
+      labelEn: 'Fast Bank Dossier',
+      icon: TrendingUp,
+      description: 'الملف الائتماني والتحليل المالي للبنوك',
+      badge: isEn ? 'Credit' : 'ائتمان وبنوك',
+      badgeColor: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
+    },
+    {
       id: 'TAX_TRACKER',
       defaultTab: 'TAX_TRACKER',
-      number: '4',
-      label: 'الإقرارات',
-      labelEn: 'Tax Returns',
+      number: '6',
+      label: 'الضرائب',
+      labelEn: 'Taxes & Portal',
       icon: Percent,
-      description: 'إقرارات القيمة المضافة 10 ونموذج 41',
+      description: 'إقرارات القيمة المضافة والدخل وETA',
       badge: pendingTaxesCount > 0 
         ? (isEn ? `${pendingTaxesCount} Due` : `${pendingTaxesCount} مستحق`) 
         : (isEn ? 'ETA' : 'إقرارات ETA'),
       badgeColor: pendingTaxesCount > 0 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
     },
     {
-      id: 'TAX_AUDIT_HUB',
-      defaultTab: 'TAX_AUDIT_HUB',
-      number: '5',
-      label: 'الفحص الضريبي',
-      labelEn: 'Tax Inspection',
-      icon: Scale,
-      description: 'فحص الحسابات، الدفاتر، ولجان الطعن',
-      badge: isEn ? 'Audit' : 'فحص وطعون',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-    },
-    {
       id: 'OFFICE_TREASURY',
       defaultTab: 'OFFICE_TREASURY',
-      number: '6',
-      label: 'خزنة المكتب',
-      labelEn: 'Office Treasury',
+      number: '7',
+      label: 'الأتعاب والخزنة',
+      labelEn: 'Treasury & Fees',
       icon: CreditCard,
-      description: 'المقبوضات والمصروفات وحركة النقدية',
-      badge: isEn ? 'Treasury' : 'نقدية وبنوك',
+      description: 'المقبوضات والمصروفات وأتعاب المكتب',
+      badge: isEn ? 'Treasury' : 'خزنة وأتعاب',
       badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
     },
   ];
 
-  // --- Additional Tools Section (أدوات إضافية) ---
-  const additionalTools = [
+  // --- Remaining Screens Moved to "المزيد" (باقي الشاشات في بند المزيد) ---
+  const moreTools = [
+    {
+      id: 'CUSTOMS_HUB',
+      defaultTab: 'CUSTOMS_SHIPMENTS',
+      label: 'الجمارك والتجارة الخارجية (ACI)',
+      labelEn: 'Customs & Nafeza',
+      icon: Ship,
+      badge: 'ACI',
+    },
+    {
+      id: 'WHATSAPP_BOT',
+      defaultTab: 'WHATSAPP_BOT',
+      label: 'إدارة الواتساب والتواصل',
+      labelEn: 'WhatsApp Business API',
+      icon: MessageSquare,
+      badge: 'Bot',
+    },
+    {
+      id: 'SAP_ERP',
+      defaultTab: 'SAP_ERP',
+      label: 'نظام SAP ERP للمؤسسات',
+      labelEn: 'SAP ERP Integration',
+      icon: Database,
+      badge: 'SAP',
+    },
+    {
+      id: 'CURRENCY_EXCHANGE_RATES',
+      defaultTab: 'CURRENCY_EXCHANGE_RATES',
+      label: 'أسعار الصرف وفروق العملة',
+      labelEn: 'Exchange Rates (EAS 13)',
+      icon: LineChart,
+      badge: 'CBE',
+    },
+    {
+      id: 'AUDIT_SECURITY_HUB',
+      defaultTab: 'AUDIT_TRAIL',
+      label: 'سجل العمليات والرقابة',
+      labelEn: 'Audit Trail & Compliance',
+      icon: History,
+      badge: `${state.auditLogs.length}`,
+    },
+    {
+      id: 'MOBILE_COMPANION',
+      defaultTab: 'MOBILE_COMPANION',
+      label: 'المساعد الميداني للهاتف',
+      labelEn: 'Mobile Field Companion',
+      icon: Smartphone,
+      badge: '📱',
+    },
     {
       id: 'FINANCIAL_STATEMENTS',
       defaultTab: 'FINANCIAL_STATEMENTS',
@@ -290,55 +342,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'MULTI_TENANT_WORKSPACES',
       defaultTab: 'MULTI_TENANT_WORKSPACES',
       label: 'بيئات الشركات والمصانع',
-      labelEn: 'Multi-Tenant Hub',
+      labelEn: 'Multi-Tenant Workspaces',
       icon: Factory,
       badge: `${state.clients.length} كيان`,
     },
     {
-      id: 'FINANCIAL_REPORTING_HUB',
-      defaultTab: 'CREDIT_SIMULATOR',
-      label: 'الائتمان ودراسات الجدوى',
-      labelEn: 'Credit & Feasibility',
-      icon: TrendingUp,
-      badge: 'بنوك',
-    },
-    {
-      id: 'CUSTOMS_HUB',
-      defaultTab: 'CUSTOMS_SHIPMENTS',
-      label: 'الجمارك والتجارة الخارجية (ACI)',
-      labelEn: 'Customs & Nafeza',
-      icon: Ship,
-      badge: 'ACI',
-    },
-    {
-      id: 'CURRENCY_EXCHANGE_RATES',
-      defaultTab: 'CURRENCY_EXCHANGE_RATES',
-      label: 'أسعار الصرف وفروق العملة',
-      labelEn: 'Exchange Rates (EAS 13)',
-      icon: LineChart,
-      badge: 'CBE',
-    },
-    {
-      id: 'AUDIT_SECURITY_HUB',
-      defaultTab: 'AUDIT_TRAIL',
-      label: 'سجل العمليات والرقابة',
-      labelEn: 'Audit Trail & Compliance',
-      icon: ShieldCheck,
-      badge: `${state.auditLogs.length}`,
-    },
-    {
-      id: 'MOBILE_COMPANION',
-      label: 'المساعد الميداني للهاتف',
-      labelEn: 'Mobile Field Companion',
-      icon: Smartphone,
-      badge: '📱',
+      id: 'TAX_AUDIT_HUB',
+      defaultTab: 'TAX_AUDIT_HUB',
+      label: 'الفحص الضريبي والطعون',
+      labelEn: 'Tax Inspection & Appeals',
+      icon: Scale,
+      badge: 'فحص وطعون',
     },
   ];
 
-  const isAdditionalActive = additionalTools.some(
+  const isMoreActive = moreTools.some(
     (h) => parentHub === h.id || activeTab === h.id || (h.defaultTab && activeTab === h.defaultTab)
   );
-  const [showAdditionalTools, setShowAdditionalTools] = useState(isAdditionalActive);
+  const [showMoreTools, setShowMoreTools] = useState(isMoreActive);
 
   return (
     <>
@@ -389,18 +410,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation Items List - Streamlined 6 Core Sections + Additional Tools */}
+        {/* Navigation Items List - 7 Primary Sections + "المزيد" Section */}
         <nav className="flex-1 py-3 px-2.5 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
-          {/* Header Badge for The 6 Core Sections */}
+          {/* Header Badge for The 7 Primary Sections */}
           <div className="px-2 pt-1 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-400 tracking-wide border-b border-slate-800/60 mb-1.5">
-            <span className="text-slate-200">{isEn ? 'CORE SECTIONS (6)' : 'الأقسام الأساسية للمنظومة (6)'}</span>
+            <span className="text-slate-200">{isEn ? 'MAIN SECTIONS (7)' : 'القائمة الرئيسية (7 بنود)'}</span>
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
               {isEn ? 'Primary' : 'الرئيسية'}
             </span>
           </div>
 
-          {/* The 6 Primary Interfaces (العملاء، المراجعة، الإقرارات، الفحص الضريبي، خزنة المكتب، لوحة التحكم) */}
-          {primarySixSections.map((section) => {
+          {/* The 7 Primary Interfaces */}
+          {primarySevenSections.map((section) => {
             const Icon = section.icon;
             const isSectionActive = activeTab === section.id || parentHub === section.id || (section.defaultTab && activeTab === section.defaultTab);
             const sectionTitle = isEn ? (section.labelEn || section.label) : section.label;
@@ -459,26 +480,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
-          {/* Additional Tools Accordion (أدوات إضافية) */}
+          {/* More Section Accordion (المزيد) */}
           <div className="pt-2 border-t border-slate-800/80 mt-2">
             <button
-              onClick={() => setShowAdditionalTools(!showAdditionalTools)}
-              className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all cursor-pointer bg-slate-950/40 border border-slate-800"
+              onClick={() => setShowMoreTools(!showMoreTools)}
+              className="w-full flex items-center justify-between px-2.5 py-2.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all cursor-pointer bg-slate-950/40 border border-slate-800"
             >
               <div className="flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>{isEn ? 'Additional Tools & Extensions' : 'أدوات إضافية'}</span>
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span className="font-black text-amber-300">{isEn ? 'More Screens & Tools' : 'المزيد (باقي الشاشات والأدوات)'}</span>
               </div>
               <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform duration-150 ${
-                  showAdditionalTools ? 'rotate-180 text-blue-400' : 'text-slate-500'
+                className={`w-4 h-4 transition-transform duration-150 ${
+                  showMoreTools ? 'rotate-180 text-amber-400' : 'text-slate-500'
                 }`}
               />
             </button>
 
-            {showAdditionalTools && (
+            {showMoreTools && (
               <div className="space-y-0.5 mt-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                {additionalTools.map((tool) => {
+                {moreTools.map((tool) => {
                   const Icon = tool.icon;
                   const isToolActive = activeTab === tool.id || (tool.defaultTab && activeTab === tool.defaultTab);
                   const toolTitle = isEn ? (tool.labelEn || tool.label) : tool.label;
@@ -490,11 +511,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         handleSelectTab(tool.defaultTab || tool.id);
                         if (window.innerWidth < 1024) handleClose();
                       }}
-                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
+                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg transition-colors cursor-pointer text-xs ${
                         isEn ? 'text-left' : 'text-right'
                       } ${
                         isToolActive
-                          ? 'bg-slate-800 text-white font-bold shadow-2xs border border-slate-700'
+                          ? 'bg-slate-800 text-amber-300 font-bold shadow-2xs border border-amber-500/40'
                           : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
                       }`}
                     >

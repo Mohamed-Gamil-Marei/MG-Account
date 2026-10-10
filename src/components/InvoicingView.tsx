@@ -183,7 +183,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         formDraftStorage.saveInvoiceDraft({
           invoiceType,
           isReceipt,
-          docType,
+          docType: docType as any,
           receiverType,
           date,
           dueDate,
@@ -242,7 +242,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       const meta = formDraftStorage.saveInvoiceDraft({
         invoiceType,
         isReceipt,
-        docType,
+        docType: docType as any,
         receiverType,
         date,
         dueDate,
@@ -295,7 +295,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     const meta = formDraftStorage.saveInvoiceDraft({
       invoiceType,
       isReceipt,
-      docType,
+      docType: docType as any,
       receiverType,
       date,
       dueDate,
@@ -1443,7 +1443,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                     PrintLayout.printElement('official-invoice-document', {
                       title: `فاتورة ضريبية رسمية - رقم ${selectedInvoice.invoiceNumber}`,
                       documentNumber: selectedInvoice.invoiceNumber,
-                      clientName: selectedInvoice.clientName,
+                      clientName: (selectedInvoice as any).receiverName || (selectedInvoice as any).clientName || '',
                       date: selectedInvoice.date,
                       orientation: 'portrait',
                       pageSize: 'A4',
@@ -2163,12 +2163,12 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
           initialContext={{
             procedureType: whatsAppInvoice.isReceipt ? 'TREASURY_RECEIPT' : 'INVOICE_CLAIM',
             title: whatsAppInvoice.isReceipt ? 'إيصال استلام نقدية' : `فاتورة إلكترونية #${whatsAppInvoice.invoiceNumber}`,
-            clientName: whatsAppInvoice.receiverName,
+            clientName: (whatsAppInvoice as any).receiverName || (whatsAppInvoice as any).clientName || '',
             referenceCode: whatsAppInvoice.invoiceNumber,
-            amount: whatsAppInvoice.totalAmount,
-            periodOrDate: whatsAppInvoice.dateTimeIssued?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+            amount: (whatsAppInvoice as any).totalAmount || (whatsAppInvoice as any).totalNet || whatsAppInvoice.grandTotal || 0,
+            periodOrDate: (whatsAppInvoice as any).dateTimeIssued?.slice(0, 10) || (whatsAppInvoice as any).issueDate || new Date().toISOString().slice(0, 10),
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-            customNotes: whatsAppInvoice.items?.map((it) => `${it.description} (${formatEgyptianCurrency(it.total)})`).join('، '),
+            customNotes: whatsAppInvoice.items?.map((it: any) => `${it.description} (${formatEgyptianCurrency(it.totalPrice || it.total || 0)})`).join('، '),
           }}
           state={state}
         />

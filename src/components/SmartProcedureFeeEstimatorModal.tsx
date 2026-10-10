@@ -350,7 +350,7 @@ export const SmartProcedureFeeEstimatorModal: React.FC<SmartProcedureFeeEstimato
     else if (companyType === 'LLC') companyMultiplier = 1.15;
     else if (companyType === 'PARTNERSHIP') companyMultiplier = 1.0;
     else if (companyType === 'SOLE_PROPRIETORSHIP') companyMultiplier = 0.85;
-    else if (companyType === 'FREELANCE') companyMultiplier = 0.80;
+    else if ((companyType as string) === 'FREELANCE') companyMultiplier = 0.80;
 
     // Multiplier for activity size
     let scaleMultiplier = 1.0;

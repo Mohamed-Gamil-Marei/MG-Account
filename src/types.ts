@@ -300,6 +300,7 @@ export interface PortalCredentials {
     password?: string;
     tradeCode?: string;
     expiryDate?: string;
+    portalUrl?: string;
     notes?: string;
   };
   // توكن الختم والتوقيع الإلكتروني (Egypt Trust, MCDR, Delta, etc.)
@@ -1466,6 +1467,7 @@ export interface CustomsShipmentItem {
   grossWeightKg?: number;
   volumeCbm?: number;
   customsDutyRatePct: number; // نسبة الضريبة الجمركية المقررة %
+  vatRatePct?: number; // نسبة ضريبة القيمة المضافة %
   dutyAmountEgp: number; // قيمة الضريبة الجمركية المحتسبة
   apportionedOtherCostEgp: number; // نصيب الصنف من المصاريف الإنزالية المشتركة
   totalItemLandedCostEgp: number; // التكلفة الإنزالية الإجمالية للصنف بالمخزن

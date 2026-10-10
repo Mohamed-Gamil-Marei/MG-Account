@@ -11,9 +11,11 @@ export interface FilterTabOption {
 }
 
 export interface FilterButtonOption {
+  id?: string;
   label: string;
   active: boolean;
   onClick: () => void;
+  count?: number;
   variant?: 'blue' | 'emerald' | 'amber' | 'purple' | 'slate' | 'rose';
 }
 
@@ -31,6 +33,7 @@ export interface UnifiedScreenCardProps {
   subtitle?: string;
   description?: string;
   badge?: string;
+  badgeText?: string; // alias for badge
   badgeVariant?: 'blue' | 'emerald' | 'amber' | 'purple' | 'slate' | 'rose';
   icon?: LucideIcon | React.ComponentType<{ className?: string }>;
   primaryAction?: PrimaryActionConfig;
@@ -65,7 +68,8 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
   title,
   subtitle,
   description,
-  badge,
+  badge: propBadge,
+  badgeText,
   badgeVariant = 'blue',
   icon: Icon,
   primaryAction,
@@ -94,6 +98,7 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
   className = '',
   contentClassName = '',
 }) => {
+  const badge = propBadge || badgeText;
   const { density, toggleDensity, isFocusMode } = useDensity();
   const effectiveSubtitle = subtitle || description;
   const effectiveSearchVal = searchValue !== undefined ? searchValue : (searchTerm !== undefined ? searchTerm : '');

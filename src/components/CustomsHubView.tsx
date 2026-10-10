@@ -1832,7 +1832,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
                     <div>
                       <p className="font-bold">المراجع والمحاسب القانوني المسؤول:</p>
                       <p className="mt-4 font-mono font-bold">{state.officeProfile.auditorName}</p>
-                      <p className="text-[10px] text-slate-500">رقم السجل: {state.officeProfile.registrationNumber}</p>
+                      <p className="text-[10px] text-slate-500">رقم السجل: {state.officeProfile.licenseNumber}</p>
                     </div>
                     <div className="text-center">
                       <div className="w-20 h-20 border border-dashed border-slate-400 rounded-lg flex items-center justify-center text-slate-400 text-[10px]">

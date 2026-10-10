@@ -89,13 +89,13 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
     matchedClient?.name ||
     'شركة النيل للصناعات الهندسية والتوريدات (ش.م.م)';
   const taxRegNo =
-    currentDeclaration?.taxCardNo ||
+    (currentDeclaration as any)?.taxCardNo ||
     matchedClient?.taxCardNo ||
     matchedClient?.vatRegistrationNo ||
     '482-910-332';
   const taxFileNo = matchedClient?.incomeTaxFileNo || '14/829/938/01';
   const taxOffice =
-    currentDeclaration?.taxOffice ||
+    (currentDeclaration as any)?.taxOffice ||
     matchedClient?.taxOffice ||
     'مركز كبار الممولين (SAP - الحي المالي)';
   const commercialReg = matchedClient?.commercialRegistrationNo || '148293';
@@ -114,11 +114,11 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
 
   // الحسبة المحاسبية والضريبية الشاملة (المبيعات، المشتريات، المخرجات، المدخلات، الرصيد الدائن، الصافي)
   const salesAmount =
-    isZeroReturn ? 0 : Number(currentDeclaration?.salesTaxableAmount ?? currentDeclaration?.salesAmount ?? 0);
+    isZeroReturn ? 0 : Number(currentDeclaration?.salesTaxableAmount ?? (currentDeclaration as any)?.salesAmount ?? 0);
   const vatOutput =
     isZeroReturn ? 0 : Number(currentDeclaration?.vatOutputTax ?? Math.round(salesAmount * 0.14));
   const purchasesAmount =
-    isZeroReturn ? 0 : Number(currentDeclaration?.purchasesTaxableAmount ?? currentDeclaration?.purchasesAmount ?? 0);
+    isZeroReturn ? 0 : Number(currentDeclaration?.purchasesTaxableAmount ?? (currentDeclaration as any)?.purchasesAmount ?? 0);
   const vatInput =
     isZeroReturn ? 0 : Number(currentDeclaration?.vatInputTax ?? Math.round(purchasesAmount * 0.14));
   const previousCredit =

@@ -31,6 +31,8 @@ export type OfficePracticeSubTab =
   | 'PRACTICE_MANAGEMENT'
   | 'CREDIT_DOSSIER_REGISTRY'
   | 'WHATSAPP_BUSINESS_API'
+  | 'WHATSAPP_SETTINGS'
+  | 'WHATSAPP_BOT'
   | 'OFFICE_TREASURY';
 
 interface OfficePracticeHubViewProps {

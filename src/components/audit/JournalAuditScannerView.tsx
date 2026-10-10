@@ -235,17 +235,17 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
     }
     const wb = XLSX.utils.book_new();
 
-    const findingsData = filteredFindings.map((f, idx) => ({
+    const findingsData = filteredFindings.map((f: any, idx) => ({
       'م': idx + 1,
-      'رقم القيد': f.journalEntrySerial,
+      'رقم القيد': f.journalEntrySerial || f.journalEntryId || f.id,
       'التاريخ': f.entryDate,
       'اسم الشركة / العميل': f.clientName || 'المنشأة العامة',
       'عنوان الملاحظة': f.title,
-      'المبلغ المرتبط (ج.م)': f.amount || 0,
-      'نوع الملاحظة': f.findingType === 'UNBALANCED_ENTRY' ? 'عدم توازن محاسبي' : f.findingType === 'DUPLICATE_ENTRY' ? 'قيد مكرر مشبوه' : f.findingType === 'MISSING_DOCUMENT' ? 'نقص مستندات مؤيدة' : 'مخالفة توجيه محاسبي',
+      'المبلغ المرتبط (ج.م)': f.amount || f.varianceAmount || 0,
+      'نوع الملاحظة': f.findingType === 'UNBALANCED_ENTRY' || f.category === 'UNBALANCED' ? 'عدم توازن محاسبي' : f.findingType === 'DUPLICATE_ENTRY' ? 'قيد مكرر مشبوه' : f.findingType === 'MISSING_DOCUMENT' ? 'نقص مستندات مؤيدة' : 'مخالفة توجيه محاسبي',
       'درجة الخطورة': f.severity === 'CRITICAL' ? 'حرج للغاية (Critical)' : f.severity === 'HIGH' ? 'مخاطر عالية (High)' : f.severity === 'MEDIUM' ? 'متوسط (Medium)' : 'تنبيه (Low)',
       'التفاصيل والوصف': f.description,
-      'الإجراء والتصحيح المقترح': f.suggestedAction,
+      'الإجراء والتصحيح المقترح': f.suggestedAction || f.recommendation || '',
       'حالة القيد': f.isPosted ? 'مرحل لدفتر الأستاذ' : 'مسودة غير مرحل',
     }));
 
@@ -273,8 +273,8 @@ export const JournalAuditScannerView: React.FC<JournalAuditScannerViewProps> = (
       { 'المؤشر الرقابي': 'عدد القيود ذات المشاكل المرصودة', 'القيمة': summary.totalFindingsCount },
       { 'المؤشر الرقابي': 'القيود غير المتزنة حسابياً', 'القيمة': summary.unbalancedCount },
       { 'المؤشر الرقابي': 'القيود المكررة', 'القيمة': summary.duplicatesCount },
-      { 'المؤشر الرقابي': 'القيود المفتقرة للمستندات', 'القيمة': summary.missingDocsCount },
-      { 'المؤشر الرقابي': 'مؤشر الصحة الدفترية', 'القيمة': `${summary.healthScore} / 100` },
+      { 'المؤشر الرقابي': 'القيود المفتقرة للمستندات', 'القيمة': (summary as any).missingDocsCount || (summary as any).missingAttachmentsCount || 0 },
+      { 'المؤشر الرقابي': 'مؤشر الصحة الدفترية', 'القيمة': `${(summary as any).healthScore || (summary as any).healthIndex || 100} / 100` },
       { 'المؤشر الرقابي': 'التقييم الرقابي العام', 'القيمة': summary.healthGrade === 'EXCELLENT' ? 'ممتاز' : summary.healthGrade === 'GOOD' ? 'جيد' : summary.healthGrade === 'NEEDS_REVIEW' ? 'يحتاج مراجعة وتصحيح' : 'حرج ومخاطر مرتفعة' },
     ];
     const wsSummary = XLSX.utils.json_to_sheet(summaryData);

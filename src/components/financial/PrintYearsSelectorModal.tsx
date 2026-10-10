@@ -19,11 +19,13 @@ export interface PrintYearsConfig {
   selectedYears: number[];
 }
 
-interface PrintYearsSelectorModalProps {
+export interface PrintYearsSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentConfig: PrintYearsConfig;
-  onApplyConfig: (config: PrintYearsConfig) => void;
+  availableYears?: number[];
+  onApplyConfig?: (config: PrintYearsConfig) => void;
+  onApply?: (config: PrintYearsConfig) => void;
   onPrintNow?: () => void;
 }
 
@@ -33,7 +35,9 @@ export const PrintYearsSelectorModal: React.FC<PrintYearsSelectorModalProps> = (
   isOpen,
   onClose,
   currentConfig,
+  availableYears,
   onApplyConfig,
+  onApply,
   onPrintNow,
 }) => {
   const [mode, setMode] = useState<PrintYearsConfig['mode']>(currentConfig.mode || 'CUSTOM_COMPARISON');
@@ -78,7 +82,8 @@ export const PrintYearsSelectorModal: React.FC<PrintYearsSelectorModalProps> = (
       selectedYears: effectiveYears,
     };
 
-    onApplyConfig(config);
+    if (onApplyConfig) onApplyConfig(config);
+    if (onApply) onApply(config);
     onClose();
 
     if (triggerPrint && onPrintNow) {

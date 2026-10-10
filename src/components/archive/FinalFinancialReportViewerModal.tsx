@@ -650,7 +650,7 @@ export const FinalFinancialReportViewerModal: React.FC<FinalFinancialReportViewe
                     clientName: clientRecord?.name || 'شركة معتمدة',
                     auditorName: officeProfile?.auditorName || 'محمد جميل مرعي',
                     licenseNumber: officeProfile?.licenseNumber || 'س.م.م 43122',
-                    fiscalYear: clientRecord?.activeFiscalYear || new Date().getFullYear(),
+                    fiscalYear: (clientRecord as any)?.activeFiscalYear || new Date().getFullYear(),
                     securityHash: headerVerification?.integrityHash || 'VERIFIED',
                   })}
                   size={90}

@@ -31,8 +31,15 @@ import {
   Lock,
 } from 'lucide-react';
 import { DatabaseState, db } from '../../db/localDatabase';
-import { Account, JournalEntry, OfficeProfile } from '../../types';
+import { Account, JournalEntry, JournalEntryLine, OfficeProfile } from '../../types';
 import { OfficialReportHeader } from '../common/OfficialReportHeader';
+import {
+  computeAccountBalances,
+  generateIncomeStatement,
+  generateBalanceSheet,
+  generateCashFlowStatement,
+  round2,
+} from '../../utils/accountingCalculations';
 
 interface FileReviewWizardViewProps {
   state: DatabaseState;
@@ -131,8 +138,11 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   const [isAiSuggesting, setIsAiSuggesting] = useState<boolean>(false);
   const [mappingApproved, setMappingApproved] = useState<boolean>(false);
 
-  // Step 4: Static Check Results
+  // Step 4: Static Check Results & Balancing
   const [staticCheck, setStaticCheck] = useState<AuditStaticCheckResult | null>(null);
+  const [unclassifiedWarnings, setUnclassifiedWarnings] = useState<string[]>([]);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [showPartnerBalanceModal, setShowPartnerBalanceModal] = useState<boolean>(false);
 
   // Step 5: Financial Statements & Direct Audit Entries
   const [generatedEntries, setGeneratedEntries] = useState<JournalEntry[]>([]);
@@ -544,155 +554,230 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     });
   };
 
-  // Step 4 -> Step 5: Generate Entries & Statements
+  // Handler for optional Partner Current Account balancing (Item 3e)
+  const handleBalanceWithPartnerAccount = () => {
+    if (!staticCheck) return;
+    const diff = round2(staticCheck.totalDebit - staticCheck.totalCredit);
+    if (Math.abs(diff) < 0.01) {
+      alert('الميزان متزن بالفعل! لا توجد حاجة لموازنة جاري الشركاء.');
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    let updatedRows = [...mappedRows];
+    const partnerRowIdx = updatedRows.findIndex(r => r.mappedCode === '3600');
+
+    if (partnerRowIdx !== -1) {
+      const existingRow = updatedRows[partnerRowIdx];
+      let newCredit = existingRow.credit;
+      let newDebit = existingRow.debit;
+
+      if (diff > 0) {
+        newCredit = round2(existingRow.credit + diff);
+      } else {
+        newDebit = round2(existingRow.debit + Math.abs(diff));
+      }
+
+      updatedRows[partnerRowIdx] = {
+        ...existingRow,
+        debit: newDebit,
+        credit: newCredit,
+        netBalance: round2(newDebit - newCredit),
+        isModifiedByAuditor: true,
+      };
+
+      const newChangeRecord: AuditorModificationRecord = {
+        id: `change-${Date.now()}`,
+        timestamp,
+        accountRowId: existingRow.id,
+        originalCode: existingRow.originalCode,
+        originalName: existingRow.originalName,
+        previousMappedCode: existingRow.mappedCode,
+        previousMappedName: existingRow.mappedName,
+        newMappedCode: existingRow.mappedCode,
+        newMappedName: existingRow.mappedName,
+        modifiedBy: currentUser?.name || 'المحاسب المراجع',
+        reason: `موازنة فرق ميزان المراجعة بقيمة ${diff} ج.م في حساب جاري الشركاء (3600)`,
+      };
+      setAuditorChangesLog(prev => [newChangeRecord, ...prev]);
+    } else {
+      const newRow: MappedAccountRow = {
+        id: `partner-balance-${Date.now()}`,
+        originalCode: '3600',
+        originalName: 'جاري الشركاء (تسوية موازنة الملف)',
+        debit: diff < 0 ? Math.abs(diff) : 0,
+        credit: diff > 0 ? diff : 0,
+        netBalance: round2((diff < 0 ? Math.abs(diff) : 0) - (diff > 0 ? diff : 0)),
+        mappedCode: '3600',
+        mappedName: 'جاري الشركاء',
+        matchType: 'MANUAL_MODIFIED',
+        confidence: 1.0,
+        isApproved: true,
+        isModifiedByAuditor: true,
+      };
+      updatedRows.push(newRow);
+
+      const newChangeRecord: AuditorModificationRecord = {
+        id: `change-${Date.now()}`,
+        timestamp,
+        accountRowId: newRow.id,
+        originalCode: '3600',
+        originalName: 'جاري الشركاء (تسوية موازنة)',
+        previousMappedCode: 'غير مسجل',
+        previousMappedName: 'غير مسجل',
+        newMappedCode: '3600',
+        newMappedName: 'جاري الشركاء',
+        modifiedBy: currentUser?.name || 'المحاسب المراجع',
+        reason: `إضافة حساب جاري الشركاء (3600) لموازنة الفرق بقيمة ${diff} ج.م`,
+      };
+      setAuditorChangesLog(prev => [newChangeRecord, ...prev]);
+    }
+
+    setMappedRows(updatedRows);
+    setShowPartnerBalanceModal(false);
+
+    const totDebit = round2(updatedRows.reduce((sum, r) => sum + (r.debit || 0), 0));
+    const totCredit = round2(updatedRows.reduce((sum, r) => sum + (r.credit || 0), 0));
+    const newDiff = round2(totDebit - totCredit);
+
+    setStaticCheck(prev => prev ? {
+      ...prev,
+      isBalanced: Math.abs(newDiff) < 0.01,
+      totalDebit: totDebit,
+      totalCredit: totCredit,
+      difference: newDiff,
+    } : null);
+  };
+
+  // Step 4 -> Step 5: Generate Entries & Statements using accountingCalculations directly (Requirement 3)
   const handleProceedToGeneration = () => {
-    if (!staticCheck?.isBalanced) {
-      alert('الميزان غير متزن! غير مسموح بتوليد القوائم في وضع المراجعة إلا بعد موازنة الملف بتعديل القيود.');
+    setGenerationError(null);
+    setUnclassifiedWarnings([]);
+
+    if (staticCheck?.unmappedAccounts && staticCheck.unmappedAccounts.length > 0) {
+      setGenerationError('توجد حسابات غير مربوطة بأكواد الدليل. يرجى إتمام ربط كافة الحسابات أولاً.');
       return;
     }
-    if (staticCheck?.unmappedAccounts.length > 0) {
-      alert('توجد حسابات غير مربوطة بأكواد الدليل. يرجى إتمام ربط كافة الحسابات أولاً.');
-      return;
-    }
 
-    // Grouping by Category to calculate Financial Statements
-    let revenues = 0;
-    let cogs = 0;
-    let selling = 0;
-    let admin = 0;
-    let dep = 0;
-    let fin = 0;
-    let otherInc = 0;
-    let taxExp = 0;
+    // a) Map every row in mappedRows to a JournalEntryLine in a single balanced journal entry with source AUDIT_DIRECT_ENTRY
+    const lines: JournalEntryLine[] = mappedRows.map((row, index) => {
+      const existingAcc = state.accounts.find(a => a.code === row.mappedCode);
+      const accId = existingAcc ? existingAcc.id : `acc-audit-${row.mappedCode}`;
+      const accName = existingAcc ? existingAcc.name : row.mappedName;
 
-    let ppe = 0;
-    let accDep = 0;
-    let inventory = 0;
-    let receivables = 0;
-    let notesReceivable = 0;
-    let taxDebit = 0;
-    let prepayments = 0;
-    let cashAndBanks = 0;
-
-    let capital = 0;
-    let legalReserve = 0;
-    let retainedEarnings = 0;
-    let currentProfit = 0;
-
-    let longTermLoans = 0;
-    let payables = 0;
-    let notesPayable = 0;
-    let taxesPayable = 0;
-    let accruedExpenses = 0;
-
-    mappedRows.forEach((row) => {
-      const code = row.mappedCode;
-      const net = row.debit - row.credit;
-
-      if (code.startsWith('41') || code.startsWith('42')) revenues += Math.abs(net);
-      else if (code.startsWith('51')) cogs += Math.abs(net);
-      else if (code.startsWith('52')) selling += Math.abs(net);
-      else if (code.startsWith('530') || code.startsWith('531')) admin += Math.abs(net);
-      else if (code.startsWith('536')) dep += Math.abs(net);
-      else if (code.startsWith('54')) fin += Math.abs(net);
-      else if (code.startsWith('43') || code.startsWith('44')) otherInc += Math.abs(net);
-      else if (code.startsWith('55')) taxExp += Math.abs(net);
-
-      // Balance Sheet
-      else if (code.startsWith('121') || code.startsWith('122')) ppe += Math.abs(net);
-      else if (code.startsWith('231') || code.startsWith('129')) accDep += Math.abs(net);
-      else if (code.startsWith('131') || code.startsWith('132')) inventory += Math.abs(net);
-      else if (code.startsWith('141')) receivables += Math.abs(net);
-      else if (code.startsWith('142')) notesReceivable += Math.abs(net);
-      else if (code.startsWith('143')) taxDebit += Math.abs(net);
-      else if (code.startsWith('144')) prepayments += Math.abs(net);
-      else if (code.startsWith('111') || code.startsWith('112') || code.startsWith('113')) cashAndBanks += Math.abs(net);
-
-      else if (code.startsWith('311')) capital += Math.abs(net);
-      else if (code.startsWith('312')) legalReserve += Math.abs(net);
-      else if (code.startsWith('313')) retainedEarnings += Math.abs(net);
-
-      else if (code.startsWith('211') || code.startsWith('221')) longTermLoans += Math.abs(net);
-      else if (code.startsWith('222')) payables += Math.abs(net);
-      else if (code.startsWith('223')) notesPayable += Math.abs(net);
-      else if (code.startsWith('224')) taxesPayable += Math.abs(net);
-      else if (code.startsWith('225')) accruedExpenses += Math.abs(net);
+      return {
+        id: `line-audit-${index}-${Date.now()}`,
+        accountId: accId,
+        accountCode: row.mappedCode,
+        accountName: accName,
+        debit: round2(row.debit || 0),
+        credit: round2(row.credit || 0),
+        description: `رصيد ميزان المراجعة - ${row.originalName}`,
+      };
     });
 
-    const grossProfit = revenues - cogs;
-    const operatingProfit = grossProfit - (selling + admin + dep) + otherInc - fin;
-    const netProfitBeforeTax = operatingProfit;
-    const netProfitAfterTax = netProfitBeforeTax - taxExp;
+    const totalDebit = round2(lines.reduce((sum, l) => sum + (l.debit || 0), 0));
+    const totalCredit = round2(lines.reduce((sum, l) => sum + (l.credit || 0), 0));
+    const trialBalanceDiff = round2(totalDebit - totalCredit);
 
-    currentProfit = netProfitAfterTax;
+    // Check trial balance balance
+    if (Math.abs(trialBalanceDiff) > 0.01) {
+      setGenerationError(`ميزان المراجعة غير متزن! إجمالي المدين: ${totalDebit.toLocaleString('ar-EG')} - إجمالي الدائن: ${totalCredit.toLocaleString('ar-EG')} (الفرق: ${trialBalanceDiff.toLocaleString('ar-EG')} ج.م). غير مسموح بتوليد القوائم إلا بعد تعديل الميزان أو الموازنة بجاري الشركاء.`);
+      return;
+    }
 
-    const totalNonCurrentAssets = Math.max(0, ppe - accDep);
-    const totalCurrentAssets = inventory + receivables + notesReceivable + taxDebit + prepayments + cashAndBanks;
-    const totalAssets = totalNonCurrentAssets + totalCurrentAssets;
-
-    const totalEquity = capital + legalReserve + retainedEarnings + currentProfit;
-    const totalNonCurrentLiabilities = longTermLoans;
-    const totalCurrentLiabilities = payables + notesPayable + taxesPayable + accruedExpenses;
-    const totalLiabilitiesAndEquity = totalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
-
-    const finSummary = {
-      clientName: activeClient?.name || 'العميل',
-      fiscalYear: selectedFiscalYear,
-      revenues,
-      costOfGoodsSold: cogs,
-      grossProfit,
-      sellingAndMarketingExpenses: selling,
-      administrativeExpenses: admin,
-      depreciationExpense: dep,
-      financeCosts: fin,
-      otherIncomes: otherInc,
-      netProfitBeforeTax,
-      taxExpense: taxExp,
-      netProfitAfterTax,
-      
-      // Balance Sheet
-      nonCurrentAssets: totalNonCurrentAssets,
-      currentAssets: totalCurrentAssets,
-      totalAssets,
-      equity: totalEquity,
-      nonCurrentLiabilities: totalNonCurrentLiabilities,
-      currentLiabilities: totalCurrentLiabilities,
-      totalLiabilitiesAndEquity,
-      isBalanced: Math.abs(totalAssets - totalLiabilitiesAndEquity) < 1,
-    };
-
-    setFinancialSummary(finSummary);
-
-    // Call localDatabase generateAuditDirectEntries
-    const directEntriesRes = db.generateAuditDirectEntries({
-      fiscalYear: selectedFiscalYear,
+    const auditEntry: JournalEntry = {
+      id: `audit-direct-entry-${selectedFiscalYear}-${Date.now()}`,
+      entryNumber: Date.now(),
+      serialNumber: `AUDIT-${selectedFiscalYear}-0001`,
+      entryType: 'ADJUSTING',
+      date: `${selectedFiscalYear}-12-31`,
+      description: `قيد ميزان المراجعة المباشر المعتمد لسنة ${selectedFiscalYear} (وضع المراجعة)`,
+      totalDebit,
+      totalCredit,
+      isPosted: true,
+      source: 'AUDIT_DIRECT_ENTRY',
       clientId: activeClient?.id,
       clientName: activeClient?.name,
-      date: `${selectedFiscalYear}-12-31`,
-      incomeData: {
-        revenues,
-        costOfGoodsSold: cogs,
-        sellingAndMarketingExpenses: selling,
-        administrativeExpenses: admin,
-        depreciationExpense: dep,
-        financeCosts: fin,
-        otherIncomes: otherInc,
-        taxExpense: taxExp,
-        netProfitAfterTax,
-      },
-      balanceData: {
-        nonCurrentAssets: { ppe, accDep },
-        currentAssets: { inventory, receivables, notesReceivable, taxDebit, prepayments, cashAndBanks },
-        equity: { capital, legalReserve, retainedEarnings, currentProfit, partnersCurrent: 0 },
-        nonCurrentLiabilities: { longTermLoans },
-        currentLiabilities: { payables, notesPayable, taxesPayable, socialInsurance: 0, accruedExpenses },
-      },
+      lines,
+      auditTrail: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Prepare temp account structure for computation
+    const evalAccounts: Account[] = [...state.accounts];
+    mappedRows.forEach(row => {
+      if (!evalAccounts.some(a => a.code === row.mappedCode)) {
+        evalAccounts.push({
+          id: `acc-audit-${row.mappedCode}`,
+          code: row.mappedCode,
+          name: row.mappedName,
+          category: row.mappedCode.startsWith('1') ? 'ASSETS' :
+                    row.mappedCode.startsWith('2') ? 'LIABILITIES' :
+                    row.mappedCode.startsWith('3') ? 'EQUITY' :
+                    row.mappedCode.startsWith('4') ? 'REVENUES' : 'EXPENSES',
+          nature: (row.mappedCode.startsWith('1') || row.mappedCode.startsWith('5')) ? 'DEBIT' : 'CREDIT',
+          level: 2,
+          openingBalanceDebit: 0,
+          openingBalanceCredit: 0,
+          isSystem: false,
+        });
+      }
     });
 
-    if (directEntriesRes.success) {
-      setGeneratedEntries(directEntriesRes.generatedEntries);
+    // b) Compute statements using computeAccountBalances, generateIncomeStatement, generateBalanceSheet
+    const calculatedAccounts = computeAccountBalances(evalAccounts, [auditEntry]);
+    const incomeData = generateIncomeStatement(calculatedAccounts);
+    const balanceData = generateBalanceSheet(calculatedAccounts, incomeData);
+    const cashFlowData = generateCashFlowStatement(incomeData, balanceData);
+
+    // c) Warning for any account code that is unclassified or not standard
+    const unclassified: string[] = [];
+    mappedRows.forEach(row => {
+      const c = row.mappedCode;
+      const isRecognized = c.startsWith('1') || c.startsWith('2') || c.startsWith('3') || c.startsWith('4') || c.startsWith('5');
+      if (!isRecognized) {
+        unclassified.push(`الحساب (${row.originalName}) بالكود (${c}) غير مصنف ضمن بنود القوائم المالية المعتمدة.`);
+      }
+    });
+    setUnclassifiedWarnings(unclassified);
+
+    // d) If generation failed or balance sheet is not balanced, do NOT proceed to step 5
+    if (!balanceData.isBalanced || Math.abs(balanceData.variance) > 0.01) {
+      setGenerationError(`تعذر الانتقال للخطوة 5: الميزانية العمومية غير متزنة! إجمالي الأصول: ${balanceData.totalAssets.toLocaleString('ar-EG')} - إجمالي الالتزامات وحقوق الملكية: ${balanceData.totalEquityAndLiabilities.toLocaleString('ar-EG')} (الفرق: ${balanceData.variance.toLocaleString('ar-EG')} ج.م).`);
+      return;
     }
 
+    // Set output summary and entries
+    setFinancialSummary({
+      clientName: activeClient?.name || 'العميل',
+      fiscalYear: selectedFiscalYear,
+      revenues: incomeData.revenuesTotal,
+      costOfGoodsSold: incomeData.costOfGoodsSold,
+      grossProfit: incomeData.grossProfit,
+      sellingAndMarketingExpenses: incomeData.sellingAndMarketingExpenses,
+      administrativeExpenses: incomeData.administrativeExpenses,
+      depreciationExpense: incomeData.depreciationExpense,
+      financeCosts: incomeData.financeCosts,
+      otherIncomes: incomeData.otherIncomes,
+      netProfitBeforeTax: incomeData.netProfitBeforeTax,
+      taxExpense: incomeData.taxExpense,
+      netProfitAfterTax: incomeData.netProfitAfterTax,
+      
+      // Balance Sheet
+      nonCurrentAssets: balanceData.nonCurrentAssetsTotal,
+      currentAssets: balanceData.currentAssetsTotal,
+      totalAssets: balanceData.totalAssets,
+      equity: balanceData.equityTotal,
+      nonCurrentLiabilities: balanceData.nonCurrentLiabilitiesTotal,
+      currentLiabilities: balanceData.currentLiabilitiesTotal,
+      totalLiabilitiesAndEquity: balanceData.totalEquityAndLiabilities,
+      isBalanced: balanceData.isBalanced,
+      cashFlow: cashFlowData,
+    });
+
+    setGeneratedEntries([auditEntry]);
     setCurrentStep(5);
   };
 
@@ -739,7 +824,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
       }))
     );
 
-    const ws = XLSX.utils.json_to_array ? XLSX.utils.json_to_sheet(exportData) : XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'القيود المترجمة');
     XLSX.writeFile(wb, `Audit_Entries_${activeClient?.name}_${selectedFiscalYear}.xlsx`);
@@ -1289,6 +1374,55 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             </div>
           </div>
 
+          {/* Unclassified Accounts Red Warning Banner (Item 3c) */}
+          {unclassifiedWarnings.length > 0 && (
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 rounded-xl space-y-1">
+              <h4 className="text-xs font-bold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                تحذير: توجد حسابات غير مصنفة بالقوائم المالية المعتمدة ({unclassifiedWarnings.length})
+              </h4>
+              <ul className="text-xs text-rose-700 dark:text-rose-400 list-disc list-inside space-y-1">
+                {unclassifiedWarnings.map((warn, i) => (
+                  <li key={i}>{warn}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Generation Error Message Banner (Item 3d) */}
+          {generationError && (
+            <div className="p-4 bg-rose-100 dark:bg-rose-950/80 border-2 border-rose-500 rounded-xl flex items-start gap-3">
+              <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-rose-900 dark:text-rose-100">فشل الانتقال والاتزان</h4>
+                <p className="text-xs text-rose-800 dark:text-rose-200 font-medium">{generationError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Optional Partner Account Balancing Trigger (Item 3e) */}
+          {!staticCheck.isBalanced && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-amber-600" />
+                  خيارات تسوية فرق عدم الاتزان ({round2(staticCheck.difference).toLocaleString('ar-EG')} ج.م)
+                </h4>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  يمكنك معالجة الفرق يدوياً بتعديل أرقام القيود، أو اختيار موازنة الفرق بجاري الشركاء اختياريًا.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPartnerBalanceModal(true)}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Scale className="w-4 h-4" />
+                <span>موازنة الفرق بجاري الشركاء (3600)</span>
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
             <button
               type="button"
@@ -1308,6 +1442,65 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
               <span>التالي: توليد القيود المباشرة والقوائم المالية</span>
               <ArrowLeft className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Partner Account Balancing (Item 3e) */}
+      {showPartnerBalanceModal && staticCheck && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Scale className="w-5 h-5 text-amber-500" />
+                تأكيد موازنة الفرق بجاري الشركاء (3600)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPartnerBalanceModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
+              <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl space-y-2">
+                <div className="flex justify-between">
+                  <span className="font-semibold">السنة المالية:</span>
+                  <span className="font-bold">{selectedFiscalYear}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">قيمة فرق عدم الاتزان:</span>
+                  <span className="font-bold font-mono text-rose-600">{round2(staticCheck.difference).toLocaleString('ar-EG')} ج.م</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">الحساب التأثري:</span>
+                  <span className="font-bold">3600 - جاري الشركاء</span>
+                </div>
+              </div>
+
+              <p className="text-slate-500 text-[11px] leading-relaxed">
+                سيتم إضافة/تعديل سطر القيد الخاص بحساب جاري الشركاء بمبلغ التسوية وتدويل العمليات في سجل تعديلات المراجع.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowPartnerBalanceModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleBalanceWithPartnerAccount}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs"
+              >
+                تأكيد الموازنة وتسجيل الأثر
+              </button>
+            </div>
           </div>
         </div>
       )}

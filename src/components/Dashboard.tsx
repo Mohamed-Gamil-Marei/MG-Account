@@ -180,9 +180,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {
         id: 'kpi-net-income',
         title: 'صافي الربح العام',
-        value: formatEgyptianCurrency(incomeData.netIncome),
-        badge: incomeData.netIncome >= 0 ? '+ربح تشغيلي' : '-عجز مالي',
-        badgeVariant: incomeData.netIncome >= 0 ? 'emerald' : 'rose',
+        value: formatEgyptianCurrency((incomeData as any).netIncome ?? (incomeData as any).netProfit ?? 0),
+        badge: ((incomeData as any).netIncome ?? (incomeData as any).netProfit ?? 0) >= 0 ? '+ربح تشغيلي' : '-عجز مالي',
+        badgeVariant: ((incomeData as any).netIncome ?? (incomeData as any).netProfit ?? 0) >= 0 ? 'emerald' : 'rose',
         category: 'FINANCIAL',
         targetTab: 'FINANCIAL_STATEMENTS',
         icon: TrendingUp,
@@ -296,7 +296,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {
         id: 'kpi-assets',
         title: 'إجمالي الأصول',
-        value: formatEgyptianCurrency(balanceData.assetsTotal),
+        value: formatEgyptianCurrency((balanceData as any).assetsTotal ?? (balanceData as any).totalAssets ?? 0),
         badge: 'متداولة وثابتة',
         badgeVariant: 'indigo',
         category: 'FINANCIAL',
@@ -362,7 +362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {
         id: 'kpi-liabilities',
         title: 'إجمالي الالتزامات',
-        value: formatEgyptianCurrency(balanceData.liabilitiesTotal),
+        value: formatEgyptianCurrency((balanceData as any).liabilitiesTotal ?? (balanceData as any).totalLiabilities ?? 0),
         badge: 'خصوم ومطلوبات',
         badgeVariant: 'amber',
         category: 'FINANCIAL',
@@ -618,17 +618,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const getBadgeClass = (variant: KpiCardItem['badgeVariant']) => {
     switch (variant) {
       case 'emerald':
-        return 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'rose':
-        return 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800';
-      case 'amber':
-        return 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
-      case 'indigo':
-        return 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
-      case 'blue':
-        return 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+        return 'bg-red-50 text-red-700 border-red-200';
       default:
-        return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+        return 'bg-slate-50 text-slate-700 border-slate-200';
     }
   };
 
@@ -761,15 +755,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div
               key={kpi.id}
               onClick={() => navigate(kpi.targetTab)}
-              className="min-h-[142px] sm:min-h-[150px] rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800/90 shadow-2xs hover:shadow-md hover:border-emerald-500/60 dark:hover:border-emerald-500/50 transition-all p-3 flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              className="min-h-[120px] rounded-lg bg-white border border-slate-200 shadow-sm hover:border-slate-400 transition-all p-3 flex flex-col justify-between cursor-pointer group relative"
               title={`انقر للانتقال إلى تفاصيل ${kpi.title}`}
             >
               {/* Card Top: Icon & ActionsMenu */}
               <div className="flex items-center justify-between gap-1">
                 <div
-                  className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${kpi.iconBg}`}
+                  className="w-7 h-7 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0"
                 >
-                  <Icon className={`w-3.5 h-3.5 ${kpi.iconColor}`} />
+                  <Icon className="w-3.5 h-3.5 text-slate-700" />
                 </div>
 
                 {/* Stop propagation so clicking the menu button doesn't trigger card navigation */}
@@ -791,26 +785,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
               {/* Card Center: Clean Value & Title */}
               <div className="my-auto py-1 text-right min-w-0">
                 <div
-                  className="font-mono font-black text-sm sm:text-base text-slate-900 dark:text-slate-50 truncate tracking-tight"
+                  className="font-mono font-bold text-sm sm:text-base text-slate-900 truncate tracking-tight"
                   title={String(kpi.value)}
                 >
                   {kpi.value}
                 </div>
-                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-400 truncate mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                <h3 className="text-xs font-medium text-slate-600 truncate mt-0.5">
                   {kpi.title}
                 </h3>
               </div>
 
               {/* Card Bottom: Concise Geometric Badge Indicator */}
-              <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/80">
+              <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100">
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border truncate ${getBadgeClass(
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded border truncate ${getBadgeClass(
                     kpi.badgeVariant
                   )}`}
                 >
                   {kpi.badge}
                 </span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[10px] text-slate-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
                   عرض ↵
                 </span>
               </div>

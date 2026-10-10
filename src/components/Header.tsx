@@ -104,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <h1 className="text-sm sm:text-base md:text-lg font-black tracking-tight text-white flex items-center gap-1">
-                <span>{isEn ? (profile.firmNameEnglish || profile.firmName) : profile.firmName}</span>
+                <span>{isEn ? ((profile as any).firmNameEnglish || profile.firmName) : profile.firmName}</span>
                 <span className="text-emerald-400">/ {profile.auditorName}</span>
               </h1>
               <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">

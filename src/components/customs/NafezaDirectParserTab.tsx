@@ -243,7 +243,7 @@ export const NafezaDirectParserTab: React.FC<NafezaDirectParserTabProps> = ({
               >
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.taxNumber || 'سجل ضريبي'})
+                    {c.name} ({c.taxCardNo || 'سجل ضريبي'})
                   </option>
                 ))}
               </select>
@@ -380,12 +380,12 @@ export const NafezaDirectParserTab: React.FC<NafezaDirectParserTabProps> = ({
                     {parsedData.items.map((it) => (
                       <tr key={it.id} className="hover:bg-slate-800/30">
                         <td className="p-2.5 font-mono font-bold text-cyan-300">{it.hsCode}</td>
-                        <td className="p-2.5 font-semibold text-white">{it.descriptionAr}</td>
+                        <td className="p-2.5 font-semibold text-white">{it.description}</td>
                         <td className="p-2.5 font-mono text-slate-300">
-                          {it.quantity} {it.unitOfMeasure}
+                          {it.quantity} {it.unit}
                         </td>
-                        <td className="p-2.5 font-mono text-amber-300">{(it.customsDutyRate * 100).toFixed(0)}%</td>
-                        <td className="p-2.5 font-mono text-blue-300">{(it.vatRate * 100).toFixed(0)}%</td>
+                        <td className="p-2.5 font-mono text-amber-300">{(it.customsDutyRatePct || 0).toFixed(0)}%</td>
+                        <td className="p-2.5 font-mono text-blue-300">{(it.vatRatePct || 14).toFixed(0)}%</td>
                         <td className="p-2.5 font-mono font-bold text-emerald-400">
                           {it.unitLandedCostEgp?.toLocaleString()} ج.م
                         </td>

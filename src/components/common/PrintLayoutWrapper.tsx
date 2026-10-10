@@ -135,8 +135,8 @@ export const PrintLayoutWrapper: React.FC<PrintLayoutWrapperProps> = ({
     PrintService.printElementById(id, {
       title: editableDocTitle,
       orientation: printSettings.orientation === 'LANDSCAPE' ? 'landscape' : 'portrait',
-      pageSize: printSettings.paperSize || 'A4',
-      margins: printSettings.margins || 'DEFAULT',
+      pageSize: (printSettings.paperSize === 'LEGAL' ? 'A4' : printSettings.paperSize) as any || 'A4',
+      margins: (printSettings.margins === 'WIDE' ? 'DEFAULT' : printSettings.margins) as any || 'DEFAULT',
       showLetterhead: printSettings.includeLetterhead !== false,
       showStamp: printSettings.includeSignatureStamp !== false && showSignatureStamp,
       showQr: printSettings.includeQrVerification !== false,

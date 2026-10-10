@@ -2472,7 +2472,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       {/* New Journal Entry Modal with Wizard Pattern */}
       {isNewEntryModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 my-8 animate-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-xl max-w-4xl w-full p-6 shadow-sm border border-slate-200 my-8">
             {/* Modal Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
               <div className="flex items-center gap-2">
@@ -3723,7 +3723,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                         type="button"
                         onClick={handleOpenClientReportModalForNewEntry}
                         disabled={!isBalanced}
-                        className="px-4 py-2 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl font-bold shadow-md shadow-emerald-950/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         title="ربط القيد مباشرة بملف العميل وتوثيقه كتقرير رسمي في أرشيف المستندات"
                       >
                         <FolderArchive className="w-4 h-4 text-emerald-300" />

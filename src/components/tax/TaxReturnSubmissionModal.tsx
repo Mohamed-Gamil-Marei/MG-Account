@@ -255,7 +255,7 @@ export const TaxReturnSubmissionModal: React.FC<TaxReturnSubmissionModalProps> =
     };
 
     db.updateClient(selectedClient.id, {
-      taxSystemType: selectedSystem,
+      taxSystemType: selectedSystem === 'SAP' ? 'SAP' : 'OLD_PORTAL',
       portalCredentials: updatedCreds,
     });
 

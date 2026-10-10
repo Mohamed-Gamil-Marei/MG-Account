@@ -48,9 +48,9 @@ import {
 import AccountingHubView from './components/hubs/AccountingHubView';
 
 // Resilient dynamic loader that safely handles both default and named exports with network retry
-function lazyWithRetry<T extends React.ComponentType<any>>(
+function lazyWithRetry(
   factory: () => Promise<any>
-): React.LazyExoticComponent<any> {
+): React.LazyExoticComponent<React.ComponentType<any>> {
   return React.lazy(async () => {
     try {
       const res = await factory();

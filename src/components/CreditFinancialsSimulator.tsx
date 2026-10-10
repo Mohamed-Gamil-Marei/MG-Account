@@ -966,9 +966,9 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   const getNoteBreakdownSum = (noteNumber: number | string, yr: number): number | null => {
     const note = supplementaryNotes.find((n) => String(n.noteNumber) === String(noteNumber));
     if (note && note.customBreakdownRows && note.customBreakdownRows.length > 0) {
-      const hasAnyValue = note.customBreakdownRows.some((r) => r.values && r.values[yr] !== undefined);
+      const hasAnyValue = note.customBreakdownRows.some((r: any) => (r.values && r.values[yr] !== undefined) || (r.valuesByYear && r.valuesByYear[yr] !== undefined));
       if (hasAnyValue) {
-        return note.customBreakdownRows.reduce((sum, r) => sum + (r.values?.[yr] || 0), 0);
+        return note.customBreakdownRows.reduce((sum, r: any) => sum + (r.values?.[yr] || r.valuesByYear?.[yr] || 0), 0);
       }
     }
     return null;
@@ -979,7 +979,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     const result: Record<number, any> = {};
 
     yearsList.forEach((yr) => {
-    const d = yearsData[yr] || {
+    const d: any = yearsData[yr] || {
       sales: 10000000,
       cogsRatio: 75,
       adminExpRatio: 8,
@@ -1132,9 +1132,9 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     const retainedEarningsAndProfit = hiddenItemIds.includes('retainedEarningsAndProfit') ? 0 : rawRetained;
 
     // Partner Current Account (جاري الشركاء): plug balancing account
-    const rawPartnerAccount = d.partnerCurrentAccount !== undefined
-      ? d.partnerCurrentAccount
-      : (d.legalReserve !== undefined ? d.legalReserve : (totalAssets - totalLiabilities - paidUpCapital - retainedEarningsAndProfit));
+    const rawPartnerAccount = (d as any).partnerCurrentAccount !== undefined
+      ? (d as any).partnerCurrentAccount
+      : ((d as any).legalReserve !== undefined ? (d as any).legalReserve : (totalAssets - totalLiabilities - paidUpCapital - retainedEarningsAndProfit));
     const legalReserve = hiddenItemIds.includes('legalReserve') ? 0 : rawPartnerAccount;
 
     // True Equity Sum:
@@ -1219,7 +1219,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   // Centralized Bidirectional Cell Update Handler
   const handleUpdateFinancialStatementCell = (field: string, year: number, val: number) => {
     // 1. Update yearsData state with explicit override
-    setYearsData((prev) => ({
+    setYearsData((prev: any) => ({
       ...prev,
       [year]: {
         ...(prev[year] || {}),
@@ -1250,7 +1250,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
     const targetNoteNum = noteMapping[field];
     if (targetNoteNum !== undefined) {
-      setSupplementaryNotes((prevNotes) =>
+      setSupplementaryNotes((prevNotes: any[]) =>
         prevNotes.map((note) => {
           if (String(note.noteNumber) === String(targetNoteNum)) {
             const rows = note.customBreakdownRows || [];
@@ -1266,11 +1266,11 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 ],
               };
             }
-            const currentTotal = rows.reduce((s, r) => s + (r.values?.[year] || 0), 0);
+            const currentTotal = rows.reduce((s: number, r: any) => s + (r.values?.[year] || r.valuesByYear?.[year] || 0), 0);
             if (currentTotal === 0 || rows.length === 1) {
               return {
                 ...note,
-                customBreakdownRows: rows.map((r, idx) =>
+                customBreakdownRows: rows.map((r: any, idx: number) =>
                   idx === 0
                     ? { ...r, values: { ...(r.values || {}), [year]: val } }
                     : { ...r, values: { ...(r.values || {}), [year]: 0 } }
@@ -1281,7 +1281,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             let allocated = 0;
             return {
               ...note,
-              customBreakdownRows: rows.map((r, idx) => {
+              customBreakdownRows: rows.map((r: any, idx: number) => {
                 if (idx === rows.length - 1) {
                   const remainder = val - allocated;
                   return {
@@ -1289,7 +1289,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                     values: { ...(r.values || {}), [year]: Math.round(remainder * 100) / 100 },
                   };
                 }
-                const rowVal = Math.round((r.values?.[year] || 0) * factor * 100) / 100;
+                const rowVal = Math.round(((r.values?.[year] || r.valuesByYear?.[year] || 0)) * factor * 100) / 100;
                 allocated += rowVal;
                 return {
                   ...r,
@@ -2066,7 +2066,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             yearsList={yearsList}
             yearsData={yearsData}
             computedData={computedData}
-            activeYear={selectedYear}
+            {...({ activeYear: selectedYear } as any)}
             clientName={clientProfile.companyName}
             onApplyEngineeredNumbers={handleApplyEngineeredNumbers}
           />
@@ -2132,7 +2132,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           <button
             type="button"
             onClick={() => {
-              setPrintScope('CURRENT_VIEW');
+              setPrintScope('CURRENT_VIEW' as any);
               setIsPrintModalOpen(true);
             }}
             className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
@@ -2196,7 +2196,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             onRollForwardFromPreviousYear={handleRollForwardFinancialsFromPreviousYear}
             onUpdateCell={handleUpdateFinancialStatementCell}
             onUpdateYearData={(yr, partial) => {
-              setYearsData((prev) => ({
+              setYearsData((prev: any) => ({
                 ...prev,
                 [yr]: { ...(prev[yr] || {}), ...partial },
               }));

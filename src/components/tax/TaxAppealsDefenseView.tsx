@@ -121,7 +121,7 @@ export const TaxAppealsDefenseView: React.FC<TaxAppealsDefenseViewProps> = ({
               >
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.taxNumber || 'سجل ضريبي'})
+                    {c.name} ({c.taxCardNo || 'سجل ضريبي'})
                   </option>
                 ))}
               </select>
@@ -299,8 +299,8 @@ export const TaxAppealsDefenseView: React.FC<TaxAppealsDefenseViewProps> = ({
             <div className="text-slate-300">تحية طيبة وبعد ،،،</div>
             <div className="text-slate-300 text-justify">
               مقدمه لسيادتكم / المحاسب القانوني <strong>محمد جميل مرعي</strong>، بصفتي وكيلاً عن الممول / <strong>{selectedClient?.name}</strong>،
-              المسجل ضريبياً برقم <strong>({selectedClient?.taxNumber || '000-000-000'})</strong>، 
-              وملف ضريبي رقم <strong>({selectedClient?.fileNumber || '12345/ع'})</strong>.
+              المسجل ضريبياً برقم <strong>({selectedClient?.taxCardNo || '000-000-000'})</strong>، 
+              وملف ضريبي رقم <strong>({selectedClient?.incomeTaxFileNo || '12345/ع'})</strong>.
             </div>
           </div>
 

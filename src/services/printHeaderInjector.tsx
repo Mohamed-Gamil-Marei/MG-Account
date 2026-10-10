@@ -48,7 +48,7 @@ export function injectPrintHeader(customTitle?: string): void {
     injectedRoot = createRoot(injectedHeaderContainer);
     injectedRoot.render(
       <DensityProvider>
-        <I18nProvider>
+        <I18nProvider language="ar">
           <div className="w-full">
             <OfficialReportHeader
               officeProfile={officeProfile}

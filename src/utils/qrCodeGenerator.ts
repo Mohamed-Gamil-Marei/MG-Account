@@ -25,6 +25,7 @@ export interface VerificationPayloadData {
   taxOffice?: string;
   auditorName?: string;
   licenseNumber?: string;
+  licenseNo?: string;
   amount?: number;
   totalAssets?: number;
   netProfit?: number;

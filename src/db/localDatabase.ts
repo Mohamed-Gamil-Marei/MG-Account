@@ -926,22 +926,25 @@ export class LocalDatabase {
     category: AccountCategory,
     nature: 'DEBIT' | 'CREDIT'
   ): Account {
-    let acc = this.state.accounts.find(
-      (a) => a.code === code || a.name.trim() === defaultName.trim()
-    );
-    if (!acc) {
-      acc = this.addAccount({
-        code,
-        name: defaultName,
-        category,
-        nature,
-        level: 2,
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        isSystem: false,
-      });
+    const acc = this.state.accounts.find((a) => a.code === code);
+    if (acc) {
+      if (acc.name.trim() !== defaultName.trim()) {
+        throw new Error(
+          `تعارض في دليل الحسابات: الكود (${code}) موجود باسم (${acc.name}) بينما الاسم المطلوب هو (${defaultName}).`
+        );
+      }
+      return acc;
     }
-    return acc;
+    return this.addAccount({
+      code,
+      name: defaultName,
+      category,
+      nature,
+      level: 2,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      isSystem: false,
+    });
   }
 
   public updateJournalEntry(id: string, updates: Partial<JournalEntry>): JournalEntry | null {
@@ -1208,13 +1211,14 @@ export class LocalDatabase {
     };
 
     // الأصول
-    addDebit('1110', 'الأصول الثابتة', 'ASSETS', bs.nonCurrentAssets.ppe, 'الأصول الثابتة بالتكلفة التاريخية');
-    addDebit('1210', 'مخزون بضاعة آخر المدة', 'ASSETS', bs.currentAssets.inventory, 'مخزون بضاعة وخامات آخر المدة');
-    addDebit('1220', 'العملاء والمدينون التجاريون', 'ASSETS', bs.currentAssets.receivables, 'أرصدة العملاء والمدينين');
-    addDebit('1225', 'أوراق القبض', 'ASSETS', bs.currentAssets.notesReceivable, 'أوراق قبض تجارية برسم التحصيل');
-    addDebit('1230', 'مصلحة الضرائب - رصيد مدين', 'ASSETS', bs.currentAssets.taxDebit, 'أرصدة ضريبية مدينة ومسدد تحت الحساب');
-    addDebit('1250', 'مصروفات مدفوعة مقدماً وأرصدة مدينة', 'ASSETS', bs.currentAssets.prepayments, 'مصروفات مدفوعة مقدماً وأرصدة مدينة أخرى');
-    addDebit('1260', 'نقدية بالصندوق والبنوك', 'ASSETS', bs.currentAssets.cashAndBanks, 'النقدية بالبنوك والصندوق');
+    addDebit('1110', 'أصول ثابتة', 'ASSETS', bs.nonCurrentAssets.ppe, 'الأصول الثابتة بالتكلفة التاريخية');
+    addDebit('1210', 'مخزون', 'ASSETS', bs.currentAssets.inventory, 'مخزون بضاعة وخامات آخر المدة');
+    addDebit('1220', 'عملاء', 'ASSETS', bs.currentAssets.receivables, 'أرصدة العملاء والمدينين');
+    addDebit('1225', 'أوراق قبض', 'ASSETS', bs.currentAssets.notesReceivable, 'أوراق قبض تجارية برسم التحصيل');
+    addDebit('1230', 'أرصدة ضريبية مدينة', 'ASSETS', bs.currentAssets.taxDebit, 'أرصدة ضريبية مدينة ومسدد تحت الحساب');
+    addDebit('1240', 'مصروفات مقدمة', 'ASSETS', bs.currentAssets.prepayments, 'مصروفات مدفوعة مقدماً وأرصدة مدينة أخرى');
+    addDebit('1250', 'نقدية', 'ASSETS', bs.currentAssets.cashAndBanks, 'النقدية بالصندوق والخزينة');
+    addDebit('1260', 'بنوك', 'ASSETS', bs.currentAssets.cashAndBanks, 'حسابات البنوك الجارية');
 
     // بنود الأصول المخصصة
     (params.customLines || []).forEach((cl) => {
@@ -1226,30 +1230,30 @@ export class LocalDatabase {
     });
 
     // الخصوم وحقوق الملكية
-    addCredit('1190', 'مجمع إهلاك الأصول الثابتة', 'ASSETS', bs.nonCurrentAssets.accDep, 'مجمع إهلاك الأصول الثابتة');
-    addCredit('3110', 'رأس المال المدفوع', 'EQUITY', bs.equity.capital, 'رأس المال المصدر والمدفوع');
-    addCredit('3120', 'الاحتياطي القانوني', 'EQUITY', bs.equity.legalReserve, 'الاحتياطي القانوني النظامي');
-    addCredit('3130', 'احتياطيات أخرى', 'EQUITY', bs.equity.otherReserves || 0, 'احتياطيات أخرى');
-    addCredit('3140', 'أرباح مرحلة', 'EQUITY', bs.equity.retainedEarnings, 'الأرباح المرحلة');
+    addCredit('1190', 'مجمع إهلاك', 'ASSETS', bs.nonCurrentAssets.accDep, 'مجمع إهلاك الأصول الثابتة');
+    addCredit('3100', 'رأس مال', 'EQUITY', bs.equity.capital, 'رأس المال المصدر والمدفوع');
+    addCredit('3200', 'احتياطي قانوني', 'EQUITY', bs.equity.legalReserve, 'الاحتياطي القانوني النظامي');
+    addCredit('3300', 'احتياطيات أخرى', 'EQUITY', bs.equity.otherReserves || 0, 'احتياطيات أخرى');
+    addCredit('3400', 'أرباح مرحلة', 'EQUITY', bs.equity.retainedEarnings, 'الأرباح المرحلة');
 
     const profitVal = Number(bs.equity.currentProfit || 0);
     if (profitVal > 0) {
-      addCredit('3141', 'صافي ربح العام', 'EQUITY', profitVal, 'صافي أرباح العام الحالي');
+      addCredit('3500', 'أرباح العام', 'EQUITY', profitVal, 'صافي أرباح العام الحالي');
     } else if (profitVal < 0) {
-      addDebit('3142', 'صافي خسارة العام', 'EQUITY', Math.abs(profitVal), 'صافي خسائر العام الحالي');
+      addDebit('3500', 'أرباح العام', 'EQUITY', Math.abs(profitVal), 'صافي خسائر العام الحالي');
     }
 
-    addCredit('3150', 'جاري الشركاء وأصحاب المنشأة', 'EQUITY', bs.equity.partnersCurrent, 'جاري الشركاء');
-    addCredit('3190', 'حقوق ملكية أخرى', 'EQUITY', bs.equity.otherEquity || 0, 'حقوق ملكية أخرى');
-    addCredit('2210', 'قروض وتسهيلات طويلة الأجل', 'LIABILITIES', bs.nonCurrentLiabilities.longTermLoans, 'قروض وتسهيلات بنكية طويلة الأجل');
-    addCredit('2220', 'التزامات ضريبية مؤجلة', 'LIABILITIES', bs.nonCurrentLiabilities.deferredTaxLiabilities || 0, 'التزامات ضريبية مؤجلة');
-    addCredit('2290', 'التزامات غير متداولة أخرى', 'LIABILITIES', bs.nonCurrentLiabilities.otherNonCurrentLiabilities || 0, 'التزامات غير متداولة أخرى');
+    addCredit('3600', 'جاري الشركاء', 'EQUITY', bs.equity.partnersCurrent, 'جاري الشركاء');
+    addCredit('2110', 'قروض طويلة', 'LIABILITIES', bs.nonCurrentLiabilities.longTermLoans, 'قروض وتسهيلات بنكية طويلة الأجل');
+    addCredit('2120', 'ضريبة مؤجلة', 'LIABILITIES', bs.nonCurrentLiabilities.deferredTaxLiabilities || 0, 'التزامات ضريبية مؤجلة');
 
-    addCredit('2110', 'الموردون والدائنون التجاريون', 'LIABILITIES', bs.currentLiabilities.payables, 'أرصدة الموردين والدائنين');
-    addCredit('2115', 'أوراق الدفع', 'LIABILITIES', bs.currentLiabilities.notesPayable, 'أوراق دفع وتعهدات سداد');
-    addCredit('2140', 'مصلحة الضرائب - مستحقات دائنة', 'LIABILITIES', bs.currentLiabilities.taxesPayable, 'ضرائب مستحقة واجبة السداد');
-    addCredit('2145', 'الهيئة القومية للتأمين الاجتماعي', 'LIABILITIES', bs.currentLiabilities.socialInsurance, 'تأمينات اجتماعية مستحقة');
-    addCredit('2150', 'مصروفات مستحقة وأرصدة دائنة', 'LIABILITIES', bs.currentLiabilities.accruedExpenses, 'مصروفات مستحقة وأرصدة دائنة');
+    addCredit('2210', 'موردين', 'LIABILITIES', bs.currentLiabilities.payables, 'أرصدة الموردين والدائنين');
+    addCredit('2220', 'أوراق دفع', 'LIABILITIES', bs.currentLiabilities.notesPayable, 'أوراق دفع وتعهدات سداد');
+    addCredit('2230', 'ض.ق.م', 'LIABILITIES', bs.currentLiabilities.taxesPayable, 'ضريبة القيمة المضافة المستحقة');
+    addCredit('2235', 'ضرائب أخرى', 'LIABILITIES', bs.currentLiabilities.taxesPayable, 'ضريبة كسب العمل المستحقة');
+    addCredit('2238', 'ضرائب أخرى', 'LIABILITIES', bs.currentLiabilities.taxesPayable, 'ضريبة الخصم والتحصيل المستحقة');
+    addCredit('2240', 'تأمينات', 'LIABILITIES', bs.currentLiabilities.socialInsurance, 'تأمينات اجتماعية مستحقة');
+    addCredit('2250', 'مستحقات', 'LIABILITIES', bs.currentLiabilities.accruedExpenses, 'مصروفات مستحقة وأرصدة دائنة');
     addCredit('2190', 'التزامات متداولة أخرى', 'LIABILITIES', bs.currentLiabilities.otherCurrentLiabilities || 0, 'التزامات متداولة أخرى');
 
     // بنود الخصوم والملكية المخصصة
