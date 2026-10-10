@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -12,6 +13,10 @@ import { etaMiddleware } from "./server/etaMiddleware.ts";
 import { whatsappServerEngine } from "./server/whatsappServerEngine.ts";
 
 dotenv.config();
+
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 let aiClient: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI | null {
@@ -27,6 +32,7 @@ function getAI(): GoogleGenAI | null {
 
 async function startServer() {
   const app = express();
+  app.set("trust proxy", 1);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(express.json({ limit: "50mb" }));
@@ -284,7 +290,6 @@ async function startServer() {
     const publicPaths = [
       "/api/health",
       "/api/currency/rates",
-      "/api/auth/verify-master",
       "/api/auth/check-setup",
       "/api/auth/setup-admin",
       "/api/auth/login",
@@ -302,7 +307,8 @@ async function startServer() {
       });
     }
 
-    const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(token) as any;
+    const tokenHash = hashToken(token);
+    const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(tokenHash) as any;
     if (!session || new Date(session.expires_at) < new Date()) {
       return res.status(401).json({
         success: false,
@@ -371,11 +377,12 @@ async function startServer() {
       const info = stmt.run(name.trim(), email.trim().toLowerCase(), hash, createdAt);
       const userId = info.lastInsertRowid;
 
-      const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashToken(rawToken);
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(token, userId, expiresAt);
+      db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(tokenHash, userId, expiresAt);
 
-      res.cookie("session_token", token, {
+      res.cookie("session_token", rawToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
@@ -407,11 +414,12 @@ async function startServer() {
         return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
       }
 
-      const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashToken(rawToken);
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(token, user.id, expiresAt);
+      db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(tokenHash, user.id, expiresAt);
 
-      res.cookie("session_token", token, {
+      res.cookie("session_token", rawToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
@@ -443,7 +451,8 @@ async function startServer() {
   app.post("/api/auth/logout", (req, res) => {
     const token = req.cookies?.session_token;
     if (token) {
-      db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+      const tokenHash = hashToken(token);
+      db.prepare("DELETE FROM sessions WHERE token = ?").run(tokenHash);
     }
     res.clearCookie("session_token");
     res.json({ success: true, message: "تم تسجيل الخروج بنجاح." });
@@ -455,7 +464,8 @@ async function startServer() {
       return res.status(401).json({ success: false, error: "غير مسجل الدخول." });
     }
 
-    const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(token) as any;
+    const tokenHash = hashToken(token);
+    const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(tokenHash) as any;
     if (!session || new Date(session.expires_at) < new Date()) {
       return res.status(401).json({ success: false, error: "انتهت صلاحية الجلسة." });
     }
@@ -571,6 +581,12 @@ async function startServer() {
       }
 
       const updatedRole = role !== undefined ? role : existing.role;
+      if (existing.role === 'ADMIN' && updatedRole !== 'ADMIN') {
+        const adminCountRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN'").get() as { count: number };
+        if (adminCountRow.count <= 1) {
+          return res.status(400).json({ success: false, error: "لا يمكن تغيير دور آخر مدير نظام (ADMIN)." });
+        }
+      }
       const updatedName = name !== undefined ? name : existing.name;
       const p = permissions !== undefined ? permissions : {
         canManageUsers: existing.can_manage_users,
@@ -639,10 +655,120 @@ async function startServer() {
       return res.status(400).json({ success: false, error: "لا يمكنك حذف حساب المدير الحالي." });
     }
 
+    const targetUser = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
+    if (targetUser && targetUser.role === 'ADMIN') {
+      const adminCountRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN'").get() as { count: number };
+      if (adminCountRow.count <= 1) {
+        return res.status(400).json({ success: false, error: "لا يمكن حذف آخر مدير نظام (ADMIN)." });
+      }
+    }
+
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM users WHERE id = ?").run(userId);
     res.json({ success: true, message: "تم حذف المستخدم وإلغاء جلساته بنجاح." });
   });
+
+  // --- AES-256-GCM Credentials Encryption Setup ---
+  const CREDENTIALS_KEY_SECRET = process.env.CREDENTIALS_KEY || "egyptian_accounting_system_credentials_secret_key_2026_gcm";
+  const CREDENTIALS_KEY_BUFFER = crypto.createHash("sha256").update(CREDENTIALS_KEY_SECRET).digest();
+
+  function encryptCredentials(data: any): string {
+    if (data === undefined || data === null) return "";
+    const jsonStr = typeof data === "string" ? data : JSON.stringify(data);
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", CREDENTIALS_KEY_BUFFER, iv);
+    let encrypted = cipher.update(jsonStr, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    const authTag = cipher.getAuthTag().toString("hex");
+    return `${iv.toString("hex")}:${authTag}:${encrypted}`;
+  }
+
+  function decryptCredentials(encryptedStr: string): any {
+    if (!encryptedStr || typeof encryptedStr !== "string" || !encryptedStr.includes(":")) return null;
+    const parts = encryptedStr.split(":");
+    if (parts.length !== 3) return null;
+    const [ivHex, authTagHex, encryptedText] = parts;
+    try {
+      const decipher = crypto.createDecipheriv("aes-256-gcm", CREDENTIALS_KEY_BUFFER, Buffer.from(ivHex, "hex"));
+      decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+      let decrypted = decipher.update(encryptedText, "hex", "utf8");
+      decrypted += decipher.final("utf8");
+      return JSON.parse(decrypted);
+    } catch (err) {
+      console.error("Credentials decryption error:", err);
+      return null;
+    }
+  }
+
+  function sanitizeClientData(parsedClient: any): any {
+    if (!parsedClient || typeof parsedClient !== "object") return parsedClient;
+    const client = JSON.parse(JSON.stringify(parsedClient));
+    if (client.portalCredentials) {
+      for (const key of Object.keys(client.portalCredentials)) {
+        const p = client.portalCredentials[key];
+        if (p && typeof p === "object") {
+          p.hasPassword = Boolean(p.password || p.pin || p.pinOtp);
+          delete p.password;
+          delete p.pin;
+          delete p.pinOtp;
+          delete p.clientSecret;
+        }
+      }
+    }
+    return client;
+  }
+
+  function processClientSaveData(parsedClient: any, existingClientRowData?: any): any {
+    if (!parsedClient || typeof parsedClient !== "object") return parsedClient;
+    const client = JSON.parse(JSON.stringify(parsedClient));
+
+    if (client.portalCredentials) {
+      let fullCredentials: any = { ...client.portalCredentials };
+
+      if (existingClientRowData) {
+        try {
+          const existingParsed = typeof existingClientRowData === "string" ? JSON.parse(existingClientRowData) : existingClientRowData;
+          if (existingParsed._encryptedPortalCredentials) {
+            const existingDecrypted = decryptCredentials(existingParsed._encryptedPortalCredentials);
+            if (existingDecrypted) {
+              for (const portalKey of Object.keys(existingDecrypted)) {
+                if (fullCredentials[portalKey]) {
+                  if (!fullCredentials[portalKey].password && existingDecrypted[portalKey]?.password) {
+                    fullCredentials[portalKey].password = existingDecrypted[portalKey].password;
+                  }
+                  if (!fullCredentials[portalKey].pin && existingDecrypted[portalKey]?.pin) {
+                    fullCredentials[portalKey].pin = existingDecrypted[portalKey].pin;
+                  }
+                  if (!fullCredentials[portalKey].pinOtp && existingDecrypted[portalKey]?.pinOtp) {
+                    fullCredentials[portalKey].pinOtp = existingDecrypted[portalKey].pinOtp;
+                  }
+                  if (!fullCredentials[portalKey].clientSecret && existingDecrypted[portalKey]?.clientSecret) {
+                    fullCredentials[portalKey].clientSecret = existingDecrypted[portalKey].clientSecret;
+                  }
+                } else {
+                  fullCredentials[portalKey] = existingDecrypted[portalKey];
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      client._encryptedPortalCredentials = encryptCredentials(fullCredentials);
+
+      for (const key of Object.keys(client.portalCredentials)) {
+        const p = client.portalCredentials[key];
+        if (p && typeof p === "object") {
+          p.hasPassword = Boolean(p.password || p.pin || p.pinOtp);
+          delete p.password;
+          delete p.pin;
+          delete p.pinOtp;
+          delete p.clientSecret;
+        }
+      }
+    }
+    return client;
+  }
 
   // --- Data Storage Endpoints (/api/data/:entityType) ---
   const restrictedSecretaryEntities = ["journalEntries", "treasury", "financialActivityLogs"];
@@ -654,6 +780,12 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
       }
       const user = (req as any).user;
+      if (entityType === "treasury" && !user?.canAccessTreasury && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى الخزنة." });
+      }
+      if (entityType === "auditLogs" && !user?.canAccessAuditTrail && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى سجل المراجعة." });
+      }
       if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
         return res.status(403).json({ success: false, error: "غير مصرح: حساب السكرتارية ليس له صلاحية الوصول للقيود أو الخزنة." });
       }
@@ -661,7 +793,10 @@ async function startServer() {
       const rows = db.prepare(`SELECT * FROM ${entityType}`).all() as any[];
       const data = rows.map((r) => {
         try {
-          const parsed = JSON.parse(r.data);
+          let parsed = JSON.parse(r.data);
+          if (entityType === "clients") {
+            parsed = sanitizeClientData(parsed);
+          }
           if (typeof parsed === "object" && parsed !== null) {
             return { ...parsed, _version: r.version, _updatedAt: r.updated_at, _updatedBy: r.updated_by };
           }
@@ -684,6 +819,12 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
       }
       const user = (req as any).user;
+      if (entityType === "treasury" && !user?.canAccessTreasury && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى الخزنة." });
+      }
+      if (entityType === "auditLogs" && !user?.canAccessAuditTrail && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى سجل المراجعة." });
+      }
       if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
         return res.status(403).json({ success: false, error: "غير مصرح." });
       }
@@ -691,7 +832,10 @@ async function startServer() {
       const rows = db.prepare(`SELECT * FROM ${entityType} WHERE version > ? OR updated_at > ?`).all(since, new Date(since).toISOString()) as any[];
       const data = rows.map((r) => {
         try {
-          const parsed = JSON.parse(r.data);
+          let parsed = JSON.parse(r.data);
+          if (entityType === "clients") {
+            parsed = sanitizeClientData(parsed);
+          }
           return { ...parsed, _version: r.version, _updatedAt: r.updated_at, _updatedBy: r.updated_by };
         } catch {
           return r.data;
@@ -710,24 +854,39 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
       }
       const user = (req as any).user;
+      if (entityType === "journalEntries" && !user?.canPostEntries && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية إضافة وترحيل القيود." });
+      }
+      if (entityType === "treasury" && !user?.canAccessTreasury && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى الخزنة." });
+      }
+      if (entityType === "auditLogs" && !user?.canAccessAuditTrail && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى سجل المراجعة." });
+      }
       if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
         return res.status(403).json({ success: false, error: "غير مصرح." });
       }
 
-      const { id, data, version } = req.body;
+      let { id, data, version } = req.body;
       if (!id || data === undefined) {
         return res.status(400).json({ success: false, error: "معرف السجل والبيانات مطلوبة." });
       }
 
-      const existing = db.prepare(`SELECT version FROM ${entityType} WHERE id = ?`).get(id) as any;
-      if (existing && version !== undefined && version < existing.version) {
+      const existingRow = db.prepare(`SELECT version, data FROM ${entityType} WHERE id = ?`).get(id) as any;
+      if (existingRow && version !== undefined && version < existingRow.version) {
         return res.status(409).json({
           success: false,
           error: "تعارض إصدار (Version Conflict): تم تعديل هذا السجل بواسطة مستخدم آخر مسبقاً. يرجى تحديث الصفحة.",
         });
       }
 
-      const newVersion = existing ? existing.version + 1 : 1;
+      if (entityType === "clients") {
+        const parsedData = typeof data === "string" ? JSON.parse(data) : data;
+        const processedData = processClientSaveData(parsedData, existingRow ? existingRow.data : null);
+        data = processedData;
+      }
+
+      const newVersion = existingRow ? existingRow.version + 1 : 1;
       const updatedAt = new Date().toISOString();
       const updatedBy = user ? user.name : "System";
       const dataStr = typeof data === "string" ? data : JSON.stringify(data);
@@ -743,12 +902,12 @@ async function startServer() {
         const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
         const auditRecord = {
           id: auditId,
-          action: existing ? "UPDATE" : "CREATE",
+          action: existingRow ? "UPDATE" : "CREATE",
           entity: entityType,
           recordId: id,
           userName: updatedBy,
           timestamp: updatedAt,
-          details: `تم ${existing ? "تعديل" : "إضافة"} سجل في ${entityType} (${id})`
+          details: `تم ${existingRow ? "تعديل" : "إضافة"} سجل في ${entityType} (${id})`
         };
         db.prepare(`
           INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
@@ -763,6 +922,77 @@ async function startServer() {
     }
   });
 
+  // --- Secure Reveal Endpoint for Client Credentials (with Audit Logging) ---
+  app.post("/api/clients/:id/reveal-credentials", (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ success: false, error: "تسجيل الدخول مطلوب لعرض بيانات الاعتمادات." });
+      }
+
+      const { id } = req.params;
+      const { portalKey } = req.body;
+
+      const row = db.prepare("SELECT data FROM clients WHERE id = ?").get(id) as any;
+      if (!row) {
+        return res.status(404).json({ success: false, error: "العميل غير موجود." });
+      }
+
+      let clientData: any = {};
+      try {
+        clientData = JSON.parse(row.data);
+      } catch {
+        return res.status(500).json({ success: false, error: "خطأ في قراءة بيانات العميل." });
+      }
+
+      let fullCredentials: any = null;
+      if (clientData._encryptedPortalCredentials) {
+        fullCredentials = decryptCredentials(clientData._encryptedPortalCredentials);
+      } else if (clientData.portalCredentials) {
+        fullCredentials = clientData.portalCredentials;
+      }
+
+      if (!fullCredentials) {
+        return res.status(404).json({ success: false, error: "لا توجد اعتمادات أو كلمات مرور مسجلة لهذا العميل." });
+      }
+
+      // Log to Audit Trail
+      const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+      const timestamp = new Date().toISOString();
+      const userName = user.name || user.email || "مستخدم";
+      const portalLabel = portalKey === 'sapPortal' ? 'منظومة ساب (SAP)' : portalKey === 'etaGeneralTax' ? 'بوابة الضرائب العامة' : portalKey || 'كافة البوابات';
+
+      const auditRecord = {
+        id: auditId,
+        action: "REVEAL_CLIENT_CREDENTIALS",
+        entity: "clients",
+        recordId: id,
+        userName: userName,
+        timestamp: timestamp,
+        details: `تم طلب إظهار كلمة المرور واعتمادات (${portalLabel}) للعميل: ${clientData.name || id} بواسطة ${userName}`
+      };
+
+      db.prepare(`
+        INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
+      `).run(auditId, JSON.stringify(auditRecord), timestamp, userName, JSON.stringify(auditRecord), timestamp, userName);
+
+      let resultCredentials = fullCredentials;
+      if (portalKey && portalKey !== 'all' && fullCredentials[portalKey]) {
+        resultCredentials = { [portalKey]: fullCredentials[portalKey] };
+      }
+
+      res.json({
+        success: true,
+        credentials: resultCredentials,
+        message: "تم إظهار بيانات الاعتماد بنجاح وتسجيل العملية في سجل المراجعة (Audit Log)."
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.delete("/api/data/:entityType/:id", (req, res) => {
     try {
       const { entityType, id } = req.params;
@@ -770,6 +1000,15 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
       }
       const user = (req as any).user;
+      if (!user?.canDeleteRecords && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية حذف السجلات." });
+      }
+      if (entityType === "treasury" && !user?.canAccessTreasury && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى الخزنة." });
+      }
+      if (entityType === "auditLogs" && !user?.canAccessAuditTrail && user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الوصول إلى سجل المراجعة." });
+      }
       if (user && user.role === "SECRETARY" && restrictedSecretaryEntities.includes(entityType)) {
         return res.status(403).json({ success: false, error: "غير مصرح." });
       }
@@ -837,8 +1076,30 @@ async function startServer() {
     }
   });
 
+  // --- Rate Limiter for Master Verification ---
+  const verifyMasterRateLimits = new Map<string, number[]>();
+  function verifyMasterRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
+    const now = Date.now();
+    let timestamps = verifyMasterRateLimits.get(ip) || [];
+    timestamps = timestamps.filter(ts => now - ts < 60 * 1000);
+    if (timestamps.length >= 5) {
+      return res.status(429).json({
+        success: false,
+        error: "تم تجاوز الحد المسموح لمحاولات التحقق (5 محاولات في الدقيقة). يرجى الانتظار.",
+      });
+    }
+    timestamps.push(now);
+    verifyMasterRateLimits.set(ip, timestamps);
+    next();
+  }
+
   // Endpoint to verify master password from server environment without client leaks
-  app.post("/api/auth/verify-master", (req, res) => {
+  app.post("/api/auth/verify-master", verifyMasterRateLimiter, (req, res) => {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ success: false, error: "غير مصرح: ينبغي تسجيل الدخول للتحقق." });
+    }
 
     const { passcode, type } = req.body;
     if (!passcode) {
@@ -853,12 +1114,18 @@ async function startServer() {
     }
 
     const normalized = String(passcode).trim();
-    let authorized = false;
+    const safeCompare = (a: string, b: string) => {
+      const bufA = Buffer.from(a);
+      const bufB = Buffer.from(b);
+      if (bufA.length !== bufB.length) return false;
+      return crypto.timingSafeEqual(bufA, bufB);
+    };
 
+    let authorized = false;
     if (type === "PURGE") {
-      authorized = (normalized === purgePass);
+      authorized = safeCompare(normalized, purgePass);
     } else {
-      authorized = (normalized === editPass || normalized === purgePass);
+      authorized = safeCompare(normalized, editPass) || safeCompare(normalized, purgePass);
     }
 
     res.json({ success: true, authorized });
@@ -1220,6 +1487,126 @@ ${JSON.stringify(sampleEntries, null, 2)}
     }
   });
 
+  // --- Account Mapping Suggestions endpoint (Gemini AI for File Review) ---
+  app.post("/api/audit/suggest-account-mapping", async (req, res) => {
+    try {
+      const { unmappedAccounts, chartOfAccounts } = req.body;
+      const ai = getAI();
+      if (!ai) {
+        return res.json({
+          success: false,
+          fallback: true,
+          message: "GEMINI_API_KEY غير مهيأ على السيرفر",
+        });
+      }
+
+      const prompt = `أنت خبير محاسبة مالية ومعايير محاسبة مصرية (EAS) ومراجع حسابات لدى مكتب المحاسب القانوني "محمد جميل مرعي".
+المطلوب: مطابقة قائمة الحسابات غير المربوطة التالية القادمة من ملف ميزان مراجعة/أستاذ عام مع دليل الحسابات المصري الموحد المرفق.
+
+الحسابات غير المربوطة:
+${JSON.stringify(unmappedAccounts || [], null, 2)}
+
+دليل الحسابات المستهدف للنظام:
+${JSON.stringify(chartOfAccounts || [], null, 2)}
+
+لكل حساب غير مربوط، اختر أنسب حساب من دليل الحسابات المستهدف.
+أرجع النتيجة بتنسيق JSON حصراً كـ Array:
+[
+  {
+    "originalCode": "الكود الأصلي من الملف",
+    "originalName": "الاسم الأصلي من الملف",
+    "suggestedCode": "كود الحساب المقترح من الدليل",
+    "suggestedName": "اسم الحساب المقترح من الدليل",
+    "confidence": 0.95,
+    "reasoning": "سبب الاقتراح المحاسبي بالتفصيل"
+  }
+]`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const text = response.text || "[]";
+      let parsed = [];
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        parsed = [];
+      }
+      res.json({ success: true, data: parsed });
+    } catch (err: any) {
+      console.error("Account Mapping Suggestion Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- Financial Review Report Endpoint (Gemini AI for File Review Notes & Disclosures) ---
+  app.post("/api/audit/generate-review-report", async (req, res) => {
+    try {
+      const { clientName, fiscalYear, financialSummary } = req.body;
+      const ai = getAI();
+      if (!ai) {
+        return res.json({
+          success: false,
+          fallback: true,
+          message: "GEMINI_API_KEY غير مهيأ على السيرفر",
+        });
+      }
+
+      const prompt = `أنت مراجع حسابات قانوني أول بمكتب المحاسب القانوني ومراقب الحسابات "محمد جميل مرعي".
+استلمت الأرقام النهائية الجاهزة للقوائم المالية للعميل: "${clientName || 'العميل'}" عن السنة المالية: ${fiscalYear || 2026}.
+
+الأرقام النهائية الجاهزة للقوائم المالية (المجموعات النهائية فقط):
+${JSON.stringify(financialSummary || {}, null, 2)}
+
+تعليمات حاسمة ومشددة جداً:
+1. ممنوع إدخال أو اختراع أو توليد أي أرقام جديدة نهائياً لم تذكر في المدخلات أعلاه!
+2. كل رقم أو نسبة أو مبلغ تذكره في التقرير يجب أن يكون مستخرجاً مباشرة من أرقام القوائم المرفقة فقط.
+3. قم بإعداد:
+   - ملاحظات المراجعة والتحليل (Audit Observations)
+   - تحليل النسب المالية (الربحية، التداول، الهيكل المالي) بناءً على الأرقام
+   - صياغة الإيضاحات المتممة المبدئية للقوائم المالية.
+
+أرجع الإجابة بتنسيق JSON حصراً بالنظام التالي:
+{
+  "auditNotes": [
+    "ملاحظة 1 استناداً للأرقام...",
+    "ملاحظة 2 استناداً للأرقام..."
+  ],
+  "financialRatios": [
+    { "ratioName": "هامش مجمل الربح", "value": "XX%", "interpretation": "تحليل النسبة بناء على الإيرادات ومجمل الربح..." },
+    { "ratioName": "نسبة التداول", "value": "X.XX", "interpretation": "تحليل الأصول المتداولة والالتزامات المتداولة..." }
+  ],
+  "draftDisclosures": "نص الإيضاحات المتممة المعتمدة للقوائم المالية...",
+  "summaryText": "ملخص التقرير المالي ورأي المراجع المبدئي"
+}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const text = response.text || "{}";
+      let parsed = {};
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        parsed = {};
+      }
+      res.json({ success: true, data: parsed });
+    } catch (err: any) {
+      console.error("Generate Review Report Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Credit Financial Statement AI Distribution Assistant (توزيع النسب المالية لمبيعات مستهدفة)
   app.post("/api/ai/distribute-financials", async (req, res) => {
     try {
@@ -1440,8 +1827,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 6. Get Transmission Logs
-  app.get("/api/eta/logs", (_req, res) => {
+  app.get("/api/eta/logs", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       const logs = etaMiddleware.getLogs();
       res.json({ success: true, data: logs });
     } catch (err: any) {
@@ -1450,8 +1841,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 7. Clear Transmission Logs
-  app.delete("/api/eta/logs", (_req, res) => {
+  app.delete("/api/eta/logs", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       etaMiddleware.clearLogs();
       res.json({ success: true, message: "تم مسح سجل الإرسال بنجاح." });
     } catch (err: any) {
@@ -1460,8 +1855,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 8. Get current Server ETA config
-  app.get("/api/eta/config", (_req, res) => {
+  app.get("/api/eta/config", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       const config = etaMiddleware.getConfig();
       // Mask secret for security
       const safeConfig = {
@@ -1478,6 +1877,10 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   // 9. Update Server ETA config
   app.post("/api/eta/config", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       const updated = etaMiddleware.updateConfig(req.body);
       res.json({ success: true, data: updated, message: "تم تحديث إعدادات الوسيط بنجاح." });
     } catch (err: any) {
@@ -1588,8 +1991,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 4. Get WhatsApp Server Config
-  app.get("/api/whatsapp/config", (_req, res) => {
+  app.get("/api/whatsapp/config", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       const config = whatsappServerEngine.getConfig();
       res.json({
         success: true,
@@ -1607,6 +2014,10 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   // 5. Update WhatsApp Server Config
   app.post("/api/whatsapp/config", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       const updated = whatsappServerEngine.updateConfig(req.body);
       res.json({ success: true, data: updated, message: "تم تحديث إعدادات WhatsApp Business API بنجاح." });
     } catch (err: any) {
@@ -1625,8 +2036,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 7. Get WhatsApp Transmission Logs
-  app.get("/api/whatsapp/logs", (_req, res) => {
+  app.get("/api/whatsapp/logs", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       const logs = whatsappServerEngine.getLogs();
       res.json({ success: true, data: logs });
     } catch (err: any) {
@@ -1635,8 +2050,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 8. Clear WhatsApp Logs
-  app.delete("/api/whatsapp/logs", (_req, res) => {
+  app.delete("/api/whatsapp/logs", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تتطلب دور مدير (ADMIN)." });
+      }
       whatsappServerEngine.clearLogs();
       res.json({ success: true, message: "تم مسح سجل إرسال الرسائل بنجاح." });
     } catch (err: any) {
@@ -1661,6 +2080,19 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   // 10. Meta Webhook Receiver (POST)
   app.post("/api/whatsapp/webhook", async (req, res) => {
     try {
+      const signature = req.headers["x-hub-signature-256"] as string;
+      const appSecret = process.env.WHATSAPP_APP_SECRET;
+      if (appSecret) {
+        if (!signature) {
+          return res.status(401).json({ success: false, error: "توقيع Webhook مفقود." });
+        }
+        const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(JSON.stringify(req.body)).digest("hex");
+        const sigBuf = Buffer.from(signature);
+        const expBuf = Buffer.from(expected);
+        if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+          return res.status(401).json({ success: false, error: "توقيع Webhook غير صالح." });
+        }
+      }
       const result = await whatsappServerEngine.handleWebhookPayload(req.body);
       res.status(200).json(result);
     } catch (err: any) {
@@ -1705,9 +2137,13 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     }
   });
 
-  // 14. Live WhatsApp Chat: Simulate incoming client reply (for interactive preview & verification)
+  // 14. Live WhatsApp Chat: Simulate incoming client reply (for interactive preview & verification - ADMIN dev mode only)
   app.post("/api/whatsapp/chat/simulate-incoming", (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'ADMIN' || process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ success: false, message: "محاكاة الرسائل الواردة متاحة للمدير في وضع التطوير فقط." });
+      }
       const { phone, text, clientName } = req.body;
       if (!phone || !text) {
         return res.status(400).json({ success: false, message: "يرجى تحديد رقم الهاتف ونص رسالة العميل." });
@@ -1900,8 +2336,8 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       if (confirmationText !== "تأكيد الاستعادة") {
         return res.status(400).json({ success: false, error: "يرجى كتابة جملة التأكيد الصحيحة 'تأكيد الاستعادة' للمتابعة." });
       }
-      if (!backupName) {
-        return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية مطلوب." });
+      if (!backupName || typeof backupName !== 'string' || !/^backup_[A-Za-z0-9_-]+$/.test(backupName) || backupName.includes("..") || backupName.includes("/")) {
+        return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية غير صالح أو غير مسموح به." });
       }
 
       const targetPath = path.join(backupDir, backupName);

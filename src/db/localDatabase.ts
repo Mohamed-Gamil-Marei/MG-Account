@@ -5,6 +5,7 @@ import {
   JournalEntry,
   JournalEntryLine,
   ClientArchiveRecord,
+  PortalCredentials,
   ClientProcedureTask,
   ClientDocumentFolder,
   ClientDocument,
@@ -94,7 +95,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   baseCurrency: 'EGP',
   compactView: false,
   securityAuthEnabled: false,
-  customEditPassword: 'Mg120',
+  customEditPassword: '',
 };
 
 export interface DatabaseState {
@@ -125,6 +126,31 @@ export interface DatabaseState {
   clientArchives?: ClientArchiveRecord[];
   activeClientId?: string;
   activeClientName?: string;
+}
+
+function sanitizeClientsForLocalStorage(clients: ClientArchiveRecord[]): ClientArchiveRecord[] {
+  if (!Array.isArray(clients)) return [];
+  return clients.map((client) => {
+    if (!client.portalCredentials) return client;
+    const sanitizedCreds: PortalCredentials = {};
+    for (const [key, val] of Object.entries(client.portalCredentials)) {
+      if (val && typeof val === 'object') {
+        const p = val as any;
+        sanitizedCreds[key as keyof PortalCredentials] = {
+          ...p,
+          password: undefined,
+          pin: undefined,
+          pinOtp: undefined,
+          clientSecret: undefined,
+          hasPassword: Boolean(p.password || p.pin || p.pinOtp || p.hasPassword),
+        };
+      }
+    }
+    return {
+      ...client,
+      portalCredentials: sanitizedCreds,
+    };
+  });
 }
 
 export class LocalDatabase {
@@ -323,7 +349,7 @@ export class LocalDatabase {
       const officeProfileJson = localStorage.getItem(STORAGE_KEYS.OFFICE_PROFILE);
       const auditLogsJson = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
       const usersJson = localStorage.getItem(STORAGE_KEYS.SYSTEM_USERS);
-      const currentUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'user-admin';
+      const currentUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || '';
       const preferencesJson = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
       const whatsappMessagesJson = localStorage.getItem(STORAGE_KEYS.WHATSAPP_MESSAGES);
       const whatsappSettingsJson = localStorage.getItem(STORAGE_KEYS.WHATSAPP_SETTINGS);
@@ -501,7 +527,6 @@ export class LocalDatabase {
             const single = [...SAMPLE_SYSTEM_USERS];
             try {
               localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(single));
-              localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'user-admin');
               localStorage.setItem(RESET_FLAG, 'true');
             } catch {}
             return single;
@@ -513,8 +538,6 @@ export class LocalDatabase {
               if (adm) {
                 adm.name = 'admin';
                 adm.username = 'admin';
-                adm.pinCode = 'admin';
-                adm.password = 'admin';
                 adm.isActive = true;
               } else {
                 parsed.unshift({ ...DEFAULT_MASTER_ADMIN_USER });
@@ -524,7 +547,7 @@ export class LocalDatabase {
           }
           return [...SAMPLE_SYSTEM_USERS];
         })(),
-        currentUserId: 'user-admin',
+        currentUserId: (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) || '',
         preferences: preferencesJson ? JSON.parse(preferencesJson) : DEFAULT_USER_PREFERENCES,
         whatsappMessages: whatsappMessagesJson ? JSON.parse(whatsappMessagesJson) : [],
         whatsappBotSettings: (() => {
@@ -627,7 +650,8 @@ export class LocalDatabase {
         localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(this.state.journalEntries));
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.CLIENTS)) {
-        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(this.state.clients));
+        const safeClients = sanitizeClientsForLocalStorage(this.state.clients);
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(safeClients));
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.TREASURY)) {
         localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(this.state.treasuryTransactions));
@@ -810,30 +834,38 @@ export class LocalDatabase {
   // --- Journal Entries CRUD ---
   public validateJournalEntryDraft(entry: { totalDebit: number; totalCredit: number; lines: JournalEntryLine[] }): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
-    const totalDebit = Number(entry.totalDebit || 0);
-    const totalCredit = Number(entry.totalCredit || 0);
-    const diff = Math.abs(totalDebit - totalCredit);
+    const lines = entry.lines || [];
 
-    // 1. Balance verification
-    if (diff > 0.01) {
-      errors.push(`القيد غير متزن: إجمالي المدين (${totalDebit.toFixed(2)}) لا يساوي إجمالي الدائن (${totalCredit.toFixed(2)}) بفارق (${diff.toFixed(2)} ج.م)`);
+    // Calculate actual sum of debit and credit from lines to ensure strict mathematical equality
+    const calculatedDebit = Math.round(lines.reduce((sum, l) => sum + Number(l.debit || 0), 0) * 1000) / 1000;
+    const calculatedCredit = Math.round(lines.reduce((sum, l) => sum + Number(l.credit || 0), 0) * 1000) / 1000;
+    const diff = Math.abs(calculatedDebit - calculatedCredit);
+
+    // 1. Balance verification (difference > 0.005)
+    if (diff > 0.005) {
+      errors.push(`القيد غير متزن: إجمالي المدين (${calculatedDebit.toFixed(2)}) لا يساوي إجمالي الدائن (${calculatedCredit.toFixed(2)}) بفارق (${diff.toFixed(2)} ج.م)`);
     }
 
-    if (!entry.lines || entry.lines.length < 2) {
+    if (lines.length < 2) {
       errors.push('يجب أن يحتوي القيد على طرفين محاسبيين على الأقل (مدين ودائن)');
     }
 
     // 2. Lines debit/credit and accounts verification
-    for (let i = 0; i < (entry.lines || []).length; i++) {
-      const line = entry.lines[i];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const d = Number(line.debit || 0);
       const c = Number(line.credit || 0);
+
+      // Negative value check
+      if (d < 0 || c < 0) {
+        errors.push(`الطرف رقم (${i + 1}): لا يمكن إدخال قيم سالبة في المدين أو الدائن لحساب (${line.accountName || line.accountCode || 'مجهول'})`);
+      }
 
       // Debit/credit mutual exclusion
       if (d > 0 && c > 0) {
         errors.push(`الطرف رقم (${i + 1}): الحساب (${line.accountName || line.accountCode}) مسجل كمدين ودائن في نفس الوقت`);
       }
-      if (d <= 0 && c <= 0) {
+      if (d === 0 && c === 0) {
         errors.push(`الطرف رقم (${i + 1}): الحساب (${line.accountName || line.accountCode}) يجب أن يحتوي على مبلغ مدين أو دائن أكبر من صفر`);
       }
 
@@ -842,7 +874,7 @@ export class LocalDatabase {
         (a) => (line.accountId && a.id === line.accountId) || (line.accountCode && a.code === line.accountCode)
       );
       if (!accExists) {
-        errors.push(`الطرف رقم (${i + 1}): الحساب كود (${line.accountCode || 'مجهول'}) غير موجود في شجرة الحسابات المعتمدة`);
+        errors.push(`الطرف رقم (${i + 1}): الحساب كود (${line.accountCode || line.accountId || 'مجهول'}) غير موجود في شجرة الحسابات المعتمدة`);
       }
     }
 
@@ -866,7 +898,7 @@ export class LocalDatabase {
 
     const newEntry: JournalEntry = {
       ...entry,
-      id: `je-${Date.now()}`,
+      id: crypto.randomUUID(),
       entryNumber: nextNum,
       serialNumber: serial,
       qrPayload: `EGY-ACC-MGM|${serial}|${entry.date}|${entry.totalDebit.toFixed(2)}|${entry.isPosted ? 'POSTED' : 'DRAFT'}`,
@@ -924,6 +956,16 @@ export class LocalDatabase {
       );
     }
 
+    const candidate: JournalEntry = {
+      ...old,
+      ...updates,
+    };
+
+    const validation = this.validateJournalEntryDraft(candidate);
+    if (!validation.isValid) {
+      throw new Error(`تعذر تعديل القيد المحاسبي:\n${validation.errors.join('\n')}`);
+    }
+
     const now = new Date().toISOString();
 
     const audit: AuditRecord = {
@@ -934,8 +976,7 @@ export class LocalDatabase {
     };
 
     this.state.journalEntries[index] = {
-      ...old,
-      ...updates,
+      ...candidate,
       updatedAt: now,
       auditTrail: [audit, ...(old.auditTrail || [])],
     };
@@ -1081,45 +1122,45 @@ export class LocalDatabase {
 
       if (cogs > 0) {
         const acc = this.getOrCreateAccount('5110', 'تكلفة المبيعات والنشاط', 'EXPENSES', 'DEBIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: cogs, credit: 0, description: 'تكلفة المبيعات المحققة' });
+        incLines.push({ id: `line-${Date.now()}-cogs`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: cogs, credit: 0, description: 'تكلفة المبيعات المحققة' });
       }
       if (admin > 0) {
-        const acc = this.getOrCreateAccount('5201', 'مصروفات عمومية وإدارية', 'EXPENSES', 'DEBIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: admin, credit: 0, description: 'المصروفات الإدارية والعمومية' });
+        const acc = this.getOrCreateAccount('5300', 'مصروفات عمومية وإدارية', 'EXPENSES', 'DEBIT');
+        incLines.push({ id: `line-${Date.now()}-admin`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: admin, credit: 0, description: 'المصروفات الإدارية والعمومية' });
       }
       if (selling > 0) {
-        const acc = this.getOrCreateAccount('5202', 'مصروفات بيعية وتسويقية', 'EXPENSES', 'DEBIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: selling, credit: 0, description: 'مصروفات البيع والتسويق' });
+        const acc = this.getOrCreateAccount('5200', 'مصروفات بيعية وتسويقية', 'EXPENSES', 'DEBIT');
+        incLines.push({ id: `line-${Date.now()}-sell`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: selling, credit: 0, description: 'مصروفات البيع والتسويق' });
       }
       if (dep > 0) {
-        const acc = this.getOrCreateAccount('5203', 'مصروف إهلاك الأصول الثابتة', 'EXPENSES', 'DEBIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: dep, credit: 0, description: 'إهلاك الأصول عن السنة' });
+        const acc = this.getOrCreateAccount('5360', 'مصروف إهلاك الأصول الثابتة', 'EXPENSES', 'DEBIT');
+        incLines.push({ id: `line-${Date.now()}-dep`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: dep, credit: 0, description: 'إهلاك الأصول عن السنة' });
       }
       if (fin > 0) {
-        const acc = this.getOrCreateAccount('5301', 'فوائد وأعباء تمويلية', 'EXPENSES', 'DEBIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: fin, credit: 0, description: 'أعباء وفوائد بنكية تمويلية' });
+        const acc = this.getOrCreateAccount('5400', 'فوائد وأعباء تمويلية', 'EXPENSES', 'DEBIT');
+        incLines.push({ id: `line-${Date.now()}-fin`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: fin, credit: 0, description: 'أعباء وفوائد بنكية تمويلية' });
       }
       if (taxExp > 0) {
-        const acc = this.getOrCreateAccount('5401', 'ضريبة الدخل عن العام', 'EXPENSES', 'DEBIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: taxExp, credit: 0, description: 'مخصص / عبء ضريبة الدخل السنوية' });
+        const acc = this.getOrCreateAccount('5500', 'ضريبة الدخل عن العام', 'EXPENSES', 'DEBIT');
+        incLines.push({ id: `line-${Date.now()}-tax`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: taxExp, credit: 0, description: 'مخصص / عبء ضريبة الدخل السنوية' });
       }
 
       // إقفال صافي الربح / الخسارة
       if (netProfit > 0) {
         const acc = this.getOrCreateAccount('3140', 'أرباح العام / الأرباح المرحلة', 'EQUITY', 'CREDIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: netProfit, credit: 0, description: 'صافي ربح العام بعد الضريبة المحول للأرباح' });
+        incLines.push({ id: `line-${Date.now()}-profit`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: netProfit, credit: 0, description: 'صافي ربح العام بعد الضريبة المحول للأرباح' });
       } else if (netProfit < 0) {
         const acc = this.getOrCreateAccount('3140', 'أرباح العام / الأرباح المرحلة', 'EQUITY', 'CREDIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: Math.abs(netProfit), description: 'صافي خسارة العام المحولة للمرحلة' });
+        incLines.push({ id: `line-${Date.now()}-loss`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: Math.abs(netProfit), description: 'صافي خسارة العام المحولة للمرحلة' });
       }
 
       if (rev > 0) {
-        const acc = this.getOrCreateAccount('4110', 'إيرادات النشاط والمبيعات', 'REVENUE', 'CREDIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: rev, description: 'إيرادات المبيعات والنشاط السنوي' });
+        const acc = this.getOrCreateAccount('4110', 'إيرادات النشاط والمبيعات', 'REVENUES', 'CREDIT');
+        incLines.push({ id: `line-${Date.now()}-rev`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: rev, description: 'إيرادات المبيعات والنشاط السنوي' });
       }
       if (otherInc > 0) {
-        const acc = this.getOrCreateAccount('4201', 'إيرادات وأرباح أخرى', 'REVENUE', 'CREDIT');
-        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: otherInc, description: 'إيرادات وأرباح متنوعة أخرى' });
+        const acc = this.getOrCreateAccount('4201', 'إيرادات وأرباح أخرى', 'REVENUES', 'CREDIT');
+        incLines.push({ id: `line-${Date.now()}-other`, accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: otherInc, description: 'إيرادات وأرباح متنوعة أخرى' });
       }
 
       const totalDebitInc = Math.round(incLines.reduce((sum, l) => sum + (l.debit || 0), 0) * 100) / 100;
@@ -1154,7 +1195,7 @@ export class LocalDatabase {
       const v = Math.round(Number(val || 0) * 100) / 100;
       if (v > 0) {
         const acc = this.getOrCreateAccount(code, name, category, 'DEBIT');
-        bsLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: v, credit: 0, description: desc });
+        bsLines.push({ id: crypto.randomUUID(), accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: v, credit: 0, description: desc });
       }
     };
 
@@ -1162,7 +1203,7 @@ export class LocalDatabase {
       const v = Math.round(Number(val || 0) * 100) / 100;
       if (v > 0) {
         const acc = this.getOrCreateAccount(code, name, category, 'CREDIT');
-        bsLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: v, description: desc });
+        bsLines.push({ id: crypto.randomUUID(), accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: v, description: desc });
       }
     };
 
@@ -2341,14 +2382,13 @@ export class LocalDatabase {
     return true;
   }
 
-  // --- Complete Database Purge / Factory Reset with Passcode (Mgacc120) ---
+  // --- Complete Database Purge / Factory Reset with Passcode ---
   public purgeAllDatabaseData(passcode: string): { success: boolean; message: string } {
-    const norm = SecurityAuthService.normalizeInput(passcode).trim();
-    const isValid = norm === 'Mgacc120' || norm === 'mgacc120' || norm === 'Mg120' || norm === 'mg120' || SecurityAuthService.verifyPassword(passcode);
+    const isValid = SecurityAuthService.verifyPassword(passcode) || SecurityAuthService.verifyPurgePassword(passcode);
     if (!isValid) {
       return {
         success: false,
-        message: 'الرقم السري لتفريغ البيانات غير صحيح! يرجى إدخال الرقم السري المعتمد (Mgacc120 أو Mg120).',
+        message: 'الرقم السري لتفريغ البيانات غير صحيح! يرجى إدخال الرقم السري المعتمد.',
       };
     }
 
@@ -2736,9 +2776,9 @@ export class LocalDatabase {
       : `${params.year}-12-31`;
 
     const expenseAcc =
-      this.state.accounts.find((a) => a.id === params.expenseAccountId || a.code === '334' || a.name.includes('إهلاك')) || {
-        id: '334',
-        code: '334',
+      this.state.accounts.find((a) => a.id === params.expenseAccountId || a.code === '5360' || a.code === '334' || a.name.includes('إهلاك')) || {
+        id: 'acc-5360',
+        code: '5360',
         name: 'مصروف إهلاك أصول ثابتة',
       };
     const accumAcc =
@@ -2862,14 +2902,7 @@ export class LocalDatabase {
     const isDirectMatch = (normUserPin.length > 0 && normEntered === normUserPin) ||
                           (normPassword.length > 0 && normEntered === normPassword);
 
-    // 2. Sovereign Master password match (Mg120 / 120 / mg120 / Mgacc120 / custom master password)
-    const isMasterMatch = SecurityAuthService.verifyPassword(enteredPin);
-
-    // 3. Numeric-only match (e.g. user enters "120" for "Mg120", "2026" for "Aud2026", "123" for "Acc123")
-    const numericOnlyUserPin = (user.pinCode || '').replace(/\D/g, '');
-    const isNumericSuffixMatch = numericOnlyUserPin.length > 0 && normEntered === numericOnlyUserPin;
-
-    if (isDirectMatch || isMasterMatch || isNumericSuffixMatch) {
+    if (isDirectMatch) {
       this.state.currentUserId = user.id;
       this.saveState('CURRENT_USER_ID');
       this.logAudit('UPDATE', `تسجيل دخول ناجح للمستخدم: ${user.name} (${user.roleTitleArabic})`);

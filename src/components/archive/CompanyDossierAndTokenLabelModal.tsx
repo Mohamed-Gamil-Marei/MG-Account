@@ -84,25 +84,25 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
     // Token & Portals
     tokenProvider: client.portalCredentials?.eSignatureToken?.provider || 'إيجيبت ترست (Egypt Trust)',
     tokenType: client.portalCredentials?.eSignatureToken?.tokenType || 'E_SEAL',
-    tokenPin: client.portalCredentials?.eSignatureToken?.pin || 'Mg@2026#88',
-    tokenSerial: client.portalCredentials?.eSignatureToken?.serialNumber || 'ET-2026-99182',
-    tokenExpiry: client.portalCredentials?.eSignatureToken?.expiryDate || '2027/05/30',
+    tokenPin: client.portalCredentials?.eSignatureToken?.pin || '',
+    tokenSerial: client.portalCredentials?.eSignatureToken?.serialNumber || '',
+    tokenExpiry: client.portalCredentials?.eSignatureToken?.expiryDate || '',
 
     // Other Portals
     etaUser: client.portalCredentials?.etaEInvoicing?.username || client.email || `${client.taxCardNo || 'eta'}@portal.gov.eg`,
-    etaPass: client.portalCredentials?.etaEInvoicing?.password || 'Eta@9981#Pass',
+    etaPass: client.portalCredentials?.etaEInvoicing?.password || '',
     
-    sapUser: client.portalCredentials?.sapPortal?.username || client.taxCardNo || '492817302_SAP',
-    sapPass: client.portalCredentials?.sapPortal?.password || 'SapEgypt#2026!',
+    sapUser: client.portalCredentials?.sapPortal?.username || client.taxCardNo || '',
+    sapPass: client.portalCredentials?.sapPortal?.password || '',
 
-    payrollUser: client.portalCredentials?.etaPayrollTax?.username || client.taxCardNo || 'PAY_492817302',
-    payrollPass: client.portalCredentials?.etaPayrollTax?.password || 'Pay#7718!eg',
+    payrollUser: client.portalCredentials?.etaPayrollTax?.username || client.taxCardNo || '',
+    payrollPass: client.portalCredentials?.etaPayrollTax?.password || '',
 
-    nafezaUser: client.portalCredentials?.nafeza?.username || `NAF_${client.taxCardNo || '817'}`,
-    nafezaPass: client.portalCredentials?.nafeza?.password || 'Nafeza#2026$Safe',
+    nafezaUser: client.portalCredentials?.nafeza?.username || '',
+    nafezaPass: client.portalCredentials?.nafeza?.password || '',
 
-    insuranceUser: client.portalCredentials?.socialInsurancePortal?.username || client.socialInsuranceNo || 'INS_2940182',
-    insurancePass: client.portalCredentials?.socialInsurancePortal?.password || 'Ins#Eg8891!',
+    insuranceUser: client.portalCredentials?.socialInsurancePortal?.username || client.socialInsuranceNo || '',
+    insurancePass: client.portalCredentials?.socialInsurancePortal?.password || '',
   });
 
   // Dynamic Subjection Obligations List with toggleable inclusion and full text customizability
@@ -201,24 +201,24 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
 
         tokenProvider: client.portalCredentials?.eSignatureToken?.provider || 'إيجيبت ترست (Egypt Trust)',
         tokenType: client.portalCredentials?.eSignatureToken?.tokenType || 'E_SEAL',
-        tokenPin: client.portalCredentials?.eSignatureToken?.pin || 'Mg@2026#88',
-        tokenSerial: client.portalCredentials?.eSignatureToken?.serialNumber || 'ET-2026-99182',
-        tokenExpiry: client.portalCredentials?.eSignatureToken?.expiryDate || '2027/05/30',
+        tokenPin: client.portalCredentials?.eSignatureToken?.pin || '',
+        tokenSerial: client.portalCredentials?.eSignatureToken?.serialNumber || '',
+        tokenExpiry: client.portalCredentials?.eSignatureToken?.expiryDate || '',
 
         etaUser: client.portalCredentials?.etaEInvoicing?.username || client.email || `${client.taxCardNo || 'eta'}@portal.gov.eg`,
-        etaPass: client.portalCredentials?.etaEInvoicing?.password || 'Eta@9981#Pass',
+        etaPass: client.portalCredentials?.etaEInvoicing?.password || '',
         
-        sapUser: client.portalCredentials?.sapPortal?.username || client.taxCardNo || '492817302_SAP',
-        sapPass: client.portalCredentials?.sapPortal?.password || 'SapEgypt#2026!',
+        sapUser: client.portalCredentials?.sapPortal?.username || client.taxCardNo || '',
+        sapPass: client.portalCredentials?.sapPortal?.password || '',
 
-        payrollUser: client.portalCredentials?.etaPayrollTax?.username || client.taxCardNo || 'PAY_492817302',
-        payrollPass: client.portalCredentials?.etaPayrollTax?.password || 'Pay#7718!eg',
+        payrollUser: client.portalCredentials?.etaPayrollTax?.username || client.taxCardNo || '',
+        payrollPass: client.portalCredentials?.etaPayrollTax?.password || '',
 
-        nafezaUser: client.portalCredentials?.nafeza?.username || `NAF_${client.taxCardNo || '817'}`,
-        nafezaPass: client.portalCredentials?.nafeza?.password || 'Nafeza#2026$Safe',
+        nafezaUser: client.portalCredentials?.nafeza?.username || '',
+        nafezaPass: client.portalCredentials?.nafeza?.password || '',
 
-        insuranceUser: client.portalCredentials?.socialInsurancePortal?.username || client.socialInsuranceNo || 'INS_2940182',
-        insurancePass: client.portalCredentials?.socialInsurancePortal?.password || 'Ins#Eg8891!',
+        insuranceUser: client.portalCredentials?.socialInsurancePortal?.username || client.socialInsuranceNo || '',
+        insurancePass: client.portalCredentials?.socialInsurancePortal?.password || '',
       });
     }
   }, [client]);

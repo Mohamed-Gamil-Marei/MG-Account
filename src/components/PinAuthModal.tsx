@@ -17,6 +17,7 @@ import {
   Info,
 } from 'lucide-react';
 import { db } from '../db/localDatabase';
+import { fetchWithAuth } from '../lib/apiClient';
 import { cloudSync, SyncStatus } from '../lib/cloudSync';
 import { SystemUser } from '../types';
 
@@ -87,14 +88,53 @@ export const PinAuthModal: React.FC<PinAuthModalProps> = ({
     setError(null);
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
+    let emailOrId = '';
+    const pass = pin;
 
     if (authMode === 'MANUAL') {
       if (!manualIdentifier.trim()) {
-        setError('يرجى إدخال اسم المستخدم أو كود الموظف');
+        setError('يرجى إدخال اسم المستخدم أو البريد الإلكتروني');
         return;
       }
+      emailOrId = manualIdentifier.trim();
+    } else {
+      if (!selectedUser) {
+        setError('يرجى اختيار حساب المستخدم');
+        return;
+      }
+      emailOrId = selectedUser.email || selectedUser.username || selectedUser.id;
+    }
+
+    try {
+      const serverRes = await fetchWithAuth('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailOrId, password: pass }),
+      });
+      const data = await serverRes.json();
+      if (serverRes.ok && data.success && data.user) {
+        setPin('');
+        setError(null);
+        const localUser = db.getUsers().find((u) => u.email === data.user.email || u.id === data.user.id) || {
+          id: String(data.user.id || 'user-admin'),
+          name: data.user.name || 'admin',
+          username: data.user.name || 'admin',
+          email: data.user.email || 'admin@system.local',
+          role: data.user.role || 'ADMIN',
+          roleTitleArabic: 'المدير الرئيسي',
+        };
+        db.switchUser(localUser.id);
+        onSuccess(localUser as SystemUser);
+        return;
+      }
+    } catch {
+      // Server call offline/unavailable, fallback to local database auth
+    }
+
+    if (authMode === 'MANUAL') {
       const res = db.authenticateUser(manualIdentifier, pin);
       if (res.success && res.user) {
         setPin('');
@@ -391,7 +431,7 @@ export const PinAuthModal: React.FC<PinAuthModalProps> = ({
         {/* Master Admin Helper Hint */}
         <div className="px-6 py-1.5 bg-slate-950/40 border-t border-slate-800/60 text-center">
           <p className="text-[11px] text-slate-400">
-            حساب الأدمن الرئيسي: <span className="text-amber-400 font-mono font-bold">admin</span> | كلمة المرور: <span className="text-amber-400 font-mono font-bold">admin</span>
+            حساب الأدمن الرئيسي: <span className="text-amber-400 font-mono font-bold">admin</span>
           </p>
         </div>
 

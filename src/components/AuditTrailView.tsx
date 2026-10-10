@@ -140,14 +140,14 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
             />
           </label>
 
-          {/* Purge Database Button with PIN Mgacc120 */}
+          {/* Purge Database Button */}
           <button
             onClick={() => setIsPurgeModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-600 hover:text-white text-red-700 dark:text-red-300 rounded-xl font-bold text-xs border border-red-200 dark:border-red-800 transition-all cursor-pointer shadow-2xs"
-            title="تفريغ وتصفير كافة بيانات وسجلات المنظومة برقم سري (Mgacc120)"
+            title="تفريغ وتصفير كافة بيانات وسجلات المنظومة برقم سري"
           >
             <Trash2 className="w-4 h-4 text-red-600" />
-            <span>تفريغ شامل (Mgacc120)</span>
+            <span>تفريغ شامل</span>
           </button>
         </div>
       </div>

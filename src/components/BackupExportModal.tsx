@@ -578,7 +578,7 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>تفريغ شامل (Mgacc120)</span>
+                    <span>تفريغ شامل</span>
                   </button>
                 </div>
               </div>

@@ -452,13 +452,19 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     return priorIncome.netProfitAfterTax;
   }, [priorPeriodEntries.length, priorPeriodAccounts]);
 
+  const priorBalanceData = useMemo(() => {
+    if (priorPeriodEntries.length === 0) return null;
+    const priorIncome = generateIncomeStatement(priorPeriodAccounts);
+    return generateBalanceSheet(priorPeriodAccounts, priorIncome);
+  }, [priorPeriodEntries.length, priorPeriodAccounts]);
+
   const baseBalanceData = useMemo(() => {
     return generateBalanceSheet(cumulativeCalculatedAccounts, baseIncomeData);
   }, [cumulativeCalculatedAccounts, baseIncomeData]);
 
   const baseCashFlowData = useMemo(() => {
-    return generateCashFlowStatement(baseIncomeData, baseBalanceData);
-  }, [baseIncomeData, baseBalanceData]);
+    return generateCashFlowStatement(baseIncomeData, baseBalanceData, priorBalanceData);
+  }, [baseIncomeData, baseBalanceData, priorBalanceData]);
 
   // Helper to map field keys to descriptive Arabic financial item names
   const getHumanItemName = (key: string): string => {

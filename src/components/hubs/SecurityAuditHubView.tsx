@@ -284,7 +284,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
                   <span className="text-slate-500 block mb-1 font-semibold">كلمة المرور المعتمدة:</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block tracking-wider">
-                      {showApprovedPassword ? (state.preferences?.customEditPassword || 'Mg120') : '••••••••'}
+                      {showApprovedPassword ? (state.preferences?.customEditPassword || '••••••••') : '••••••••'}
                     </span>
                     <button
                       type="button"
@@ -361,8 +361,8 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
                       <span className="font-bold text-emerald-700">مفعل ونشط</span>
                     </div>
                     <div className="flex items-center justify-between text-xs p-2 rounded-lg bg-slate-50">
-                      <span className="text-slate-600">الرمز السيادي للترخيص:</span>
-                      <span className="font-mono font-bold text-slate-900">Mg120</span>
+                      <span className="text-slate-600">حالة التوقيع الرقمي:</span>
+                      <span className="font-bold text-emerald-700">معتمد ومحمي</span>
                     </div>
                   </div>
                 </div>

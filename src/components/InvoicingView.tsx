@@ -2142,7 +2142,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         }}
       />
 
-      {/* Security Auth Modal for Edit Action (Password: Mg120) */}
+      {/* Security Auth Modal for Edit Action */}
       <SecurityAuthModal
         isOpen={isAuthModalOpen}
         onClose={() => {

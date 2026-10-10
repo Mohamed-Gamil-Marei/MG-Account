@@ -334,8 +334,6 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
 
     // مطابقة بيانات شركة النيل بدقة للمحاسب
     if ((client.id === 'cl-1' || client.name?.includes('النيل')) && !username) {
-      username = 'NileEng_Corp_Tax';
-      password = 'Password@2026';
       sysType = 'SAP';
       portalUrl = OFFICIAL_SAP_PORTAL_URL;
     }

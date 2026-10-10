@@ -1851,7 +1851,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 },
                 {
                   id: 'purge-database',
-                  label: 'تفريغ وتصفير بيانات المنظومة بالكامل (Mgacc120)',
+                  label: 'تفريغ وتصفير بيانات المنظومة بالكامل',
                   icon: Trash2,
                   variant: 'danger',
                   onClick: () => setIsPurgeModalOpen(true),

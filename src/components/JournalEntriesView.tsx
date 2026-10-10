@@ -3946,7 +3946,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
         )}
       </SlideOverDrawer>
 
-      {/* Security Auth Modal for Edit Passcode (Mg120) */}
+      {/* Security Auth Modal for Edit Passcode */}
       {isAuthModalOpen && (
         <SecurityAuthModal
           title="طلب إذن تعديل القيد المحاسبي"

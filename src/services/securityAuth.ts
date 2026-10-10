@@ -249,7 +249,7 @@ export class SecurityAuthService {
   }
 
   /**
-   * Adds and Authorizes the current or a named device using master code (Mg120 / Mgacc120)
+   * Adds and Authorizes the current or a named device using master code
    */
   static authorizeAndBindNewDevice(
     masterPasscode: string,

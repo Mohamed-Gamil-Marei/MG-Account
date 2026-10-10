@@ -58,7 +58,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     language: 'ar',
     compactView: false,
     securityAuthEnabled: false,
-    customEditPassword: 'Mg120',
+    customEditPassword: '',
   };
 
   const currentLang = preferences.language || 'ar';
@@ -71,7 +71,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const [selectedLang, setSelectedLang] = useState<AppLanguage>(currentLang);
   const [selectedTheme, setSelectedTheme] = useState<ThemeMode>(preferences.themeMode || 'light');
   const [selectedBrand, setSelectedBrand] = useState<BrandColor>(preferences.brandColor || 'blue');
-  const [customPassword, setCustomPassword] = useState<string>(preferences.customEditPassword || 'Mg120');
+  const [customPassword, setCustomPassword] = useState<string>(preferences.customEditPassword || '');
   const [showCustomPassword, setShowCustomPassword] = useState<boolean>(false);
   const [securityEnabled, setSecurityEnabled] = useState<boolean>(preferences.securityAuthEnabled ?? false);
   const [compactView, setCompactView] = useState<boolean>(preferences.compactView ?? false);
@@ -175,7 +175,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       language: selectedLang,
       themeMode: selectedTheme,
       brandColor: selectedBrand,
-      customEditPassword: customPassword.trim() || 'Mg120',
+      customEditPassword: customPassword.trim(),
       securityAuthEnabled: securityEnabled,
       compactView,
       customFirebaseConfig,

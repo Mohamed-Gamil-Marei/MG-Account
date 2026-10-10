@@ -308,7 +308,7 @@ export const FinancialDossierGeneratorView: React.FC<FinancialDossierGeneratorVi
       } else if (r.category === 'EXPENSES') {
         if (r.code.startsWith('51') || r.name.includes('تكلفة المبيعات') || r.name.includes('بضاعة مباعة') || r.name.includes('خامات')) {
           totalCostOfSales += bal;
-        } else if (r.name.includes('إهلاك')) {
+        } else if (r.code.startsWith('5360') || r.name.includes('إهلاك')) {
           depreciationExpense += bal;
           totalExpenses += bal;
         } else if (r.name.includes('فوائد') || r.name.includes('تمويل')) {

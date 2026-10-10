@@ -33,7 +33,7 @@ service cloud.firestore {
 
     // --- 1. User Profiles & Permissions ---
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if isSignedIn() && request.auth.uid == userId &&
         request.resource.data.role == 'PENDING' &&
         request.resource.data.canManageUsers == false &&
@@ -102,7 +102,7 @@ service cloud.firestore {
     // --- 11. Audit Trail Logs (سجل العمليات والرقابة) ---
     match /auditLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 

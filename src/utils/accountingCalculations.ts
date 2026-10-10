@@ -1,5 +1,13 @@
 import { Account, JournalEntry } from '../types';
 
+/**
+ * دالة تقريب موحدة لمنع الأخطاء العائمة والتراكمية (Floating-point precision)
+ */
+export function round2(num: number): number {
+  if (num === 0 || !num || isNaN(num)) return 0;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
 export interface CalculatedAccount extends Account {
   movementDebit: number;
   movementCredit: number;
@@ -20,28 +28,28 @@ export function computeAccountBalances(accounts: Account[], entries: JournalEntr
 
   for (const entry of postedEntries) {
     for (const line of entry.lines) {
-      debitMovements[line.accountId] = (debitMovements[line.accountId] || 0) + (line.debit || 0);
-      creditMovements[line.accountId] = (creditMovements[line.accountId] || 0) + (line.credit || 0);
+      debitMovements[line.accountId] = round2((debitMovements[line.accountId] || 0) + (line.debit || 0));
+      creditMovements[line.accountId] = round2((creditMovements[line.accountId] || 0) + (line.credit || 0));
     }
   }
 
   return accounts.map((acc) => {
-    const movDebit = debitMovements[acc.id] || 0;
-    const movCredit = creditMovements[acc.id] || 0;
+    const movDebit = round2(debitMovements[acc.id] || 0);
+    const movCredit = round2(creditMovements[acc.id] || 0);
 
-    const totalDebit = (acc.openingBalanceDebit || 0) + movDebit;
-    const totalCredit = (acc.openingBalanceCredit || 0) + movCredit;
+    const totalDebit = round2((acc.openingBalanceDebit || 0) + movDebit);
+    const totalCredit = round2((acc.openingBalanceCredit || 0) + movCredit);
 
     let endingBalanceDebit = 0;
     let endingBalanceCredit = 0;
 
     if (totalDebit >= totalCredit) {
-      endingBalanceDebit = totalDebit - totalCredit;
+      endingBalanceDebit = round2(totalDebit - totalCredit);
     } else {
-      endingBalanceCredit = totalCredit - totalDebit;
+      endingBalanceCredit = round2(totalCredit - totalDebit);
     }
 
-    const netBalance = totalDebit - totalCredit;
+    const netBalance = round2(totalDebit - totalCredit);
 
     return {
       ...acc,
@@ -54,7 +62,7 @@ export function computeAccountBalances(accounts: Account[], entries: JournalEntr
       netBalance,
       currentDebit: totalDebit,
       currentCredit: totalCredit,
-      currentBalance: acc.nature === 'DEBIT' ? netBalance : -netBalance,
+      currentBalance: round2(acc.nature === 'DEBIT' ? netBalance : -netBalance),
     };
   });
 }
@@ -103,8 +111,8 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
   for (const acc of accountsToEvaluate) {
     if (acc.level === 1) continue;
 
-    const balance = acc.endingBalanceCredit - acc.endingBalanceDebit; // Revenues are credit
-    const expenseBal = acc.endingBalanceDebit - acc.endingBalanceCredit; // Expenses are debit
+    const balance = round2(acc.endingBalanceCredit - acc.endingBalanceDebit); // Revenues are credit
+    const expenseBal = round2(acc.endingBalanceDebit - acc.endingBalanceCredit); // Expenses are debit
 
     if (acc.category === 'REVENUES') {
       if (acc.code.startsWith('4110') || acc.name.includes('مبيعات')) salesRevenue += balance;
@@ -113,8 +121,8 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
       else otherIncomes += balance;
     } else if (acc.category === 'EXPENSES') {
       if (acc.code.startsWith('5100') || acc.code.startsWith('5110') || acc.name.includes('تكلفة المبيعات') || acc.name.includes('مشتريات')) costOfGoodsSold += expenseBal;
-      else if (acc.code.startsWith('52') || acc.name.includes('تسويق') || acc.name.includes('بيع')) sellingAndMarketingExpenses += expenseBal;
       else if (acc.code.startsWith('5360') || acc.name.includes('إهلاك')) depreciationExpense += expenseBal;
+      else if (acc.code.startsWith('52') || acc.name.includes('تسويق') || acc.name.includes('بيع')) sellingAndMarketingExpenses += expenseBal;
       else if (acc.code.startsWith('53') || acc.name.includes('عمومي') || acc.name.includes('إداري')) administrativeExpenses += expenseBal;
       else if (acc.code.startsWith('54') || acc.name.includes('تمويل') || acc.name.includes('فوائد')) financeCosts += expenseBal;
       else if (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) taxExpense += expenseBal;
@@ -122,34 +130,45 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
     }
   }
 
-  const revenuesTotal = salesRevenue + servicesRevenue - salesReturns;
-  const grossProfit = revenuesTotal - costOfGoodsSold;
-  const operatingExpenses = sellingAndMarketingExpenses + administrativeExpenses;
-  const operatingProfit = grossProfit - operatingExpenses;
-  const profitBeforeTax = operatingProfit - depreciationExpense - financeCosts + otherIncomes;
+  salesRevenue = round2(salesRevenue);
+  servicesRevenue = round2(servicesRevenue);
+  salesReturns = round2(salesReturns);
+  otherIncomes = round2(otherIncomes);
+  costOfGoodsSold = round2(costOfGoodsSold);
+  sellingAndMarketingExpenses = round2(sellingAndMarketingExpenses);
+  administrativeExpenses = round2(administrativeExpenses);
+  depreciationExpense = round2(depreciationExpense);
+  financeCosts = round2(financeCosts);
+  taxExpense = round2(taxExpense);
+
+  const revenuesTotal = round2(salesRevenue + servicesRevenue - salesReturns);
+  const grossProfit = round2(revenuesTotal - costOfGoodsSold);
+  const operatingExpenses = round2(sellingAndMarketingExpenses + administrativeExpenses);
+  const operatingProfit = round2(grossProfit - operatingExpenses);
+  const profitBeforeTax = round2(operatingProfit - depreciationExpense - financeCosts + otherIncomes);
 
   // If tax expense not booked yet in journal, calculate Egyptian statutory 22.5% on positive profit
-  const effectiveTax = taxExpense > 0 ? taxExpense : profitBeforeTax > 0 ? Math.round(profitBeforeTax * 0.225) : 0;
-  const netProfitAfterTax = profitBeforeTax - effectiveTax;
+  const effectiveTax = round2(taxExpense > 0 ? taxExpense : profitBeforeTax > 0 ? profitBeforeTax * 0.225 : 0);
+  const netProfitAfterTax = round2(profitBeforeTax - effectiveTax);
 
   return {
-    revenuesTotal,
-    salesRevenue,
-    servicesRevenue,
-    salesReturnsAndDiscounts: salesReturns,
-    costOfGoodsSold,
-    grossProfit,
-    sellingAndMarketingExpenses,
-    administrativeExpenses,
-    operatingExpenses,
-    operatingProfit,
-    depreciationExpense,
-    financeCosts,
-    otherIncomes,
-    profitBeforeTax,
-    netProfitBeforeTax: profitBeforeTax,
-    taxExpense: effectiveTax,
-    netProfitAfterTax,
+    revenuesTotal: round2(revenuesTotal),
+    salesRevenue: round2(salesRevenue),
+    servicesRevenue: round2(servicesRevenue),
+    salesReturnsAndDiscounts: round2(salesReturns),
+    costOfGoodsSold: round2(costOfGoodsSold),
+    grossProfit: round2(grossProfit),
+    sellingAndMarketingExpenses: round2(sellingAndMarketingExpenses),
+    administrativeExpenses: round2(administrativeExpenses),
+    operatingExpenses: round2(operatingExpenses),
+    operatingProfit: round2(operatingProfit),
+    depreciationExpense: round2(depreciationExpense),
+    financeCosts: round2(financeCosts),
+    otherIncomes: round2(otherIncomes),
+    profitBeforeTax: round2(profitBeforeTax),
+    netProfitBeforeTax: round2(profitBeforeTax),
+    taxExpense: round2(effectiveTax),
+    netProfitAfterTax: round2(netProfitAfterTax),
   };
 }
 
@@ -335,39 +354,40 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     }
   }
 
-  const netFixedAssets = propertyPlantEquipment - accumulatedDepreciation;
-  const totalNonCurrentAssets = netFixedAssets + otherNonCurrentAssets;
+  const netFixedAssets = round2(propertyPlantEquipment - accumulatedDepreciation);
+  const totalNonCurrentAssets = round2(netFixedAssets + otherNonCurrentAssets);
 
-  const totalCurrentAssets =
+  const totalCurrentAssets = round2(
     inventory +
     tradeReceivables +
     notesReceivable +
     whtTaxDebit +
     vatInputTax +
     prepaymentsAndOther +
-    cashAndBanks;
+    cashAndBanks
+  );
 
-  const totalAssets = totalNonCurrentAssets + totalCurrentAssets;
+  const totalAssets = round2(totalNonCurrentAssets + totalCurrentAssets);
 
-  const currentYearNetProfit =
+  const currentYearNetProfit = round2(
     incomeData && Math.abs(incomeData.netProfitAfterTax) >= 0.01
       ? incomeData.netProfitAfterTax
-      : currentYearNetProfitAccount;
+      : currentYearNetProfitAccount
+  );
 
-  let totalEquity =
+  let totalEquity = round2(
     paidUpCapital +
     legalReserve +
     otherReserves +
     retainedEarnings +
     currentYearNetProfit +
     partnersCurrentAccount +
-    otherEquity;
+    otherEquity
+  );
 
-  const totalNonCurrentLiabilities = longTermLoans + deferredTaxLiabilities + otherNonCurrentLiabilities;
+  const totalNonCurrentLiabilities = round2(longTermLoans + deferredTaxLiabilities + otherNonCurrentLiabilities);
 
   // التحقق مما إذا كانت ضريبة الدخل مسجلة بقيد فعلياً أو بحساب التزام في الدفاتر:
-  // 1. إذا وُجد حساب مصروف ضريبة (كود 55 أو اسمه ضريبة الدخل) له رصيد/حركة، فهذا يعني وجود قيد استحقاق فعلي
-  // 2. إذا وُجد حساب التزام لضريبة الدخل (كود 2260 أو كود يبدأ بـ 226 أو اسمه ضريبة دخل) له رصيد دائن
   const isTaxRecordedInJournal =
     calculatedAccounts.some(
       (acc) =>
@@ -379,10 +399,9 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
           (acc.endingBalanceCredit > 0 || acc.movementCredit > 0))
     );
 
-  // لا يضاف incomeTaxPayable كالتزام تقديري إذا كانت الضريبة مسجلة بقيد فعلاً في الدفاتر لتجنب الازدواج
-  const incomeTaxPayable = isTaxRecordedInJournal ? 0 : (incomeData?.taxExpense || 0);
+  const incomeTaxPayable = round2(isTaxRecordedInJournal ? 0 : (incomeData?.taxExpense || 0));
 
-  const totalCurrentLiabilities =
+  const totalCurrentLiabilities = round2(
     tradePayables +
     notesPayable +
     vatOutputTax +
@@ -391,75 +410,77 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     socialInsurancePayable +
     accruedExpenses +
     incomeTaxPayable +
-    otherCurrentLiabilities;
+    otherCurrentLiabilities
+  );
 
-  const totalLiabilities = totalNonCurrentLiabilities + totalCurrentLiabilities;
-  const totalEquityAndLiabilities = totalEquity + totalLiabilities;
+  const totalLiabilities = round2(totalNonCurrentLiabilities + totalCurrentLiabilities);
+  const totalEquityAndLiabilities = round2(totalEquity + totalLiabilities);
 
   // الحساب الدقيق للفارق الحقيقي والاتزان دون أي تعديل أو امتصاص للأرقام في الأرباح المرحلة
-  const variance = Math.abs(totalAssets - totalEquityAndLiabilities);
+  const variance = round2(Math.abs(totalAssets - totalEquityAndLiabilities));
   const isBalanced = variance < 0.05;
 
   return {
     nonCurrentAssets: {
-      propertyPlantEquipment,
-      accumulatedDepreciation,
-      netFixedAssets,
-      otherNonCurrentAssets,
-      totalNonCurrentAssets,
+      propertyPlantEquipment: round2(propertyPlantEquipment),
+      accumulatedDepreciation: round2(accumulatedDepreciation),
+      netFixedAssets: round2(netFixedAssets),
+      otherNonCurrentAssets: round2(otherNonCurrentAssets),
+      totalNonCurrentAssets: round2(totalNonCurrentAssets),
     },
     currentAssets: {
-      inventory,
-      tradeReceivables,
-      notesReceivable,
-      whtTaxDebit,
-      vatInputTax,
-      prepaymentsAndOther,
-      cashAndBanks,
-      totalCurrentAssets,
+      inventory: round2(inventory),
+      tradeReceivables: round2(tradeReceivables),
+      notesReceivable: round2(notesReceivable),
+      whtTaxDebit: round2(whtTaxDebit),
+      vatInputTax: round2(vatInputTax),
+      prepaymentsAndOther: round2(prepaymentsAndOther),
+      cashAndBanks: round2(cashAndBanks),
+      totalCurrentAssets: round2(totalCurrentAssets),
     },
-    totalAssets,
+    totalAssets: round2(totalAssets),
     equity: {
-      paidUpCapital,
-      legalReserve,
-      otherReserves,
-      retainedEarnings,
-      currentYearNetProfit,
-      partnersCurrentAccount,
-      otherEquity,
-      totalEquity,
+      paidUpCapital: round2(paidUpCapital),
+      legalReserve: round2(legalReserve),
+      otherReserves: round2(otherReserves),
+      retainedEarnings: round2(retainedEarnings),
+      currentYearNetProfit: round2(currentYearNetProfit),
+      partnersCurrentAccount: round2(partnersCurrentAccount),
+      otherEquity: round2(otherEquity),
+      totalEquity: round2(totalEquity),
     },
     nonCurrentLiabilities: {
-      longTermLoans,
-      deferredTaxLiabilities,
-      otherNonCurrentLiabilities,
-      totalNonCurrentLiabilities,
+      longTermLoans: round2(longTermLoans),
+      deferredTaxLiabilities: round2(deferredTaxLiabilities),
+      otherNonCurrentLiabilities: round2(otherNonCurrentLiabilities),
+      totalNonCurrentLiabilities: round2(totalNonCurrentLiabilities),
     },
     currentLiabilities: {
-      tradePayables,
-      notesPayable,
-      vatOutputTax,
-      payrollTaxPayable,
-      whtPayable,
-      socialInsurancePayable,
-      accruedExpenses,
-      incomeTaxPayable,
-      otherCurrentLiabilities,
-      totalCurrentLiabilities,
+      tradePayables: round2(tradePayables),
+      notesPayable: round2(notesPayable),
+      vatOutputTax: round2(vatOutputTax),
+      payrollTaxPayable: round2(payrollTaxPayable),
+      whtPayable: round2(whtPayable),
+      socialInsurancePayable: round2(socialInsurancePayable),
+      accruedExpenses: round2(accruedExpenses),
+      incomeTaxPayable: round2(incomeTaxPayable),
+      otherCurrentLiabilities: round2(otherCurrentLiabilities),
+      totalCurrentLiabilities: round2(totalCurrentLiabilities),
     },
-    totalLiabilities,
-    totalEquityAndLiabilities,
-    currentAssetsTotal: totalCurrentAssets,
-    nonCurrentAssetsTotal: totalNonCurrentAssets,
-    equityTotal: totalEquity,
-    currentLiabilitiesTotal: totalCurrentLiabilities,
-    nonCurrentLiabilitiesTotal: totalNonCurrentLiabilities,
+    totalLiabilities: round2(totalLiabilities),
+    totalEquityAndLiabilities: round2(totalEquityAndLiabilities),
+    currentAssetsTotal: round2(totalCurrentAssets),
+    nonCurrentAssetsTotal: round2(totalNonCurrentAssets),
+    equityTotal: round2(totalEquity),
+    currentLiabilitiesTotal: round2(totalCurrentLiabilities),
+    nonCurrentLiabilitiesTotal: round2(totalNonCurrentLiabilities),
     isBalanced,
-    variance,
+    variance: round2(variance),
   };
 }
 
 export interface CashFlowStatementData {
+  hasComparativeData: boolean;
   operatingCashFlow: {
     netProfitBeforeTax: number;
     depreciationAdjustment: number;
@@ -485,52 +506,101 @@ export interface CashFlowStatementData {
 
 export function generateCashFlowStatement(
   incomeData: IncomeStatementData,
-  balanceData: BalanceSheetData
+  balanceData: BalanceSheetData,
+  priorBalanceData?: BalanceSheetData | null
 ): CashFlowStatementData {
-  const depreciation = incomeData.depreciationExpense || 0;
-  const netProfit = incomeData.profitBeforeTax;
+  const depreciation = round2(incomeData.depreciationExpense || 0);
+  const netProfit = round2(incomeData.profitBeforeTax);
 
-  const changeInReceivables = -(balanceData.currentAssets.tradeReceivables * 0.15);
-  const changeInInventory = -(balanceData.currentAssets.inventory * 0.1);
-  const changeInPayables = balanceData.currentLiabilities.tradePayables * 0.12;
-  const taxPaid = -(incomeData.taxExpense || 0);
+  if (!priorBalanceData) {
+    const endingCash = round2(balanceData.currentAssets.cashAndBanks);
+    return {
+      hasComparativeData: false,
+      operatingCashFlow: {
+        netProfitBeforeTax: round2(netProfit),
+        depreciationAdjustment: round2(depreciation),
+        changeInReceivables: 0,
+        changeInInventory: 0,
+        changeInPayables: 0,
+        taxPaid: 0,
+        netOperatingCash: round2(netProfit + depreciation),
+      },
+      investingCashFlow: {
+        purchaseOfFixedAssets: 0,
+        netInvestingCash: 0,
+      },
+      financingCashFlow: {
+        loansReceivedOrPaid: 0,
+        drawings: 0,
+        netFinancingCash: 0,
+      },
+      netChangeInCash: 0,
+      beginningCash: endingCash,
+      endingCash: endingCash,
+    };
+  }
 
-  const netOperatingCash =
-    netProfit + depreciation + changeInReceivables + changeInInventory + changeInPayables + taxPaid;
+  // Indirect method cash flow calculations based on changes in balance sheet accounts:
+  const priorReceivables = priorBalanceData.currentAssets.tradeReceivables + priorBalanceData.currentAssets.notesReceivable;
+  const currReceivables = balanceData.currentAssets.tradeReceivables + balanceData.currentAssets.notesReceivable;
+  const changeInReceivables = round2(-(currReceivables - priorReceivables));
 
-  const purchaseOfFixedAssets = -(balanceData.nonCurrentAssets.propertyPlantEquipment * 0.05);
+  const priorInventory = priorBalanceData.currentAssets.inventory;
+  const currInventory = balanceData.currentAssets.inventory;
+  const changeInInventory = round2(-(currInventory - priorInventory));
+
+  const priorPayables = priorBalanceData.currentLiabilities.tradePayables + priorBalanceData.currentLiabilities.notesPayable + priorBalanceData.currentLiabilities.accruedExpenses;
+  const currPayables = balanceData.currentLiabilities.tradePayables + balanceData.currentLiabilities.notesPayable + balanceData.currentLiabilities.accruedExpenses;
+  const changeInPayables = round2(currPayables - priorPayables);
+
+  const taxPaid = round2(-(incomeData.taxExpense || 0));
+
+  const netOperatingCash = round2(
+    netProfit + depreciation + changeInReceivables + changeInInventory + changeInPayables + taxPaid
+  );
+
+  const priorPPE = priorBalanceData.nonCurrentAssets.propertyPlantEquipment;
+  const currPPE = balanceData.nonCurrentAssets.propertyPlantEquipment;
+  const purchaseOfFixedAssets = round2(-(currPPE - priorPPE));
   const netInvestingCash = purchaseOfFixedAssets;
 
-  const loansReceivedOrPaid = 50000;
-  const drawings = -20000;
-  const netFinancingCash = loansReceivedOrPaid + drawings;
+  const priorLoans = priorBalanceData.nonCurrentLiabilities.longTermLoans;
+  const currLoans = balanceData.nonCurrentLiabilities.longTermLoans;
+  const loansReceivedOrPaid = round2(currLoans - priorLoans);
 
-  const netChangeInCash = netOperatingCash + netInvestingCash + netFinancingCash;
-  const endingCash = balanceData.currentAssets.cashAndBanks;
-  const beginningCash = endingCash - netChangeInCash;
+  const priorEquityExcludingProfit = priorBalanceData.equity.paidUpCapital + priorBalanceData.equity.partnersCurrentAccount + priorBalanceData.equity.legalReserve + priorBalanceData.equity.otherReserves + priorBalanceData.equity.otherEquity;
+  const currEquityExcludingProfit = balanceData.equity.paidUpCapital + balanceData.equity.partnersCurrentAccount + balanceData.equity.legalReserve + balanceData.equity.otherReserves + balanceData.equity.otherEquity;
+  const drawings = round2(currEquityExcludingProfit - priorEquityExcludingProfit);
+
+  const netFinancingCash = round2(loansReceivedOrPaid + drawings);
+
+  const beginningCash = round2(priorBalanceData.currentAssets.cashAndBanks);
+  const endingCash = round2(balanceData.currentAssets.cashAndBanks);
+  const netChangeInCash = round2(endingCash - beginningCash);
 
   return {
+    hasComparativeData: true,
     operatingCashFlow: {
-      netProfitBeforeTax: netProfit,
-      depreciationAdjustment: depreciation,
-      changeInReceivables,
-      changeInInventory,
-      changeInPayables,
-      taxPaid,
-      netOperatingCash,
+      netProfitBeforeTax: round2(netProfit),
+      depreciationAdjustment: round2(depreciation),
+      changeInReceivables: round2(changeInReceivables),
+      changeInInventory: round2(changeInInventory),
+      changeInPayables: round2(changeInPayables),
+      taxPaid: round2(taxPaid),
+      netOperatingCash: round2(netOperatingCash),
     },
     investingCashFlow: {
-      purchaseOfFixedAssets,
-      netInvestingCash,
+      purchaseOfFixedAssets: round2(purchaseOfFixedAssets),
+      netInvestingCash: round2(netInvestingCash),
     },
     financingCashFlow: {
-      loansReceivedOrPaid,
-      drawings,
-      netFinancingCash,
+      loansReceivedOrPaid: round2(loansReceivedOrPaid),
+      drawings: round2(drawings),
+      netFinancingCash: round2(netFinancingCash),
     },
-    netChangeInCash,
-    beginningCash,
-    endingCash,
+    netChangeInCash: round2(netChangeInCash),
+    beginningCash: round2(beginningCash),
+    endingCash: round2(endingCash),
   };
 }
 

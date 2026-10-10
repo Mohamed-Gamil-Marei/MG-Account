@@ -87,12 +87,57 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'PORTALS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS' | 'COMMUNICATION_LOG'>('PROCEDURES');
   const [procedureFilterStatus, setProcedureFilterStatus] = useState<string>('ALL');
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+  const [revealedPasswordsMap, setRevealedPasswordsMap] = useState<Record<string, string>>({});
+  const [loadingRevealKey, setLoadingRevealKey] = useState<string | null>(null);
+
+  const handleTogglePasswordReveal = async (clientId: string, portalKey: string) => {
+    const compositeKey = `${clientId}_${portalKey}`;
+    const currentlyRevealed = showPasswordMap[portalKey];
+
+    if (currentlyRevealed) {
+      setShowPasswordMap((prev) => ({ ...prev, [portalKey]: false }));
+      return;
+    }
+
+    if (revealedPasswordsMap[compositeKey]) {
+      setShowPasswordMap((prev) => ({ ...prev, [portalKey]: true }));
+      return;
+    }
+
+    setLoadingRevealKey(compositeKey);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/reveal-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portalKey }),
+      });
+      const result = await res.json();
+      if (result.success && result.credentials) {
+        const portalCred = result.credentials[portalKey] || result.credentials;
+        const pwd = portalCred?.password || portalCred?.pin || portalCred?.pinOtp || '';
+        if (pwd) {
+          setRevealedPasswordsMap((prev) => ({ ...prev, [compositeKey]: pwd }));
+          setShowPasswordMap((prev) => ({ ...prev, [portalKey]: true }));
+          alert('تم إظهار كلمة المرور بنجاح وتسجيل العملية في سجل المراجعة (Audit Log).');
+        } else {
+          alert('لا توجد كلمة مرور مسجلة لهذه البوابة.');
+        }
+      } else {
+        alert(result.error || 'تعذر إظهار كلمة المرور.');
+      }
+    } catch (err: any) {
+      console.error('Error revealing password:', err);
+      alert('حدث خطأ أثناء طلب إظهار كلمة المرور من السيرفر.');
+    } finally {
+      setLoadingRevealKey(null);
+    }
+  };
 
   // Company Master Dossier & Token Keyring Label Modal State
   const [isTokenDossierModalOpen, setIsTokenDossierModalOpen] = useState(false);
   const [tokenDossierTargetClient, setTokenDossierTargetClient] = useState<ClientArchiveRecord | null>(null);
 
-  // Security Auth for Edit Mode (Mg120)
+  // Security Auth for Edit Mode
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isExportAuthModalOpen, setIsExportAuthModalOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<ClientArchiveRecord | null>(null);
@@ -506,7 +551,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     window.open(waUrl, '_blank');
   };
 
-  // Encrypted Portal & Password Audit Sheet Export (Unlocked with Mg120)
+  // Encrypted Portal & Password Audit Sheet Export
   const handleExecuteExportAllPortals = () => {
     setIsExportAuthModalOpen(false);
     const office = state.officeProfile;
@@ -565,7 +610,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
               <strong>تاريخ الاستخراج:</strong> ${printDate}
             </div>
             <div style="color: #b91c1c; font-weight: bold; font-size: 10px; margin-top: 5px;">
-              [ وثيقة سرية ومحمية برمز المرور Mg120 ]
+              [ وثيقة سرية ومحمية برمز المرور ]
             </div>
           </div>
         </div>
@@ -604,7 +649,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       </div>
     `;
 
-    PrintService.printHtmlContent(html, 'كشف_بوابات_العملاء_المشفر_Mg120');
+    PrintService.printHtmlContent(html, 'كشف_بوابات_العملاء_المشفر');
   };
 
   const handleAddProcedureSubmit = (e: React.FormEvent) => {
@@ -1777,9 +1822,12 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       },
                     ].map((portal) => {
                       const cred = portal.data;
+                      const compositeKey = liveSelectedClient ? `${liveSelectedClient.id}_${portal.key}` : portal.key;
+                      const revealedPassword = revealedPasswordsMap[compositeKey] || cred?.password || '';
                       const hasUsername = Boolean(cred?.username);
-                      const hasPassword = Boolean(cred?.password);
+                      const hasPassword = Boolean(cred?.hasPassword || cred?.password || revealedPassword);
                       const isRevealed = showPasswordMap[portal.key] || false;
+                      const isLoading = loadingRevealKey === compositeKey;
 
                       // Expiry calculation
                       let expiryBadge = null;
@@ -1852,7 +1900,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                                   <span className="font-mono font-bold text-slate-900">
                                     {hasPassword
                                       ? isRevealed
-                                        ? cred?.password
+                                        ? revealedPassword || '••••••••••••'
                                         : '••••••••••••'
                                       : 'غير مسجل'}
                                   </span>
@@ -1860,28 +1908,32 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                                     <>
                                       <button
                                         type="button"
-                                        onClick={() =>
-                                          setShowPasswordMap((prev) => ({
-                                            ...prev,
-                                            [portal.key]: !prev[portal.key],
-                                          }))
-                                        }
-                                        className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
-                                        title={isRevealed ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                                        disabled={isLoading}
+                                        onClick={() => liveSelectedClient && handleTogglePasswordReveal(liveSelectedClient.id, portal.key)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer disabled:opacity-50"
+                                        title={isRevealed ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور (تسجيل في سجل المراجعة)'}
                                       >
-                                        {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                        {isLoading ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                        ) : isRevealed ? (
+                                          <EyeOff className="w-3.5 h-3.5" />
+                                        ) : (
+                                          <Eye className="w-3.5 h-3.5" />
+                                        )}
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(cred?.password || '');
-                                          alert('تم نسخ كلمة المرور بنجاح');
-                                        }}
-                                        className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
-                                        title="نسخ كلمة المرور"
-                                      >
-                                        <Copy className="w-3.5 h-3.5" />
-                                      </button>
+                                      {isRevealed && revealedPassword && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(revealedPassword);
+                                            alert('تم نسخ كلمة المرور بنجاح');
+                                          }}
+                                          className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
+                                          title="نسخ كلمة المرور"
+                                        >
+                                          <Copy className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -3147,7 +3199,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         </div>
       )}
 
-      {/* Security Auth Modal for Client Edit (Password: Mg120) */}
+      {/* Security Auth Modal for Client Edit */}
       <SecurityAuthModal
         isOpen={isAuthModalOpen}
         onClose={() => {

@@ -943,7 +943,7 @@ export interface UserPreferences {
   baseCurrency?: CurrencyCode;      // العملة الوظيفية للمنشأة (افتراضياً EGP)
   compactView?: boolean;
   securityAuthEnabled?: boolean; // تفعيل أو إلغاء التحقق بالرقم السري عند التعديل
-  customEditPassword?: string;   // كلمة المرور المخصصة للتعديل (الافتراضية: Mg120)
+  customEditPassword?: string;   // كلمة المرور المخصصة للتعديل
   defaultSettlementAccountId?: string; // حساب التسوية / الفروق المعلقة للإصلاح التلقائي للقيد
   printSettings?: PrintSettings;
   sapConfigs?: SapApiConfig[];
@@ -1044,6 +1044,7 @@ export type NavigationTab =
   | 'CURRENCY_EXCHANGE_RATES'
   | 'GENERAL_LEDGER'
   | 'TRIAL_BALANCE'
+  | 'FILE_REVIEW'
   | 'FIXED_ASSETS'
   | 'BANK_RECONCILIATION'
   | 'OCR_INVOICE_SCANNER'

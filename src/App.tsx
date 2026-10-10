@@ -557,6 +557,8 @@ export default function App() {
         return <AccountingHubView state={state} initialSubTab="GENERAL_LEDGER" fiscalYear={selectedFiscalYear} />;
       case 'TRIAL_BALANCE':
         return <AccountingHubView state={state} initialSubTab="TRIAL_BALANCE" fiscalYear={selectedFiscalYear} />;
+      case 'FILE_REVIEW':
+        return <AccountingHubView state={state} initialSubTab="FILE_REVIEW" fiscalYear={selectedFiscalYear} />;
       case 'FINANCIAL_STATEMENTS':
       case 'FINANCIAL_DOSSIER_GENERATOR':
       case 'FINANCIAL_NOTES':
@@ -793,7 +795,7 @@ export default function App() {
         />
       )}
 
-      {/* Complete Data Purge Modal (Protected by Mgacc120) */}
+      {/* Complete Data Purge Modal */}
       {isPurgeModalOpen && (
         <PurgeDatabaseModal
           isOpen={isPurgeModalOpen}

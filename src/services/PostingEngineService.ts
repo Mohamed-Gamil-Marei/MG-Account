@@ -53,12 +53,10 @@ export class PostingEngineService {
     const catMatch = accounts.find((a) => a.category === fallbackCategory && a.level >= 2);
     if (catMatch) return { id: catMatch.id, code: catMatch.code, name: catMatch.name };
 
-    // 5. Hard fallback
-    return {
-      id: `acc-fallback-${preferredCodes[0] || 'gen'}`,
-      code: preferredCodes[0] || '1000',
-      name: fallbackName,
-    };
+    // If account not found in chart of accounts, throw clear error
+    throw new Error(
+      `تعذر ترحيل القيد: الحساب [${fallbackName}] بكود (${preferredCodes.join(', ')}) غير موجود في دليل الحسابات المعتمد. يُرجى إنشاء الحساب أولاً.`
+    );
   }
 
   /**
@@ -281,7 +279,7 @@ export class PostingEngineService {
 
     const depExpenseAccount = this.findAccount(
       accounts,
-      ['5220', '5200', '52'],
+      ['5360', '5300', '53'],
       'EXPENSES',
       'مصروفات إهلاك الأصول الثابتة'
     );

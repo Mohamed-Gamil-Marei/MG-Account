@@ -1002,7 +1002,7 @@ export const UserManagementModal: React.FC<{
                     <div className="mt-6 p-5 rounded-2xl bg-amber-500/5 border border-dashed border-amber-500/30 text-center">
                       <ShieldCheck className="w-8 h-8 text-amber-400 mx-auto mb-2" />
                       <p className="text-xs text-amber-300 font-bold mb-1">
-                        المنظومة تعمل حالياً بحساب الأدمن الرئيسي فقط (admin / admin).
+                        المنظومة تعمل حالياً بحساب الأدمن الرئيسي فقط (admin).
                       </p>
                       <p className="text-[11px] text-slate-400 max-w-lg mx-auto mb-3">
                         جميع أوامر المنظومة تخضع لحسابك السيادي. عند إضافة أي محاسبين أو موظفين جدد يدوياً، ستتحكم بكامل صلاحياتهم، كلمات مرورهم، وإمكانية حظرهم بضغطة زر واحدة.
@@ -1045,7 +1045,7 @@ export const UserManagementModal: React.FC<{
                       <p className="text-[11px] text-slate-400">
                         كلمة المرور الحالية المعتمدة:{' '}
                         <strong className="text-amber-400 font-mono">
-                          {users.find((u) => u.id === 'user-admin')?.password || 'admin'}
+                          ••••••••
                         </strong>
                       </p>
                     </div>

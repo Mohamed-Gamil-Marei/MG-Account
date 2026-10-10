@@ -23,6 +23,7 @@ import { BankReconciliationView } from '../accounting/BankReconciliationView';
 import { InvoiceOcrScannerView } from '../accounting/InvoiceOcrScannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
 import { UnifiedFinancialReportsView } from '../UnifiedFinancialReportsView';
+import { FileReviewWizardView } from '../audit/FileReviewWizardView';
 import { ClientSelector } from '../common/ClientSelector';
 import { ShieldCheck, ShieldAlert, Factory, Percent } from 'lucide-react';
 import { MultiTenantWorkspacesModal } from '../common/MultiTenantWorkspacesModal';
@@ -35,6 +36,7 @@ export type AccountingSubTab =
   | 'CHART_OF_ACCOUNTS'
   | 'GENERAL_LEDGER'
   | 'TRIAL_BALANCE'
+  | 'FILE_REVIEW'
   | 'FINANCIAL_STATEMENTS'
   | 'OCR_INVOICE_SCANNER'
   | 'FIXED_ASSETS'
@@ -99,6 +101,13 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       icon: Scale,
       badge: 'فحص الاتزان',
       badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+    },
+    {
+      id: 'FILE_REVIEW',
+      label: 'مراجعة ملف (File Review)',
+      icon: Sparkles,
+      badge: 'وضع المراجعة',
+      badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800 font-bold',
     },
     {
       id: 'FINANCIAL_STATEMENTS',
@@ -218,6 +227,9 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
         {activeSubTab === 'GENERAL_LEDGER' && <GeneralLedgerView state={state} />}
         {activeSubTab === 'TRIAL_BALANCE' && (
           <TrialBalanceView state={state} fiscalYear={fiscalYear} />
+        )}
+        {activeSubTab === 'FILE_REVIEW' && (
+          <FileReviewWizardView state={state} onNavigateToTab={(tab) => setActiveSubTab(tab as any)} />
         )}
         {activeSubTab === 'FINANCIAL_STATEMENTS' && (
           <UnifiedFinancialReportsView

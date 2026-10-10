@@ -66,6 +66,7 @@ export const getParentHub = (tabId: string): string => {
     case 'JOURNAL_ENTRIES':
     case 'GENERAL_LEDGER':
     case 'TRIAL_BALANCE':
+    case 'FILE_REVIEW':
     case 'FIXED_ASSETS':
     case 'BANK_RECONCILIATION':
     case 'CURRENCY_EXCHANGE_RATES':
