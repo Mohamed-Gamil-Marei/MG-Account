@@ -27,6 +27,7 @@ import { AuditConsistencySentinelView } from '../audit/AuditConsistencySentinelV
 import { SmartExcelAuditSentinelView } from '../audit/SmartExcelAuditSentinelView';
 import { ClientSelector } from '../common/ClientSelector';
 import { TaxRiskAndPenaltiesView } from '../tax/TaxRiskAndPenaltiesView';
+import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 import { Scale } from 'lucide-react';
 import { runAutomatedJournalAudit } from '../../services/journalAuditEngine';
 
@@ -119,48 +120,32 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
       {/* Central Active Client Context Selector */}
       <ClientSelector state={state} />
 
-      {/* Compact Sub-Tabs Toolbar */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeSubTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveSubTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
-                  isActive
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
-                <span className="whitespace-nowrap">{tab.label}</span>
-                {tab.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Responsive Sub-Tabs Toolbar (ما يتسع وضع الباقي في زر المزيد ▾، وعلى الموبايل زر عريض) */}
+      <div className="space-y-2">
+        <ResponsiveSubTabBar
+          tabs={tabs.map((tab) => ({
+            id: tab.id,
+            label: tab.label,
+            icon: React.createElement(tab.icon, { className: 'w-4 h-4 shrink-0' }),
+            badge: tab.badge !== undefined ? (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono ${tab.badgeColor || ''}`}>
+                {tab.badge}
+              </span>
+            ) : undefined,
+          }))}
+          activeTab={activeSubTab}
+          onTabChange={(id) => setActiveSubTab(id as TaxAuditSubTab)}
+          maxVisibleTabs={4}
+        />
 
         {pendingTaxesCount > 0 && (
-          <div className="flex items-center gap-2 text-xs shrink-0 pl-1">
+          <div className="flex items-center justify-end px-1">
             <button
               onClick={() => setActiveSubTab('TAX_TRACKER')}
-              className="px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-800/60 text-rose-800 dark:text-rose-300 font-medium flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
+              className="min-h-[44px] px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-800/60 text-rose-800 dark:text-rose-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
             >
-              <Clock className="w-3 h-3 text-rose-600 dark:text-rose-400" />
-              <span>{pendingTaxesCount} مستحق</span>
+              <Clock className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span>يوجد {pendingTaxesCount} إقرار مستحق يتطلب المتابعة</span>
             </button>
           </div>
         )}

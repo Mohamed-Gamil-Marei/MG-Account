@@ -14,6 +14,7 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { TrialBalanceAutoMapperModal } from './accounting/TrialBalanceAutoMapperModal';
 import { AuditConsistencySentinelModal } from './audit/AuditConsistencySentinelModal';
+import { PrintLayout } from './common/PrintLayout';
 import * as XLSX from 'xlsx';
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
@@ -183,7 +184,14 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
           id: 'btn-print-tb',
           label: 'طباعة الميزان',
           icon: Printer,
-          onClick: () => window.print(),
+          onClick: () =>
+            PrintLayout.printElement('trial-balance-report', {
+              title: `ميزان المراجعة بالأرصدة والمجاميع - ${activeClient?.name || 'المنشأة'}`,
+              clientName: activeClient?.name,
+              fiscalYear: currentFiscalYear,
+              orientation: 'landscape',
+              pageSize: 'A4',
+            }),
         },
       ]}
       searchTerm={searchTerm}

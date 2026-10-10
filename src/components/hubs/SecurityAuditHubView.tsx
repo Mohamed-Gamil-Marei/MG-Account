@@ -24,6 +24,7 @@ import { UserManagementModal } from '../UserManagementModal';
 import { DeviceLockModal } from '../DeviceLockModal';
 import { PurgeDatabaseModal } from '../PurgeDatabaseModal';
 import { AccessRestrictedGate } from '../AccessRestrictedGate';
+import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 
 export type SecurityAuditSubTab = 'AUDIT_TRAIL' | 'BACKUP_EXPORT' | 'USERS_DEVICES';
 
@@ -94,46 +95,31 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
 
   return (
     <div className="space-y-2.5">
-      {/* Compact Sub-Tabs Toolbar */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeSubTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveSubTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
-                  isActive
-                    ? 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
-                <span className="whitespace-nowrap">{tab.label}</span>
-                {tab.badge !== undefined && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Responsive Sub-Tabs Toolbar (ما يتسع وضع الباقي في زر المزيد ▾، وعلى الموبايل زر عريض) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <ResponsiveSubTabBar
+          tabs={tabs.map((tab) => ({
+            id: tab.id,
+            label: tab.label,
+            icon: React.createElement(tab.icon, { className: 'w-4 h-4 shrink-0' }),
+            badge: tab.badge !== undefined ? (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono ${tab.badgeColor || ''}`}>
+                {tab.badge}
+              </span>
+            ) : undefined,
+          }))}
+          activeTab={activeSubTab}
+          onTabChange={(id) => setActiveSubTab(id as SecurityAuditSubTab)}
+          maxVisibleTabs={3}
+          className="flex-1"
+        />
 
         <div className="hidden sm:flex items-center gap-2 text-xs shrink-0 pl-1">
           <button
             onClick={() => setIsBackupModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors text-[11px]"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors text-xs"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-4 h-4" />
             <span>نسخة احتياطية</span>
           </button>
         </div>

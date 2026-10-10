@@ -28,6 +28,7 @@ import { ShieldCheck, ShieldAlert, Factory, Percent } from 'lucide-react';
 import { MultiTenantWorkspacesModal } from '../common/MultiTenantWorkspacesModal';
 import { AcceleratedDepreciationCalculatorModal } from '../industrial/AcceleratedDepreciationCalculatorModal';
 import { IndustrialCostManagerModal } from '../industrial/IndustrialCostManagerModal';
+import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 
 export type AccountingSubTab =
   | 'JOURNAL_ENTRIES'
@@ -192,47 +193,22 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
           </div>
         </div>
 
-        {/* Clear Visible Navigation Buttons (Wrapping Grid - No Horizontal Drag Strip) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-9 gap-2">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeSubTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveSubTab(tab.id)}
-                className={`flex flex-col justify-between p-2.5 rounded-xl text-right transition-all cursor-pointer border ${
-                  isActive
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-500/30'
-                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between w-full mb-1.5">
-                  <div
-                    className={`p-1.5 rounded-lg ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                  </div>
-                  {tab.badge !== undefined && (
-                    <span
-                      className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md shrink-0 font-mono ${
-                        isActive
-                          ? 'bg-white/20 text-white'
-                          : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs font-bold leading-tight">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* Responsive Navigation Buttons Deck (ما يتسع وضع الباقي في زر المزيد ▾، وعلى الموبايل زر عريض) */}
+        <ResponsiveSubTabBar
+          tabs={tabs.map((tab) => ({
+            id: tab.id,
+            label: tab.label,
+            icon: React.createElement(tab.icon, { className: 'w-4 h-4 shrink-0' }),
+            badge: tab.badge !== undefined ? (
+              <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md font-mono ${tab.badgeColor || ''}`}>
+                {tab.badge}
+              </span>
+            ) : undefined,
+          }))}
+          activeTab={activeSubTab}
+          onTabChange={(id) => setActiveSubTab(id as AccountingSubTab)}
+          maxVisibleTabs={5}
+        />
       </div>
 
       {/* Render Active Sub-View */}

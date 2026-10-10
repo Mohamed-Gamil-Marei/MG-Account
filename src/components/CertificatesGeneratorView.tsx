@@ -60,6 +60,7 @@ import {
 } from '../types';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { PrintPreviewModal } from './common/PrintPreviewModal';
+import { PrintLayout } from './common/PrintLayout';
 import { CertifiedDocumentExportMenu } from './common/CertifiedDocumentExportMenu';
 import { DocumentVerificationModal } from './common/DocumentVerificationModal';
 import { DirectWhatsAppProcedureModal } from './common/DirectWhatsAppProcedureModal';
@@ -725,14 +726,16 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
 
   const [isDirectPreviewOpen, setIsDirectPreviewOpen] = useState(false);
 
-  // Direct print function for certificate using robust isolated iframe PrintService with immutable record ID
+  // Direct print function for certificate routed through unified PrintLayout (A4, Cairo, RTL, Header)
   const handlePrintCertificateDirect = () => {
-    PrintService.printRecordById(activeCertificatePayload.id, 'official-certificate-document', {
+    PrintLayout.printElement('official-certificate-document', {
       title: activeCustomHeading || 'شهادة محاسبية معتمدة',
+      clientName: beneficiaryName,
+      documentNumber: activeCertificatePayload.id,
       orientation: 'portrait',
       pageSize: 'A4',
-      margins: 'DEFAULT',
-      resequencePageNumbers: true,
+      showLetterhead: false, // The certificate element already renders its own specialized bordered official certificate header
+      showStamp: false, // The certificate already has its specialized official seal & signature box
     });
   };
 

@@ -687,6 +687,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Central Screen Client & Fiscal Year Context Banner */}
       <ClientSelector state={state} />
 
+      {/* Last successful backup info banner */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          <span>حالة الحفظ والنسخ الاحتياطي السحابي:</span>
+        </div>
+        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+          آخر نسخة احتياطية ناجحة: {localStorage.getItem('egy_acc_last_successful_backup') || 'لم تقم بإنشاء نسخة بعد'}
+        </span>
+      </div>
+
       {/* Autonomous CPA Command Deck (Morning Radar, War-Room & One-Click Tools) */}
       <CpaAutonomousCommandDeck
         state={state}

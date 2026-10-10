@@ -41,6 +41,7 @@ import {
   Calculator,
   FolderTree,
   Factory,
+  X,
 } from 'lucide-react';
 
 // Primary view loaded directly for immediate startup render
@@ -103,6 +104,7 @@ const QuickAccountingToolsDrawer = lazyWithRetry(() => import('./components/comm
 import { LanguageToggle } from './components/LanguageToggle';
 import { CloudSyncHeaderWidget } from './components/CloudSyncHeaderWidget';
 import { HeaderNavigationDropdown } from './components/common/HeaderNavigationDropdown';
+import { MobileBottomNavigation } from './components/common/ThemeUIComponents';
 import { I18nProvider, getTranslation } from './utils/i18n';
 import { parseVerificationFromUrl, VerificationPayloadData } from './utils/qrCodeGenerator';
 import { firebaseAuth, FirebaseUserProfile } from './services/firebaseAuthService';
@@ -187,6 +189,7 @@ export default function App() {
   const [verificationData, setVerificationData] = useState<VerificationPayloadData | null>(null);
   const [isMgPromoModalOpen, setIsMgPromoModalOpen] = useState<boolean>(false);
   const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(false);
+  const [isMobileMoreSheetOpen, setIsMobileMoreSheetOpen] = useState<boolean>(false);
 
   const [firebaseProfile, setFirebaseProfile] = useState<FirebaseUserProfile | null>(() => firebaseAuth.getCurrentProfile());
   const [authResolved, setAuthResolved] = useState<boolean>(false);
@@ -1284,7 +1287,7 @@ export default function App() {
 
         {/* Scrollable Main Content Container */}
         <main
-          className={`flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-5 lg:p-6 transition-colors min-w-0 ${
+          className={`flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-5 lg:p-6 pb-24 md:pb-6 transition-colors min-w-0 ${
             isDark ? 'bg-slate-950 text-slate-100' : 'bg-[#F8FAFC] text-slate-800'
           }`}
         >
@@ -1300,7 +1303,7 @@ export default function App() {
         </main>
 
         {/* Mobile Quick Return Floating Badge when viewing Desktop mode on mobile screens */}
-        <div className="md:hidden fixed bottom-14 left-4 right-4 z-40 flex justify-center pointer-events-none">
+        <div className="md:hidden fixed bottom-20 left-4 right-4 z-30 flex justify-center pointer-events-none">
           <button
             onClick={handleSwitchToMobileMode}
             className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xl border border-emerald-400/40 active:scale-95 transition-all animate-in fade-in slide-in-from-bottom-3"
@@ -1309,6 +1312,111 @@ export default function App() {
             <span>التبديل إلى وضع الهاتف الميداني 📱</span>
           </button>
         </div>
+
+        {/* Mobile Fixed Bottom Navigation Bar (أقل من 768px: شريط تنقل سفلي ثابت بـ 5 أزرار) */}
+        <MobileBottomNavigation
+          activeTab={activeTab}
+          onNavigate={(tab) => setActiveTab(tab)}
+          onOpenMore={() => setIsMobileMoreSheetOpen(true)}
+        />
+
+        {/* Mobile 'More' Sheet Modal (ورقة بباقي الأقسام حسب الصلاحيات) */}
+        {isMobileMoreSheetOpen && (
+          <div
+            className="md:hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex flex-col justify-end animate-in fade-in duration-200"
+            onClick={() => setIsMobileMoreSheetOpen(false)}
+          >
+            <div
+              className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 rounded-t-3xl max-h-[85vh] overflow-y-auto p-5 space-y-5 shadow-2xl animate-in slide-in-from-bottom-5 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-sky-600" />
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">أقسام وموديولات النظام المتاحة</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMoreSheetOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Sections list grouped and filtered by isTabAccessible */}
+              <div className="space-y-4">
+                {[
+                  {
+                    category: 'الحسابات والقوائم المالية المعتمدة',
+                    items: [
+                      { id: 'CHART_OF_ACCOUNTS', label: 'دليل الحسابات الشامل' },
+                      { id: 'GENERAL_LEDGER', label: 'دفتر الأستاذ العام' },
+                      { id: 'TRIAL_BALANCE', label: 'ميزان المراجعة' },
+                      { id: 'FINANCIAL_STATEMENTS', label: 'القوائم المالية (EAS)' },
+                      { id: 'FIXED_ASSETS', label: 'الأصول الثابتة والإهلاك' },
+                    ],
+                  },
+                  {
+                    category: 'الضرائب والفحص والامتثال',
+                    items: [
+                      { id: 'TAX_PENALTY_SIMULATOR', label: 'الفحص وغرامات الضرائب' },
+                      { id: 'ETA_RECONCILIATION', label: 'مطابقة الفاتورة الإلكترونية ETA' },
+                      { id: 'AUDIT_WORKING_PAPERS', label: 'أوراق عمل المراجعة' },
+                      { id: 'TAX_EXPOSURE_SIMULATOR', label: 'كشف ومخاطر الفحص' },
+                      { id: 'PAYROLL_INSURANCE', label: 'كسب العمل والتأمينات' },
+                    ],
+                  },
+                  {
+                    category: 'إدارة المكتب والخدمات المهنية',
+                    items: [
+                      { id: 'OFFICE_TREASURY', label: 'خزنة ونقدية المكتب' },
+                      { id: 'INVOICING', label: 'فواتير الأتعاب والمبيعات' },
+                      { id: 'CERTIFICATES', label: 'الشهادات والاعتمادات الرسمية' },
+                      { id: 'FEASIBILITY_STUDY', label: 'دراسات الجدوى' },
+                      { id: 'CREDIT_SIMULATOR', label: 'محاكي الائتمان والملاءة' },
+                      { id: 'CUSTOMS_HUB', label: 'الجمارك وسلاسل الإمداد' },
+                      { id: 'AUDIT_TRAIL', label: 'سجل العمليات والرقابة' },
+                      { id: 'MULTI_TENANT_WORKSPACES', label: 'بيئات عمل الشركات' },
+                    ],
+                  },
+                ].map((group, gIdx) => {
+                  const accessibleItems = group.items.filter((item) => isTabAccessible(item.id));
+                  if (accessibleItems.length === 0) return null;
+                  return (
+                    <div key={gIdx} className="space-y-1.5">
+                      <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block px-1">
+                        {group.category}
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {accessibleItems.map((item) => {
+                          const isCurrent = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMoreSheetOpen(false);
+                              }}
+                              className={`min-h-[44px] px-3 py-2 text-right text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-sky-50 dark:bg-sky-950/50 border-sky-500 text-sky-700 dark:text-sky-300'
+                                  : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bottom Status / Footer info */}
         <footer

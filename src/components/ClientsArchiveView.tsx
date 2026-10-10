@@ -58,6 +58,7 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu } from './common/ActionMenu';
+import { PrintLayout } from './common/PrintLayout';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { validateEgyptianTaxNumber } from '../utils/taxValidationEngine';
@@ -1982,7 +1983,25 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       <span className="font-bold text-slate-900">سجل حركات وسندات الخزنة الخاصة بالعميل</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => {
+                          PrintLayout.printElement('client-account-statement-table', {
+                            title: `كشف حساب تفصيلي - ${liveSelectedClient.name}`,
+                            subtitle: `سجل حركات وسندات الخزنة والأتعاب والرسوم | كود العميل: ${liveSelectedClient.code || ''}`,
+                            clientName: liveSelectedClient.name,
+                            date: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
+                            orientation: 'portrait',
+                            pageSize: 'A4',
+                          });
+                        }}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1 cursor-pointer text-xs"
+                        title="طباعة كشف حساب معتمد للعميل (A4 - خط Cairo)"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>طباعة كشف الحساب</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setTargetProcedure(null);
@@ -1990,10 +2009,10 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                           setQuickTxAmount(clientSummary.remainingFeesDue > 0 ? clientSummary.remainingFeesDue : 5000);
                           setIsQuickTreasuryModalOpen(true);
                         }}
-                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-1 cursor-pointer text-xs"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>تسجيل سند قبض أتعاب</span>
+                        <span>تسجيل سند قبض</span>
                       </button>
 
                       <button
@@ -2003,7 +2022,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                           setQuickTxAmount(1000);
                           setIsQuickTreasuryModalOpen(true);
                         }}
-                        className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl font-bold flex items-center gap-1 cursor-pointer text-xs"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>سداد رسوم حكومية</span>
@@ -2017,7 +2036,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       لا توجد حركات مالية مسجلة بالخزنة لهذا العميل حتى الآن.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <div id="client-account-statement-table" className="overflow-x-auto border border-slate-200 rounded-xl bg-white p-2">
                       <table className="w-full text-right border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">

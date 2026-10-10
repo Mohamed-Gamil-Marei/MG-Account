@@ -38,6 +38,7 @@ import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { SecurityAuthService } from '../services/securityAuth';
 import { formDraftStorage, useNetworkStatus } from '../utils/formDrafts';
+import { PrintLayout } from './common/PrintLayout';
 import { AutoSaveStatusBadge } from './common/AutoSaveStatusBadge';
 import { DraftRecoveryBanner } from './common/DraftRecoveryBanner';
 import { EtaSettingsModal } from './EtaSettingsModal';
@@ -1439,46 +1440,19 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    const styleId = 'invoice-direct-print-style';
-                    let styleEl = document.getElementById(styleId) as HTMLStyleElement;
-                    if (!styleEl) {
-                      styleEl = document.createElement('style');
-                      styleEl.id = styleId;
-                      document.head.appendChild(styleEl);
-                    }
-                    styleEl.innerHTML = `
-                      @page {
-                        size: A4 portrait;
-                        margin: 10mm 12mm;
-                      }
-                      @media print {
-                        body * {
-                          visibility: hidden !important;
-                        }
-                        #official-invoice-document, #official-invoice-document * {
-                          visibility: visible !important;
-                        }
-                        #official-invoice-document {
-                          position: absolute !important;
-                          left: 0 !important;
-                          top: 0 !important;
-                          width: 100% !important;
-                          margin: 0 !important;
-                          padding: 20px !important;
-                          background: white !important;
-                          box-shadow: none !important;
-                          border: none !important;
-                        }
-                      }
-                    `;
-                    setTimeout(() => {
-                      window.print();
-                    }, 120);
+                    PrintLayout.printElement('official-invoice-document', {
+                      title: `فاتورة ضريبية رسمية - رقم ${selectedInvoice.invoiceNumber}`,
+                      documentNumber: selectedInvoice.invoiceNumber,
+                      clientName: selectedInvoice.clientName,
+                      date: selectedInvoice.date,
+                      orientation: 'portrait',
+                      pageSize: 'A4',
+                    });
                   }}
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>طباعة رسمية</span>
+                  <span>طباعة رسمية (A4)</span>
                 </button>
                 <button
                   onClick={() => setWhatsAppInvoice(selectedInvoice)}

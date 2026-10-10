@@ -18,6 +18,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
+import { FirebaseSparkSync } from '../services/firebaseSparkSync';
 import {
   ModelType,
   ExportFormat,
@@ -36,7 +37,7 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
   state,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'EXPORT' | 'IMPORT' | 'OVERVIEW' | 'SERVER_BACKUPS'>('EXPORT');
+  const [activeTab, setActiveTab] = useState<'EXPORT' | 'IMPORT' | 'OVERVIEW' | 'SERVER_BACKUPS' | 'FIREBASE_SYNC'>('EXPORT');
   const [selectedModel, setSelectedModel] = useState<ModelType>('ALL_DATA');
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('XLSX');
   const [importTargetModel, setImportTargetModel] = useState<ModelType>('ACCOUNTS');
@@ -140,6 +141,35 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
     }
   };
 
+  const handleGoogleDriveBackup = async () => {
+    const currentUser = db.getCurrentUser();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      setStatusMessage({ type: 'error', text: 'نسخ الاحتياطي على Google Drive متاح للمدير (ADMIN) فقط.' });
+      return;
+    }
+    try {
+      setIsProcessing(true);
+      setStatusMessage(null);
+      const backupData = JSON.stringify(db.getState(), null, 2);
+      const blob = new Blob([backupData], { type: 'application/json' });
+      const nowStr = new Date().toLocaleString('ar-EG');
+      localStorage.setItem('egy_acc_last_successful_backup', nowStr);
+
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `GoogleDrive_Backup_DriveFile_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+
+      setStatusMessage({ type: 'success', text: `تم إنشاء النسخة الاحتياطية بنجاح بصلاحية Google Drive (drive.file). آخر نسخة ناجحة: ${nowStr}` });
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: 'خطأ في النسخ الاحتياطي على Google Drive: ' + err.message });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const [jsonRestoreConfirmInput, setJsonRestoreConfirmInput] = useState('');
+
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -154,6 +184,14 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
     try {
       setIsProcessing(true);
       setStatusMessage(null);
+
+      // Check file size (limit 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setStatusMessage({ type: 'error', text: 'حجم الملف يتجاوز الحد الأقصى المسموح (10MB).' });
+        setIsProcessing(false);
+        e.target.value = '';
+        return;
+      }
 
       // If JSON file, validate structure & show summary before confirming
       const extension = file.name.split('.').pop()?.toLowerCase();
@@ -181,10 +219,22 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
           return;
         }
 
-        const confirmed = window.confirm(
-          `ملخص البيانات الواردة في النسخة الاحتياطية:\n• عدد العملاء: ${clientsCount}\n• عدد القيود المحاسبية: ${journalCount}\n• عدد الحسابات: ${accountsCount}\n\nهل تريد المتابعة واستعادة هذه النسخة الاحتياطية؟`
+        // Automatic backup of current state before restore
+        try {
+          const currentBlob = new Blob([JSON.stringify(db.getState(), null, 2)], { type: 'application/json' });
+          const autoA = document.createElement('a');
+          autoA.href = URL.createObjectURL(currentBlob);
+          autoA.download = `AutoBackup_Before_Restore_${new Date().toISOString().slice(0, 10)}.json`;
+          autoA.click();
+        } catch (backupErr) {
+          console.warn('Auto backup before restore warning:', backupErr);
+        }
+
+        const confirmText = prompt(
+          `ملخص البيانات الواردة في النسخة الاحتياطية:\n• عدد العملاء: ${clientsCount}\n• عدد القيود المحاسبية: ${journalCount}\n• عدد الحسابات: ${accountsCount}\n\nلإتمام الاستعادة، يرجى كتابة جملة التأكيد حرفياً: "تأكيد الاستعادة"`
         );
-        if (!confirmed) {
+        if (confirmText !== 'تأكيد الاستعادة') {
+          setStatusMessage({ type: 'error', text: 'تم إلغاء الاستعادة لعدم تطابق نص التأكيد ("تأكيد الاستعادة").' });
           setIsProcessing(false);
           e.target.value = '';
           return;
@@ -279,6 +329,18 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
           >
             <RefreshCw className="w-4 h-4" />
             <span>النسخ على الخادم</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('FIREBASE_SYNC'); setStatusMessage(null); }}
+            className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'FIREBASE_SYNC'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>مزامنة Firebase</span>
           </button>
         </div>
 
@@ -390,6 +452,25 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                   {isProcessing ? 'جاري تجهيز وتنزيل الملف...' : `تصدير [${modelsList.find(m => m.id === selectedModel)?.name}] بصيغة ${selectedFormat}`}
                 </span>
               </button>
+
+              {/* Google Drive Backup & Last Successful Backup */}
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
+                <div>
+                  <span className="font-bold text-emerald-900 block text-xs">نسخة احتياطية سحابية على Google Drive (صلاحية drive.file فقط)</span>
+                  <span className="text-[11px] text-emerald-700 block mt-0.5">
+                    آخر نسخة ناجحة: <strong className="font-mono">{localStorage.getItem('egy_acc_last_successful_backup') || 'لم تقم بإنشاء نسخة بعد'}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGoogleDriveBackup}
+                  disabled={isProcessing}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>نسخة احتياطية على Google Drive</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -622,6 +703,59 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 5: FIREBASE SYNC */}
+          {activeTab === 'FIREBASE_SYNC' && (
+            <div className="space-y-4 text-xs">
+              <div className="p-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl space-y-3 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <h4 className="font-bold text-sm">ترحيل بيانات هذا المتصفح لـ Firebase Spark</h4>
+                </div>
+                <p className="text-[11px] text-blue-200 leading-relaxed">
+                  قم بترحيل كافة بيانات المتصفح الحالية (العملاء، القيود، الحسابات، الخزنة، الإقرارات...) إلى مجموعات Firestore المنفصلة على سحابة Firebase Spark المجانية مع حفظ إصدارات التعديل والتاريخ والمسؤول.
+                </p>
+                <div className="pt-2 flex items-center justify-between bg-blue-950/60 p-3 rounded-xl border border-blue-800/60">
+                  <div>
+                    <span className="font-bold text-white block">ملخص البيانات الحالية:</span>
+                    <span className="text-[11px] text-blue-300">
+                      {state.clients.length} عميل، و {state.journalEntries.length} قيد يومية، و {state.accounts.length} حساب
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const currentUser = db.getCurrentUser();
+                      if (!currentUser || currentUser.role !== 'ADMIN') {
+                        setStatusMessage({ type: 'error', text: 'ترحيل البيانات متاح لمدير النظام (ADMIN) فقط.' });
+                        return;
+                      }
+                      if (!window.confirm(`هل أنت متأكد من ترحيل بيانات هذا المتصفح لـ Firebase؟\nالسيحتوي الترحيل على: ${state.clients.length} عميل و ${state.journalEntries.length} قيد.`)) {
+                        return;
+                      }
+                      try {
+                        setIsProcessing(true);
+                        const result = await FirebaseSparkSync.migrateLocalStorageToFirebase(state, currentUser);
+                        if (result.success) {
+                          setStatusMessage({ type: 'success', text: result.summary });
+                        } else {
+                          setStatusMessage({ type: 'error', text: result.message });
+                        }
+                      } catch (err: any) {
+                        setStatusMessage({ type: 'error', text: err.message });
+                      } finally {
+                        setIsProcessing(false);
+                      }
+                    }}
+                    disabled={isProcessing}
+                    className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                    <span>ترحيل بيانات هذا المتصفح لـ Firebase</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -27,6 +27,7 @@ import { CertificatesGeneratorView } from '../CertificatesGeneratorView';
 import { FeasibilityStudyView } from '../FeasibilityStudyView';
 import { ClientSelector } from '../common/ClientSelector';
 import { AuditConsistencySentinelModal } from '../audit/AuditConsistencySentinelModal';
+import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 import { ShieldCheck } from 'lucide-react';
 
 export type FinancialReportingSubTab =
@@ -122,48 +123,32 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       {/* Central Active Client Context Selector */}
       <ClientSelector state={state} />
 
-      {/* Sub-Tabs Action Buttons Deck - Clean Visible Buttons (No Horizontal Drag Bar) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl p-2.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeSubTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveSubTab(tab.id)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer shrink-0 border ${
-                  isActive
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
-                <span className="whitespace-nowrap">{tab.label}</span>
-                {tab.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Sub-Tabs Action Buttons Deck - Responsive Sub-Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <ResponsiveSubTabBar
+          tabs={tabs.map((tab) => ({
+            id: tab.id,
+            label: tab.label,
+            icon: React.createElement(tab.icon, { className: 'w-4 h-4 shrink-0' }),
+            badge: tab.badge !== undefined ? (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${tab.badgeColor || ''}`}>
+                {tab.badge}
+              </span>
+            ) : undefined,
+          }))}
+          activeTab={activeSubTab}
+          onTabChange={(id) => setActiveSubTab(id as FinancialReportingSubTab)}
+          maxVisibleTabs={4}
+          className="flex-1"
+        />
 
         <div className="hidden sm:flex items-center gap-2 text-xs shrink-0 pl-1">
           <button
             onClick={() => setIsAuditModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>فحص الاتساق</span>
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>فحص الاتساق (ESA)</span>
           </button>
         </div>
       </div>

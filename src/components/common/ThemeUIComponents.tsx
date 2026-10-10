@@ -1,5 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Search, X, ChevronDown, CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
+import {
+  MoreHorizontal,
+  Search,
+  X,
+  ChevronDown,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Info,
+  Plus,
+  LayoutDashboard,
+  Users,
+  Receipt,
+  FileCheck2,
+  Layers,
+  Check,
+} from 'lucide-react';
 import { theme } from '../../theme';
 
 // ==========================================
@@ -438,5 +454,373 @@ export function DataTable<T extends { id?: string | number }>({
         </div>
       </div>
     </div>
+  );
+};
+
+// ==========================================
+// 10. ResponsiveSubTabBar (ألغِ التمرير الأفقي للأقسام الفرعية)
+// ==========================================
+export interface SubTabItem {
+  id: string;
+  label: string;
+  icon?: React.ReactNode;
+  badge?: React.ReactNode;
+}
+
+export interface ResponsiveSubTabBarProps {
+  tabs: SubTabItem[];
+  activeTab: string;
+  onTabChange: (id: string) => void;
+  maxVisibleTabs?: number;
+  className?: string;
+}
+
+export const ResponsiveSubTabBar: React.FC<ResponsiveSubTabBarProps> = ({
+  tabs,
+  activeTab,
+  onTabChange,
+  maxVisibleTabs = 5,
+  className = '',
+}) => {
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
+
+  const activeItem = tabs.find((t) => t.id === activeTab) || tabs[0];
+  const visibleTabs = tabs.slice(0, maxVisibleTabs);
+  const overflowTabs = tabs.slice(maxVisibleTabs);
+  const isOverflowActive = overflowTabs.some((t) => t.id === activeTab);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsMoreOpen(false);
+      }
+      if (mobileRef.current && !mobileRef.current.contains(e.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  return (
+    <div className={`w-full ${className}`}>
+      {/* 1. Mobile View (شاشة الموبايل: زر واحد عريض باسم القسم يفتح قائمة) */}
+      <div className="sm:hidden relative" ref={mobileRef}>
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="w-full min-h-[44px] flex items-center justify-between px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs text-xs font-bold text-slate-800 dark:text-slate-200 transition-all cursor-pointer active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 truncate">
+            {activeItem?.icon && <span className="text-sky-600 dark:text-sky-400 shrink-0">{activeItem.icon}</span>}
+            <span className="truncate">{activeItem?.label}</span>
+            {activeItem?.badge && <span className="shrink-0">{activeItem.badge}</span>}
+          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0 ${
+              isMobileMenuOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+
+        {isMobileMenuOpen && (
+          <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 py-1.5 max-h-72 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            {tabs.map((tab) => {
+              const isSelected = tab.id === activeTab;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    onTabChange(tab.id);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`w-full min-h-[44px] flex items-center justify-between px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer text-right ${
+                    isSelected
+                      ? 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    {tab.icon && <span className="shrink-0">{tab.icon}</span>}
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  {isSelected && <Check className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 2. Desktop / Tablet View (ما يتسع وضع الباقي في زر "المزيد ▾" بدون أي تمرير أفقي) */}
+      <div className="hidden sm:flex flex-wrap items-center gap-1.5 p-1 bg-slate-100/90 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+        {visibleTabs.map((tab) => {
+          const isSelected = tab.id === activeTab;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              className={`min-h-[44px] flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 shadow-xs ring-1 ring-slate-200 dark:ring-slate-700'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              {tab.icon && <span className="shrink-0">{tab.icon}</span>}
+              <span>{tab.label}</span>
+              {tab.badge && <span className="shrink-0">{tab.badge}</span>}
+            </button>
+          );
+        })}
+
+        {overflowTabs.length > 0 && (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsMoreOpen(!isMoreOpen)}
+              className={`min-h-[44px] flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                isOverflowActive
+                  ? 'bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 shadow-xs ring-1 ring-slate-200 dark:ring-slate-700'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <span>المزيد</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMoreOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isMoreOpen && (
+              <div className="absolute left-0 mt-1.5 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
+                {overflowTabs.map((tab) => {
+                  const isSelected = tab.id === activeTab;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        onTabChange(tab.id);
+                        setIsMoreOpen(false);
+                      }}
+                      className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer text-right ${
+                        isSelected
+                          ? 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {tab.icon && <span className="shrink-0">{tab.icon}</span>}
+                        <span className="truncate">{tab.label}</span>
+                      </div>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 11. ResponsiveScreenToolbar (شريط أدوات الشاشة في صفين + زر + عائم وباقي الأدوات في ⋯ على الموبايل)
+// ==========================================
+export interface ResponsiveScreenToolbarProps {
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+  searchPlaceholder?: string;
+  primaryAction?: {
+    label: string;
+    icon?: React.ReactNode;
+    onClick: () => void;
+  };
+  secondaryActions?: {
+    label: string;
+    icon?: React.ReactNode;
+    onClick: () => void;
+    danger?: boolean;
+  }[];
+  filters?: React.ReactNode;
+  summaryStats?: React.ReactNode;
+  className?: string;
+}
+
+export const ResponsiveScreenToolbar: React.FC<ResponsiveScreenToolbarProps> = ({
+  searchQuery,
+  onSearchChange,
+  searchPlaceholder = 'بحث...',
+  primaryAction,
+  secondaryActions = [],
+  filters,
+  summaryStats,
+  className = '',
+}) => {
+  return (
+    <div className={`space-y-2.5 ${className}`}>
+      {/* الصف الأول: البحث والفلاتر والإحصائيات الملخصة */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {onSearchChange && (
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery || ''}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="w-full min-h-[44px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 pr-10 pl-3.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500/20"
+              />
+            </div>
+          )}
+          {filters}
+        </div>
+
+        {summaryStats && <div className="flex items-center gap-2 text-xs shrink-0">{summaryStats}</div>}
+      </div>
+
+      {/* الصف الثاني: أزرار الإجراءات (على الديسكتاوب صف أزرار، وعلى الموبايل زر + عائم والأدوات في ⋯) */}
+      <div className="flex items-center justify-between gap-2">
+        {/* أزرار سطح المكتب والتابلت */}
+        <div className="hidden sm:flex items-center gap-2 flex-wrap">
+          {secondaryActions.map((action, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={action.onClick}
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                action.danger
+                  ? 'border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              {action.icon && <span className="shrink-0">{action.icon}</span>}
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* قائمة ⋯ للموبايل للأدوات الفرعية */}
+        <div className="sm:hidden flex items-center gap-2">
+          {secondaryActions.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-500">أدوات إضافية:</span>
+              <MoreMenu items={secondaryActions} />
+            </div>
+          )}
+        </div>
+
+        {/* الزر الرئيسي لسطح المكتب */}
+        {primaryAction && (
+          <div className="hidden sm:block mr-auto">
+            <button
+              type="button"
+              onClick={primaryAction.onClick}
+              className="min-h-[44px] px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs shadow-sky-500/20 flex items-center gap-2 cursor-pointer transition-all active:scale-[0.98]"
+            >
+              {primaryAction.icon || <Plus className="w-4 h-4" />}
+              <span>{primaryAction.label}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* زر + عائم (FAB) للموبايل للعمليات السريعة */}
+      {primaryAction && (
+        <button
+          type="button"
+          onClick={primaryAction.onClick}
+          title={primaryAction.label}
+          className="sm:hidden fixed bottom-20 left-4 z-40 w-13 h-13 min-h-[52px] min-w-[52px] rounded-full bg-sky-600 hover:bg-sky-500 text-white shadow-2xl flex items-center justify-center border-2 border-white dark:border-slate-900 cursor-pointer active:scale-90 transition-transform"
+        >
+          {primaryAction.icon || <Plus className="w-6 h-6 stroke-[2.5]" />}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ==========================================
+// 12. MobileBottomNavigation (شريط تنقل سفلي ثابت بـ 5 أزرار)
+// ==========================================
+export interface MobileBottomNavigationProps {
+  activeTab: string;
+  onNavigate: (tabId: string) => void;
+  onOpenMore: () => void;
+}
+
+export const MobileBottomNavigation: React.FC<MobileBottomNavigationProps> = ({
+  activeTab,
+  onNavigate,
+  onOpenMore,
+}) => {
+  const isDashboard = activeTab === 'DASHBOARD';
+  const isClients = activeTab === 'CLIENTS_ARCHIVE' || activeTab === 'OFFICE_HUB';
+  const isEntries = activeTab === 'JOURNAL_ENTRIES' || activeTab === 'ACCOUNTING_HUB';
+  const isTaxes = activeTab === 'TAX_TRACKER' || activeTab === 'TAX_AUDIT_HUB';
+
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-2xl h-16 flex items-center justify-around px-2"
+      aria-label="شريط التنقل الميداني السريع"
+    >
+      <button
+        type="button"
+        onClick={() => onNavigate('DASHBOARD')}
+        className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+          isDashboard ? 'text-sky-600 dark:text-sky-400 font-black' : 'text-slate-500 dark:text-slate-400 font-semibold'
+        }`}
+      >
+        <LayoutDashboard className="w-5 h-5 shrink-0" />
+        <span className="text-[10px]">الرئيسية</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onNavigate('CLIENTS_ARCHIVE')}
+        className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+          isClients ? 'text-sky-600 dark:text-sky-400 font-black' : 'text-slate-500 dark:text-slate-400 font-semibold'
+        }`}
+      >
+        <Users className="w-5 h-5 shrink-0" />
+        <span className="text-[10px]">العملاء</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onNavigate('JOURNAL_ENTRIES')}
+        className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+          isEntries ? 'text-sky-600 dark:text-sky-400 font-black' : 'text-slate-500 dark:text-slate-400 font-semibold'
+        }`}
+      >
+        <Receipt className="w-5 h-5 shrink-0" />
+        <span className="text-[10px]">القيود</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onNavigate('TAX_TRACKER')}
+        className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+          isTaxes ? 'text-sky-600 dark:text-sky-400 font-black' : 'text-slate-500 dark:text-slate-400 font-semibold'
+        }`}
+      >
+        <FileCheck2 className="w-5 h-5 shrink-0" />
+        <span className="text-[10px]">الإقرارات</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpenMore}
+        className="flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-semibold transition-colors cursor-pointer"
+      >
+        <Layers className="w-5 h-5 shrink-0" />
+        <span className="text-[10px]">المزيد</span>
+      </button>
+    </nav>
   );
 };

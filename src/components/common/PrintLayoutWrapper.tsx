@@ -564,3 +564,5 @@ export const PrintLayoutWrapper: React.FC<PrintLayoutWrapperProps> = ({
 
   return content;
 };
+
+export { PrintLayout, printElementWithPrintLayout } from './PrintLayout';

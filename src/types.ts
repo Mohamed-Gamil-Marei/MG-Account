@@ -202,12 +202,15 @@ export interface ClientDocument {
   title: string;
   category?: ClientDocumentCategory | string; // تصنيف المستند: ضريبي، قانوني، تعاقدي، مالي، عام
   documentType: 'TAX_CARD' | 'COMMERCIAL_REG' | 'ARTICLES_OF_INC' | 'FINANCIAL_REPORT' | 'POWER_OF_ATTORNEY' | 'RECEIPT' | 'AUDIT_REPORT' | 'TAX_RETURN' | 'CONTRACT' | 'OTHER';
-  fileDataUrl: string; // Base64 or Blob URL
-  fileName: string;
+  fileDataUrl?: string; // Base64 or Blob URL
+  fileName?: string;
   fileSize?: string;
   uploadedAt: string;
   tag?: string;
   notes?: string;
+  fiscalYear?: number;
+  googleDriveLink?: string;
+  documentStatus?: 'REQUIRED' | 'RECEIVED' | 'MISSING'; // مطلوب / وصل / ناقص
 }
 
 export type ClientRelationshipType = 'PERMANENT' | 'TEMPORARY'; // دائم (سنوي/تعاقدي) | مؤقت (استشاري/مهمة محددة)

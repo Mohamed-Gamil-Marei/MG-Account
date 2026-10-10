@@ -23,6 +23,7 @@ import { exportElementToPdf } from '../utils/certifiedDocumentExporter';
 import { PrintService } from '../services/PrintService';
 import { generateQrCodeSvg } from '../utils/qrCodeGenerator';
 import { PrintExportControlModal } from './common/PrintExportControlModal';
+import { PrintLayout } from './common/PrintLayout';
 
 interface EgyptianTaxDeclarationPdfModalProps {
   isOpen: boolean;
@@ -190,99 +191,16 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
 
   const printableRef = useRef<HTMLDivElement>(null);
 
-  // طباعة مباشرة نظيفة ومعزولة تمنع تماماً ظهور أي صفحات بيضاء أو ترحيل
+  // طباعة موحدة عبر PrintLayout تضمن خط Cairo واتجاه RTL ومقاس A4 وهيدر المكتب ورقم الصفحة
   const handlePrint = () => {
-    const formEl = document.getElementById('egyptian-official-tax-form');
-    if (!formEl) {
-      window.print();
-      return;
-    }
-
-    // إنشاء iframe عازل ومخصص للطباعة
-    let printIframe = document.getElementById('tax-return-print-iframe') as HTMLIFrameElement;
-    if (!printIframe) {
-      printIframe = document.createElement('iframe');
-      printIframe.id = 'tax-return-print-iframe';
-      printIframe.style.position = 'fixed';
-      printIframe.style.right = '0';
-      printIframe.style.bottom = '0';
-      printIframe.style.width = '0px';
-      printIframe.style.height = '0px';
-      printIframe.style.border = 'none';
-      printIframe.style.opacity = '0';
-      printIframe.style.zIndex = '-9999';
-      document.body.appendChild(printIframe);
-    }
-
-    const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
-    if (!iframeDoc) {
-      window.print();
-      return;
-    }
-
-    // استيراد كافة ملفات التنسيق والخطوط من الصفحة الرئيسية
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-      .map((s) => s.outerHTML)
-      .join('\n');
-
-    iframeDoc.open();
-    iframeDoc.write(`
-      <!DOCTYPE html>
-      <html lang="ar" dir="rtl">
-        <head>
-          <meta charset="utf-8" />
-          <title>إقرار ضريبي رسمي - ${clientName}</title>
-          ${styles}
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 4mm 4mm 4mm 4mm;
-            }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              box-sizing: border-box;
-            }
-            html, body {
-              background: #ffffff !important;
-              color: #0f172a !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 100% !important;
-              direction: rtl !important;
-              font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif !important;
-            }
-            #egyptian-official-tax-form {
-              width: 100% !important;
-              max-width: 100% !important;
-              margin: 0 !important;
-              padding: 2mm 3mm !important;
-              box-shadow: none !important;
-              border: none !important;
-            }
-            .no-print {
-              display: none !important;
-            }
-          </style>
-        </head>
-        <body>
-          <div id="egyptian-official-tax-form">
-            ${formEl.innerHTML}
-          </div>
-        </body>
-      </html>
-    `);
-    iframeDoc.close();
-
-    // تشغيل الطباعة بعد اكتمال تحميل عناصر الـ iframe
-    setTimeout(() => {
-      try {
-        printIframe.contentWindow?.focus();
-        printIframe.contentWindow?.print();
-      } catch {
-        window.print();
-      }
-    }, 250);
+    PrintLayout.printElement('egyptian-official-tax-form', {
+      title: `إقرار ضريبي رسمي - ${clientName}`,
+      subtitle: `الفترة الضريبية: ${period} | نموذج مصلحة الضرائب المصرية`,
+      clientName,
+      date: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
+      orientation: 'portrait',
+      pageSize: 'A4',
+    });
   };
 
   // تصدير وتحميل ملف PDF حقيقي ومباشر وكامل البيانات على صفحة A4 واحدة معتمدة

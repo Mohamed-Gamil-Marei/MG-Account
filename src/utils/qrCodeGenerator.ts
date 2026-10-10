@@ -74,7 +74,7 @@ export function getSystemVerificationBaseUrl(): string {
     return window.location.origin.replace(/\/+$/, '');
   }
 
-  return 'https://cpa-egypt.tax.gov.eg';
+  return 'https://ais-dev-l3or2ffau5yhmqhcrkpuh4-843507267924.europe-west2.run.app';
 }
 
 /**
@@ -87,59 +87,17 @@ export function formatPayloadAsVerificationUrl(raw: string): string {
 
   const origin = getSystemVerificationBaseUrl();
   const parts = raw.split('|');
-  if (parts.length >= 2) {
-    const code = parts[1] || parts[0];
-    const amt = parts.find((p) => /^\d+(\.\d+)?$/.test(p));
-    const date = parts.find((p) => /^\d{4}-\d{2}-\d{2}$/.test(p));
-    let t = 'CERT';
-    if (raw.includes('INV') || code.startsWith('INV')) t = 'INV';
-    else if (raw.includes('AUD') || code.startsWith('AUD')) t = 'AUD';
-    else if (raw.includes('ETA') || raw.includes('TAX')) t = 'TAX';
-    else if (raw.includes('FEASIBILITY') || code.startsWith('FS')) t = 'FS';
-    else if (raw.includes('JV') || raw.includes('ACC')) t = 'JV';
-
-    const amtParam = amt ? `&amt=${amt}` : '';
-    const dateParam = date ? `&d=${date}` : '';
-    return `${origin}/#verify?id=${encodeURIComponent(code)}&t=${t}${amtParam}${dateParam}`;
-  }
-  return `${origin}/#verify?id=${encodeURIComponent(raw)}`;
+  const code = parts.length >= 2 ? (parts[1] || parts[0]) : raw;
+  return `${origin}/#verify?id=${encodeURIComponent(code)}`;
 }
 
 /**
- * Builds a direct verification URL with document ID and parameters
- * Keeps the URL concise and compact (under 140 chars) to prevent QR matrix bloat on paper prints
+ * Builds a direct verification URL with document ID only (Requirement 5.1: بدون أي بيانات مالية أو ضريبية في الرابط)
  */
 export function buildVerificationUrl(data: VerificationPayloadData, customBaseUrl?: string): string {
-  const docId = data.docNumber || `CERT-${Date.now().toString().slice(-6)}`;
+  const docId = data.docNumber || data.recordId || `CERT-${Date.now().toString().slice(-6)}`;
   const origin = (customBaseUrl && customBaseUrl.trim()) ? customBaseUrl.trim().replace(/\/+$/, '') : getSystemVerificationBaseUrl();
-
-  const secHash = data.securityHash || generateDocumentSecurityHash(docId, data.clientName || 'عميل معتمد', data.amount, data.date);
-
-  // Short type identifier to keep QR module count low
-  let shortType = 'CERT';
-  const rawType = data.docType || '';
-  if (rawType.includes('فاتورة') || docId.startsWith('INV')) shortType = 'INV';
-  else if (rawType.includes('تقرير') || rawType.includes('مراقب') || docId.startsWith('AUD')) shortType = 'AUD';
-  else if (rawType.includes('ضريب') || rawType.includes('إقرار') || docId.startsWith('TAX')) shortType = 'TAX';
-  else if (rawType.includes('قوائم') || rawType.includes('مركز') || rawType.includes('مالي') || docId.startsWith('EAS') || docId.startsWith('FIN') || docId.startsWith('FS')) shortType = 'FS';
-  else if (rawType.includes('دراسة')) shortType = 'FS';
-
-  const amtParam = data.amount !== undefined ? `&amt=${encodeURIComponent(data.amount.toString())}` : '';
-  const dateParam = data.date ? `&d=${encodeURIComponent(data.date)}` : '';
-  const yrParam = data.fiscalYear ? `&yr=${encodeURIComponent(data.fiscalYear.toString())}` : '';
-  const assetsParam = data.totalAssets !== undefined ? `&assets=${encodeURIComponent(data.totalAssets.toString())}` : '';
-  const netParam = data.netProfit !== undefined ? `&net=${encodeURIComponent(data.netProfit.toString())}` : '';
-  const crParam = data.commercialRegNo ? `&cr=${encodeURIComponent(data.commercialRegNo.trim().slice(0, 20))}` : '';
-  const tcParam = data.taxCardNo ? `&tc=${encodeURIComponent(data.taxCardNo.trim().slice(0, 20))}` : '';
-  const hashClean = secHash.replace(/^EAS-/, '').slice(0, 9);
-  const hashParam = `&h=${encodeURIComponent(hashClean)}`;
-
-  // Short client snippet (max 25 chars) to maintain small QR matrix
-  const clientSnippet = data.clientName ? `&c=${encodeURIComponent(data.clientName.trim().slice(0, 25))}` : '';
-  const ridParam = data.recordId && data.recordId !== docId ? `&rid=${encodeURIComponent(data.recordId.trim())}` : '';
-  const cidParam = data.clientId ? `&cid=${encodeURIComponent(data.clientId.trim())}` : '';
-
-  return `${origin}/#verify?id=${encodeURIComponent(docId)}&t=${shortType}${ridParam}${cidParam}${clientSnippet}${amtParam}${dateParam}${yrParam}${assetsParam}${netParam}${crParam}${tcParam}${hashParam}`;
+  return `${origin}/#verify?id=${encodeURIComponent(docId)}`;
 }
 
 /**

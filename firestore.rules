@@ -120,6 +120,12 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && (isAdmin() || getUserRole() == 'ACCOUNTANT');
     }
 
+    // --- 14. Issued Documents Verification Registry ---
+    match /issuedDocuments/{docId} {
+      allow get: if true;
+      allow write: if isAccountant();
+    }
+
     // --- Default Deny All Unauthenticated or Unmatched Requests ---
     match /{document=**} {
       allow read, write: if false;

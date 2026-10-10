@@ -1,5 +1,5 @@
 import React from 'react';
-import { LucideIcon, Zap, LayoutGrid, ListFilter } from 'lucide-react';
+import { LucideIcon, Zap, LayoutGrid, ListFilter, Plus } from 'lucide-react';
 import { ActionButton, ActionDropdownItem } from './ActionButton';
 import { ActionMenu, ActionMenuItem } from './ActionMenu';
 import { ScreenActionToolbar, ScreenActionButtonItem } from './ScreenActionToolbar';
@@ -191,9 +191,9 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
             <button
               id={primaryAction.id}
               onClick={primaryAction.onClick}
-              className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 min-h-[40px] sm:min-h-auto bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
             >
-              {primaryAction.icon && <primaryAction.icon className="w-3 h-3" />}
+              {primaryAction.icon && <primaryAction.icon className="w-3.5 h-3.5" />}
               <span>{primaryAction.label}</span>
             </button>
           )}
@@ -233,7 +233,7 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
         </div>
       </div>
 
-      {/* Sub-Header Toolbar (Search and Filter Tabs if present) */}
+      {/* Sub-Header Toolbar (Search and Filter Tabs if present - No horizontal scroll, wrapping flex) */}
       {(onSearchChange || (filterTabs && filterTabs.length > 0) || (filterButtons && filterButtons.length > 0)) && (
         <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3 text-xs no-print print:hidden">
           {onSearchChange && (
@@ -243,18 +243,18 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
                 value={effectiveSearchVal}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-3 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-900 dark:text-slate-100"
+                className="w-full pl-3 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-900 dark:text-slate-100"
               />
             </div>
           )}
 
           {filterTabs && filterTabs.length > 0 && onFilterTabChange && (
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+            <div className="flex flex-wrap items-center gap-1.5">
               {filterTabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => onFilterTabChange(tab.id)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                  className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
                     activeFilterTab === tab.id
                       ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100 shadow-2xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -267,12 +267,12 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
           )}
 
           {filterButtons && filterButtons.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+            <div className="flex flex-wrap items-center gap-1.5">
               {filterButtons.map((btn, idx) => (
                 <button
                   key={idx}
                   onClick={btn.onClick}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                  className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
                     btn.active
                       ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100 shadow-2xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -288,6 +288,18 @@ export const UnifiedScreenCard: React.FC<UnifiedScreenCardProps> = ({
 
       {/* Main Single-Card Content Area */}
       <div className={`p-4 md:p-5 ${contentClassName}`}>{children}</div>
+
+      {/* Mobile Floating Action Button (FAB) for Primary Action */}
+      {primaryAction && (
+        <button
+          type="button"
+          onClick={primaryAction.onClick}
+          title={primaryAction.label}
+          className="sm:hidden fixed bottom-20 left-4 z-40 w-13 h-13 min-h-[52px] min-w-[52px] rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-2xl flex items-center justify-center border-2 border-white dark:border-slate-900 cursor-pointer active:scale-90 transition-transform"
+        >
+          {primaryAction.icon ? <primaryAction.icon className="w-6 h-6 stroke-[2.5]" /> : <Plus className="w-6 h-6 stroke-[2.5]" />}
+        </button>
+      )}
     </div>
   );
 };

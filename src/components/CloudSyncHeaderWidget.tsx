@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertCircle, Smartphone, Laptop } from 'lucide-react';
-import { CloudSync, CloudSyncInfo } from '../services/cloudSyncService';
+import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertCircle, Smartphone } from 'lucide-react';
+import { FirebaseSparkSync, SyncStatusInfo } from '../services/firebaseSparkSync';
 import { db } from '../db/localDatabase';
 
 interface CloudSyncHeaderWidgetProps {
@@ -8,75 +8,55 @@ interface CloudSyncHeaderWidgetProps {
 }
 
 export const CloudSyncHeaderWidget: React.FC<CloudSyncHeaderWidgetProps> = ({ isDark = false }) => {
-  const [syncInfo, setSyncInfo] = useState<CloudSyncInfo>(CloudSync.getSyncInfo());
+  const [syncInfo, setSyncInfo] = useState<SyncStatusInfo>({
+    status: 'ONLINE',
+    unsentChangesCount: 0
+  });
   const [isOpen, setIsOpen] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = CloudSync.subscribe((info) => {
+    const unsub = FirebaseSparkSync.subscribe((info) => {
       setSyncInfo(info);
     });
     return unsub;
   }, []);
 
-  const handleManualPush = async () => {
-    setActionMessage('جاري رفع التعديلات للسحابة...');
-    const ok = await db.syncToCloudNow();
-    if (ok) {
-      setActionMessage('تمت المزامنة بنجاح! التعديلات متاحة الآن على الهاتف وباقي الأجهزة');
-      setTimeout(() => setActionMessage(null), 3500);
-    } else {
-      setActionMessage('تعذر رفع البيانات. يرجى التحقق من اتصال الإنترنت');
-    }
-  };
-
-  const handleManualPull = async () => {
-    setActionMessage('جاري جلب أحدث البيانات من السحابة...');
-    const ok = await db.pullFromCloudNow();
-    if (ok) {
-      setActionMessage('تم تحديث البيانات المحلية بأحدث نسخة سحابية!');
-      setTimeout(() => setActionMessage(null), 3500);
-    } else {
-      setActionMessage('لم يتم العثور على تحديثات جديدة في السحابة');
-      setTimeout(() => setActionMessage(null), 3000);
-    }
+  const handleManualSync = async () => {
+    setActionMessage('جاري المزامنة مع Firebase Spark...');
+    await FirebaseSparkSync.flushUnsentQueue();
+    setActionMessage('تمت مزامنة التعديلات بنجاح!');
+    setTimeout(() => setActionMessage(null), 3000);
   };
 
   const renderBadge = () => {
     switch (syncInfo.status) {
       case 'SYNCING':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold animate-pulse">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold animate-pulse">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
-            <span className="hidden xl:inline text-[11px]">مزامنة سحابية...</span>
-          </div>
-        );
-      case 'SYNCED':
-        return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="hidden xl:inline text-[11px]">سحابي مباشر</span>
+            <span className="text-[11px]">جاري المزامنة...</span>
           </div>
         );
       case 'OFFLINE':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold">
             <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-            <span className="hidden xl:inline text-[11px]">دون إنترنت</span>
+            <span className="text-[11px]">غير متصل {syncInfo.unsentChangesCount > 0 ? `(${syncInfo.unsentChangesCount})` : ''}</span>
           </div>
         );
       case 'ERROR':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold">
             <AlertCircle className="w-3.5 h-3.5 text-red-500" />
-            <span className="hidden xl:inline text-[11px]">خطأ اتصال</span>
+            <span className="text-[11px]">خطأ اتصال</span>
           </div>
         );
       default:
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold">
-            <Cloud className="w-3.5 h-3.5 text-blue-500" />
-            <span className="hidden xl:inline text-[11px]">سحابي جاهز</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-[11px]">متصل {syncInfo.unsentChangesCount > 0 ? `(معلق: ${syncInfo.unsentChangesCount})` : ''}</span>
           </div>
         );
     }
@@ -89,7 +69,7 @@ export const CloudSyncHeaderWidget: React.FC<CloudSyncHeaderWidgetProps> = ({ is
         id="btn-cloud-sync-status"
         onClick={() => setIsOpen(!isOpen)}
         className="cursor-pointer transition-transform active:scale-95 flex items-center"
-        title="حالة الربط السحابي والتشغيل من الموبايل"
+        title="حالة المزامنة السحابية (متصل / غير متصل / تعديلات معلقة)"
       >
         {renderBadge()}
       </button>
@@ -105,8 +85,8 @@ export const CloudSyncHeaderWidget: React.FC<CloudSyncHeaderWidgetProps> = ({ is
                   <Cloud className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">الربط السحابي والتشغيل الموحد</h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">مزامنة فورية بين الهاتف والكمبيوتر</p>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">المزامنة اللحظية (Firebase Spark)</h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">حالة الربط والتعديلات المعلقة</p>
                 </div>
               </div>
               <button
@@ -121,37 +101,25 @@ export const CloudSyncHeaderWidget: React.FC<CloudSyncHeaderWidgetProps> = ({ is
             {/* Status Card */}
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2 mb-3">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-500 dark:text-slate-400">حالة الاتصال السحابي:</span>
-                <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  قاعدة البيانات متصلة (Firestore Real-time)
+                <span className="text-slate-500 dark:text-slate-400">حالة الاتصال:</span>
+                <span className={`font-bold font-mono ${syncInfo.status === 'ONLINE' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {syncInfo.status === 'ONLINE' ? 'متصل بالسحابة' : syncInfo.status === 'OFFLINE' ? 'غير متصل (أوفلاين)' : 'جاري المزامنة...'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 dark:text-slate-400">التعديلات غير المُرسلة:</span>
+                <span className={`font-bold font-mono ${syncInfo.unsentChangesCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {syncInfo.unsentChangesCount} تعديل
                 </span>
               </div>
               {syncInfo.lastSyncedAt && (
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 dark:text-slate-400">آخر مزامنة ناجحة:</span>
+                  <span className="text-slate-500 dark:text-slate-400">آخر مزامنة:</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-300 dir-ltr text-[10px]">
                     {new Date(syncInfo.lastSyncedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 </div>
               )}
-              {syncInfo.lastSyncedBy && (
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 dark:text-slate-400">بواسطة:</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">{syncInfo.lastSyncedBy}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Cross-Platform Instructions */}
-            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 mb-3 space-y-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-indigo-900 dark:text-indigo-300 text-[11px]">
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>كيفية الفتح من الموبايل أو أي جهاز آخر:</span>
-              </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                افتح رابط المنظومة على هاتفك وسجل الدخول بالرمز المعتمد، وستظهر كل القيود والبيانات متطابقة لحظياً مع الكمبيوتر.
-              </p>
             </div>
 
             {actionMessage && (
@@ -160,30 +128,17 @@ export const CloudSyncHeaderWidget: React.FC<CloudSyncHeaderWidgetProps> = ({ is
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                id="btn-manual-cloud-push"
-                onClick={handleManualPush}
-                disabled={syncInfo.status === 'SYNCING'}
-                className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncInfo.status === 'SYNCING' ? 'animate-spin' : ''}`} />
-                <span>رفع وتحديث السحابة</span>
-              </button>
-
-              <button
-                type="button"
-                id="btn-manual-cloud-pull"
-                onClick={handleManualPull}
-                disabled={syncInfo.status === 'SYNCING'}
-                className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-300 dark:border-slate-700 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Cloud className="w-3.5 h-3.5 text-blue-500" />
-                <span>سحب أحدث نسخة</span>
-              </button>
-            </div>
+            {/* Action Button */}
+            <button
+              type="button"
+              id="btn-manual-sync"
+              onClick={handleManualSync}
+              disabled={syncInfo.status === 'SYNCING'}
+              className="w-full px-3 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncInfo.status === 'SYNCING' ? 'animate-spin' : ''}`} />
+              <span>مزامنة فورية الآن</span>
+            </button>
           </div>
         </>
       )}

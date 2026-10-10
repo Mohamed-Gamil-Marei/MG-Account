@@ -32,6 +32,7 @@ import { PrintService } from '../../services/PrintService';
 import { OfficialReportHeader } from '../common/OfficialReportHeader';
 import { formatEgyptianCurrency, formatNumber, CertifiedQrCodeReact, buildVerificationUrl } from '../../utils/qrCodeGenerator';
 import { db } from '../../db/localDatabase';
+import { PrintLayout } from '../common/PrintLayout';
 
 export interface FinalFinancialReportViewerModalProps {
   isOpen: boolean;
@@ -94,14 +95,20 @@ export const FinalFinancialReportViewerModal: React.FC<FinalFinancialReportViewe
   const handlePrintOfficialReport = async () => {
     setIsPrinting(true);
     try {
-      await PrintService.printElementById('certified-financial-report-sheet', {
-        title: `التقرير_المالي_الختامي_المعتمد_${clientRecord?.name || 'العميل'}_${fiscalYear}`,
+      await PrintLayout.printElement('certified-financial-report-sheet', {
+        title: `التقرير المالي الختامي المعتمد - ${clientRecord?.name || 'العميل'} - ${fiscalYear}`,
+        clientName: clientRecord?.name,
+        fiscalYear: fiscalYear,
         orientation: 'portrait',
         pageSize: 'A4',
       });
     } catch (err) {
       console.error('Printing failed:', err);
-      window.print();
+      await PrintLayout.printElement('certified-financial-report-sheet', {
+        title: `التقرير المالي الختامي المعتمد`,
+        orientation: 'portrait',
+        pageSize: 'A4',
+      });
     } finally {
       setIsPrinting(false);
     }
