@@ -1027,70 +1027,9 @@ export class LocalDatabase {
     return deletedCount;
   }
 
-  /**
-   * وضع المراجعة: توليد قيود اليومية المزدوجة من بيانات الإدخال المباشر
-   * كل قيد يمر بكافة فحوصات addJournalEntry (التوازن، صحة الحسابات، عدم ازدواج المدين/الدائن)
-   * ويتعلم بمصدر AUDIT_DIRECT_ENTRY
-   */
-  public generateAuditDirectEntries(params: {
-    fiscalYear: number;
-    clientId?: string;
-    clientName?: string;
-    date?: string;
-    incomeData: {
-      revenues?: number;
-      costOfGoodsSold?: number;
-      sellingAndMarketingExpenses?: number;
-      administrativeExpenses?: number;
-      depreciationExpense?: number;
-      financeCosts?: number;
-      otherIncomes?: number;
-      taxExpense?: number;
-      netProfitAfterTax?: number;
-    };
-    balanceData: {
-      nonCurrentAssets: {
-        ppe: number;
-        accDep: number;
-      };
-      currentAssets: {
-        inventory: number;
-        receivables: number;
-        notesReceivable: number;
-        taxDebit: number;
-        prepayments: number;
-        cashAndBanks: number;
-      };
-      equity: {
-        capital: number;
-        legalReserve: number;
-        otherReserves?: number;
-        retainedEarnings: number;
-        currentProfit: number;
-        partnersCurrent: number;
-        otherEquity?: number;
-      };
-      nonCurrentLiabilities: {
-        longTermLoans: number;
-        deferredTaxLiabilities?: number;
-        otherNonCurrentLiabilities?: number;
-      };
-      currentLiabilities: {
-        payables: number;
-        notesPayable: number;
-        taxesPayable: number;
-        socialInsurance: number;
-        accruedExpenses: number;
-        otherCurrentLiabilities?: number;
-      };
-    };
-    customLines?: Array<{
-      id: string;
-      name: string;
-      section: string;
-      amount: number;
-    }>;
-  }): { success: boolean; generatedEntries: JournalEntry[]; errors?: string[] } {
+
+
+  public generateAndSaveAuditEntries(params: any): void {
     const yr = params.fiscalYear;
     const entryDate = params.date || `${yr}-12-31`;
     const clientId = params.clientId;

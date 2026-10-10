@@ -85,9 +85,13 @@ export interface IncomeStatementData {
   netProfitBeforeTax: number;
   taxExpense: number;
   netProfitAfterTax: number;
+  hasTaxRecorded: boolean;
 }
 
-export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[]): IncomeStatementData {
+export function generateIncomeStatement(
+  calculatedAccounts: CalculatedAccount[],
+  estimateTaxIfMissing: boolean = true
+): IncomeStatementData {
   let salesRevenue = 0;
   let servicesRevenue = 0;
   let salesReturns = 0;
@@ -99,6 +103,7 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
   let depreciationExpense = 0;
   let financeCosts = 0;
   let taxExpense = 0;
+  let hasTaxRecorded = false;
 
   const parentIds = new Set(calculatedAccounts.map((a) => a.parentId).filter(Boolean));
   const accountsToEvaluate = calculatedAccounts.filter(
@@ -125,7 +130,10 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
       else if (acc.code.startsWith('52') || acc.name.includes('تسويق') || acc.name.includes('بيع')) sellingAndMarketingExpenses += expenseBal;
       else if (acc.code.startsWith('53') || acc.name.includes('عمومي') || acc.name.includes('إداري')) administrativeExpenses += expenseBal;
       else if (acc.code.startsWith('54') || acc.name.includes('تمويل') || acc.name.includes('فوائد')) financeCosts += expenseBal;
-      else if (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) taxExpense += expenseBal;
+      else if (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) {
+        taxExpense += expenseBal;
+        hasTaxRecorded = true;
+      }
       else administrativeExpenses += expenseBal; // Guaranteed no lost expenses
     }
   }
@@ -148,7 +156,11 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
   const profitBeforeTax = round2(operatingProfit - depreciationExpense - financeCosts + otherIncomes);
 
   // If tax expense not booked yet in journal, calculate Egyptian statutory 22.5% on positive profit
-  const effectiveTax = round2(taxExpense > 0 ? taxExpense : profitBeforeTax > 0 ? profitBeforeTax * 0.225 : 0);
+  const effectiveTax = round2(
+    taxExpense > 0 
+      ? taxExpense 
+      : (estimateTaxIfMissing && profitBeforeTax > 0 ? profitBeforeTax * 0.225 : 0)
+  );
   const netProfitAfterTax = round2(profitBeforeTax - effectiveTax);
 
   return {
