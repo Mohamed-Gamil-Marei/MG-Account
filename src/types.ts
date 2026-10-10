@@ -831,7 +831,7 @@ export interface TaxMandateTask {
 }
 
 // Multi-User Access Control (RBAC)
-export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT' | 'SECRETARY';
+export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT' | 'SECRETARY' | 'PENDING';
 
 export type BrandColor = 'blue' | 'emerald' | 'indigo' | 'slate' | 'amber';
 export type ThemeMode = 'light' | 'dark' | 'system';

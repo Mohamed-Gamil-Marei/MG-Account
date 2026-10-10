@@ -51,7 +51,7 @@ class FirebaseAuthService {
 
   private async loadUserProfile(user: FirebaseUser) {
     try {
-      const docRef = doc(db, 'systemUsers', user.uid);
+      const docRef = doc(db, 'users', user.uid);
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data();
@@ -59,13 +59,18 @@ class FirebaseAuthService {
       } else {
         // Create default PENDING profile if not exists in Firestore
         const defaultProfile: any = {
-          id: user.uid,
+          uid: user.uid,
           email: user.email || '',
           name: user.displayName || user.email?.split('@')[0] || 'مستخدم جديد',
           role: 'PENDING',
+          canManageUsers: false,
           canAccessTreasury: false,
           canAccessAuditTrail: false,
-          canManageUsers: false,
+          canPostEntries: false,
+          canEditPostedEntries: false,
+          canDeleteRecords: false,
+          canAccessCreditFiles: false,
+          canAccessTaxReports: false,
           createdAt: new Date().toISOString(),
         };
         await setDoc(docRef, defaultProfile, { merge: true });
@@ -138,19 +143,21 @@ class FirebaseAuthService {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
     const defaultProfile: any = {
-      id: user.uid,
+      uid: user.uid,
       email,
       name,
       role: 'PENDING',
+      canManageUsers: false,
       canAccessTreasury: false,
       canAccessAuditTrail: false,
-      canManageUsers: false,
       canPostEntries: false,
       canEditPostedEntries: false,
       canDeleteRecords: false,
+      canAccessCreditFiles: false,
+      canAccessTaxReports: false,
       createdAt: new Date().toISOString(),
     };
-    const docRef = doc(db, 'systemUsers', user.uid);
+    const docRef = doc(db, 'users', user.uid);
     await setDoc(docRef, defaultProfile);
     await this.loadUserProfile(user);
     if (!this.currentUserProfile) {
@@ -167,11 +174,24 @@ class FirebaseAuthService {
   }
 
   public async checkSetup(): Promise<boolean> {
-    return false; // No auto setup needed, admin created in console
+    return false;
   }
 
   public async setupAdmin(name: string, email: string, pass: string): Promise<FirebaseUserProfile> {
     return this.signUp(name, email, pass);
+  }
+
+  public getCurrentProfile(): FirebaseUserProfile | null {
+    return this.currentUserProfile;
+  }
+
+  public async getIdToken(forceRefresh = false): Promise<string | null> {
+    if (!this.rawFirebaseUser) return null;
+    return await this.rawFirebaseUser.getIdToken(forceRefresh);
+  }
+
+  public isAdmin(): boolean {
+    return this.currentUserProfile?.role === 'ADMIN';
   }
 }
 
