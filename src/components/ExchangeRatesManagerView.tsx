@@ -22,6 +22,7 @@ import {
 import { db, DatabaseState } from '../db/localDatabase';
 import { CurrencyCode, DailyExchangeRateRecord } from '../types';
 import { currencyService, formatFinancialCurrency, SUPPORTED_CURRENCIES } from '../utils/currencyService';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface ExchangeRatesManagerViewProps {
   state: DatabaseState;
@@ -177,7 +178,7 @@ export const ExchangeRatesManagerView: React.FC<ExchangeRatesManagerViewProps> =
   }, [calcAmount, calcFromCurrency, calcToCurrency, exchangeRates]);
 
   return (
-    <div className="space-y-6">
+    <div id="exchange-rates-printable-container" className="space-y-6">
       {/* Compact ERP Header */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -191,38 +192,35 @@ export const ExchangeRatesManagerView: React.FC<ExchangeRatesManagerViewProps> =
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons & Unified Multi-Format Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleLiveSync}
-            disabled={isSyncing}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition-all ${
-              isSyncing
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
-            }`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'جاري التحديث...' : 'تحديث أسعار اليوم (CBE)'}</span>
-          </button>
-
-          <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-2xs active:scale-95 transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>سعر صرف يدوي</span>
-          </button>
-
-          {onNavigateToFinancialStatements && (
-            <button
-              onClick={onNavigateToFinancialStatements}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-              <span>القوائم المالية</span>
-            </button>
-          )}
+          <ScreenActionToolbar
+            modelType="EXCHANGE_RATES"
+            title="جدول أسعار الصرف والعملات الأجنبية"
+            targetElementId="exchange-rates-printable-container"
+            compact={true}
+            actions={[
+              {
+                label: isSyncing ? 'جاري التحديث...' : 'تحديث من البنك المركزي',
+                icon: RefreshCw,
+                onClick: handleLiveSync,
+              },
+              {
+                label: 'سعر يدوي',
+                icon: Plus,
+                onClick: handleOpenAddModal,
+              },
+              ...(onNavigateToFinancialStatements
+                ? [
+                    {
+                      label: 'القوائم المالية',
+                      icon: BookOpen,
+                      onClick: onNavigateToFinancialStatements,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 

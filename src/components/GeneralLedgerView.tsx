@@ -19,6 +19,8 @@ import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
+import * as XLSX from 'xlsx';
+import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 
 interface GeneralLedgerViewProps {
   state: DatabaseState;
@@ -103,13 +105,94 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
       : calculatedAccounts.filter((a) => a.id === selectedAccountId);
   }, [selectedAccountId, calculatedAccounts]);
 
+  const handleExportLedgerToExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const rows: Record<string, any>[] = [];
+
+    accountsToDisplay.forEach((acc) => {
+      const txs = indexedTransactions.get(acc.id) || [];
+      const openingBal = acc.nature === 'DEBIT' ? acc.openingBalanceDebit : acc.openingBalanceCredit;
+      let running = openingBal;
+
+      // Account Header Banner Row
+      rows.push({
+        'التاريخ': `[${acc.code}] ${acc.name}`,
+        'رقم القيد': `طبيعة الحساب: ${acc.nature === 'DEBIT' ? 'مدين' : 'دائن'}`,
+        'البيان': 'رصيد أول المدة الافتتاحي',
+        'العميل / المركز': '-',
+        'مدين (ج.م)': acc.openingBalanceDebit || 0,
+        'دائن (ج.م)': acc.openingBalanceCredit || 0,
+        'الرصيد المتحرك': running,
+      });
+
+      txs.forEach((tx) => {
+        if (acc.nature === 'DEBIT') {
+          running += tx.debit - tx.credit;
+        } else {
+          running += tx.credit - tx.debit;
+        }
+
+        rows.push({
+          'التاريخ': tx.date,
+          'رقم القيد': tx.serial,
+          'البيان': tx.description,
+          'العميل / المركز': tx.clientName || '-',
+          'مدين (ج.م)': tx.debit || 0,
+          'دائن (ج.م)': tx.credit || 0,
+          'الرصيد المتحرك': running,
+        });
+      });
+
+      // Total Account Row
+      rows.push({
+        'التاريخ': 'إجمالي الحركات',
+        'رقم القيد': `حركات: ${txs.length}`,
+        'البيان': 'الرصيد الختامي المعتمد',
+        'العميل / المركز': '-',
+        'مدين (ج.م)': acc.movementDebit || 0,
+        'دائن (ج.م)': acc.movementCredit || 0,
+        'الرصيد المتحرك': acc.currentBalance || running,
+      });
+
+      // Empty separator row
+      rows.push({
+        'التاريخ': '',
+        'رقم القيد': '',
+        'البيان': '',
+        'العميل / المركز': '',
+        'مدين (ج.م)': '',
+        'دائن (ج.م)': '',
+        'الرصيد المتحرك': '',
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    formatWorksheetForArabicExport(ws, rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'دفتر الأستاذ العام');
+    const safeTitle = selectedAccountId === 'ALL' ? 'الأستاذ_العام_الشامل' : `كشف_حساب_${accountsToDisplay[0]?.code || 'محدد'}`;
+    writeArabicExcelFile(wb, `${safeTitle}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   return (
     <UnifiedScreenCard
+      id="general-ledger-container"
+      targetElementId="general-ledger-container"
+      printSelector="#general-ledger-container"
       title="دفتر الأستاذ العام وكشوف الحسابات المساعدة"
       subtitle="General & Sub-Ledgers • حركة الحسابات والعملاء والموردين"
       icon={BookOpen}
       actionsSlot={
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            id="btn-export-ledger-excel"
+            onClick={handleExportLedgerToExcel}
+            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            title="تصدير كشف حساب الأستاذ العام لإكسل"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">تصدير إكسل</span>
+          </button>
           <button
             type="button"
             id="btn-ledger-whatsapp-share"
@@ -124,12 +207,14 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({ state }) =
           <ScreenActionToolbar
             modelType="JOURNAL"
             title="دفتر الأستاذ العام وحركات الحسابات"
+            targetElementId="general-ledger-container"
+            printSelector="#general-ledger-container"
             count={accountsToDisplay.length}
           />
         </div>
       }
     >
-      <div className="space-y-4">
+      <div id="general-ledger-printable-content" className="space-y-4">
         {/* Account Selector, Client Filter and Date Filters */}
         <div className="bg-slate-50/70 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 flex flex-col lg:flex-row items-center justify-between gap-3 text-xs">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full lg:w-auto flex-1">

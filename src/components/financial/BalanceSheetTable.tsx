@@ -190,9 +190,25 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
             </span>
           )}
         </p>
-        {Math.abs(computedBalance.balanceDifference) > 0.01 && (
-          <div className="inline-block bg-amber-50 text-amber-900 border border-amber-300 px-3 py-1 rounded-lg text-xs font-bold mt-1">
-            ⚠️ {isEn ? 'Balance Check Alert' : 'تنبيه توازن الميزانية'}: {formatEgyptianCurrency(computedBalance.balanceDifference, true)}
+        {Math.abs(computedBalance.balanceDifference) > 0.01 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-800 px-3 py-1.5 rounded-xl text-xs font-bold mt-1 shadow-2xs">
+            <span>⚠️ {isEn ? 'Imbalance Alert' : 'يوجد فارق عدم اتزان في الميزانية العمومية'}: {formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference))}</span>
+            <button
+              type="button"
+              onClick={() => {
+                const currentRetained = overrides['bs_retained'] !== undefined ? overrides['bs_retained'] : overrides['bs_retainedEarnings'] !== undefined ? overrides['bs_retainedEarnings'] : (baseBalanceData.equity.retainedEarnings || 0);
+                const nextVal = currentRetained + computedBalance.balanceDifference;
+                setVal('bs_retained', String(nextVal));
+                setVal('bs_retainedEarnings', String(nextVal));
+              }}
+              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+            >
+              ⚡ ضبط وموازنة فورية إلى الأرباح المرحلة
+            </button>
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 px-3 py-1 rounded-xl text-xs font-bold mt-1 shadow-2xs">
+            <span>✓ {isEn ? 'Balance Sheet is 100% Balanced (Assets = Liabilities + Equity)' : 'الميزانية العمومية متزنة تماماً بنسبة 100% (الأصول = الالتزامات + حقوق الملكية)'}</span>
           </div>
         )}
       </div>
@@ -373,6 +389,7 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
               </tr>
               {renderDataRow('رأس المال المصدر والمدفوع بالكامل', '(11)', computedBalance.equity.capital, 1.0)}
               {renderDataRow('الاحتياطي القانوني (5% وفقاً للقانون 159)', '(12)', computedBalance.equity.legalReserve, 0.85)}
+              {renderDataRow('الاحتياطي النظامي والاحتياطيات الأخرى', '(12-أ)', computedBalance.equity.otherReserves || 0, 0.90)}
               {renderDataRow('أرباح (خسائر) مرحلة من أعوام سابقة', '(13)', computedBalance.equity.retainedEarnings, 0.90)}
               {renderDataRow('صافي أرباح (خسائر) العام المالي الحالي بعد الضريبة', '(قائمة الدخل)', computedBalance.equity.currentProfit, 0.88, {
                 isBold: true,
@@ -429,6 +446,7 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
                 </td>
               </tr>
               {renderDataRow('قروض وتسهيلات بنكية طويلة الأجل', '(15)', computedBalance.nonCurrentLiabilities.longTermLoans, 0.95)}
+              {renderDataRow('التزامات ضريبية مؤجلة', '(15-أ)', computedBalance.nonCurrentLiabilities.deferredTaxLiabilities || 0, 0.95)}
 
               {/* Custom Non-Current Liab */}
               {getSectionCustomItems('NON_CURRENT_LIAB').map((item) => (
@@ -819,6 +837,20 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-600">الاحتياطي النظامي والاحتياطيات الأخرى:</span>
+                  <input
+                    type="text"
+                    value={
+                      overrides['bs_otherReserves'] !== undefined
+                        ? overrides['bs_otherReserves']
+                        : baseBalanceData.equity.otherReserves || 0
+                    }
+                    onChange={(e) => setVal('bs_otherReserves', e.target.value)}
+                    className="w-36 text-left px-2 py-1 bg-blue-50/70 border border-blue-300 rounded font-mono font-bold text-blue-950 focus:bg-white text-xs"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-slate-600">أرباح (خسائر) مرحلة من أعوام سابقة:</span>
                   <input
                     type="text"
@@ -909,6 +941,20 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
                   />
                 </div>
 
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-600">التزامات ضريبية مؤجلة:</span>
+                  <input
+                    type="text"
+                    value={
+                      overrides['bs_defTax'] !== undefined
+                        ? overrides['bs_defTax']
+                        : baseBalanceData.nonCurrentLiabilities.deferredTaxLiabilities || 0
+                    }
+                    onChange={(e) => setVal('bs_defTax', e.target.value)}
+                    className="w-36 text-left px-2 py-1 bg-blue-50/70 border border-blue-300 rounded font-mono font-bold text-blue-950 focus:bg-white text-xs"
+                  />
+                </div>
+
                 {getSectionCustomItems('NON_CURRENT_LIAB').map((item) => (
                   <div
                     key={item.id}
@@ -988,7 +1034,8 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
                         ? overrides['bs_taxesPayable']
                         : baseBalanceData.currentLiabilities.vatOutputTax +
                           baseBalanceData.currentLiabilities.payrollTaxPayable +
-                          baseBalanceData.currentLiabilities.whtPayable
+                          baseBalanceData.currentLiabilities.whtPayable +
+                          (baseBalanceData.currentLiabilities.incomeTaxPayable || 0)
                     }
                     onChange={(e) => setVal('bs_taxesPayable', e.target.value)}
                     className="w-36 text-left px-2 py-1 bg-blue-50/70 border border-blue-300 rounded font-mono font-bold text-blue-950 focus:bg-white text-xs"

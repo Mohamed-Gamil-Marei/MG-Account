@@ -23,6 +23,7 @@ import {
   FileText,
   ShieldCheck,
   Receipt,
+  Percent,
   FileCheck,
   ExternalLink,
   ChevronDown,
@@ -108,7 +109,15 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       netTotal: 50850,
     },
   ]);
-  const [applyWht, setApplyWht] = useState(true); // 1%
+  const defaultTaxActive = state.officeProfile?.defaultTaxEnabled !== false;
+  const defaultTaxRateVal = state.officeProfile?.defaultTaxRate ?? 14;
+  const defaultWhtActive = state.officeProfile?.defaultWhtEnabled !== false;
+  const defaultWhtRateVal = state.officeProfile?.defaultWhtRate ?? 1;
+
+  const [applyVat, setApplyVat] = useState<boolean>(defaultTaxActive);
+  const [globalVatRate, setGlobalVatRate] = useState<number>(defaultTaxRateVal);
+  const [applyWht, setApplyWht] = useState<boolean>(defaultWhtActive);
+  const [globalWhtRate, setGlobalWhtRate] = useState<number>(defaultWhtRateVal);
   const [autoPostOnIssue, setAutoPostOnIssue] = useState(true); // توليد وترحيل قيد اليومية العامة آلياً فور الإصدار
 
   // Auto-Save & Draft State
@@ -147,6 +156,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       if (savedDraft.items && savedDraft.items.length > 0) {
         setItems(savedDraft.items);
       }
+      if (typeof savedDraft.applyVat === 'boolean') setApplyVat(savedDraft.applyVat);
+      if (typeof savedDraft.globalVatRate === 'number') setGlobalVatRate(savedDraft.globalVatRate);
       setApplyWht(savedDraft.applyWht ?? true);
       if (typeof savedDraft.autoPostOnIssue === 'boolean') setAutoPostOnIssue(savedDraft.autoPostOnIssue);
 
@@ -182,6 +193,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
           paymentMethod,
           notes,
           items,
+          applyVat,
+          globalVatRate,
           applyWht,
           autoPostOnIssue,
         });
@@ -203,7 +216,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     paymentMethod,
     notes,
     items,
+    applyVat,
+    globalVatRate,
     applyWht,
+    globalWhtRate,
     autoPostOnIssue,
     editingInvoiceId,
   ]);
@@ -236,6 +252,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         paymentMethod,
         notes,
         items,
+        applyVat,
+        globalVatRate,
         applyWht,
         autoPostOnIssue,
       });
@@ -261,7 +279,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     paymentMethod,
     notes,
     items,
+    applyVat,
+    globalVatRate,
     applyWht,
+    globalWhtRate,
     autoPostOnIssue,
     editingInvoiceId,
   ]);
@@ -284,6 +305,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       paymentMethod,
       notes,
       items,
+      applyVat,
+      globalVatRate,
       applyWht,
       autoPostOnIssue,
     });
@@ -319,6 +342,15 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       setPartnerAddress('');
       setPaymentMethod('BANK');
       setNotes('');
+      const taxActive = state.officeProfile?.defaultTaxEnabled !== false;
+      const taxRate = state.officeProfile?.defaultTaxRate ?? 14;
+      const whtActive = state.officeProfile?.defaultWhtEnabled !== false;
+      const whtRate = state.officeProfile?.defaultWhtRate ?? 1;
+
+      setApplyVat(taxActive);
+      setGlobalVatRate(taxRate);
+      setApplyWht(whtActive);
+      setGlobalWhtRate(whtRate);
       setItems([
         {
           id: 'i1',
@@ -330,8 +362,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
           unitPrice: 0,
           discountRate: 0,
           discountAmount: 0,
-          vatRate: 14,
-          whtRate: 1,
+          vatRate: taxActive ? taxRate : 0,
+          whtRate: whtActive ? whtRate : 0,
           totalBeforeTax: 0,
           salesTotal: 0,
           vatAmount: 0,
@@ -339,7 +371,6 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
           netTotal: 0,
         },
       ]);
-      setApplyWht(true);
       setAutoPostOnIssue(true);
       setLastAutoSaveTime(null);
       setDraftRestoredNotice(null);
@@ -351,7 +382,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
   const subtotal = items.reduce((s, item) => s + (item.quantity * item.unitPrice), 0);
   const totalDiscount = items.reduce((s, item) => s + (item.discountAmount || 0), 0);
   const totalBeforeTax = subtotal - totalDiscount;
-  const totalVat = items.reduce((s, item) => s + item.vatAmount, 0);
+  const totalVat = applyVat ? items.reduce((s, item) => s + item.vatAmount, 0) : 0;
   const totalWht = applyWht ? items.reduce((s, item) => s + item.whtAmount, 0) : 0;
   const grandTotal = totalBeforeTax + totalVat - totalWht;
 
@@ -366,8 +397,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     const discAmt = (sTotal * discRate) / 100;
     const netBefore = sTotal - discAmt;
 
-    const vRate = Number(item.vatRate) ?? 14;
-    const wRate = applyWht ? (Number(item.whtRate) ?? 1) : 0;
+    const rawVRate = field === 'vatRate' ? Number(value) : (item.vatRate !== undefined ? Number(item.vatRate) : (applyVat ? globalVatRate : 0));
+    const vRate = applyVat ? rawVRate : 0;
+    const rawWRate = field === 'whtRate' ? Number(value) : (item.whtRate !== undefined ? Number(item.whtRate) : (applyWht ? globalWhtRate : 0));
+    const wRate = applyWht ? rawWRate : 0;
 
     const vat = (netBefore * vRate) / 100;
     const wht = (netBefore * wRate) / 100;
@@ -375,6 +408,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     item.salesTotal = sTotal;
     item.discountAmount = discAmt;
     item.totalBeforeTax = netBefore;
+    item.vatRate = vRate;
+    item.whtRate = wRate;
     item.vatAmount = vat;
     item.whtAmount = wht;
     item.netTotal = netBefore + vat - wht;
@@ -383,8 +418,74 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     setItems(newItems);
   };
 
+  const applyVatRateToAllItems = (rate: number, enabled: boolean = true) => {
+    setApplyVat(enabled);
+    if (enabled) {
+      setGlobalVatRate(rate);
+    }
+    const targetVRate = enabled ? rate : 0;
+    const updated = items.map((it) => {
+      const qty = Number(it.quantity) || 1;
+      const price = Number(it.unitPrice) || 0;
+      const discRate = Number(it.discountRate) || 0;
+      const sTotal = qty * price;
+      const discAmt = (sTotal * discRate) / 100;
+      const netBefore = sTotal - discAmt;
+      const wRate = applyWht ? (it.whtRate !== undefined ? Number(it.whtRate) : globalWhtRate) : 0;
+      const vat = (netBefore * targetVRate) / 100;
+      const wht = (netBefore * wRate) / 100;
+
+      return {
+        ...it,
+        salesTotal: sTotal,
+        discountAmount: discAmt,
+        totalBeforeTax: netBefore,
+        vatRate: targetVRate,
+        vatAmount: vat,
+        whtRate: wRate,
+        whtAmount: wht,
+        netTotal: netBefore + vat - wht,
+      };
+    });
+    setItems(updated);
+  };
+
+  const applyWhtRateToAllItems = (rate: number, enabled: boolean = true) => {
+    setApplyWht(enabled);
+    if (enabled) {
+      setGlobalWhtRate(rate);
+    }
+    const targetWRate = enabled ? rate : 0;
+    const updated = items.map((it) => {
+      const qty = Number(it.quantity) || 1;
+      const price = Number(it.unitPrice) || 0;
+      const discRate = Number(it.discountRate) || 0;
+      const sTotal = qty * price;
+      const discAmt = (sTotal * discRate) / 100;
+      const netBefore = sTotal - discAmt;
+      const vRate = applyVat ? (it.vatRate !== undefined ? Number(it.vatRate) : globalVatRate) : 0;
+      const vat = (netBefore * vRate) / 100;
+      const wht = (netBefore * targetWRate) / 100;
+
+      return {
+        ...it,
+        salesTotal: sTotal,
+        discountAmount: discAmt,
+        totalBeforeTax: netBefore,
+        vatRate: vRate,
+        vatAmount: vat,
+        whtRate: targetWRate,
+        whtAmount: wht,
+        netTotal: netBefore + vat - wht,
+      };
+    });
+    setItems(updated);
+  };
+
   const addItem = () => {
     const count = items.length + 1;
+    const initialVat = applyVat ? globalVatRate : 0;
+    const initialWht = applyWht ? globalWhtRate : 0;
     setItems([
       ...items,
       {
@@ -397,8 +498,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         unitPrice: 0,
         discountRate: 0,
         discountAmount: 0,
-        vatRate: 14,
-        whtRate: applyWht ? 1 : 0,
+        vatRate: initialVat,
+        whtRate: initialWht,
         totalBeforeTax: 0,
         salesTotal: 0,
         vatAmount: 0,
@@ -431,7 +532,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
       setPaymentMethod((inv.paymentMethod as any) || 'BANK');
       setNotes(inv.notes || '');
       setItems(inv.items.map((it) => ({ ...it })));
-      setApplyWht(inv.totalWht > 0);
+      const hasVat = (inv.totalVat || 0) > 0 || inv.items.some((i) => (Number(i.vatRate) || 0) > 0);
+      setApplyVat(hasVat);
+      const firstVatRate = inv.items.find((i) => (Number(i.vatRate) || 0) > 0)?.vatRate ?? 14;
+      setGlobalVatRate(firstVatRate);
+      const hasWht = (inv.totalWht || 0) > 0 || inv.items.some((i) => (Number(i.whtRate) || 0) > 0);
+      setApplyWht(hasWht);
+      const firstWhtRate = inv.items.find((i) => (Number(i.whtRate) || 0) > 0)?.whtRate ?? 1;
+      setGlobalWhtRate(firstWhtRate);
       setSelectedInvoice(null);
       setIsNewModalOpen(true);
       return;
@@ -455,7 +563,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     setPaymentMethod((invoiceToEdit.paymentMethod as any) || 'BANK');
     setNotes(invoiceToEdit.notes || '');
     setItems(invoiceToEdit.items.map((it) => ({ ...it })));
-    setApplyWht(invoiceToEdit.totalWht > 0);
+    const hasVat = (invoiceToEdit.totalVat || 0) > 0 || invoiceToEdit.items.some((i) => (Number(i.vatRate) || 0) > 0);
+    setApplyVat(hasVat);
+    const firstVatRate = invoiceToEdit.items.find((i) => (Number(i.vatRate) || 0) > 0)?.vatRate ?? 14;
+    setGlobalVatRate(firstVatRate);
+    const hasWht = (invoiceToEdit.totalWht || 0) > 0 || invoiceToEdit.items.some((i) => (Number(i.whtRate) || 0) > 0);
+    setApplyWht(hasWht);
+    const firstWhtRate = invoiceToEdit.items.find((i) => (Number(i.whtRate) || 0) > 0)?.whtRate ?? 1;
+    setGlobalWhtRate(firstWhtRate);
     setIsAuthModalOpen(false);
     setSelectedInvoice(null);
     setIsNewModalOpen(true);
@@ -625,6 +740,44 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
     alert(`✓ اكتمل الترحيل الآلي: تم ترحيل (${res.postedCount}) فاتورة بنجاح إلى قيود اليومية العامة وتحديث ميزان المراجعة.`);
   };
 
+  const handleOpenNewDocument = () => {
+    setEditingInvoiceId(null);
+    setInvoiceToEdit(null);
+    const savedDraft = formDraftStorage.getInvoiceDraft();
+    if (!savedDraft) {
+      const taxActive = state.officeProfile?.defaultTaxEnabled !== false;
+      const taxRate = state.officeProfile?.defaultTaxRate ?? 14;
+      const whtActive = state.officeProfile?.defaultWhtEnabled !== false;
+      const whtRate = state.officeProfile?.defaultWhtRate ?? 1;
+
+      setApplyVat(taxActive);
+      setGlobalVatRate(taxRate);
+      setApplyWht(whtActive);
+      setGlobalWhtRate(whtRate);
+      setItems([
+        {
+          id: 'i1',
+          itemType: 'EGS',
+          itemCode: 'EG-100200300-SRV001',
+          description: '',
+          unitType: isReceipt ? 'EA' : 'JOB',
+          quantity: 1,
+          unitPrice: 0,
+          discountRate: 0,
+          discountAmount: 0,
+          vatRate: taxActive ? taxRate : 0,
+          whtRate: whtActive ? whtRate : 0,
+          totalBeforeTax: 0,
+          salesTotal: 0,
+          vatAmount: 0,
+          whtAmount: 0,
+          netTotal: 0,
+        },
+      ]);
+    }
+    setIsNewModalOpen(true);
+  };
+
   const filteredInvoices = state.invoices.filter((inv) => {
     let matchesType = true;
     if (filterType === 'SALES') {
@@ -660,6 +813,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
 
   return (
     <UnifiedScreenCard
+      id="invoices-unified-card"
+      modelType="INVOICES"
+      printSelector="#invoices-unified-card"
+      targetElementId="invoices-unified-card"
       title="منظومة الفاتورة والإيصال الإلكتروني"
       subtitle="ETA e-Invoicing & Receipts • تكامل مصلحة الضرائب المصرية"
       icon={CreditCard}
@@ -670,20 +827,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
         label: 'إصدار مستند',
         icon: Plus,
         variant: 'success',
-        onClick: () => {
-          setEditingInvoiceId(null);
-          setIsNewModalOpen(true);
-        },
+        onClick: handleOpenNewDocument,
       }}
       actionMenuItems={[
         {
           label: 'إصدار فاتورة / إيصال جديد',
           preset: 'create',
           variant: 'success',
-          onClick: () => {
-            setEditingInvoiceId(null);
-            setIsNewModalOpen(true);
-          },
+          onClick: handleOpenNewDocument,
         },
         ...(pendingInvoices.length > 0
           ? [
@@ -893,8 +1044,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                   <th className="py-1.5 px-2.5">نوع المستند</th>
                   <th className="py-1.5 px-2.5">اسم الطرف (العميل / المشتري)</th>
                   <th className="py-1.5 px-2.5 text-left">قيمة البضاعة</th>
-                  <th className="py-1.5 px-2.5 text-left">ض.ق.م 14%</th>
-                  <th className="py-1.5 px-2.5 text-left">خصم 1%</th>
+                  <th className="py-1.5 px-2.5 text-left">ضريبة القيمة المضافة</th>
+                  <th className="py-1.5 px-2.5 text-left">خصم أ.ت.ص</th>
                   <th className="py-1.5 px-2.5 text-left">صافي الفاتورة</th>
                   <th className="py-1.5 px-2.5 text-center">حالة ETA</th>
                   <th className="py-1.5 px-2.5 text-center">اليومية</th>
@@ -942,8 +1093,26 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                         </div>
                       </td>
                       <td className="py-1.5 px-2.5 font-mono text-left text-slate-700 dark:text-slate-300">{formatEgyptianCurrency(inv.subtotal)}</td>
-                      <td className="py-1.5 px-2.5 font-mono text-left text-emerald-700 dark:text-emerald-400">+{formatEgyptianCurrency(inv.totalVat)}</td>
-                      <td className="py-1.5 px-2.5 font-mono text-left text-red-700 dark:text-red-400">-{formatEgyptianCurrency(inv.totalWht)}</td>
+                      <td className="py-1.5 px-2.5 font-mono text-left">
+                        {inv.totalVat > 0 ? (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                            +{formatEgyptianCurrency(inv.totalVat)}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            معفى (0%)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2.5 font-mono text-left">
+                        {inv.totalWht > 0 ? (
+                          <span className="text-red-700 dark:text-red-400 font-medium">
+                            -{formatEgyptianCurrency(inv.totalWht)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">0.00</span>
+                        )}
+                      </td>
                       <td className="py-1.5 px-2.5 font-mono font-bold text-left text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
                         {formatEgyptianCurrency(inv.grandTotal)}
                       </td>
@@ -1148,6 +1317,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                       <th className="p-2.5">الكود</th>
                       <th className="p-2.5 text-center">الكمية</th>
                       <th className="p-2.5 text-left">سعر الوحدة</th>
+                      <th className="p-2.5 text-center">ض.ق.م %</th>
                       <th className="p-2.5 text-left">الإجمالي</th>
                     </tr>
                   </thead>
@@ -1158,6 +1328,9 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                         <td className="p-2.5 text-[10px] text-slate-500">{it.itemCode}</td>
                         <td className="p-2.5 text-center">{it.quantity}</td>
                         <td className="p-2.5 text-left">{formatEgyptianCurrency(it.unitPrice)}</td>
+                        <td className="p-2.5 text-center font-bold text-emerald-800">
+                          {(it.vatRate ?? 0) > 0 ? `${it.vatRate}%` : 'معفى 0%'}
+                        </td>
                         <td className="p-2.5 text-left font-bold">{formatEgyptianCurrency(it.totalBeforeTax)}</td>
                       </tr>
                     ))}
@@ -1178,13 +1351,46 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                   </div>
                 )}
                 <div className="flex justify-between text-emerald-800">
-                  <span>ضريبة القيمة المضافة 14% (T1):</span>
-                  <span className="font-mono">+{formatEgyptianCurrency(selectedInvoice.totalVat)}</span>
+                  {selectedInvoice.totalVat > 0 ? (
+                    <>
+                      <span>
+                        ضريبة القيمة المضافة{' '}
+                        {(() => {
+                          const net = selectedInvoice.subtotal - (selectedInvoice.totalDiscount || 0);
+                          const rate = net > 0 ? Math.round((selectedInvoice.totalVat / net) * 100) : 14;
+                          return `(${rate}%)`;
+                        })()}:
+                      </span>
+                      <span className="font-mono">+{formatEgyptianCurrency(selectedInvoice.totalVat)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-slate-500 font-normal">ضريبة القيمة المضافة:</span>
+                      <span className="font-sans text-xs bg-emerald-100/70 text-emerald-900 px-2 py-0.5 rounded-md font-bold">
+                        معفى من الضريبة (0.00 ج.م)
+                      </span>
+                    </>
+                  )}
                 </div>
-                <div className="flex justify-between text-red-700">
-                  <span>ضريبة الخصم والتحصيل 1% أ.ت.ص (T4):</span>
-                  <span className="font-mono">-{formatEgyptianCurrency(selectedInvoice.totalWht)}</span>
-                </div>
+                {selectedInvoice.totalWht > 0 ? (
+                  <div className="flex justify-between text-red-700">
+                    <span>
+                      ضريبة الخصم والتحصيل{' '}
+                      {(() => {
+                        const net = selectedInvoice.subtotal - (selectedInvoice.totalDiscount || 0);
+                        const rate = net > 0 ? Math.round((selectedInvoice.totalWht / net) * 100) : 1;
+                        return `(${rate}%)`;
+                      })()}{' '}
+                      أ.ت.ص:
+                    </span>
+                    <span className="font-mono">-{formatEgyptianCurrency(selectedInvoice.totalWht)}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-slate-400 text-xs font-normal">
+                    <span>ضريبة الخصم والتحصيل (أ.ت.ص):</span>
+                    <span className="font-mono">غير مطبقة (0.00 ج.م)</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-900 text-sm pt-2 border-t border-slate-200 font-black">
                   <span>صافي القيمة الإجمالية المستحقة:</span>
                   <span className="font-mono text-emerald-900">{formatEgyptianCurrency(selectedInvoice.grandTotal)}</span>
@@ -1553,27 +1759,145 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                 </div>
               </div>
 
-              {/* Items Table */}
-              <div className="border border-slate-200 rounded-2xl p-3.5 space-y-3">
-                <div className="flex justify-between items-center font-bold text-slate-800">
+              {/* Items Table & Tax Controls */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 space-y-3.5 bg-white dark:bg-slate-900 shadow-2xs">
+                {/* 1. Global Tax & VAT Control Banner */}
+                <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-slate-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-slate-900 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        %
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                            خيارات ضريبة القيمة المضافة (VAT):
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              applyVat
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            }`}
+                          >
+                            {applyVat ? `مفعلة (${globalVatRate}%)` : 'بدون ضريبة / معفاة (0%)'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          يمكنك إصدار الفاتورة بدون ضريبة نهائياً، أو تحديد نسبة الضريبة (14% أو 15% أو 5% أو مخصصة)، وتخصيص نسبة لكل صنف.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Enable / Disable VAT Toggle */}
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => applyVatRateToAllItems(globalVatRate > 0 ? globalVatRate : 14, true)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          applyVat
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        ✓ تطبيق الضريبة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyVatRateToAllItems(0, false)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          !applyVat
+                            ? 'bg-amber-600 text-white shadow-2xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        ✕ بدون ضريبة (معفى / 0%)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* VAT Presets & Custom Rate Selector when active */}
+                  {applyVat && (
+                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          نسب شائعة:
+                        </span>
+                        {[
+                          { rate: 14, label: '14% (مصر)' },
+                          { rate: 15, label: '15% (السعودية)' },
+                          { rate: 5, label: '5% (الإمارات/عمان)' },
+                          { rate: 10, label: '10%' },
+                          { rate: 0, label: '0% (معفى/صادرات)' },
+                        ].map((preset) => (
+                          <button
+                            key={preset.rate}
+                            type="button"
+                            onClick={() => applyVatRateToAllItems(preset.rate, preset.rate > 0)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border ${
+                              globalVatRate === preset.rate && applyVat
+                                ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-600 dark:text-slate-400 font-bold">
+                          نسبة مخصصة:
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={globalVatRate}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setGlobalVatRate(val);
+                            }}
+                            className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-center"
+                          />
+                          <span className="font-bold text-slate-700 dark:text-slate-300 text-xs">%</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => applyVatRateToAllItems(globalVatRate, globalVatRate > 0)}
+                          className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/60 dark:hover:bg-emerald-800 text-emerald-900 dark:text-emerald-100 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                          title="تطبيق هذه النسبة على جميع بنود الفاتورة حالياً"
+                        >
+                          تطبيق على الكل
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Items List Header */}
+                <div className="flex justify-between items-center font-bold text-slate-800 dark:text-slate-200 pt-1">
                   <div className="flex items-center gap-2">
                     <span>بنود وأصناف الفاتورة:</span>
                     <span className="text-[10px] text-slate-400 font-normal">
-                      (تدعم تكويد EGS و GS1 وضريبة 14% وخصم 1%)
+                      (يمكنك تحديد كمية وسعر ونسبة ضريبة مستقلة لكل بند)
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={addItem}
-                    className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 cursor-pointer font-bold"
+                    className="text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 text-xs flex items-center gap-1 cursor-pointer font-bold bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة بند</span>
+                    <span>إضافة بند جديد</span>
                   </button>
                 </div>
 
+                {/* Items Rows */}
                 {items.map((item, idx) => (
-                  <div key={item.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                  <div key={item.id} className="bg-slate-50 dark:bg-slate-850 p-3 rounded-xl border border-slate-200 dark:border-slate-750 space-y-2.5">
                     <div className="grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-6">
                         <input
@@ -1582,7 +1906,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                           placeholder="بيان الصنف أو الخدمة المقدمة"
                           value={item.description}
                           onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium"
                         />
                       </div>
                       <div className="col-span-3">
@@ -1591,14 +1915,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                           placeholder="كود الصنف EGS / GS1"
                           value={item.itemCode}
                           onChange={(e) => handleItemChange(idx, 'itemCode', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                         />
                       </div>
                       <div className="col-span-2">
                         <select
                           value={item.itemType || 'EGS'}
                           onChange={(e) => handleItemChange(idx, 'itemType', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                          className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold"
                         >
                           <option value="EGS">EGS (مصري)</option>
                           <option value="GS1">GS1 (دولي)</option>
@@ -1608,15 +1932,17 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                         <button
                           type="button"
                           onClick={() => removeItem(idx)}
-                          className="text-slate-400 hover:text-red-600 cursor-pointer"
+                          className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                          title="حذف هذا البند"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-12 gap-2 items-center text-slate-700">
-                      <div className="col-span-3">
+                    <div className="grid grid-cols-12 gap-2 items-center text-slate-700 dark:text-slate-300 text-xs">
+                      {/* Quantity */}
+                      <div className="col-span-2">
                         <label className="text-[10px] text-slate-400 block mb-0.5">الكمية:</label>
                         <input
                           type="number"
@@ -1624,10 +1950,12 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                           placeholder="الكمية"
                           value={item.quantity}
                           onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
-                          className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                          className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono"
                         />
                       </div>
-                      <div className="col-span-3">
+
+                      {/* Unit Price */}
+                      <div className="col-span-2">
                         <label className="text-[10px] text-slate-400 block mb-0.5">سعر الوحدة (ج.م):</label>
                         <input
                           type="number"
@@ -1635,10 +1963,12 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                           placeholder="السعر"
                           value={item.unitPrice || ''}
                           onChange={(e) => handleItemChange(idx, 'unitPrice', Number(e.target.value))}
-                          className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono font-bold"
+                          className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono font-bold"
                         />
                       </div>
-                      <div className="col-span-3">
+
+                      {/* Discount Rate */}
+                      <div className="col-span-2">
                         <label className="text-[10px] text-slate-400 block mb-0.5">الخصم %:</label>
                         <input
                           type="number"
@@ -1647,12 +1977,46 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                           placeholder="خصم %"
                           value={item.discountRate || 0}
                           onChange={(e) => handleItemChange(idx, 'discountRate', Number(e.target.value))}
-                          className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                          className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono"
                         />
                       </div>
-                      <div className="col-span-3 text-left">
+
+                      {/* VAT Rate % for this item */}
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-400 block mb-0.5">ض.ق.م %:</label>
+                        {applyVat ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              value={item.vatRate ?? globalVatRate}
+                              onChange={(e) => handleItemChange(idx, 'vatRate', Number(e.target.value))}
+                              className="w-full px-1.5 py-1 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 text-center"
+                              title="نسبة ضريبة القيمة المضافة لهذا البند"
+                            />
+                            <span className="text-[10px] font-bold text-slate-500">%</span>
+                          </div>
+                        ) : (
+                          <div className="px-2 py-1 bg-slate-200 dark:bg-slate-800 text-slate-500 text-[10px] font-bold rounded text-center">
+                            معفى 0%
+                          </div>
+                        )}
+                      </div>
+
+                      {/* VAT Amount */}
+                      <div className="col-span-2 text-center">
+                        <label className="text-[10px] text-slate-400 block mb-0.5">مبلغ الضريبة:</label>
+                        <div className="font-mono text-xs pt-1 font-bold text-emerald-700 dark:text-emerald-400">
+                          {item.vatAmount > 0 ? `+${formatEgyptianCurrency(item.vatAmount)}` : '0.00'}
+                        </div>
+                      </div>
+
+                      {/* Net Item Total */}
+                      <div className="col-span-2 text-left">
                         <label className="text-[10px] text-slate-400 block mb-0.5">صافي البند:</label>
-                        <div className="font-mono font-bold text-slate-900 text-xs pt-1">
+                        <div className="font-mono font-bold text-slate-900 dark:text-slate-100 text-xs pt-1">
                           {formatEgyptianCurrency(item.netTotal)}
                         </div>
                       </div>
@@ -1660,33 +2024,84 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                   </div>
                 ))}
 
-                {/* Calculation Footer */}
-                <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-bold">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyWht}
-                        onChange={(e) => setApplyWht(e.target.checked)}
-                        className="rounded text-emerald-600"
-                      />
-                      <span>تطبيق خصم وتحصيل 1% أ.ت.ص</span>
-                    </label>
+                {/* Calculation Footer & Summary Breakdown */}
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                    {/* WHT Controls */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <label className="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer font-bold">
+                        <input
+                          type="checkbox"
+                          checked={applyWht}
+                          onChange={(e) => applyWhtRateToAllItems(globalWhtRate > 0 ? globalWhtRate : 1, e.target.checked)}
+                          className="rounded text-red-600"
+                        />
+                        <span>تطبيق خصم وتحصيل أ.ت.ص</span>
+                      </label>
 
-                    <label className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/70 border border-indigo-200 px-2.5 py-1 rounded-lg cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={autoPostOnIssue}
-                        onChange={(e) => setAutoPostOnIssue(e.target.checked)}
-                        className="rounded text-indigo-600"
-                      />
-                      <Sparkles className="w-3 h-3 text-indigo-600" />
-                      <span>توليد قيد يومية تلقائي فور الإصدار</span>
-                    </label>
+                      {applyWht && (
+                        <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 px-2 py-1 rounded-xl">
+                          <span className="text-[11px] text-red-800 dark:text-red-300 font-bold">نسبة الخصم:</span>
+                          {[1, 0.5, 3, 5].map((rate) => (
+                            <button
+                              key={rate}
+                              type="button"
+                              onClick={() => applyWhtRateToAllItems(rate, true)}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                                globalWhtRate === rate
+                                  ? 'bg-red-700 text-white'
+                                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-red-100'
+                              }`}
+                            >
+                              {rate}%
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <label className="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1 rounded-lg cursor-pointer font-bold">
+                        <input
+                          type="checkbox"
+                          checked={autoPostOnIssue}
+                          onChange={(e) => setAutoPostOnIssue(e.target.checked)}
+                          className="rounded text-indigo-600"
+                        />
+                        <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                        <span>ترحيل قيد يومية تلقائي فور الإصدار</span>
+                      </label>
+                    </div>
                   </div>
-                  <div className="text-slate-900 font-mono text-sm">
-                    صافي الفاتورة الإجمالي:{' '}
-                    <strong className="text-emerald-900">{formatEgyptianCurrency(grandTotal)}</strong>
+
+                  {/* Complete Invoice Financial Totals Bar */}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-4 flex-wrap text-slate-600 dark:text-slate-400">
+                      <div>
+                        قيمة البضاعة: <strong className="text-slate-800 dark:text-slate-200 font-mono">{formatEgyptianCurrency(subtotal)}</strong>
+                      </div>
+                      {totalDiscount > 0 && (
+                        <div>
+                          الخصم: <strong className="text-red-600 font-mono">-{formatEgyptianCurrency(totalDiscount)}</strong>
+                        </div>
+                      )}
+                      <div>
+                        الضريبة (VAT):{' '}
+                        {applyVat && totalVat > 0 ? (
+                          <strong className="text-emerald-700 dark:text-emerald-400 font-mono">+{formatEgyptianCurrency(totalVat)}</strong>
+                        ) : (
+                          <strong className="text-slate-500 font-sans">معفى (0.00 ج.م)</strong>
+                        )}
+                      </div>
+                      {applyWht && totalWht > 0 && (
+                        <div>
+                          خصم أ.ت.ص: <strong className="text-red-700 dark:text-red-400 font-mono">-{formatEgyptianCurrency(totalWht)}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-slate-900 dark:text-slate-100 font-mono text-sm font-black">
+                      صافي الفاتورة الإجمالي:{' '}
+                      <strong className="text-emerald-800 dark:text-emerald-300 text-base">{formatEgyptianCurrency(grandTotal)}</strong>
+                    </div>
                   </div>
                 </div>
               </div>

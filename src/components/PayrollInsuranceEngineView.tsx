@@ -281,8 +281,10 @@ export const PayrollInsuranceEngineView: React.FC<PayrollInsuranceEngineProps> =
           <ScreenActionToolbar
             modelType="PAYROLL"
             title="مسير الرواتب والأجور والتأمينات"
+            targetElementId="payroll-payslip-canvas"
+            printSelector="#payroll-payslip-canvas"
+            customDocument={rosterCalculations}
             count={employees.length}
-            showImport={false}
           />
         </div>
       </div>
@@ -404,7 +406,7 @@ export const PayrollInsuranceEngineView: React.FC<PayrollInsuranceEngineProps> =
 
       {/* Tab 1: Monthly Payroll Roster */}
       {activeTab === 'ROSTER' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div id="payroll-payslip-canvas" className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between text-xs">
             <span className="font-bold text-slate-800">
               جدول مسير الأجور والمرتبات لشهر ({selectedMonth})

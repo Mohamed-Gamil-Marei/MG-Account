@@ -783,10 +783,11 @@ export const QuickAccountingToolsDrawer: React.FC<QuickAccountingToolsDrawerProp
                 onChange={(e) => setVatRate(Number(e.target.value))}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
               >
-                <option value={14}>14% (النسبة العامة)</option>
-                <option value={5}>5% (آلات ومعدات)</option>
-                <option value={10}>10% (خدمات مهنية واستشارية)</option>
-                <option value={0}>0% (معفى / تصدير للخارج)</option>
+                <option value={14}>14% (النسبة العامة - مصر)</option>
+                <option value={15}>15% (المملكة العربية السعودية)</option>
+                <option value={5}>5% (آلات ومعدات / الإمارات وعمان)</option>
+                <option value={10}>10% (خدمات وسلع جدول)</option>
+                <option value={0}>0% (معفى / تصدير للخارج / بدون ضريبة)</option>
               </select>
             </div>
 

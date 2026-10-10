@@ -3,6 +3,7 @@ import { FileCheck2, ShieldCheck, CheckCircle2, Award, Printer } from 'lucide-re
 import { formatEgyptianCurrency, generateQrCodeSvg, buildAuditorReportQrText } from '../../utils/qrCodeGenerator';
 import { OfficialReportHeader } from '../common/OfficialReportHeader';
 import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
+import { DocumentVerificationModal } from '../common/DocumentVerificationModal';
 
 interface CreditAuditorReportTabProps {
   yearsList: number[];
@@ -28,6 +29,7 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
   const [commercialRegNo, setCommercialRegNo] = useState<string>(clientProfile?.commercialRegNo || '184920 - استثمار القاهرة');
   const [taxCardNo, setTaxCardNo] = useState<string>(clientProfile?.taxRegNo || '492-817-302');
   const [opinionType, setOpinionType] = useState<'CLEAN' | 'QUALIFIED' | 'EMPHASIS'>('CLEAN');
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const activeData = computedData[selectedYear] || {};
 
@@ -207,26 +209,64 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
               <span>محاسب قانوني ومراجع حسابات</span>
             </div>
 
-            <div
-              data-qr-container="true"
-              className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
-              dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(
-                  buildAuditorReportQrText({
-                    auditorName: officeProfile.auditorName,
-                    licenseNumber: officeProfile.licenseNumber,
-                    companyName,
-                    fiscalYear: selectedYear,
-                    opinion: opinionType === 'CLEAN' ? 'رأي نظيف' : 'رأي متحفظ',
-                    refNumber: `CREDIT-AUD-${selectedYear}-991`,
-                  }),
-                  100
-                ),
-              }}
-            />
+            <div className="text-center">
+              <div
+                data-qr-container="true"
+                onClick={() => setIsQrModalOpen(true)}
+                className="qr-print-container bg-white p-1 rounded-lg border border-slate-200 cursor-pointer hover:border-blue-600 hover:shadow-md transition-all group"
+                title="انقر للمعاينة والتحقق الرقمي من صحة تقرير مراقب الحسابات"
+              >
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: generateQrCodeSvg(
+                      buildAuditorReportQrText({
+                        auditorName: officeProfile.auditorName,
+                        licenseNumber: officeProfile.licenseNumber,
+                        companyName,
+                        fiscalYear: selectedYear,
+                        opinion: opinionType === 'CLEAN' ? 'رأي نظيف' : 'رأي متحفظ',
+                        refNumber: `CREDIT-AUD-${selectedYear}-991`,
+                      }),
+                      100
+                    ),
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQrModalOpen(true)}
+                className="text-[10px] text-blue-700 hover:text-blue-900 font-bold mt-1 flex items-center justify-center gap-1 mx-auto cursor-pointer transition-colors no-print"
+                title="معاينة شاشة التحقق الرسمية لتقرير مراقب الحسابات"
+              >
+                <ShieldCheck className="w-3 h-3 text-blue-600" />
+                <span>فحص اعتماد الـ QR</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Official Verification Modal */}
+      {isQrModalOpen && (
+        <DocumentVerificationModal
+          data={{
+            docType: 'تقرير مراقب الحسابات المستقل',
+            docNumber: `CREDIT-AUD-${selectedYear}-991`,
+            clientName: companyName,
+            fiscalYear: selectedYear,
+            commercialRegNo: commercialRegNo,
+            taxCardNo: taxCardNo,
+            auditorName: officeProfile.auditorName,
+            licenseNumber: officeProfile.licenseNumber,
+            firmName: officeProfile.firmName,
+            date: new Date().toISOString().slice(0, 10),
+            recipient: 'إدارة الائتمان والتمويل بالبنوك والجهات المصرفية',
+            purpose: `إبداء الرأي المهني في القوائم المالية للدراسة الائتمانية: ${opinionType === 'CLEAN' ? 'رأي نظيف بدون تحفظات' : 'رأي متحفظ'} وفقاً لمعايير المراجعة المصرية`,
+            mode: 'encrypted_pdf',
+          }}
+          onClose={() => setIsQrModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

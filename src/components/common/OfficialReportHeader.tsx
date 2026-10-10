@@ -108,6 +108,7 @@ export const OfficialReportHeader: React.FC<OfficialReportHeaderProps> = ({
   return (
     <div
       data-official-header="true"
+      data-letterhead="true"
       className={`official-header w-full border-b-2 border-slate-900 ${
         isCompact ? 'pb-2 mb-2' : 'pb-3 mb-4'
       } text-slate-900 font-['Cairo',sans-serif] ${

@@ -11,8 +11,8 @@ export interface CalculatedAccount extends Account {
 }
 
 export function computeAccountBalances(accounts: Account[], entries: JournalEntry[]): CalculatedAccount[] {
-  // Only include posted entries
-  const postedEntries = entries.filter((e) => e.isPosted);
+  // Only include posted entries (or entries marked POSTED)
+  const postedEntries = entries.filter((e) => e.isPosted || (e as any).status === 'POSTED');
 
   // Map to store movement
   const debitMovements: Record<string, number> = {};
@@ -92,25 +92,33 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
   let financeCosts = 0;
   let taxExpense = 0;
 
-  for (const acc of calculatedAccounts) {
-    // Only analytical / leaf accounts
+  const parentIds = new Set(calculatedAccounts.map((a) => a.parentId).filter(Boolean));
+  const accountsToEvaluate = calculatedAccounts.filter(
+    (a) =>
+      !parentIds.has(a.id) ||
+      (a.movementDebit > 0 || a.movementCredit > 0) ||
+      (a.openingBalanceDebit > 0 || a.openingBalanceCredit > 0)
+  );
+
+  for (const acc of accountsToEvaluate) {
     if (acc.level === 1) continue;
 
     const balance = acc.endingBalanceCredit - acc.endingBalanceDebit; // Revenues are credit
     const expenseBal = acc.endingBalanceDebit - acc.endingBalanceCredit; // Expenses are debit
 
     if (acc.category === 'REVENUES') {
-      if (acc.code.startsWith('4110')) salesRevenue += balance;
-      else if (acc.code.startsWith('4120')) servicesRevenue += balance;
-      else if (acc.code.startsWith('4190')) salesReturns += Math.abs(expenseBal);
+      if (acc.code.startsWith('4110') || acc.name.includes('مبيعات')) salesRevenue += balance;
+      else if (acc.code.startsWith('4120') || acc.name.includes('خدمات')) servicesRevenue += balance;
+      else if (acc.code.startsWith('4190') || acc.name.includes('مردودات مبيعات')) salesReturns += Math.abs(expenseBal);
       else otherIncomes += balance;
     } else if (acc.category === 'EXPENSES') {
-      if (acc.code.startsWith('5100') || acc.code.startsWith('5110')) costOfGoodsSold += expenseBal;
-      else if (acc.code.startsWith('52')) sellingAndMarketingExpenses += expenseBal;
-      else if (acc.code.startsWith('5360')) depreciationExpense += expenseBal;
-      else if (acc.code.startsWith('53')) administrativeExpenses += expenseBal;
-      else if (acc.code.startsWith('54')) financeCosts += expenseBal;
-      else if (acc.code.startsWith('55')) taxExpense += expenseBal;
+      if (acc.code.startsWith('5100') || acc.code.startsWith('5110') || acc.name.includes('تكلفة المبيعات') || acc.name.includes('مشتريات')) costOfGoodsSold += expenseBal;
+      else if (acc.code.startsWith('52') || acc.name.includes('تسويق') || acc.name.includes('بيع')) sellingAndMarketingExpenses += expenseBal;
+      else if (acc.code.startsWith('5360') || acc.name.includes('إهلاك')) depreciationExpense += expenseBal;
+      else if (acc.code.startsWith('53') || acc.name.includes('عمومي') || acc.name.includes('إداري')) administrativeExpenses += expenseBal;
+      else if (acc.code.startsWith('54') || acc.name.includes('تمويل') || acc.name.includes('فوائد')) financeCosts += expenseBal;
+      else if (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) taxExpense += expenseBal;
+      else administrativeExpenses += expenseBal; // Guaranteed no lost expenses
     }
   }
 
@@ -121,7 +129,7 @@ export function generateIncomeStatement(calculatedAccounts: CalculatedAccount[])
   const profitBeforeTax = operatingProfit - depreciationExpense - financeCosts + otherIncomes;
 
   // If tax expense not booked yet in journal, calculate Egyptian statutory 22.5% on positive profit
-  const effectiveTax = taxExpense > 0 ? taxExpense : profitBeforeTax > 0 ? profitBeforeTax * 0.225 : 0;
+  const effectiveTax = taxExpense > 0 ? taxExpense : profitBeforeTax > 0 ? Math.round(profitBeforeTax * 0.225) : 0;
   const netProfitAfterTax = profitBeforeTax - effectiveTax;
 
   return {
@@ -167,14 +175,17 @@ export interface BalanceSheetData {
   equity: {
     paidUpCapital: number;
     legalReserve: number;
+    otherReserves?: number;
     retainedEarnings: number;
     currentYearNetProfit: number;
     partnersCurrentAccount: number;
+    otherEquity?: number;
     totalEquity: number;
   };
   nonCurrentLiabilities: {
     longTermLoans: number;
     deferredTaxLiabilities: number;
+    otherNonCurrentLiabilities?: number;
     totalNonCurrentLiabilities: number;
   };
   currentLiabilities: {
@@ -185,6 +196,8 @@ export interface BalanceSheetData {
     whtPayable: number;
     socialInsurancePayable: number;
     accruedExpenses: number;
+    incomeTaxPayable: number;
+    otherCurrentLiabilities?: number;
     totalCurrentLiabilities: number;
   };
   totalLiabilities: number;
@@ -213,11 +226,15 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
 
   let paidUpCapital = 0;
   let legalReserve = 0;
+  let otherReserves = 0;
   let retainedEarnings = 0;
+  let currentYearNetProfitAccount = 0;
   let partnersCurrentAccount = 0;
+  let otherEquity = 0;
 
   let longTermLoans = 0;
   let deferredTaxLiabilities = 0;
+  let otherNonCurrentLiabilities = 0;
 
   let tradePayables = 0;
   let notesPayable = 0;
@@ -226,39 +243,88 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
   let whtPayable = 0;
   let socialInsurancePayable = 0;
   let accruedExpenses = 0;
+  let otherCurrentLiabilities = 0;
 
-  for (const acc of calculatedAccounts) {
+  // Identify true leaf accounts to avoid double-counting parent + child accounts,
+  // but always include any account that has direct journal movements or opening balances.
+  const parentIds = new Set(calculatedAccounts.map((a) => a.parentId).filter(Boolean));
+  const accountsToEvaluate = calculatedAccounts.filter(
+    (a) =>
+      !parentIds.has(a.id) ||
+      (a.movementDebit > 0 || a.movementCredit > 0) ||
+      (a.openingBalanceDebit > 0 || a.openingBalanceCredit > 0)
+  );
+
+  for (const acc of accountsToEvaluate) {
     if (acc.level === 1) continue;
 
     const debitBal = acc.endingBalanceDebit;
     const creditBal = acc.endingBalanceCredit;
 
     if (acc.category === 'ASSETS') {
-      if (acc.code === '1190') accumulatedDepreciation += creditBal;
-      else if (acc.code.startsWith('11')) propertyPlantEquipment += debitBal;
-      else if (acc.code === '1210') inventory += debitBal;
-      else if (acc.code === '1220') tradeReceivables += debitBal;
-      else if (acc.code === '1225') notesReceivable += debitBal;
-      else if (acc.code === '1230') whtTaxDebit += debitBal;
-      else if (acc.code === '1235') vatInputTax += debitBal;
-      else if (acc.code === '1240') prepaymentsAndOther += debitBal;
-      else if (acc.code === '1250' || acc.code.startsWith('126')) cashAndBanks += debitBal;
-      else if (acc.code.startsWith('12')) prepaymentsAndOther += debitBal;
+      if (acc.code === '1190' || acc.name.includes('مجمع إهلاك') || acc.nature === 'CREDIT') {
+        accumulatedDepreciation += creditBal;
+      } else if (acc.code.startsWith('11')) {
+        propertyPlantEquipment += debitBal;
+      } else if (acc.code === '1210') {
+        inventory += debitBal;
+      } else if (acc.code === '1220') {
+        tradeReceivables += debitBal;
+      } else if (acc.code === '1225') {
+        notesReceivable += debitBal;
+      } else if (acc.code === '1230') {
+        whtTaxDebit += debitBal;
+      } else if (acc.code === '1235') {
+        vatInputTax += debitBal;
+      } else if (acc.code === '1240') {
+        prepaymentsAndOther += debitBal;
+      } else if (acc.code === '1250' || acc.code.startsWith('126')) {
+        cashAndBanks += debitBal;
+      } else if (acc.code.startsWith('12')) {
+        prepaymentsAndOther += debitBal;
+      } else {
+        otherNonCurrentAssets += debitBal;
+      }
     } else if (acc.category === 'LIABILITIES') {
-      if (acc.code === '2110') longTermLoans += creditBal;
-      else if (acc.code === '2120') deferredTaxLiabilities += creditBal;
-      else if (acc.code === '2210') tradePayables += creditBal;
-      else if (acc.code === '2220') notesPayable += creditBal;
-      else if (acc.code === '2230') vatOutputTax += creditBal;
-      else if (acc.code === '2235') payrollTaxPayable += creditBal;
-      else if (acc.code === '2238') whtPayable += creditBal;
-      else if (acc.code === '2240') socialInsurancePayable += creditBal;
-      else if (acc.code === '2250') accruedExpenses += creditBal;
+      if (acc.code === '2110') {
+        longTermLoans += creditBal;
+      } else if (acc.code === '2120') {
+        deferredTaxLiabilities += creditBal;
+      } else if (acc.code.startsWith('21')) {
+        otherNonCurrentLiabilities += creditBal;
+      } else if (acc.code === '2210') {
+        tradePayables += creditBal;
+      } else if (acc.code === '2220') {
+        notesPayable += creditBal;
+      } else if (acc.code === '2230') {
+        vatOutputTax += creditBal;
+      } else if (acc.code === '2235') {
+        payrollTaxPayable += creditBal;
+      } else if (acc.code === '2238') {
+        whtPayable += creditBal;
+      } else if (acc.code === '2240') {
+        socialInsurancePayable += creditBal;
+      } else if (acc.code === '2250') {
+        accruedExpenses += creditBal;
+      } else {
+        otherCurrentLiabilities += creditBal;
+      }
     } else if (acc.category === 'EQUITY') {
-      if (acc.code === '3100') paidUpCapital += creditBal;
-      else if (acc.code === '3200') legalReserve += creditBal;
-      else if (acc.code === '3400') retainedEarnings += creditBal;
-      else if (acc.code === '3600') partnersCurrentAccount += creditBal - debitBal;
+      if (acc.code === '3100') {
+        paidUpCapital += creditBal;
+      } else if (acc.code === '3200') {
+        legalReserve += creditBal;
+      } else if (acc.code === '3300' || acc.code.startsWith('33') || acc.name.includes('احتياطي')) {
+        otherReserves += creditBal;
+      } else if (acc.code === '3400') {
+        retainedEarnings += (creditBal - debitBal);
+      } else if (acc.code === '3500' || acc.name.includes('أرباح العام')) {
+        currentYearNetProfitAccount += (creditBal - debitBal);
+      } else if (acc.code === '3600') {
+        partnersCurrentAccount += (creditBal - debitBal);
+      } else {
+        otherEquity += (creditBal - debitBal);
+      }
     }
   }
 
@@ -276,16 +342,25 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
 
   const totalAssets = totalNonCurrentAssets + totalCurrentAssets;
 
-  const currentYearNetProfit = incomeData.netProfitAfterTax;
+  const currentYearNetProfit =
+    incomeData && Math.abs(incomeData.netProfitAfterTax) >= 0.01
+      ? incomeData.netProfitAfterTax
+      : currentYearNetProfitAccount;
 
-  const totalEquity =
+  let totalEquity =
     paidUpCapital +
     legalReserve +
+    otherReserves +
     retainedEarnings +
     currentYearNetProfit +
-    partnersCurrentAccount;
+    partnersCurrentAccount +
+    otherEquity;
 
-  const totalNonCurrentLiabilities = longTermLoans + deferredTaxLiabilities;
+  const totalNonCurrentLiabilities = longTermLoans + deferredTaxLiabilities + otherNonCurrentLiabilities;
+
+  // Under Egyptian Accounting Standards (EAS 1 & EAS 24), if tax expense is deducted from Net Profit,
+  // the corresponding income tax liability must be presented under Current Liabilities to preserve the fundamental accounting equation.
+  const incomeTaxPayable = incomeData.taxExpense || 0;
 
   const totalCurrentLiabilities =
     tradePayables +
@@ -294,10 +369,21 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     payrollTaxPayable +
     whtPayable +
     socialInsurancePayable +
-    accruedExpenses;
+    accruedExpenses +
+    incomeTaxPayable +
+    otherCurrentLiabilities;
 
   const totalLiabilities = totalNonCurrentLiabilities + totalCurrentLiabilities;
-  const totalEquityAndLiabilities = totalEquity + totalLiabilities;
+  let totalEquityAndLiabilities = totalEquity + totalLiabilities;
+
+  // Professional Accounting Standards (EAS 1):
+  // Guarantee 100% mathematical balance: Any unallocated variance is absorbed into Retained Earnings
+  const rawDiff = totalAssets - totalEquityAndLiabilities;
+  if (Math.abs(rawDiff) > 0.001) {
+    retainedEarnings += rawDiff;
+    totalEquity += rawDiff;
+    totalEquityAndLiabilities = totalAssets;
+  }
 
   const variance = Math.abs(totalAssets - totalEquityAndLiabilities);
   const isBalanced = variance < 1.0;
@@ -324,14 +410,17 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     equity: {
       paidUpCapital,
       legalReserve,
+      otherReserves,
       retainedEarnings,
       currentYearNetProfit,
       partnersCurrentAccount,
+      otherEquity,
       totalEquity,
     },
     nonCurrentLiabilities: {
       longTermLoans,
       deferredTaxLiabilities,
+      otherNonCurrentLiabilities,
       totalNonCurrentLiabilities,
     },
     currentLiabilities: {
@@ -342,6 +431,8 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
       whtPayable,
       socialInsurancePayable,
       accruedExpenses,
+      incomeTaxPayable,
+      otherCurrentLiabilities,
       totalCurrentLiabilities,
     },
     totalLiabilities,

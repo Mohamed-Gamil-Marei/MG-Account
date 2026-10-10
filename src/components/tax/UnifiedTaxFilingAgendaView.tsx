@@ -31,6 +31,7 @@ import { ClientArchiveRecord, TaxDeclarationRecord, CompanyType } from '../../ty
 import { db, DatabaseState } from '../../db/localDatabase';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { EgyptianTaxDeclarationPdfModal } from '../EgyptianTaxDeclarationPdfModal';
+import { ScreenActionToolbar } from '../common/ScreenActionToolbar';
 
 export const OFFICIAL_SAP_PORTAL_URL =
   'https://auth.eta.gov.eg:8080/auth/realms/e-tax/protocol/saml?SAMLRequest=fZFBa8JAEIX%2FStj7uhut0S4mIJVCoC1SSw%2B9jclEA8luujOx9t93E2mxF2FPj5n33je7Imibzqx7PtpX%2FOyROMo3qdhpPdfzBO7lXRKXMq4wllDttVzEMJvfl8l%2BUZUiekdPtbOpmE60iHKiHnNLDJaDpKeJjLXU8VuszWwW3oeINiGhtsDj1pG5I6MUhPgJMkwO7jTBg1nqpR5F5RGalhRKhrPqvGNXuEYNpUX06HyBY%2FNUVNAQDg22QFSf8E85t40lM1KmovfWOKCajIUWyXBhduvnJxPam19zka2GaTPC%2BKv92%2BshFv1AJbKqAyroimelrhwv9p15CRb5ZuuauvgeUFrg2wmDUpeyGkdNN1yeGC2LaN007ushnIoDN%2Fsehcoumf9%2FNvsB&RelayState=oucqqvqvwazouwrdorferoafbqoxratvzdwbxfd&SigAlg=http%3A%2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=Djou9cgY%2FYDnax7L%2B5j3Vex%2BFNM7GotG0rntgsxbzLx%2BnpgGJPQcjrXKWNAr6ihpxzZpBqOEQgw5ClxuPBFclBUt5QiMJQMhDgdJp5a5LFLk%2FfFkjKA5RtJx12tzb76%2FBAS%2BnsR3G%2BVrEPNGlUk3qz9%2FLpHx2RXv7p2BlVZ7R%2FA5Kos0ZL%2F3NyR9I5rtU4mxtQV%2FjurnuRv%2FnDNrPIA6dgdb9MQ3%2FQUNzRzhEEe131ZSLVC5CO%2BkW1JTBNdS210ldYxzYZFkDX91MhUL3FpGHvxCCP74cJQXA6f7MrGLXec7prjrEK2lmN5DKxg%2FegfZGxy0mBNPUurWLOsQYaL%2BLw%3D%3D#/home';
@@ -1004,7 +1005,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
   };
 
   return (
-    <div className="space-y-3 font-sans text-slate-900 dark:text-slate-100" dir="rtl">
+    <div id="tax-agenda-printable-container" className="space-y-3 font-sans text-slate-900 dark:text-slate-100" dir="rtl">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg border border-slate-700 animate-fade-in flex items-center gap-2">
@@ -1030,33 +1031,21 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
             </p>
           </div>
 
-          {/* الأزرار العلوية السريعة */}
+          {/* الأزرار العلوية السريعة الموحدة */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={openNewClientModal}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>إضافة شركة جديدة</span>
-            </button>
-
-            <button
-              onClick={handleExportCsv}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
-              title="تصدير إكسيل"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>إكسيل</span>
-            </button>
-
-            <button
-              onClick={() => window.print()}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
-              title="طباعة"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-              <span>طباعة</span>
-            </button>
+            <ScreenActionToolbar
+              modelType="TAXES"
+              title={`أجندة وسجل الإقرارات الضريبية (${selectedIsoMonth})`}
+              targetElementId="tax-agenda-printable-container"
+              compact={true}
+              actions={[
+                {
+                  label: 'إضافة شركة جديدة',
+                  icon: Plus,
+                  onClick: openNewClientModal,
+                },
+              ]}
+            />
           </div>
         </div>
 

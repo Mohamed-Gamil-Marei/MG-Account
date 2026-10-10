@@ -41,6 +41,8 @@ export interface InvoiceDraft {
   paymentMethod?: 'BANK' | 'CASH' | 'INSTAPAY' | 'CREDIT';
   notes?: string;
   items: InvoiceItem[];
+  applyVat?: boolean;
+  globalVatRate?: number;
   applyWht: boolean;
   autoPostOnIssue?: boolean;
   meta: FormDraftMeta;

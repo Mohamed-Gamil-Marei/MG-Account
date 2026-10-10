@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { FiscalYearData } from './CreditYearlyEditor';
+import { ScreenActionToolbar } from '../common/ScreenActionToolbar';
 
 export interface BankCriteriaPreset {
   id: string;
@@ -262,7 +263,7 @@ export const SmartCreditSuite: React.FC<SmartCreditSuiteProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 shadow-2xs mb-5 space-y-4">
+    <div id="credit-suite-printable-container" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 shadow-2xs mb-5 space-y-4">
       {/* Top Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
         <div className="flex items-center gap-2.5">
@@ -276,46 +277,56 @@ export const SmartCreditSuite: React.FC<SmartCreditSuiteProps> = ({
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('REVERSE_ENGINEERING')}
-            className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'REVERSE_ENGINEERING'
-                ? 'bg-indigo-600 text-white shadow-2xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-500 dark:text-amber-300" />
-            <span>الهندسة العكسية للقرض</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Tab Switcher */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setActiveTab('REVERSE_ENGINEERING')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'REVERSE_ENGINEERING'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500 dark:text-amber-300" />
+              <span>الهندسة العكسية للقرض</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('BANK_SIMULATOR')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'BANK_SIMULATOR'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>محاكي قبول البنوك</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('BANK_SIMULATOR')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'BANK_SIMULATOR'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>محاكي قبول البنوك</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('TURNOVER_RECON')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'TURNOVER_RECON'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-            <span>مطابقة كشف الحساب (Turnover)</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('TURNOVER_RECON')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'TURNOVER_RECON'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              <span>مطابقة كشف الحساب (Turnover)</span>
+            </button>
+          </div>
+
+          {/* Unified Multi-Format Toolbar */}
+          <ScreenActionToolbar
+            modelType="CREDIT_SIMULATOR"
+            title="المحرك الائتماني ومحاكي قرارات البنوك"
+            targetElementId="credit-suite-printable-container"
+            compact={true}
+          />
         </div>
       </div>
 

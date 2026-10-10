@@ -18,8 +18,6 @@ import { MgBrandBadge } from '../common/MgBrandBadge';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { ClientsArchiveView } from '../ClientsArchiveView';
 import { OfficeTreasuryView } from '../OfficeTreasuryView';
-import { CertificatesGeneratorView } from '../CertificatesGeneratorView';
-import { FeasibilityStudyView } from '../FeasibilityStudyView';
 import { CreditDossierRegistryView } from '../CreditDossierRegistryView';
 import { PracticeManagementHubView } from '../practice/PracticeManagementHubView';
 import { WhatsAppBusinessApiView } from '../practice/WhatsAppBusinessApiView';
@@ -32,9 +30,7 @@ export type OfficePracticeSubTab =
   | 'PRACTICE_MANAGEMENT'
   | 'CREDIT_DOSSIER_REGISTRY'
   | 'WHATSAPP_BUSINESS_API'
-  | 'OFFICE_TREASURY'
-  | 'CERTIFICATES'
-  | 'FEASIBILITY_STUDY';
+  | 'OFFICE_TREASURY';
 
 interface OfficePracticeHubViewProps {
   state: DatabaseState;
@@ -193,8 +189,6 @@ export const OfficePracticeHubView: React.FC<OfficePracticeHubViewProps> = ({
             />
           )
         )}
-        {activeSubTab === 'CERTIFICATES' && <CertificatesGeneratorView state={state} />}
-        {activeSubTab === 'FEASIBILITY_STUDY' && <FeasibilityStudyView state={state} />}
       </div>
 
       {/* Print, Export & QR Master Control Modal */}

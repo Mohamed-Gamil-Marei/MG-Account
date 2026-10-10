@@ -80,6 +80,25 @@ export function formatWorksheetForArabicExport(
     ws['!cols'] = [{ wch: 30 }];
   }
 
+  // 3. Apply standard financial number format to numeric cells for instant Excel calculations
+  if (ws['!ref']) {
+    try {
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[cellAddress];
+          if (cell && typeof cell.v === 'number') {
+            cell.t = 'n';
+            cell.z = '#,##0.00';
+          }
+        }
+      }
+    } catch {
+      // ignore cell formatting error
+    }
+  }
+
   return ws;
 }
 

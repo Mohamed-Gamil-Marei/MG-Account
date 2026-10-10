@@ -20,6 +20,7 @@ import {
 import { DatabaseState, db } from '../../db/localDatabase';
 import { JournalEntry, Account } from '../../types';
 import { formatFinancialCurrency } from '../../utils/currencyService';
+import { computeAccountBalances } from '../../utils/accountingCalculations';
 
 interface YearEndClosingWizardModalProps {
   isOpen: boolean;
@@ -87,18 +88,6 @@ export const YearEndClosingWizardModal: React.FC<YearEndClosingWizardModalProps>
         expenseLines.push({ account: acc, balance: fullBal });
       }
     });
-
-    // Demo fallbacks if journal has few movements
-    if (totalRevenues === 0) {
-      totalRevenues = 4500000;
-      const rAcc = state.accounts.find((a) => a.category === 'REVENUES') || state.accounts[0];
-      revenueLines.push({ account: rAcc, balance: totalRevenues });
-    }
-    if (totalExpenses === 0) {
-      totalExpenses = 3200000;
-      const eAcc = state.accounts.find((a) => a.category === 'EXPENSES') || state.accounts[0];
-      expenseLines.push({ account: eAcc, balance: totalExpenses });
-    }
 
     const netProfit = totalRevenues - totalExpenses;
 
@@ -240,17 +229,52 @@ export const YearEndClosingWizardModal: React.FC<YearEndClosingWizardModalProps>
       const nextYear = closingYear + 1;
       const openingLines: any[] = [];
 
-      state.accounts.forEach((acc, idx) => {
+      // Calculate real ending balances of the closing year up to Dec 31
+      const yearEntries = state.journalEntries.filter(
+        (e) => e.isPosted && e.date && e.date.startsWith(String(closingYear))
+      );
+      const calculatedYearBalances = computeAccountBalances(state.accounts, yearEntries);
+      const parentIds = new Set(state.accounts.map((a) => a.parentId).filter(Boolean));
+      const activeLeafBalances = calculatedYearBalances.filter(
+        (a) =>
+          !parentIds.has(a.id) ||
+          (a.movementDebit > 0 || a.movementCredit > 0) ||
+          (a.openingBalanceDebit > 0 || a.openingBalanceCredit > 0)
+      );
+
+      activeLeafBalances.forEach((acc, idx) => {
         if (acc.category === 'ASSETS' || acc.category === 'LIABILITIES' || acc.category === 'EQUITY') {
-          const bal = acc.currentBalance || (acc.openingBalanceDebit - acc.openingBalanceCredit) || 0;
-          if (bal !== 0) {
+          let deb = acc.endingBalanceDebit || 0;
+          let cred = acc.endingBalanceCredit || 0;
+
+          // If retained earnings, roll over the closed net profit/loss into it
+          if (acc.code === '3400' || acc.name.includes('أرباح (خسائر) مرحلة')) {
+            if (nominalData.netProfit >= 0) {
+              cred += nominalData.netProfit;
+            } else {
+              deb += Math.abs(nominalData.netProfit);
+            }
+          }
+
+          const netDebit = deb - cred;
+          if (netDebit > 0) {
             openingLines.push({
               id: `open-line-${idx}-${Date.now()}`,
               accountId: acc.id,
               accountCode: acc.code,
               accountName: acc.name,
-              debit: bal > 0 ? bal : 0,
-              credit: bal < 0 ? Math.abs(bal) : 0,
+              debit: Math.round(netDebit * 100) / 100,
+              credit: 0,
+              description: `رصيد افتتاحي مرحل من السنة المالية السابقة ${closingYear}`,
+            });
+          } else if (netDebit < 0) {
+            openingLines.push({
+              id: `open-line-${idx}-${Date.now()}`,
+              accountId: acc.id,
+              accountCode: acc.code,
+              accountName: acc.name,
+              debit: 0,
+              credit: Math.round(Math.abs(netDebit) * 100) / 100,
               description: `رصيد افتتاحي مرحل من السنة المالية السابقة ${closingYear}`,
             });
           }

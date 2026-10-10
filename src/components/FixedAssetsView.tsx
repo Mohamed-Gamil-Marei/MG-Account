@@ -487,7 +487,7 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
       </div>
 
       {/* Main Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
+      <div id="fixed-assets-container" className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
         {/* Controls & Action Bar */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-100">
           {/* Sub-view Navigation */}
@@ -543,6 +543,8 @@ export const FixedAssetsView: React.FC<FixedAssetsViewProps> = ({ state, fiscalY
             <ScreenActionToolbar
               modelType="FIXED_ASSETS"
               title="سجل الأصول الثابتة وإهلاكها"
+              targetElementId="fixed-assets-container"
+              printSelector="#fixed-assets-container"
               count={filteredAssets.length}
             />
           </div>

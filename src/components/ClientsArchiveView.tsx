@@ -845,6 +845,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     <>
       <UnifiedScreenCard
         id="clients-archive-unified-card"
+        modelType="CLIENTS"
+        printSelector="#clients-archive-unified-card"
+        targetElementId="clients-archive-unified-card"
         title="أرشيف ملفات العملاء والشركات"
         badge={`${filteredClients.length} ملف`}
         badgeVariant="blue"

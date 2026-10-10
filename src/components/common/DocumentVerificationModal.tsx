@@ -76,6 +76,33 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
 
   if (!isOpen) return null;
 
+  const rawType = data.docType || '';
+  const docId = data.docNumber || '';
+
+  const isFinancialStatements =
+    rawType.includes('قوائم') ||
+    rawType.includes('مركز') ||
+    rawType.includes('مالي') ||
+    docId.startsWith('EAS') ||
+    docId.startsWith('FIN') ||
+    docId.startsWith('FS');
+
+  const isAuditorReport =
+    rawType.includes('تقرير') ||
+    rawType.includes('مراقب') ||
+    docId.startsWith('AUD');
+
+  const isTaxDeclaration =
+    rawType.includes('ضريب') ||
+    rawType.includes('إقرار') ||
+    docId.startsWith('TAX');
+
+  const isInvoice =
+    rawType.includes('فاتورة') ||
+    docId.startsWith('INV');
+
+  const isCertificate = !isFinancialStatements && !isAuditorReport && !isTaxDeclaration && !isInvoice;
+
   const directUrl = buildVerificationUrl(data);
   const verificationUrl =
     typeof window !== 'undefined'
@@ -300,10 +327,10 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
 
                   <div className="text-center p-3 bg-emerald-50 rounded-2xl border border-emerald-200 shrink-0">
                     <div className="text-[10px] font-bold text-emerald-800">
-                      {isEn ? 'Digital Security Verification Ref' : 'كود التحقق الأمني الرقمي'}
+                      {isEn ? 'Permanent Record ID (Permalink)' : 'معرف السجل الفريد (Permalink)'}
                     </div>
                     <div className="text-xs font-mono font-black text-emerald-950 mt-0.5">
-                      {data.docNumber || 'CERT-2026-OFFICIAL'}
+                      {data.recordId || data.docNumber || 'RECORD-OFFICIAL'}
                     </div>
                     <div className="text-[9px] font-mono text-slate-500 mt-0.5">{securityHash}</div>
                   </div>
@@ -311,8 +338,26 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
 
                 {/* Document Title */}
                 <div className="text-center my-6">
-                  <span className="inline-block px-4 py-1.5 bg-emerald-900 text-white text-sm sm:text-base font-black rounded-xl shadow-xs">
-                    {data.docType || (isEn ? 'Certified Income & Solvency Attestation' : 'شهادة مهنية معتمدة')}
+                  <span className={`inline-block px-4 py-1.5 text-white text-sm sm:text-base font-black rounded-xl shadow-xs ${
+                    isFinancialStatements
+                      ? 'bg-blue-900 border border-blue-700'
+                      : isAuditorReport
+                      ? 'bg-slate-900 border border-slate-700'
+                      : isTaxDeclaration
+                      ? 'bg-teal-900 border border-teal-700'
+                      : isInvoice
+                      ? 'bg-purple-900 border border-purple-700'
+                      : 'bg-emerald-900 border border-emerald-700'
+                  }`}>
+                    {isFinancialStatements
+                      ? (isEn ? 'Attestation of Annual Financial Statements & Balance Sheet (EAS)' : 'اعتماد القوائم المالية السنوية والمركز المالي (معايير EAS)')
+                      : isAuditorReport
+                      ? (isEn ? 'Independent Auditor’s Report on Financial Statements' : 'تقرير مراقب الحسابات المستقل عن القوائم المالية')
+                      : isTaxDeclaration
+                      ? (isEn ? 'Certified Tax Return & Audit Attestation (ETA)' : 'اعتماد الإقرار والفحص الضريبي المالي (مصلحة الضرائب)')
+                      : isInvoice
+                      ? (isEn ? 'Certified Professional Fees Invoice' : 'فاتورة أتعاب مهنية معتمدة ومسجلة')
+                      : (data.docType || (isEn ? 'Certified Professional Attestation' : 'شهادة مهنية رسمية معتمدة'))}
                   </span>
                   <div className="text-[11px] text-slate-500 font-medium mt-1">
                     {isEn
@@ -323,87 +368,291 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
 
                 {/* Document Main Content Body */}
                 <div className="space-y-4 text-xs sm:text-sm text-slate-800 leading-relaxed">
-                  <p>
-                    {isEn ? (
-                      <>
-                        The office of Certified Public Accountant & Statutory Auditor <strong>{data.auditorName || 'Mohamed Gamil Marei'}</strong>, registered with the Ministry of Finance under License No. <strong>({data.licenseNumber || '43122'})</strong>, certifies that based on documentary audit and examination of official books:
-                      </>
-                    ) : (
-                      <>
-                        يشهد مكتب المحاسب القانوني ومراقب الحسابات <strong>{data.auditorName || 'محمد جميل مرعي'}</strong>، المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم <strong>({data.licenseNumber || 'س.م.م 43122'})</strong>، بأنه بناءً على الفحص المستندي والمراجعة المحاسبية من واقع الدفاتر والسجلات والمستندات المؤيدة:
-                      </>
-                    )}
-                  </p>
+                  {isFinancialStatements ? (
+                    /* ---------------- 1. Financial Statements Document Body ---------------- */
+                    <>
+                      <p>
+                        {isEn ? (
+                          <>
+                            The office of Certified Public Accountant & Statutory Auditor <strong>{data.auditorName || 'Mohamed Gamil Marei'}</strong>, registered with the Ministry of Finance under License No. <strong>({data.licenseNumber || '43122'})</strong>, officially attests and certifies the attached Annual Financial Statements of <strong>{data.clientName || 'Certified Entity'}</strong> for the fiscal period ended <strong>{data.fiscalYear || '2024'}</strong>.
+                          </>
+                        ) : (
+                          <>
+                            يعتمد مكتب المحاسب القانوني ومراقب الحسابات <strong>{data.auditorName || 'محمد جميل مرعي'}</strong>، المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم <strong>({data.licenseNumber || 'س.م.م 43122'})</strong>، القوائم المالية والحسابات الختامية المرفقة للشركة/المنشأة: <strong>{data.clientName || 'العميل المعتمد'}</strong> عن السنة المالية المنتهية في <strong>{data.fiscalYear || '2024'}</strong>، وتتضمن:
+                          </>
+                        )}
+                      </p>
 
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-medium">
-                    <div className="flex items-center justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-500">{isEn ? 'Client / Beneficiary:' : 'اسم العميل / المستفيد:'}</span>
-                      <span className="font-black text-slate-900">{data.clientName || 'العميل المعتمد'}</span>
-                    </div>
-
-                    {(data.nationalId || data.commercialRegNo || data.taxCardNo) && (
-                      <div className="flex items-center justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-500">
-                          {isEn ? 'National ID / CR / Tax Card:' : 'الرقم القومي / السجل / البطاقة الضريبية:'}
-                        </span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {data.nationalId || data.commercialRegNo || data.taxCardNo}
-                        </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-bold text-center">
+                        <div className="p-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-950">قائمة المركز المالي</div>
+                        <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950">قائمة الدخل والأرباح</div>
+                        <div className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950">قائمة التدفقات النقدية</div>
+                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-950">الإيضاحات والسياسات</div>
                       </div>
-                    )}
 
-                    {data.amount !== undefined && (
-                      <div className="flex items-center justify-between py-1 border-b border-slate-200 bg-emerald-50/70 p-2 rounded-lg">
-                        <span className="text-emerald-950 font-bold">
-                          {isEn ? 'Audited & Certified Net Amount:' : 'المبلغ المالي المعتمد والمحقق:'}
-                        </span>
-                        <span className="font-mono font-black text-emerald-950 text-sm sm:text-base">
-                          {formatEgyptianCurrency(data.amount)}
-                        </span>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-medium">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">{isEn ? 'Entity / Company Name:' : 'اسم الشركة / المنشأة:'}</span>
+                          <span className="font-black text-slate-900">{data.clientName || 'الشركة المعتمدة'}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">{isEn ? 'Fiscal Audit Year:' : 'السنة المالية المعتمدة:'}</span>
+                          <span className="font-bold text-slate-900 font-mono">{data.fiscalYear || '2024'}</span>
+                        </div>
+                        {(data.totalAssets !== undefined || (data.amount !== undefined && !data.netProfit)) && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200 bg-blue-50/70 p-2 rounded-lg">
+                            <span className="text-blue-950 font-bold">
+                              {isEn ? 'Total Assets (Financial Position):' : 'إجمالي الأصول (قائمة المركز المالي):'}
+                            </span>
+                            <span className="font-mono font-black text-blue-950 text-sm sm:text-base">
+                              {formatEgyptianCurrency(data.totalAssets !== undefined ? data.totalAssets : data.amount!)}
+                            </span>
+                          </div>
+                        )}
+                        {(data.netProfit !== undefined || data.amount !== undefined) && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200 bg-emerald-50/70 p-2 rounded-lg">
+                            <span className="text-emerald-950 font-bold">
+                              {isEn ? 'Net Profit / Operating Results:' : 'صافي ربح / نتائج النشاط عن العام:'}
+                            </span>
+                            <span className="font-mono font-black text-emerald-950 text-sm sm:text-base">
+                              {formatEgyptianCurrency(data.netProfit !== undefined ? data.netProfit : data.amount!)}
+                            </span>
+                          </div>
+                        )}
+                        {(data.commercialRegNo || data.taxCardNo) && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-500">
+                              {isEn ? 'Commercial Reg. / Tax Card:' : 'السجل التجاري / البطاقة الضريبية:'}
+                            </span>
+                            <span className="font-mono font-bold text-slate-900">
+                              {data.commercialRegNo || data.taxCardNo}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">{isEn ? 'Reporting Framework:' : 'إطار إعداد التقارير المالية:'}</span>
+                          <span className="font-bold text-emerald-800">
+                            {isEn ? 'Egyptian Accounting Standards (EAS) & Law 159/1981' : 'معايير المحاسبة المصرية (EAS) وقانون الشركات 159 لسنة 1981'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-500">{isEn ? 'Auditor Opinion:' : 'رأي مراقب الحسابات:'}</span>
+                          <span className="font-bold text-emerald-700">
+                            {isEn ? 'Unqualified (Clean) Opinion ✓' : 'رأي غير معدل (نظيف) - بدون أي تحفظات ✓'}
+                          </span>
+                        </div>
                       </div>
-                    )}
 
-                    {data.monthlyAmount !== undefined && (
-                      <div className="flex items-center justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-500">
-                          {isEn ? 'Equivalent Monthly Average:' : 'المتوسط المالي الشهري المعادل:'}
-                        </span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {formatEgyptianCurrency(data.monthlyAmount)}
-                        </span>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {isEn ? (
+                          <>
+                            In our opinion, the attached financial statements present fairly, in all material respects, the financial position of the company and of its financial performance and its cash flows for the year then ended in accordance with Egyptian Accounting Standards (EAS). This electronic attestation constitutes an official certified document matching the office records.
+                          </>
+                        ) : (
+                          <>
+                            في رأينا المهني، تعبر القوائم المالية المرفقة بعدالة ووضوح في كافة جوانبها الجوهرية عن المركز المالي الحقيقي للشركة ونتائج أعمالها وتدفقاتها النقدية عن السنة المالية المنتهية في ذلك التاريخ، وفقاً لمعايير المحاسبة المصرية (EAS) وفي ضوء القوانين واللوائح السارية، وتعتبر هذه النسخة الإلكترونية وثيقة أصلية معتمدة ومطابقة لدفاتر وسجلات الشركة المنتظمة.
+                          </>
+                        )}
+                      </p>
+                    </>
+                  ) : isAuditorReport ? (
+                    /* ---------------- 2. Auditor Report Document Body ---------------- */
+                    <>
+                      <p>
+                        {isEn ? (
+                          <>
+                            To the Shareholders of <strong>{data.clientName || 'The Company'}</strong>: We have audited the accompanying financial statements of the company for the fiscal year ended <strong>{data.fiscalYear || '2024'}</strong>.
+                          </>
+                        ) : (
+                          <>
+                            إلى السادة / مساهمي وأصحاب شركة <strong>{data.clientName || 'العميل المعتمد'}</strong>: قمنا بمراجعة القوائم المالية المرفقة للشركة عن السنة المالية المنتهية في <strong>{data.fiscalYear || '2024'}</strong> وفقاً لمعايير المراجعة المصرية (ESA) والقانون 159 لسنة 1981.
+                          </>
+                        )}
+                      </p>
+
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-medium">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">الشركة / المنشأة:</span>
+                          <span className="font-black text-slate-900">{data.clientName || 'الشركة المعتمدة'}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">السنة المالية المشمولة:</span>
+                          <span className="font-bold text-slate-900 font-mono">{data.fiscalYear || '2024'}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">نوع الرأي المهني:</span>
+                          <span className="font-black text-emerald-800">رأي غير متحفظ (نظيف - Unqualified Opinion)</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-500">معايير المراجعة المطبقة:</span>
+                          <span className="font-bold text-slate-900">معايير المراجعة المصرية (ESA) وقانون مزاولة مهنة المحاسبة 133 لسنة 1951</span>
+                        </div>
                       </div>
-                    )}
 
-                    {data.fiscalYear && (
-                      <div className="flex items-center justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-500">
-                          {isEn ? 'Audit Fiscal Period:' : 'السنة المالية المشمولة بالفحص:'}
-                        </span>
-                        <span className="font-bold text-slate-900">{data.fiscalYear}</span>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        في رأينا، تعبر القوائم المالية بعدالة ووضوح في كافة جوانبها الهامة عن المركز المالي للشركة ونتائج أعمالها وتدفقاتها النقدية عن السنة المالية المنتهية في ذلك التاريخ وفقاً لمعايير المحاسبة المصرية (EAS).
+                      </p>
+                    </>
+                  ) : isTaxDeclaration ? (
+                    /* ---------------- 3. Tax Declaration Document Body ---------------- */
+                    <>
+                      <p>
+                        يشهد مكتب المحاسب القانوني ومراقب الحسابات <strong>{data.auditorName || 'محمد جميل مرعي'}</strong> باعتماد الإقرار الضريبي ومرفقاته لشركة/ممولي: <strong>{data.clientName || 'الممول المعتمد'}</strong> عن الفترة الضريبية <strong>{data.fiscalYear || '2024'}</strong>.
+                      </p>
+
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-medium">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">الممول / المنشأة:</span>
+                          <span className="font-black text-slate-900">{data.clientName}</span>
+                        </div>
+                        {data.taxCardNo && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-500">رقم التسجيل / البطاقة الضريبية:</span>
+                            <span className="font-mono font-bold text-slate-900">{data.taxCardNo}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">السنة / الفترة الضريبية:</span>
+                          <span className="font-mono font-bold text-slate-900">{data.fiscalYear || '2024'}</span>
+                        </div>
+                        {data.amount !== undefined && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200 bg-emerald-50/70 p-2 rounded-lg">
+                            <span className="text-emerald-950 font-bold">صافي الضريبة / الوعاء المعتمد:</span>
+                            <span className="font-mono font-black text-emerald-950 text-sm sm:text-base">
+                              {formatEgyptianCurrency(data.amount)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-500">السند القانوني:</span>
+                          <span className="font-bold text-slate-900">قانون الإجراءات الضريبية الموحد 206 لسنة 2020 وقانون 91 لسنة 2005</span>
+                        </div>
                       </div>
-                    )}
 
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-slate-500">
-                        {isEn ? 'Addressed To:' : 'الجهة الموجه إليها الشهادة:'}
-                      </span>
-                      <span className="font-bold text-slate-900">
-                        {data.recipient || (isEn ? 'Official Authorities & Banks' : 'الجهات الرسمية والمصرفية')}
-                      </span>
-                    </div>
-                  </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        الإقرار مطابق للدفاتر والسجلات المحاسبية المنتظمة المؤيدة بمستندات صحيحة ومقدم عبر منظومة مصلحة الضرائب المصرية (ETA).
+                      </p>
+                    </>
+                  ) : isInvoice ? (
+                    /* ---------------- 4. Invoice Document Body ---------------- */
+                    <>
+                      <p>
+                        فاتورة إلكترونية معتمدة صادرة من مكتب المحاسب القانوني ومراقب الحسابات <strong>{data.auditorName || 'محمد جميل مرعي'}</strong> لصالح: <strong>{data.clientName || 'العميل'}</strong> مقابل خدمات المحاسبة والمراجعة القانونية.
+                      </p>
 
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {isEn ? (
-                      <>
-                        This attestation was issued to be submitted to <strong>{data.recipient || 'Official Authorities'}</strong> for the purpose of <strong>{data.purpose || 'Proof of Solvency and Financial Verification'}</strong>. This electronic record constitutes a valid, legally verified document matching official office registers.
-                      </>
-                    ) : (
-                      <>
-                        وقد أُعطيت هذه الشهادة لتقديمها إلى <strong>{data.recipient || 'الجهات الرسمية'}</strong> لغرض <strong>{data.purpose || 'إثبات الملاءة والاعتماد المالي'}</strong>، وتعتبر هذه النسخة الإلكترونية وثيقة أصلية معتمدة تم التحقق من سلامتها الرقمية وتطابقها التام مع سجلات المكتب.
-                      </>
-                    )}
-                  </p>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-medium">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">رقم الفاتورة:</span>
+                          <span className="font-mono font-black text-slate-900">{data.docNumber}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">العميل / الجهة:</span>
+                          <span className="font-black text-slate-900">{data.clientName}</span>
+                        </div>
+                        {data.amount !== undefined && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200 bg-purple-50 p-2 rounded-lg">
+                            <span className="text-purple-950 font-bold">إجمالي قيمة الفاتورة المستحق:</span>
+                            <span className="font-mono font-black text-purple-950 text-sm sm:text-base">
+                              {formatEgyptianCurrency(data.amount)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-500">تاريخ الإصدار:</span>
+                          <span className="font-mono font-bold text-slate-900">{issueDateFormatted}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        الفاتورة صادرة وموثقة بالسجلات الرسمية للنظام ومطابقة لضوابط مصلحة الضرائب المصرية.
+                      </p>
+                    </>
+                  ) : (
+                    /* ---------------- 5. Certificate Document Body (Default) ---------------- */
+                    <>
+                      <p>
+                        {isEn ? (
+                          <>
+                            The office of Certified Public Accountant & Statutory Auditor <strong>{data.auditorName || 'Mohamed Gamil Marei'}</strong>, registered with the Ministry of Finance under License No. <strong>({data.licenseNumber || '43122'})</strong>, certifies that based on documentary audit and examination of official books:
+                          </>
+                        ) : (
+                          <>
+                            يشهد مكتب المحاسب القانوني ومراقب الحسابات <strong>{data.auditorName || 'محمد جميل مرعي'}</strong>، المقيد بسجل المحاسبين والمراجعين بوزارة المالية تحت رقم <strong>({data.licenseNumber || 'س.م.م 43122'})</strong>، بأنه بناءً على الفحص المستندي والمراجعة المحاسبية من واقع الدفاتر والسجلات والمستندات المؤيدة:
+                          </>
+                        )}
+                      </p>
+
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-medium">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-500">{isEn ? 'Client / Beneficiary:' : 'اسم العميل / المستفيد:'}</span>
+                          <span className="font-black text-slate-900">{data.clientName || 'العميل المعتمد'}</span>
+                        </div>
+
+                        {(data.nationalId || data.commercialRegNo || data.taxCardNo) && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-500">
+                              {isEn ? 'National ID / CR / Tax Card:' : 'الرقم القومي / السجل / البطاقة الضريبية:'}
+                            </span>
+                            <span className="font-mono font-bold text-slate-900">
+                              {data.nationalId || data.commercialRegNo || data.taxCardNo}
+                            </span>
+                          </div>
+                        )}
+
+                        {data.amount !== undefined && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200 bg-emerald-50/70 p-2 rounded-lg">
+                            <span className="text-emerald-950 font-bold">
+                              {isEn ? 'Audited & Certified Net Amount:' : 'المبلغ المالي المعتمد والمحقق:'}
+                            </span>
+                            <span className="font-mono font-black text-emerald-950 text-sm sm:text-base">
+                              {formatEgyptianCurrency(data.amount)}
+                            </span>
+                          </div>
+                        )}
+
+                        {data.monthlyAmount !== undefined && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-500">
+                              {isEn ? 'Equivalent Monthly Average:' : 'المتوسط المالي الشهري المعادل:'}
+                            </span>
+                            <span className="font-mono font-bold text-slate-900">
+                              {formatEgyptianCurrency(data.monthlyAmount)}
+                            </span>
+                          </div>
+                        )}
+
+                        {data.fiscalYear && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-500">
+                              {isEn ? 'Audit Fiscal Period:' : 'السنة المالية المشمولة بالفحص:'}
+                            </span>
+                            <span className="font-bold text-slate-900">{data.fiscalYear}</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-500">
+                            {isEn ? 'Addressed To:' : 'الجهة الموجه إليها الشهادة:'}
+                          </span>
+                          <span className="font-bold text-slate-900">
+                            {data.recipient || (isEn ? 'Official Authorities & Banks' : 'الجهات الرسمية والمصرفية')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {isEn ? (
+                          <>
+                            This attestation was issued to be submitted to <strong>{data.recipient || 'Official Authorities'}</strong> for the purpose of <strong>{data.purpose || 'Proof of Solvency and Financial Verification'}</strong>. This electronic record constitutes a valid, legally verified document matching official office registers.
+                          </>
+                        ) : (
+                          <>
+                            وقد أُعطيت هذه الشهادة لتقديمها إلى <strong>{data.recipient || 'الجهات الرسمية'}</strong> لغرض <strong>{data.purpose || 'إثبات الملاءة والاعتماد المالي'}</strong>، وتعتبر هذه النسخة الإلكترونية وثيقة أصلية معتمدة تم التحقق من سلامتها الرقمية وتطابقها التام مع سجلات المكتب.
+                          </>
+                        )}
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* Footer Stamp & Verification Seal */}
@@ -458,7 +707,7 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
 
               {/* Details Cards */}
               <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                   <div>
                     <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
                       {isEn ? 'Document Type:' : 'نوع المستند المعتمد:'}
@@ -475,6 +724,15 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
                     <span className="text-xs sm:text-sm font-black text-emerald-700 dark:text-emerald-400 font-mono tracking-wider flex items-center gap-1.5">
                       <Hash className="w-4 h-4 text-emerald-600" />
                       {data.docNumber || 'CERT-2026-OFFICIAL'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
+                      {isEn ? 'Database Permanent Record ID:' : 'معرف السجل الثابت بقاعدة البيانات:'}
+                    </span>
+                    <span className="text-xs sm:text-sm font-black text-blue-700 dark:text-blue-400 font-mono tracking-wider flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                      {data.recordId || data.docNumber || 'RECORD-LINKED'}
                     </span>
                   </div>
                 </div>
@@ -500,23 +758,50 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
-                      {isEn ? 'Certified Net Amount:' : 'المبلغ المالي المعتمد:'}
-                    </span>
-                    <span className="text-sm sm:text-base font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                      {data.amount !== undefined ? formatEgyptianCurrency(data.amount) : 'مبين بمتن الشهادة'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
-                      {isEn ? 'Issue & Attestation Date:' : 'تاريخ الإصدار والاعتماد:'}
-                    </span>
-                    <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4 text-slate-500" />
-                      {issueDateFormatted}
-                    </span>
-                  </div>
+                  {isFinancialStatements ? (
+                    <>
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
+                          {isEn ? 'Net Profit / Fiscal Result:' : 'صافي ربح / نتائج النشاط عن العام:'}
+                        </span>
+                        <span className="text-sm sm:text-base font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                          {data.netProfit !== undefined
+                            ? formatEgyptianCurrency(data.netProfit)
+                            : (data.amount !== undefined ? formatEgyptianCurrency(data.amount) : 'مبين بالقوائم المعتمدة')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
+                          {isEn ? 'Total Certified Assets:' : 'إجمالي الأصول (قائمة المركز المالي):'}
+                        </span>
+                        <span className="text-sm sm:text-base font-black text-blue-700 dark:text-blue-400 font-mono">
+                          {data.totalAssets !== undefined
+                            ? formatEgyptianCurrency(data.totalAssets)
+                            : (data.amount !== undefined ? formatEgyptianCurrency(data.amount) : 'مبين بالقوائم المعتمدة')}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
+                          {isEn ? 'Certified Net Amount:' : 'المبلغ المالي المعتمد:'}
+                        </span>
+                        <span className="text-sm sm:text-base font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                          {data.amount !== undefined ? formatEgyptianCurrency(data.amount) : 'مبين بمتن المستند'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
+                          {isEn ? 'Issue & Attestation Date:' : 'تاريخ الإصدار والاعتماد:'}
+                        </span>
+                        <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Calendar className="w-4 h-4 text-slate-500" />
+                          {issueDateFormatted}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

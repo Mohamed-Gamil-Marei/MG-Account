@@ -523,7 +523,7 @@ export default function App() {
           />
         );
 
-      // 1. Accounting Hub (الدورة المحاسبية العامة)
+      // 1. Accounting & Financial Statements Hub (الحسابات والقوائم المالية المعتمدة)
       case 'ACCOUNTING_HUB':
         return <AccountingHubView state={state} initialSubTab="JOURNAL_ENTRIES" fiscalYear={selectedFiscalYear} />;
       case 'CHART_OF_ACCOUNTS':
@@ -534,6 +534,11 @@ export default function App() {
         return <AccountingHubView state={state} initialSubTab="GENERAL_LEDGER" fiscalYear={selectedFiscalYear} />;
       case 'TRIAL_BALANCE':
         return <AccountingHubView state={state} initialSubTab="TRIAL_BALANCE" fiscalYear={selectedFiscalYear} />;
+      case 'FINANCIAL_STATEMENTS':
+      case 'FINANCIAL_DOSSIER_GENERATOR':
+      case 'FINANCIAL_NOTES':
+      case 'AUDITOR_REPORT':
+        return <AccountingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
       case 'FIXED_ASSETS':
         return <AccountingHubView state={state} initialSubTab="FIXED_ASSETS" fiscalYear={selectedFiscalYear} />;
       case 'BANK_RECONCILIATION':
@@ -543,24 +548,15 @@ export default function App() {
       case 'CURRENCY_EXCHANGE_RATES':
         return <AccountingHubView state={state} initialSubTab="CURRENCY_EXCHANGE_RATES" fiscalYear={selectedFiscalYear} />;
 
-      // 2. Financial Reporting Hub (القوائم والتقارير المالية)
+      // 2. Credit, Feasibility & Advisory Hub (الائتمان ودراسات الجدوى والاستشارات)
       case 'FINANCIAL_REPORTING_HUB':
-        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
-      case 'FINANCIAL_DOSSIER_GENERATOR':
-        return <FinancialDossierGeneratorView state={state} onNavigate={(tab) => setActiveTab(tab)} />;
-      case 'FINANCIAL_STATEMENTS':
-        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
-      case 'BUDGET_PLANNER':
-        return <FinancialReportingHubView state={state} initialSubTab="BUDGET_PLANNER" fiscalYear={selectedFiscalYear} />;
-      case 'CASH_FLOW_PREDICTOR':
-        return <FinancialReportingHubView state={state} initialSubTab="CASH_FLOW_PREDICTOR" fiscalYear={selectedFiscalYear} />;
-      case 'FINANCIAL_NOTES':
-        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_NOTES" fiscalYear={selectedFiscalYear} />;
-      case 'AUDITOR_REPORT':
-        return <FinancialReportingHubView state={state} initialSubTab="AUDITOR_REPORT" fiscalYear={selectedFiscalYear} />;
-      case 'FINANCIAL_SIMULATOR':
-        return <FinancialReportingHubView state={state} initialSubTab="FINANCIAL_SIMULATOR" fiscalYear={selectedFiscalYear} />;
       case 'CREDIT_SIMULATOR':
+        return <FinancialReportingHubView state={state} initialSubTab="CREDIT_SIMULATOR" fiscalYear={selectedFiscalYear} />;
+      case 'BUDGET_PLANNER':
+      case 'CASH_FLOW_PREDICTOR':
+      case 'BUDGET_AND_CASHFLOW':
+        return <FinancialReportingHubView state={state} initialSubTab="BUDGET_AND_CASHFLOW" fiscalYear={selectedFiscalYear} />;
+      case 'FINANCIAL_SIMULATOR':
         return <FinancialReportingHubView state={state} initialSubTab="CREDIT_SIMULATOR" fiscalYear={selectedFiscalYear} />;
       case 'CERTIFICATES':
         return <FinancialReportingHubView state={state} initialSubTab="CERTIFICATES" fiscalYear={selectedFiscalYear} />;
@@ -937,9 +933,8 @@ export default function App() {
               {[
                 { id: 'JOURNAL_ENTRIES', label: 'قيود اليومية', icon: Layers },
                 { id: 'CHART_OF_ACCOUNTS', label: 'دليل الحسابات', icon: FolderTree },
-                { id: 'TRIAL_BALANCE', label: 'التقارير المالية الموحدة والميزان', icon: FileSpreadsheet },
+                { id: 'FINANCIAL_STATEMENTS', label: 'القوائم المالية والميزان (EAS)', icon: FileSpreadsheet },
                 { id: 'MULTI_TENANT_WORKSPACES', label: 'بيئات الشركات والمصانع', icon: Factory },
-                { id: 'FINANCIAL_DOSSIER_GENERATOR', label: 'المولد المالي ومختبر الفحص', icon: Sparkles },
                 { id: 'TAX_TRACKER', label: 'الفحص والضرائب', icon: Percent },
                 { id: 'CLIENTS_ARCHIVE', label: 'الشركات والعملاء', icon: Building },
               ].map((tab) => {

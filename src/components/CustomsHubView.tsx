@@ -56,6 +56,7 @@ import { PrintService } from '../services/PrintService';
 import { DemurrageSentinelTab } from './customs/DemurrageSentinelTab';
 import { FxHedgingEas13Tab } from './customs/FxHedgingEas13Tab';
 import { NafezaDirectParserTab } from './customs/NafezaDirectParserTab';
+import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 
 interface CustomsHubViewProps {
   state: DatabaseState;
@@ -264,7 +265,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100 overflow-y-auto">
+    <div id="customs-hub-printable-container" className="flex flex-col h-full bg-slate-950 text-slate-100 overflow-y-auto">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-400 font-bold text-sm animate-bounce">
@@ -296,24 +297,28 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => {
-                setSelectedShipment(null);
-                setIsEditModalOpen(true);
-              }}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>إدراج شحنة</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab('LANDED_COST_CALCULATOR')}
-              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Calculator className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>حاسبة التكلفة الإنزالية</span>
-            </button>
+            {/* Unified Multi-Format Toolbar */}
+            <ScreenActionToolbar
+              modelType="CUSTOMS"
+              title="منظومة الجمارك والتجارة الخارجية والتكلفة الإنزالية"
+              targetElementId="customs-hub-printable-container"
+              compact={true}
+              actions={[
+                {
+                  label: 'إدراج شحنة',
+                  icon: Plus,
+                  onClick: () => {
+                    setSelectedShipment(null);
+                    setIsEditModalOpen(true);
+                  },
+                },
+                {
+                  label: 'حاسبة التكلفة',
+                  icon: Calculator,
+                  onClick: () => setActiveSubTab('LANDED_COST_CALCULATOR'),
+                },
+              ]}
+            />
           </div>
         </div>
 

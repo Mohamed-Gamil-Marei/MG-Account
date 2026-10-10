@@ -50,17 +50,30 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
     return computeAccountBalances(state.accounts, filteredEntries);
   }, [state.accounts, filteredEntries]);
 
-  // Filter leaf/analytical accounts
-  const leafAccounts = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
+  const parentIds = useMemo(() => {
+    return new Set(state.accounts.map((a) => a.parentId).filter(Boolean));
+  }, [state.accounts]);
+
+  // True analytical/leaf accounts or accounts that have active balances/movements
+  const allLeafAccounts = useMemo(() => {
     return calculatedAccounts.filter(
       (a) =>
-        a.level >= 2 &&
-        (!term || a.name.toLowerCase().includes(term) || a.code.includes(term))
+        !parentIds.has(a.id) ||
+        (a.movementDebit > 0 || a.movementCredit > 0) ||
+        (a.openingBalanceDebit > 0 || a.openingBalanceCredit > 0)
     );
-  }, [calculatedAccounts, searchTerm]);
+  }, [calculatedAccounts, parentIds]);
 
-  // Calculate Totals
+  // Filter leaf accounts for UI display based on search
+  const displayedAccounts = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return allLeafAccounts;
+    return allLeafAccounts.filter(
+      (a) => a.name.toLowerCase().includes(term) || a.code.includes(term)
+    );
+  }, [allLeafAccounts, searchTerm]);
+
+  // Calculate Totals over all leaf accounts (guaranteeing search doesn't skew totals)
   const {
     totalOpeningDebit,
     totalOpeningCredit,
@@ -76,7 +89,7 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
     let endDeb = 0;
     let endCred = 0;
 
-    for (const a of leafAccounts) {
+    for (const a of allLeafAccounts) {
       opDeb += a.openingBalanceDebit || 0;
       opCred += a.openingBalanceCredit || 0;
       movDeb += a.movementDebit || 0;
@@ -93,7 +106,7 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
       totalEndingDebit: endDeb,
       totalEndingCredit: endCred,
     };
-  }, [leafAccounts]);
+  }, [allLeafAccounts]);
 
   const isOpeningBalanced = Math.abs(totalOpeningDebit - totalOpeningCredit) < 0.01;
   const isMovementBalanced = Math.abs(totalMovementDebit - totalMovementCredit) < 0.01;
@@ -101,7 +114,7 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
 
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
-    const rows = leafAccounts.map((a) => ({
+    const rows = displayedAccounts.map((a) => ({
       'كود الحساب': a.code,
       'اسم الحساب': a.name,
       'طبيعة الحساب': a.nature === 'DEBIT' ? 'مدين' : 'دائن',
@@ -134,6 +147,9 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
   return (
     <UnifiedScreenCard
       id="trial-balance-card"
+      modelType="TRIAL_BALANCE"
+      printSelector="#trial-balance-report"
+      targetElementId="trial-balance-report"
       title="ميزان المراجعة بالمجاميع والأرصدة"
       subtitle={
         activeClient
@@ -266,7 +282,7 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({ state, fisca
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {leafAccounts.map((acc, idx) => (
+              {displayedAccounts.map((acc, idx) => (
                 <tr
                   key={acc.id}
                   className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${

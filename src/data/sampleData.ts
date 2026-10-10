@@ -38,6 +38,10 @@ export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   systemSerial: 'CPA-SYS-2026-MG120-PRO-EGY',
   activationKey: 'ACT-CPA-99482-EGY-AUTH',
   notes: 'مكتب معتمد لدى مصلحة الضرائب المصرية، الهيئة العامة للرقابة المالية، والبنك المركزي المصري',
+  defaultTaxEnabled: true,
+  defaultTaxRate: 14,
+  defaultWhtEnabled: true,
+  defaultWhtRate: 1,
 };
 
 export const DEFAULT_CLIENT_FOLDERS: ClientDocumentFolder[] = [
@@ -441,11 +445,11 @@ export const SAMPLE_JOURNAL_ENTRIES: JournalEntry[] = [
     serialNumber: 'JV-2026-0001',
     date: '2026-01-01',
     description: 'قيد إثبات الأرصدة الافتتاحية للمنشأة للعام المالي 2026',
-    totalDebit: 4343000,
-    totalCredit: 4343000,
+    totalDebit: 4715000,
+    totalCredit: 4715000,
     isPosted: true,
     entryType: 'GENERAL',
-    qrPayload: 'EGY-ACC-MGM|JV-2026-0001|2026-01-01|4343000.00|POSTED',
+    qrPayload: 'EGY-ACC-MGM|JV-2026-0001|2026-01-01|4715000.00|POSTED',
     auditTrail: [
       { timestamp: '2026-01-01 09:00:00', user: 'محمد جميل مرعي (محاسب قانوني)', action: 'CREATE', details: 'إنشاء القيد الافتتاحي واعتماده' },
       { timestamp: '2026-01-01 09:05:00', user: 'محمد جميل مرعي', action: 'POST', details: 'ترحيل نهائي لدفتر الأستاذ العام' },
@@ -465,7 +469,7 @@ export const SAMPLE_JOURNAL_ENTRIES: JournalEntry[] = [
       { id: 'l12', accountId: 'acc-2210', accountCode: '2210', accountName: 'الموردون والدائنون التجاريون', debit: 0, credit: 380000, description: 'أرصدة افتتاحية' },
       { id: 'l13', accountId: 'acc-3100', accountCode: '3100', accountName: 'رأس المال المدفوع والمصدر', debit: 0, credit: 2500000, description: 'أرصدة افتتاحية' },
       { id: 'l14', accountId: 'acc-3200', accountCode: '3200', accountName: 'الاحتياطي القانوني (5% سنوياً)', debit: 0, credit: 250000, description: 'أرصدة افتتاحية' },
-      { id: 'l15', accountId: 'acc-3400', accountCode: '3400', accountName: 'أرباح (خسائر) مرحلة من أعوام سابقة', debit: 0, credit: 413000, description: 'أرصدة افتتاحية' },
+      { id: 'l15', accountId: 'acc-3400', accountCode: '3400', accountName: 'أرباح (خسائر) مرحلة من أعوام سابقة', debit: 0, credit: 785000, description: 'أرصدة افتتاحية' },
     ],
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',

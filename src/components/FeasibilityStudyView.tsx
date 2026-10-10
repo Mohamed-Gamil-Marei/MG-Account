@@ -86,7 +86,7 @@ export const FeasibilityStudyView: React.FC<FeasibilityStudyViewProps> = ({ stat
   };
 
   return (
-    <div className="space-y-5">
+    <div id="feasibility-study-document" className="space-y-5">
       {/* Header */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -104,7 +104,9 @@ export const FeasibilityStudyView: React.FC<FeasibilityStudyViewProps> = ({ stat
         <div className="flex items-center gap-2 flex-wrap">
           <ScreenActionToolbar
             modelType="FEASIBILITY"
-            title="دراسات الجدوى الاقتصادية والمالية"
+            title={`دراسة جدوى - ${projectName}`}
+            targetElementId="feasibility-study-document"
+            printSelector="#feasibility-study-document"
             showImport={false}
           />
         </div>

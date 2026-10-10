@@ -148,6 +148,9 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ state 
     <>
       <UnifiedScreenCard
         id="chart-of-accounts-card"
+        modelType="ACCOUNTS"
+        printSelector="#chart-of-accounts-card"
+        targetElementId="chart-of-accounts-card"
         title="دليل وشجرة الحسابات الموحدة"
         subtitle="الهيكل المالي المعتمد وفق معايير المحاسبة المصرية (EAS)"
         icon={FolderTree}

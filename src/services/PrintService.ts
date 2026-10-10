@@ -110,6 +110,8 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
 };
 
 export interface PrintElementOptions {
+  recordId?: string; // المعرف الثابت الفريد للسجل الحالي لضمان عدم حدوث أي تداخل في البيانات
+  documentId?: string;
   title?: string;
   orientation?: 'portrait' | 'landscape';
   pageSize?: 'A4' | 'A3' | 'Letter' | 'Thermal80mm';
@@ -126,11 +128,59 @@ export interface PrintElementOptions {
 
 export class PrintService {
   /**
+   * Tracks active print jobs to strictly prevent race conditions or cross-contamination
+   */
+  private static activePrintJobs = new Set<string>();
+
+  /**
    * Retrieves active print settings from local database preferences
    */
   public static getSettings(): PrintSettings {
     const prefs = db.getState().preferences;
     return prefs.printSettings || DEFAULT_PRINT_SETTINGS;
+  }
+
+  /**
+   * Dedicated print function requiring an immutable record ID to guarantee no data crossover.
+   */
+  public static async printRecordById(
+    recordId: string,
+    elementIdOrSelector: string = '',
+    options?: Omit<PrintElementOptions, 'recordId'>
+  ): Promise<boolean> {
+    if (!recordId || typeof recordId !== 'string' || recordId.trim() === '') {
+      console.warn('[PrintService] printRecordById called without a valid recordId.');
+    }
+    return this.printElementById(elementIdOrSelector, {
+      ...options,
+      recordId: recordId?.trim(),
+    });
+  }
+
+  /**
+   * Finds target printable element strictly bound to a specific record ID to avoid data bleeding
+   */
+  public static findPrintableElementForRecord(
+    recordId?: string,
+    elementIdOrSelector?: string
+  ): HTMLElement | null {
+    if (recordId && recordId.trim()) {
+      const cleanRecordId = recordId.trim();
+      // 1. Direct match by data-record-id attribute
+      const byRecordAttr = document.querySelector<HTMLElement>(`[data-record-id="${cleanRecordId}"]`);
+      if (byRecordAttr && byRecordAttr.offsetHeight > 40) {
+        return byRecordAttr;
+      }
+
+      // 2. Direct match by element ID matching or containing recordId
+      const byExactId = document.getElementById(cleanRecordId) || document.getElementById(`print-record-${cleanRecordId}`);
+      if (byExactId && byExactId.offsetHeight > 40) {
+        return byExactId;
+      }
+    }
+
+    // 3. Fallback to specified selector or ID
+    return this.findPrintableElement(elementIdOrSelector);
   }
 
   /**
@@ -198,7 +248,8 @@ export class PrintService {
    */
   public static findPrintableElement(elementIdOrSelector?: string): HTMLElement | null {
     if (elementIdOrSelector) {
-      const byId = document.getElementById(elementIdOrSelector);
+      const cleanId = elementIdOrSelector.replace(/^#/, '');
+      const byId = document.getElementById(cleanId);
       if (byId) return byId;
 
       try {
@@ -212,23 +263,46 @@ export class PrintService {
     const fallbacks = [
       '#printable-report-content',
       '#financial-statements-container',
+      '#trial-balance-report',
+      '#journal-entries-table-container',
+      '#printable-journal-book',
+      '#general-ledger-container',
+      '#fixed-assets-container',
+      '#office-treasury-table-container',
+      '#office-treasury-voucher-print',
+      '#payroll-payslip-canvas',
+      '#chart-of-accounts-card',
+      '#clients-archive-unified-card',
+      '#tax-agenda-printable-container',
+      '#tax-declaration-paper',
       '#official-certificate-document',
+      '#auditor-report-paper',
       '#credit-financials-container',
       '#credit-printable-dossier',
-      '#auditor-report-paper',
+      '#feasibility-study-document',
+      '#feasibility-study-paper',
+      '#audit-working-papers-container',
+      '#customs-hub-printable-container',
+      '#customs-dossier-printable',
+      '#invoice-print-container',
+      '#official-invoice-document',
       '#printable-preview-canvas',
       '#egyptian-official-tax-form',
-      '#office-treasury-voucher-print',
-      '#feasibility-study-document',
       '[data-printable="true"]',
       '.printable-canvas',
       '.printable-content',
+      '.accounting-table',
+      'main',
     ];
 
     for (const sel of fallbacks) {
-      const el = document.querySelector<HTMLElement>(sel);
-      if (el && el.offsetHeight > 40) {
-        return el;
+      try {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el && el.offsetHeight > 40) {
+          return el;
+        }
+      } catch {
+        // ignore
       }
     }
 
@@ -244,9 +318,12 @@ export class PrintService {
     elementIdOrSelector: string,
     options?: PrintElementOptions
   ): Promise<boolean> {
-    const targetElement = this.findPrintableElement(elementIdOrSelector);
+    const targetElement = options?.recordId
+      ? this.findPrintableElementForRecord(options.recordId, elementIdOrSelector)
+      : this.findPrintableElement(elementIdOrSelector);
+
     if (!targetElement) {
-      console.warn(`[PrintService] Target element '${elementIdOrSelector}' not found.`);
+      console.warn(`[PrintService] Target element '${elementIdOrSelector}' (recordId: '${options?.recordId || 'none'}') not found.`);
       window.print();
       return true;
     }
@@ -255,8 +332,13 @@ export class PrintService {
       options.onBeforePrint();
     }
 
-    // Clone element to sanitize and prepare for clean print
+    // Clone element to sanitize and prepare for clean isolated print
     const clone = targetElement.cloneNode(true) as HTMLElement;
+
+    if (options?.recordId) {
+      clone.setAttribute('data-record-id', options.recordId);
+      clone.setAttribute('data-print-isolated-record', options.recordId);
+    }
 
     // Convert interactive inputs and textareas to clean typography
     const inputs = clone.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
@@ -361,6 +443,66 @@ export class PrintService {
     else if (marginsMode === 'NONE') marginsCss = '0mm 0mm 0mm 0mm';
 
     const documentTitle = options?.title || document.title || 'مستند محاسبي معتمد';
+
+    // Auto-inject professional certified CPA Letterhead if missing and requested
+    const hasExistingHeader = !!clone.querySelector('.official-header, .injected-official-print-header, [data-official-header="true"], [data-letterhead="true"]');
+    if (options?.showLetterhead !== false && !hasExistingHeader) {
+      const dbState = db.getState();
+      const profile = dbState.officeProfile;
+      const clientCtx = dbState.activeClientContext;
+
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'injected-official-print-header';
+      headerDiv.setAttribute('data-official-header', 'true');
+      headerDiv.dir = 'rtl';
+      headerDiv.style.cssText = 'width: 100%; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2.5px solid #064e3b; display: flex; justify-content: space-between; align-items: flex-start; font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;';
+      headerDiv.innerHTML = `
+        <div style="text-align: right; line-height: 1.35;">
+          <div style="font-size: 13pt; font-weight: 900; color: #022c22;">${profile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات'}</div>
+          <div style="font-size: 10.5pt; font-weight: 800; color: #047857; margin-top: 1px;">المحاسب القانوني: ${profile?.auditorName || 'محمد جميل مرعي'}</div>
+          <div style="font-size: 8pt; font-weight: 600; color: #475569; margin-top: 1px;">سجل المحاسبين والمراجعين: ${profile?.licenseNumber || 'س.م.م 43122'} | بطاقة ضريبية: ${profile?.taxAuthorityRegNo || '654-987-321'}</div>
+          <div style="font-size: 7.5pt; color: #64748b;">هاتف: ${profile?.phone || '01003335360'} | ${profile?.address || 'جمهورية مصر العربية'}</div>
+        </div>
+        <div style="text-align: center; line-height: 1.35; padding: 0 10px;">
+          <div style="display: inline-block; padding: 4px 12px; background: #f0fdf4; border: 1.5px solid #059669; border-radius: 8px; font-size: 11pt; font-weight: 900; color: #064e3b;">
+            ${documentTitle}
+          </div>
+          ${clientCtx?.clientName ? `<div style="font-size: 9pt; font-weight: 700; color: #1e293b; margin-top: 3px;">المنشأة: ${clientCtx.clientName}</div>` : ''}
+          <div style="font-size: 7.5pt; color: #64748b; margin-top: 2px;">السنة المالية: ${clientCtx?.selectedFiscalYear || 2026} • معايير المحاسبة المصرية (EAS)</div>
+        </div>
+        <div style="text-align: left; line-height: 1.35;">
+          <div style="font-size: 8pt; font-weight: 700; color: #0f172a;">تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-EG')}</div>
+          <div style="font-size: 7.5pt; color: #64748b; font-family: monospace;">كود السجل: ${options?.recordId ? `<strong>${options.recordId}</strong>` : `EAS-DOC-${Date.now().toString().slice(-6)}`}</div>
+          <div style="font-size: 7.5pt; font-weight: 700; color: #059669; margin-top: 2px;">✓ مستند معتمد وموثق</div>
+        </div>
+      `;
+      clone.insertBefore(headerDiv, clone.firstChild);
+    }
+
+    // Auto-inject certified CPA Seal and Signature Footer if missing and requested
+    const hasExistingFooter = !!clone.querySelector('.official-stamp, .official-seal, .official-footer, [data-stamp="true"]');
+    if (options?.showStamp !== false && !hasExistingFooter) {
+      const profile = db.getState().officeProfile;
+      const footerDiv = document.createElement('div');
+      footerDiv.className = 'injected-official-print-footer avoid-page-break';
+      footerDiv.setAttribute('data-stamp', 'true');
+      footerDiv.dir = 'rtl';
+      footerDiv.style.cssText = 'width: 100%; margin-top: 18px; padding-top: 10px; border-top: 1.5px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif; page-break-inside: avoid; break-inside: avoid;';
+      footerDiv.innerHTML = `
+        <div style="text-align: right; font-size: 7.5pt; color: #64748b; line-height: 1.4;">
+          <div>منظومة المحاسب والمراجع القانوني المتكامل - كود الاعتماد المالي</div>
+          <div>معايير المحاسبة المصرية (EAS) وقانون الشركات 159 لسنة 1981</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 8.5pt; font-weight: 800; color: #0f172a;">المحاسب القانوني ومراقب الحسابات</div>
+          <div style="font-size: 9.5pt; font-weight: 900; color: #064e3b; margin-top: 1px;">${profile?.auditorName || 'محمد جميل مرعي'}</div>
+          <div style="margin-top: 3px; display: inline-block; border: 2px double #064e3b; border-radius: 9999px; padding: 2px 12px; font-size: 7.5pt; font-weight: 800; color: #064e3b;">
+            اعتماد وخاتم مراقب الحسابات
+          </div>
+        </div>
+      `;
+      clone.appendChild(footerDiv);
+    }
 
     // Build standalone HTML for isolated iframe
     const collectedStyles = this.extractDocumentStyles();
@@ -497,7 +639,7 @@ export class PrintService {
           </style>
         </head>
         <body>
-          <div class="print-document-wrapper" dir="rtl" style="width: 100%; max-width: 100%; margin: 0 auto; background: #fff; letter-spacing: normal;">
+          <div class="print-document-wrapper" dir="rtl" data-record-id="${options?.recordId || ''}" style="width: 100%; max-width: 100%; margin: 0 auto; background: #fff; letter-spacing: normal;">
             ${clone.outerHTML}
           </div>
         </body>

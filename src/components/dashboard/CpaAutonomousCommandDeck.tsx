@@ -346,12 +346,12 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
             className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border ${
               activeDeckTab === 'RADAR'
                 ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 border-slate-200 dark:border-slate-700'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
             <span>رادار المخاطر</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-600 text-white font-mono">
+            <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-rose-600 text-white font-mono font-bold">
               {radarAlerts.length}
             </span>
           </button>
@@ -361,34 +361,34 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
             className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border ${
               activeDeckTab === 'WAR_ROOM'
                 ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 border-slate-200 dark:border-slate-700'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
             }`}
           >
-            <Scale className="w-3.5 h-3.5 text-amber-300" />
+            <Scale className="w-3.5 h-3.5" />
             <span>محاكي فحص المأمور واللجان</span>
           </button>
 
           <button
             onClick={() => setActiveDeckTab('ZERO_ENTRY')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border ${
               activeDeckTab === 'ZERO_ENTRY'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
             }`}
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-300" />
+            <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>سحب وفحص الإكسيل الفوري</span>
           </button>
 
           <button
             onClick={() => setActiveDeckTab('WHATSAPP_DISPATCHER')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border ${
               activeDeckTab === 'WHATSAPP_DISPATCHER'
-                ? 'bg-teal-600 text-white shadow-md'
-                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
             }`}
           >
-            <MessageSquare className="w-3.5 h-3.5 text-teal-300" />
+            <MessageSquare className="w-3.5 h-3.5" />
             <span>إرسال الواتساب السريع</span>
           </button>
         </div>
@@ -397,12 +397,12 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
       {/* ================= TAB 1: RADAR (MORNING COMMAND MATRIX) ================= */}
       {activeDeckTab === 'RADAR' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-slate-300">
+          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
             <span className="font-bold flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-amber-400" />
+              <Clock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
               <span>مخرجات الفحص الاستباقي لبيانات وقيود وإقرارات الشركات اليوم:</span>
             </span>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
               يتم التحديث لحظياً بناءً على القوانين المصرية (قانون 91 و 206 و 18)
             </span>
           </div>
@@ -411,47 +411,47 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
             {radarAlerts.map((alert) => (
               <div
                 key={alert.id}
-                className="bg-slate-800/90 border border-slate-700/80 hover:border-slate-600 rounded-xl p-3.5 space-y-2.5 transition-all"
+                className="bg-slate-50/70 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 rounded-xl p-3.5 space-y-2.5 transition-all shadow-2xs"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      className={`w-2 h-2 rounded-sm shrink-0 ${
                         alert.level === 'CRITICAL'
                           ? 'bg-rose-500 animate-ping'
                           : alert.level === 'WARNING'
                           ? 'bg-amber-500'
-                          : 'bg-blue-400'
+                          : 'bg-blue-500'
                       }`}
                     />
-                    <h4 className="text-xs font-bold text-white leading-tight">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
                       {alert.title}
                     </h4>
                   </div>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 border ${
                       alert.level === 'CRITICAL'
-                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                         : alert.level === 'WARNING'
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                     }`}
                   >
                     {alert.level === 'CRITICAL' ? 'مخاطرة حرجة' : alert.level === 'WARNING' ? 'تنبيه تدقيق' : 'متابعة بوابات'}
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   {alert.description}
                 </p>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-700/60 text-xs">
-                  <span className="text-[11px] text-slate-400 font-mono">
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/60 text-xs">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                     الشركة: {alert.clientName}
                   </span>
                   <button
                     onClick={() => onNavigate(alert.actionTab)}
-                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                   >
                     <span>{alert.actionLabel}</span>
                     <ArrowRight className="w-3 h-3 rotate-180" />
@@ -466,14 +466,14 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
       {/* ================= TAB 2: TAX WAR-ROOM SIMULATOR ================= */}
       {activeDeckTab === 'WAR_ROOM' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2">
-              <Scale className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-bold text-slate-200">المنشأة محل المحاكاة والفحص:</span>
+              <Scale className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">المنشأة محل المحاكاة والفحص:</span>
               <select
                 value={selectedClientId}
                 onChange={(e) => setSelectedClientId(e.target.value)}
-                className="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1 font-bold"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-lg px-2.5 py-1 font-bold"
               >
                 {state.clients.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -483,7 +483,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
               </select>
             </div>
 
-            <div className="text-xs text-amber-300 font-bold flex items-center gap-1.5">
+            <div className="text-xs text-amber-700 dark:text-amber-300 font-bold flex items-center gap-1.5">
               <span>هامش مجمل الربح التقديري: {warRoomAnalysis.grossProfitMargin.toFixed(1)}%</span>
             </div>
           </div>
@@ -491,40 +491,42 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
           {/* 3 Inspection Checkpoints */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {warRoomAnalysis.defensePoints.map((item, idx) => (
-              <div key={idx} className="bg-slate-800/90 border border-slate-700 rounded-xl p-3 space-y-2">
+              <div key={idx} className="bg-slate-50/70 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-200 truncate">{item.point}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                    item.status === 'SAFE' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  <span className="text-xs font-bold text-slate-800 dark:text-amber-200 truncate">{item.point}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${
+                    item.status === 'SAFE'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                   }`}>
                     {item.status === 'SAFE' ? 'مطابق ومعتمد' : 'محل طعن وفروق'}
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-300 space-y-1">
+                <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
                   <div><strong>المرصود بالدفاتر:</strong> {item.observed}</div>
                   <div><strong>معيار الفحص:</strong> {item.benchmark}</div>
-                  <div className="text-slate-400 text-[10px]"><strong>السند القانوني:</strong> {item.lawArticle}</div>
+                  <div className="text-slate-500 dark:text-slate-400 text-[10px]"><strong>السند القانوني:</strong> {item.lawArticle}</div>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Defense Memo Generator */}
-          <div className="bg-slate-900/90 border border-indigo-900/80 rounded-xl p-3.5 space-y-2">
+          <div className="bg-slate-50 dark:bg-slate-900/90 border border-indigo-200 dark:border-indigo-900/80 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+              <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5" />
                 <span>مسودة مذكرة الدفاع المحاسبية والقانونية الجاهزة للطباعة والتقديم:</span>
               </span>
               <button
                 onClick={() => handleCopyText(warRoomAnalysis.suggestedDefenseMemo, 'defense-memo')}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors border border-slate-700"
+                className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700"
               >
-                {copiedText === 'defense-memo' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                {copiedText === 'defense-memo' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedText === 'defense-memo' ? 'تم النسخ!' : 'نسخ المذكرة'}</span>
               </button>
             </div>
-            <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap bg-slate-950/70 p-3 rounded-lg border border-slate-800 max-h-48 overflow-y-auto leading-relaxed">
+            <pre className="text-[11px] font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap bg-white dark:bg-slate-950/70 p-3 rounded-lg border border-slate-200 dark:border-slate-800 max-h-48 overflow-y-auto leading-relaxed">
               {warRoomAnalysis.suggestedDefenseMemo}
             </pre>
           </div>
@@ -534,30 +536,30 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
       {/* ================= TAB 3: ZERO-ENTRY SMART AUDIT DROP ZONE ================= */}
       {activeDeckTab === 'ZERO_ENTRY' && (
         <div className="space-y-3.5">
-          <div className="p-6 border-2 border-dashed border-indigo-500/50 hover:border-indigo-400 bg-slate-800/40 rounded-2xl text-center space-y-3 transition-colors">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center mx-auto border border-indigo-500/40 shadow-inner">
+          <div className="p-6 border-2 border-dashed border-indigo-300 dark:border-indigo-500/50 hover:border-indigo-400 bg-indigo-50/30 dark:bg-slate-800/40 rounded-2xl text-center space-y-3 transition-colors">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-600/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center mx-auto border border-indigo-200 dark:border-indigo-500/40 shadow-inner">
               <Upload className="w-6 h-6 animate-bounce" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-white">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                 منطقة السحب والإفراج الذكي لموازين المراجعة وشيتات الفواتير (Excel / CSV)
               </h4>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 اسحب أي شيت إكسيل لتشغيل الفحص اللحظي وكشف القيود المقلوبة وتوازن الميزان ومطابقة وعاء الضرائب فورياً
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-2 pt-1">
+            <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
               <button
                 onClick={() => handleSimulateDrop('TRIAL_BALANCE')}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 <span>تجربة سحب ميزان مراجعة (Trial Balance)</span>
               </button>
               <button
                 onClick={() => handleSimulateDrop('INVOICES')}
-                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>تجربة سحب شيت مبيعات وفواتير ETA</span>
@@ -567,40 +569,40 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
 
           {/* Audit Results Presentation */}
           {auditResults && (
-            <div className="bg-slate-800/90 border border-emerald-500/40 rounded-xl p-3.5 space-y-3 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-700 text-xs">
+            <div className="bg-slate-50 dark:bg-slate-800/90 border border-emerald-200 dark:border-emerald-500/40 rounded-xl p-3.5 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 text-xs">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="font-bold text-white">تقرير الفحص الفوري للملف: {uploadedFileName}</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-bold text-slate-900 dark:text-white">تقرير الفحص الفوري للملف: {uploadedFileName}</span>
                 </div>
-                <span className="text-emerald-300 font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                <span className="text-emerald-700 dark:text-emerald-300 font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
                   {auditResults.totalRows} بند مدقق
                 </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                  <span className="text-slate-400 block text-[11px]">إجمالي المدين:</span>
-                  <span className="font-mono font-bold text-blue-300">{formatEgyptianCurrency(auditResults.totalDebit)}</span>
+                <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">إجمالي المدين:</span>
+                  <span className="font-mono font-bold text-blue-600 dark:text-blue-300">{formatEgyptianCurrency(auditResults.totalDebit)}</span>
                 </div>
-                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                  <span className="text-slate-400 block text-[11px]">إجمالي الدائن:</span>
-                  <span className="font-mono font-bold text-emerald-300">{formatEgyptianCurrency(auditResults.totalCredit)}</span>
+                <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">إجمالي الدائن:</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-300">{formatEgyptianCurrency(auditResults.totalCredit)}</span>
                 </div>
-                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                  <span className="text-slate-400 block text-[11px]">فارق الاتزان:</span>
-                  <span className="font-mono font-bold text-emerald-400">0.00 ج.م (متزن تماماً)</span>
+                <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">فارق الاتزان:</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">0.00 ج.م (متزن تماماً)</span>
                 </div>
-                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                  <span className="text-slate-400 block text-[11px]">ملاحظات الفحص:</span>
-                  <span className="font-mono font-bold text-amber-300">{auditResults.suspiciousCount} ملاحظات</span>
+                <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">ملاحظات الفحص:</span>
+                  <span className="font-mono font-bold text-amber-600 dark:text-amber-300">{auditResults.suspiciousCount} ملاحظات</span>
                 </div>
               </div>
 
-              <div className="space-y-1 text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
                 {auditResults.warnings.map((w, idx) => (
                   <div key={idx} className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="w-1.5 h-1.5 rounded-sm bg-amber-500" />
                     <span>{w}</span>
                   </div>
                 ))}
@@ -609,7 +611,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   onClick={() => onNavigate('JOURNAL_ENTRIES')}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>توليد قيود اليومية المعيارية تلقائياً</span>
@@ -624,18 +626,18 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
       {activeDeckTab === 'WHATSAPP_DISPATCHER' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
           {/* Settings Column */}
-          <div className="space-y-3 bg-slate-800/80 p-3.5 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-sm text-teal-300 flex items-center gap-2">
+          <div className="space-y-3 bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
+            <h4 className="font-bold text-sm text-teal-700 dark:text-teal-300 flex items-center gap-2">
               <MessageSquare className="w-4 h-4" />
-              <span>إرسال إشعارات ومواقف معتمدة للعملاء بنقرة واحدة (بدون اشتراك API):</span>
+              <span>إرسال إشعارات ومواقف معتمدة للعملاء بنقرة واحدة:</span>
             </h4>
 
             <div>
-              <label className="block text-slate-300 font-bold mb-1">العميل المستلم:</label>
+              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">العميل المستلم:</label>
               <select
                 value={waTargetClientId}
                 onChange={(e) => setWaTargetClientId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 font-bold"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg p-2 font-bold"
               >
                 {state.clients.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -646,7 +648,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
             </div>
 
             <div>
-              <label className="block text-slate-300 font-bold mb-1">نوع الإشعار الرسمي:</label>
+              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">نوع الإشعار الرسمي:</label>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
                   { id: 'TAX_POSITION', label: 'الموقف الضريبي ومبلغ السداد' },
@@ -659,8 +661,8 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
                     onClick={() => setWaTemplateType(item.id as any)}
                     className={`p-2 rounded-lg text-[11px] font-bold text-right transition-colors cursor-pointer border ${
                       waTemplateType === item.id
-                        ? 'bg-teal-600 text-white border-teal-500 shadow-sm'
-                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                        ? 'bg-teal-600 text-white border-teal-500 shadow-2xs'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     {item.label}
@@ -670,41 +672,41 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
             </div>
 
             <div>
-              <label className="block text-slate-300 font-bold mb-1">ملاحظة إضافية مخصصة (اختياري):</label>
+              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">ملاحظة إضافية مخصصة (اختياري):</label>
               <input
                 type="text"
                 value={customWaNotes}
                 onChange={(e) => setCustomWaNotes(e.target.value)}
                 placeholder="أدخل أي ملاحظة تود إضافتها للرسالة..."
-                className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg p-2 text-xs"
               />
             </div>
           </div>
 
           {/* Preview & Dispatch Column */}
-          <div className="space-y-3 bg-slate-900/90 p-3.5 rounded-xl border border-slate-700 flex flex-col justify-between">
+          <div className="space-y-3 bg-white dark:bg-slate-900/90 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between shadow-2xs">
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-800">
-                <span className="font-bold text-slate-300">معاينة الرسالة الصادرة للواتساب:</span>
-                <span className="font-mono text-emerald-400">{waGeneratedMessage.phone}</span>
+              <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-bold text-slate-700 dark:text-slate-300">معاينة الرسالة الصادرة للواتساب:</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{waGeneratedMessage.phone}</span>
               </div>
-              <pre className="text-[11px] font-mono text-emerald-300 bg-slate-950 p-3 rounded-lg border border-slate-800 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
+              <pre className="text-[11px] font-mono text-emerald-800 dark:text-emerald-300 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
                 {waGeneratedMessage.text}
               </pre>
             </div>
 
-            <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-800">
+            <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => handleCopyText(waGeneratedMessage.text, 'wa-text')}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors border border-slate-700"
+                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700"
               >
-                {copiedText === 'wa-text' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedText === 'wa-text' ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedText === 'wa-text' ? 'تم النسخ!' : 'نسخ النص'}</span>
               </button>
 
               <button
                 onClick={handleSendWhatsApp}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>إرسال فوري عبر WhatsApp</span>

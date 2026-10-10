@@ -76,6 +76,25 @@ export interface AuditRecord {
   newValue?: any;
 }
 
+export interface FinancialActivityLog {
+  id: string;
+  timestamp: string;
+  userId?: string;
+  userName?: string;
+  userRole?: string;
+  statementType: 'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'TRIAL_BALANCE_SYNC' | 'GENERAL';
+  action: 'UPDATE_LINE' | 'ADD_CUSTOM_LINE' | 'DELETE_CUSTOM_LINE' | 'SYNC_TRIAL_BALANCE' | 'RESET_TO_LEDGER' | 'ARCHIVE_STATEMENT';
+  itemKey?: string;
+  itemName: string;
+  previousValue?: number | string;
+  newValue?: number | string;
+  variance?: number; // قيمة التعديل (الفارق)
+  notes?: string;
+  fiscalYear: number;
+  clientId?: string;
+  clientName?: string;
+}
+
 export interface JournalEntry {
   id: string;
   entryNumber: number;
@@ -759,6 +778,10 @@ export interface OfficeProfile {
   systemSerial?: string; // سريال المنظومة الرئيسي المشفر
   activationKey?: string; // كود التفعيل والترخيص الرقمي
   notes?: string;
+  defaultTaxEnabled?: boolean; // هل تطبق ضريبة القيمة المضافة افتراضياً
+  defaultTaxRate?: number; // النسبة الافتراضية لضريبة القيمة المضافة %
+  defaultWhtEnabled?: boolean; // هل يطبق خصم الأرباح التجارية أ.ت.ص افتراضياً
+  defaultWhtRate?: number; // النسبة الافتراضية للخصم %
 }
 
 // Tax Mandates & Task Scheduler Types

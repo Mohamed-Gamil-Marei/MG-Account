@@ -13,6 +13,7 @@ import { DatabaseState } from '../db/localDatabase';
 import { generateQrCodeSvg, buildAuditorReportQrText } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
 import { OfficialReportHeader } from './common/OfficialReportHeader';
+import { DocumentVerificationModal } from './common/DocumentVerificationModal';
 
 interface AuditorReportViewProps {
   state: DatabaseState;
@@ -22,6 +23,7 @@ interface AuditorReportViewProps {
 export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fiscalYear: initialFiscalYear }) => {
   const profile = state.officeProfile;
   const activeClient = state.clients.find((c) => c.id === state.activeClientContext?.clientId);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const [reportType, setReportType] = useState<'UNQUALIFIED' | 'QUALIFIED' | 'DISCLAIMER'>('UNQUALIFIED');
   const [clientCompanyName, setClientCompanyName] = useState(
@@ -44,13 +46,17 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
       ? 'رأي متحفظ (مع لفت انتباه)'
       : 'تقرير خاص بزيادة رأس المال والاندماج';
 
+  const reportRecordId = `AUD-${activeClient?.id || 'CLIENT'}-${fiscalYear}`;
+
   const qrPayload = buildAuditorReportQrText({
+    reportId: reportRecordId,
+    clientId: activeClient?.id,
     auditorName: profile.auditorName,
     licenseNumber: profile.licenseNumber,
     companyName: clientCompanyName,
     fiscalYear,
     opinion: opinionText,
-    refNumber: `AUD-EGY-${fiscalYear}-8821`,
+    refNumber: reportRecordId,
   });
 
   return (
@@ -72,6 +78,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
         <div className="flex items-center gap-2 flex-wrap">
           <ScreenActionToolbar
             modelType="AUDITOR_REPORT"
+            recordId={reportRecordId}
             title="تقرير مراقب الحسابات المستقل"
             targetElementId="auditor-report-paper"
             showImport={false}
@@ -108,6 +115,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
       {/* Official Certificate Paper Container */}
       <div
         id="auditor-report-paper"
+        data-record-id={reportRecordId}
         data-printable="true"
         dir="rtl"
         className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-12 space-y-6 text-slate-800 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 font-['Cairo',sans-serif]"
@@ -217,16 +225,56 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
               <span className="text-[7px] text-slate-500 mt-1 font-sans">(بصمة الختم الحي)</span>
             </div>
 
-            <div
-              data-qr-container="true"
-              className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
-              dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(qrPayload, 105),
-              }}
-            />
+            <div className="text-center">
+              <div
+                data-qr-container="true"
+                onClick={() => setIsQrModalOpen(true)}
+                className="qr-print-container bg-white p-1 rounded-lg border border-slate-200 cursor-pointer hover:border-emerald-600 hover:shadow-md transition-all group"
+                title="انقر للمعاينة والتحقق الرقمي من صحة تقرير مراقب الحسابات"
+              >
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: generateQrCodeSvg(qrPayload, 105),
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQrModalOpen(true)}
+                className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold mt-1 flex items-center justify-center gap-1 mx-auto cursor-pointer transition-colors no-print"
+                title="معاينة شاشة التحقق الرسمية لتقرير مراقب الحسابات"
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                <span>فحص اعتماد الـ QR</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Official Auditor's Report Verification Modal */}
+      {isQrModalOpen && (
+        <DocumentVerificationModal
+          data={{
+            recordId: reportRecordId,
+            clientId: activeClient?.id,
+            docType: 'تقرير مراقب الحسابات المستقل',
+            docNumber: reportRecordId,
+            clientName: clientCompanyName,
+            fiscalYear: fiscalYear,
+            commercialRegNo: activeClient?.commercialRegistrationNo,
+            taxCardNo: activeClient?.taxCardNo,
+            auditorName: profile.auditorName,
+            licenseNumber: profile.licenseNumber,
+            firmName: profile.firmName,
+            date: new Date().toISOString().slice(0, 10),
+            recipient: 'السادة / مساهمي وأصحاب الشركة والجهات الرسمية',
+            purpose: `إبداء الرأي المهني في القوائم المالية: ${opinionText} وفقاً لمعايير المراجعة المصرية والقانون 159 لسنة 1981`,
+            mode: 'encrypted_pdf',
+          }}
+          onClose={() => setIsQrModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

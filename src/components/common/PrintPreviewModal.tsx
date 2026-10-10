@@ -22,10 +22,13 @@ import {
 } from 'lucide-react';
 import { PrintService, PrintElementOptions } from '../../services/PrintService';
 import { exportElementToPdf } from '../../utils/certifiedDocumentExporter';
+import { PrintHeaderCustomizerModal } from '../credit/PrintHeaderCustomizerModal';
+import { db } from '../../db/localDatabase';
 
 export interface PrintPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
+  recordId?: string; // المعرف الثابت للسجل لمنع تداخل البيانات
   title?: string;
   documentTitle?: string;
   targetElementId?: string;
@@ -39,9 +42,11 @@ export interface PrintPreviewModalProps {
 export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   isOpen,
   onClose,
+  recordId,
   title,
   documentTitle,
   targetElementId = 'financial-statements-container',
+  customDocument,
   initialPageSize = 'A4',
   initialOrientation = 'portrait',
   children,
@@ -57,6 +62,8 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [showLetterhead, setShowLetterhead] = useState<boolean>(true);
   const [showStamp, setShowStamp] = useState<boolean>(true);
   const [showQr, setShowQr] = useState<boolean>(true);
+  const [isHeaderCustomizerOpen, setIsHeaderCustomizerOpen] = useState<boolean>(false);
+  const [refreshKey, setRefreshKey] = useState<number>(0);
 
   // Page Selection & Smart Resequencing
   const [pageSelectionMode, setPageSelectionMode] = useState<'ALL' | 'CUSTOM'>('ALL');
@@ -105,7 +112,9 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     if (!isOpen) return;
 
     const inspectElement = () => {
-      const el = PrintService.findPrintableElement(targetElementId);
+      const el = recordId
+        ? PrintService.findPrintableElementForRecord(recordId, targetElementId)
+        : PrintService.findPrintableElement(targetElementId);
       if (el) {
         // Find separate page sheets
         const sheetEls = el.querySelectorAll<HTMLElement>(
@@ -168,7 +177,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
     const timer = setTimeout(inspectElement, 150);
     return () => clearTimeout(timer);
-  }, [isOpen, targetElementId, showLetterhead, showStamp, showQr]);
+  }, [isOpen, targetElementId, showLetterhead, showStamp, showQr, refreshKey]);
 
   // Handle page toggle chip
   const togglePageSelection = (pageNum: number) => {
@@ -207,6 +216,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
     try {
       const options: PrintElementOptions = {
+        recordId,
         title: effectiveTitle,
         orientation,
         pageSize,
@@ -233,7 +243,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const handleExportPdf = async () => {
     setIsExportingPdf(true);
     try {
-      const cleanName = effectiveTitle.replace(/\s+/g, '_');
+      const cleanName = `${effectiveTitle}${recordId ? `_${recordId}` : ''}`.replace(/\s+/g, '_');
       const timeStr = new Date().toISOString().slice(0, 10);
       await exportElementToPdf(targetElementId, `${cleanName}_${timeStr}.pdf`, {
         orientation,
@@ -463,19 +473,51 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             </div>
           </div>
 
-          {/* Official Elements Toggles */}
-          <div className="p-3 bg-slate-850 rounded-xl border border-slate-750 space-y-2">
-            <span className="font-bold text-slate-200 block">عناصر التوثيق والاعتماد:</span>
-            <div className="space-y-1.5 text-[11px]">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showLetterhead}
-                  onChange={(e) => setShowLetterhead(e.target.checked)}
-                  className="rounded text-emerald-600"
-                />
-                <span className="text-slate-300">إظهار الترويسة وبيانات المكتب</span>
-              </label>
+          {/* Official Elements & Letterhead Customization */}
+          <div className="p-3 bg-slate-850 rounded-xl border border-slate-750 space-y-2.5">
+            <span className="font-bold text-slate-200 block text-xs">خيارات الترويسة والاعتماد:</span>
+
+            {/* Segmented Letterhead Toggle */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 block mb-0.5">وضع الترويسة:</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowLetterhead(true)}
+                  className={`py-1.5 px-2 rounded-lg font-bold text-center text-xs border cursor-pointer transition-all ${
+                    showLetterhead
+                      ? 'bg-emerald-700 text-white border-emerald-500 shadow-xs'
+                      : 'bg-slate-900 text-slate-300 border-slate-750 hover:bg-slate-800'
+                  }`}
+                >
+                  بالترويسة الرسمية
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLetterhead(false)}
+                  className={`py-1.5 px-2 rounded-lg font-bold text-center text-xs border cursor-pointer transition-all ${
+                    !showLetterhead
+                      ? 'bg-amber-700 text-white border-amber-500 shadow-xs'
+                      : 'bg-slate-900 text-slate-300 border-slate-750 hover:bg-slate-800'
+                  }`}
+                  title="طباعة بدون ترويسة للاستخدام على ورق مسبق الطباعة"
+                >
+                  بدون ترويسة (ورق جاهز)
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Button to Open Header Customizer */}
+            <button
+              type="button"
+              onClick={() => setIsHeaderCustomizerOpen(true)}
+              className="w-full py-2 px-2.5 bg-slate-800 hover:bg-slate-750 text-blue-300 hover:text-blue-200 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 border border-blue-500/30 cursor-pointer transition-all"
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-400" />
+              <span>تعديل وتخصيص بيانات الترويسة والشعار</span>
+            </button>
+
+            <div className="space-y-1.5 text-[11px] pt-1 border-t border-slate-800">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -514,8 +556,14 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       <main className="flex-1 h-full flex flex-col bg-slate-950 overflow-hidden relative">
         {/* Top Floating Viewport Toolbar */}
         <div className="h-12 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shrink-0 z-20">
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-2.5 text-xs flex-wrap">
             <span className="font-bold text-white hidden sm:inline">المعاينة الطباعية المباشرة (WYSIWYG)</span>
+            {recordId && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[11px] font-mono font-bold text-emerald-300">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>السجل: {recordId}</span>
+              </span>
+            )}
             <span className="text-slate-500 hidden sm:inline">•</span>
             <span className="text-emerald-400 font-mono font-bold">
               الصفحات المحددة للطباعة: [{selectedPages.join(', ')}]
@@ -574,6 +622,27 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           </div>
         </div>
       </main>
+
+      {/* Full Header & Office Profile Customization Modal */}
+      {isHeaderCustomizerOpen && (
+        <PrintHeaderCustomizerModal
+          isOpen={isHeaderCustomizerOpen}
+          onClose={() => setIsHeaderCustomizerOpen(false)}
+          officeProfile={db.getState().officeProfile || {}}
+          onSaveOfficeProfile={(prof) => {
+            db.updateOfficeProfile(prof as any);
+            setRefreshKey((k) => k + 1);
+          }}
+          clientProfile={{
+            companyName: customDocument?.clientName || db.getState().activeClientContext?.companyName || 'الشركة والمنشأة',
+            ...customDocument,
+          }}
+          onSaveClientProfile={(_prof) => {
+            setRefreshKey((k) => k + 1);
+          }}
+          sampleDocumentTitle={effectiveTitle}
+        />
+      )}
     </div>
   );
 };

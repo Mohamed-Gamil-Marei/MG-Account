@@ -49,6 +49,7 @@ import {
 } from '../../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { PrintLayoutWrapper } from '../common/PrintLayoutWrapper';
+import { ScreenActionToolbar } from '../common/ScreenActionToolbar';
 import { DocumentVerificationModal } from '../common/DocumentVerificationModal';
 import { VerificationPayloadData } from '../../utils/qrCodeGenerator';
 
@@ -513,7 +514,7 @@ export const BudgetPlannerView: React.FC<BudgetPlannerViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn text-right" dir="rtl">
+    <div id="budget-printable-container" className="space-y-6 animate-fadeIn text-right" dir="rtl">
       {/* Compact ERP Header */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -533,22 +534,20 @@ export const BudgetPlannerView: React.FC<BudgetPlannerViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Print & Verify Button */}
-          <button
-            onClick={() => setIsPrintModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
-          >
-            <Printer className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span>طباعة الموازنة</span>
-          </button>
-
-          <button
-            onClick={() => setIsVerificationModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
-          >
-            <FileCheck2 className="w-3.5 h-3.5" />
-            <span>الختم الرقمي QR</span>
-          </button>
+          {/* Unified Tools: Print (Preview & Customizer), Multi-Format Export, Import, Fill-in Templates */}
+          <ScreenActionToolbar
+            modelType="FEASIBILITY"
+            title={`الموازنة التقديرية السنوية ومصفوفة الانحرافات (${selectedYear})`}
+            targetElementId="budget-printable-container"
+            compact={true}
+            actions={[
+              {
+                label: 'الختم الرقمي QR',
+                icon: FileCheck2,
+                onClick: () => setIsVerificationModalOpen(true),
+              },
+            ]}
+          />
         </div>
       </div>
 

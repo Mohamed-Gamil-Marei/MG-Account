@@ -1788,6 +1788,10 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
       {/* Main Unified Screen Card */}
       <UnifiedScreenCard
+        id="journal-entries-unified-card"
+        modelType="JOURNAL"
+        printSelector="#journal-entries-table-container"
+        targetElementId="journal-entries-table-container"
         title="دفتر قيود اليومية العامة"
         subtitle="تسجيل وترحيل القيود المحاسبية"
         icon={Receipt}
@@ -1894,7 +1898,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           </div>
         }
       >
-        <div className="space-y-4">
+        <div id="journal-entries-table-container" className="space-y-4">
           {/* Micro-KPIs Ticker Bar */}
           <MicroKpisTickerBar
             items={[

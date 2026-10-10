@@ -161,40 +161,45 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
   return (
     <>
       <UnifiedScreenCard
-      title="خزنة أعمال وحسابات المكتب"
-      description="إدارة النقدية والسيولة، تحصيل الأتعاب، وسداد الرسوم الحكومية"
-      icon={Wallet}
-      headerActions={
-        <div className="flex items-center gap-2 flex-wrap">
-          <ScreenActionToolbar
-            modelType="TREASURY"
-            title="سجلات حركة خزنة المكتب"
-            count={filteredTransactions.length}
-          />
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            id="btn-add-treasury-tx"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>حركة خزنة جديدة</span>
-          </button>
-        </div>
-      }
-      searchTerm={searchTerm}
-      onSearchChange={setSearchTerm}
-      searchPlaceholder="بحث برقم السند، اسم العميل، الإجراء، أو البيان..."
-      filterTabs={[
-        { id: 'ALL', label: `كافة الحركات (${state.treasuryTransactions.length})` },
-        { id: 'INCOME_FEES', label: 'مقبوضات أتعاب' },
-        { id: 'EXPENSE_CLIENT_GOV_FEE', label: 'رسوم عملاء حكومية' },
-        { id: 'EXPENSE_OFFICE', label: 'مصروفات المكتب' },
-        { id: 'PARTNER_DRAWINGS', label: 'مسحوبات الشركاء' },
-      ]}
-      activeFilterTab={filterType}
-      onFilterTabChange={setFilterType}
-    >
-      <div className="space-y-4">
+        id="office-treasury-container"
+        targetElementId="office-treasury-table-container"
+        printSelector="#office-treasury-table-container"
+        title="خزنة أعمال وحسابات المكتب"
+        description="إدارة النقدية والسيولة، تحصيل الأتعاب، وسداد الرسوم الحكومية"
+        icon={Wallet}
+        headerActions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <ScreenActionToolbar
+              modelType="TREASURY"
+              title="سجلات حركة خزنة المكتب"
+              targetElementId="office-treasury-table-container"
+              printSelector="#office-treasury-table-container"
+              count={filteredTransactions.length}
+            />
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              id="btn-add-treasury-tx"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>حركة خزنة جديدة</span>
+            </button>
+          </div>
+        }
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="بحث برقم السند، اسم العميل، الإجراء، أو البيان..."
+        filterTabs={[
+          { id: 'ALL', label: `كافة الحركات (${state.treasuryTransactions.length})` },
+          { id: 'INCOME_FEES', label: 'مقبوضات أتعاب' },
+          { id: 'EXPENSE_CLIENT_GOV_FEE', label: 'رسوم عملاء حكومية' },
+          { id: 'EXPENSE_OFFICE', label: 'مصروفات المكتب' },
+          { id: 'PARTNER_DRAWINGS', label: 'مسحوبات الشركاء' },
+        ]}
+        activeFilterTab={filterType}
+        onFilterTabChange={setFilterType}
+      >
+        <div id="office-treasury-table-container" className="space-y-4">
         {/* KPI Row Compact */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
           <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between">

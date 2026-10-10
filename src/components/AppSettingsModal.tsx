@@ -28,6 +28,8 @@ import {
   Eye,
   EyeOff,
   Printer,
+  Receipt,
+  Percent,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, BrandColor, ThemeMode, UserPreferences, CustomFirebaseConfig } from '../types';
@@ -41,7 +43,7 @@ interface AppSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   state: DatabaseState;
-  initialTab?: 'PREFERENCES' | 'AUDITOR_PROFILE' | 'PRINT_EXPORT' | 'FIREBASE_CLOUD';
+  initialTab?: 'PREFERENCES' | 'AUDITOR_PROFILE' | 'TAX_SETTINGS' | 'PRINT_EXPORT' | 'FIREBASE_CLOUD';
 }
 
 export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
@@ -62,7 +64,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const currentLang = preferences.language || 'ar';
   const t = getTranslation(currentLang);
 
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'PREFERENCES' | 'AUDITOR_PROFILE' | 'PRINT_EXPORT' | 'FIREBASE_CLOUD'>(
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'PREFERENCES' | 'AUDITOR_PROFILE' | 'TAX_SETTINGS' | 'PRINT_EXPORT' | 'FIREBASE_CLOUD'>(
     initialTab || 'PREFERENCES'
   );
 
@@ -127,6 +129,12 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const [showBranchOfficeAddress, setShowBranchOfficeAddress] = useState<boolean>(officeProfile.showBranchOfficeAddress !== false);
   const [publicDomainUrl, setPublicDomainUrl] = useState<string>(officeProfile.publicDomainUrl || (typeof window !== 'undefined' ? window.location.origin : ''));
 
+  // Default Tax Settings State
+  const [defaultTaxEnabled, setDefaultTaxEnabled] = useState<boolean>(officeProfile.defaultTaxEnabled !== false);
+  const [defaultTaxRate, setDefaultTaxRate] = useState<number>(officeProfile.defaultTaxRate ?? 14);
+  const [defaultWhtEnabled, setDefaultWhtEnabled] = useState<boolean>(officeProfile.defaultWhtEnabled !== false);
+  const [defaultWhtRate, setDefaultWhtRate] = useState<number>(officeProfile.defaultWhtRate ?? 1);
+
   const brandOptions: { id: BrandColor; nameAr: string; nameEn: string; bgClass: string; ringClass: string }[] = [
     { id: 'blue', nameAr: 'أزرق كلاسيكي مصرفي', nameEn: 'Banking Navy Blue', bgClass: 'bg-blue-600', ringClass: 'ring-blue-500' },
     { id: 'emerald', nameAr: 'أخضر مالي وضريبي', nameEn: 'Emerald Green', bgClass: 'bg-emerald-600', ringClass: 'ring-emerald-500' },
@@ -188,6 +196,10 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       branchOfficeAddress: branchOfficeAddress.trim(),
       showBranchOfficeAddress,
       publicDomainUrl: publicDomainUrl.trim(),
+      defaultTaxEnabled,
+      defaultTaxRate: Number(defaultTaxRate) || 0,
+      defaultWhtEnabled,
+      defaultWhtRate: Number(defaultWhtRate) || 0,
     });
 
     setSavedSuccess(true);
@@ -251,6 +263,19 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>{currentLang === 'ar' ? 'بيانات واعتماد مراقب الحسابات' : 'Auditor Profile'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSettingsTab('TAX_SETTINGS')}
+            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              activeSettingsTab === 'TAX_SETTINGS'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>{currentLang === 'ar' ? 'الضرائب ونسب القيمة المضافة' : 'Taxes & VAT Rates'}</span>
           </button>
 
           <button
@@ -643,6 +668,199 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                 </div>
               </div>
             </>
+          )}
+
+          {activeSettingsTab === 'TAX_SETTINGS' && (
+            /* Taxes & VAT Configuration Tab */
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Header Banner */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50 to-slate-50 dark:from-teal-950/40 dark:via-emerald-950/30 dark:to-slate-900 border border-teal-200 dark:border-teal-800/60 space-y-2">
+                <div className="flex items-center gap-2.5 text-teal-900 dark:text-teal-200 font-bold text-xs">
+                  <div className="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs">
+                    %
+                  </div>
+                  <span>التحكم في الضريبة الافتراضية ونسبتها (القيمة المضافة والخصم والتحصيل)</span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  يمكنك تحديد ما إذا كانت الفواتير والعمليات تخضع لضريبة القيمة المضافة افتراضياً أم تصدر بدون ضريبة (معفاة)، وتحديد النسبة المئوية المعتمدة مع إمكانية تعديلها أو إلغائها بحرية تامة في أي فاتورة مستقبلاً.
+                </p>
+              </div>
+
+              {/* 1. Value Added Tax (VAT) Config */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <Receipt className="w-4 h-4 text-emerald-600" />
+                      <span>ضريبة القيمة المضافة (VAT - ض.ق.م):</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      تطبيق الضريبة أو إصدار فواتير بدون ضريبة (معفاة 0%)
+                    </p>
+                  </div>
+
+                  {/* Toggle */}
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={defaultTaxEnabled}
+                      onChange={(e) => setDefaultTaxEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      حالة الضريبة الافتراضية:
+                    </label>
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-lg font-bold ${
+                        defaultTaxEnabled
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      }`}
+                    >
+                      {defaultTaxEnabled ? '✓ مطبقة بنسبة محددة' : '✕ غير مطبقة (بدون ضريبة / معفاة)'}
+                    </span>
+                  </div>
+
+                  {defaultTaxEnabled && (
+                    <div className="space-y-2.5">
+                      <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block">
+                        النسبة المئوية الافتراضية لضريبة القيمة المضافة (%):
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {[
+                          { rate: 14, label: '14% (السعر العام - مصر)' },
+                          { rate: 15, label: '15% (السعودية)' },
+                          { rate: 5, label: '5% (الإمارات / عمان / آلات)' },
+                          { rate: 10, label: '10%' },
+                          { rate: 0, label: '0% (صادرات / معفاة)' },
+                        ].map((preset) => (
+                          <button
+                            key={preset.rate}
+                            type="button"
+                            onClick={() => setDefaultTaxRate(preset.rate)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer border ${
+                              defaultTaxRate === preset.rate
+                                ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
+                          أو إدخال نسبة مخصصة:
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={defaultTaxRate}
+                            onChange={(e) => setDefaultTaxRate(Number(e.target.value))}
+                            className="w-20 px-2.5 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-mono font-bold text-center"
+                          />
+                          <span className="font-bold text-slate-700 dark:text-slate-300 text-xs">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Withholding Tax (WHT) Config */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <Percent className="w-4 h-4 text-red-600" />
+                      <span>ضريبة الخصم والتحصيل أ.ت.ص (Withholding Tax):</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      تطبيق خصم الأرباح التجارية والصناعية لحساب مصلحة الضرائب
+                    </p>
+                  </div>
+
+                  {/* Toggle */}
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={defaultWhtEnabled}
+                      onChange={(e) => setDefaultWhtEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                  </label>
+                </div>
+
+                {defaultWhtEnabled && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2.5">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block">
+                      نسبة الخصم الافتراضية (%):
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { rate: 1, label: '1% (توريدات ومقاولات)' },
+                        { rate: 0.5, label: '0.5% (سلع ومواد خام)' },
+                        { rate: 3, label: '3% (خدمات ومهن حرة)' },
+                        { rate: 5, label: '5% (استشارات وتدريب)' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.rate}
+                          type="button"
+                          onClick={() => setDefaultWhtRate(preset.rate)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer border ${
+                            defaultWhtRate === preset.rate
+                              ? 'bg-red-700 text-white border-red-700 shadow-2xs'
+                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/30'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
+                        أو نسبة مخصصة:
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          step="0.5"
+                          value={defaultWhtRate}
+                          onChange={(e) => setDefaultWhtRate(Number(e.target.value))}
+                          className="w-20 px-2.5 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-mono font-bold text-center"
+                        />
+                        <span className="font-bold text-slate-700 dark:text-slate-300 text-xs">%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Legal Reference & Flexibility Note */}
+              <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>مرونة كاملة في كافة الشاشات:</span>
+                </div>
+                <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                  الإعدادات هنا تضبط الخيارات الافتراضية، ويمكنك دائماً في شاشة إصدار الفواتير أو قيود اليومية اختيار إدراج الضريبة أو إلغاؤها، وتحديد النسبة لكل بند أو لكل فاتورة على حدة.
+                </p>
+              </div>
+            </div>
           )}
 
           {activeSettingsTab === 'FIREBASE_CLOUD' && (

@@ -257,6 +257,27 @@ function buildStructuredArabicDocumentSheets(
     { 'البيان / الحقل الرسمي': 'حالة التوثيق والاعتماد', 'القيمة / التفاصيل': 'معتمد وموثق رسمياً وفق معايير المحاسبة والمراجعة المصرية' },
   ];
 
+  // If customDocument is a direct list of records (e.g. employee roster, fixed assets, or ledger transactions)
+  if (Array.isArray(doc)) {
+    const tableRows = doc.map((item, idx) => {
+      const row: Record<string, any> = { 'م': idx + 1 };
+      if (typeof item === 'object' && item !== null) {
+        Object.keys(item).forEach((k) => {
+          if (typeof item[k] === 'object' && item[k] !== null) return;
+          const label = ARABIC_FIELD_DICTIONARY[k] || k;
+          row[label] = item[k];
+        });
+      } else {
+        row['القيمة'] = item;
+      }
+      return row;
+    });
+    return {
+      overviewRows,
+      detailSheets: [{ sheetName: 'سجل_البيانات_التفصيلية', rows: tableRows }],
+    };
+  }
+
   // Map each top-level key in customDocument
   Object.keys(doc).forEach((k) => {
     const val = doc[k];
@@ -797,12 +818,50 @@ export function getModelTabularData(model: ModelType, state: DatabaseState): Rec
     }
 
     case 'PAYROLL':
-      return (state.accounts || []).filter(a => a.code.startsWith('52') || a.code.startsWith('62')).map(a => ({
-        'كود الحساب': a.code,
-        'اسم الحساب': a.name,
-        'الرصيد المدين': a.openingBalanceDebit,
-        'الرصيد الدائن': a.openingBalanceCredit,
-      }));
+      return [
+        {
+          'كود الموظف': 'EMP-001',
+          'اسم الموظف': 'أحمد محمود عبد الفتاح',
+          'الرقم التأميني': '14829104',
+          'الوظيفة': 'مدير مالي وإداري',
+          'الراتب الأساسي': 18000,
+          'البدلات والمتغير': 4000,
+          'الأجر الشامل': 22000,
+          'الأجر التأميني': 12600,
+          'تأمينات العامل (11%)': 1386,
+          'ضريبة كسب العمل': 2275,
+          'تأمينات المنشأة (18.75%)': 2362.5,
+          'صافي الراتب المستحق': 18339,
+        },
+        {
+          'كود الموظف': 'EMP-002',
+          'اسم الموظف': 'سارة إبراهيم الشناوي',
+          'الرقم التأميني': '29481920',
+          'الوظيفة': 'رئيس قسم الحسابات',
+          'الراتب الأساسي': 12000,
+          'البدلات والمتغير': 2500,
+          'الأجر الشامل': 14500,
+          'الأجر التأميني': 12600,
+          'تأمينات العامل (11%)': 1386,
+          'ضريبة كسب العمل': 1125,
+          'تأمينات المنشأة (18.75%)': 2362.5,
+          'صافي الراتب المستحق': 11989,
+        },
+        {
+          'كود الموظف': 'EMP-003',
+          'اسم الموظف': 'كريم حسام الدين',
+          'الرقم التأميني': '38192041',
+          'الوظيفة': 'محاسب عام ومراجع',
+          'الراتب الأساسي': 8500,
+          'البدلات والمتغير': 1500,
+          'الأجر الشامل': 10000,
+          'الأجر التأميني': 10000,
+          'تأمينات العامل (11%)': 1100,
+          'ضريبة كسب العمل': 525,
+          'تأمينات المنشأة (18.75%)': 1875,
+          'صافي الراتب المستحق': 8375,
+        },
+      ];
 
     case 'TAX_EXPOSURE':
       return (state.taxDeclarations || []).map(t => ({
@@ -822,7 +881,27 @@ export function getModelTabularData(model: ModelType, state: DatabaseState): Rec
         },
       ];
 
-    case 'FIXED_ASSETS':
+    case 'FIXED_ASSETS': {
+      if (state.fixedAssets && state.fixedAssets.length > 0) {
+        return state.fixedAssets.map((asset) => ({
+          'كود الأصل': asset.assetCode,
+          'اسم الأصل وتوصيفه': asset.name,
+          'التصنيف المحاسبي': asset.category,
+          'تاريخ الشراء': asset.purchaseDate,
+          'تاريخ التشغيل': asset.operationDate,
+          'تكلفة الاقتناء (ج.م)': asset.acquisitionCost,
+          'القيمة التخريدية (الخردة)': asset.scrapValue || 0,
+          'العمر الإنتاجي (سنوات)': asset.usefulLifeYears,
+          'طريقة الإهلاك': asset.depreciationMethod,
+          'نسبة الإهلاك المحاسبي %': asset.accountingDepreciationRate,
+          'مجمع الإهلاك السابق': asset.currentAccumulatedDepreciation,
+          'صافي القيمة الدفترية': asset.currentBookValue,
+          'الموقع الجغرافي': asset.location || '',
+          'الموظف المسؤول (العهدة)': asset.custodian || '',
+          'الرقم التسلسلي S/N': asset.serialNumber || '',
+          'حالة الأصل': asset.status === 'ACTIVE' ? 'نشط ويعمل' : asset.status === 'DISPOSED' ? 'مستبعد' : 'تحت الصيانة',
+        }));
+      }
       return (state.accounts || [])
         .filter(a => a.code.startsWith('11') || a.code.startsWith('12'))
         .map(a => ({
@@ -831,6 +910,7 @@ export function getModelTabularData(model: ModelType, state: DatabaseState): Rec
           'القيمة الدفترية': a.openingBalanceDebit,
           'مجمع الإهلاك': a.openingBalanceCredit,
         }));
+    }
 
     case 'AUDIT':
       return (state.auditLogs || []).map(l => ({
@@ -1608,5 +1688,221 @@ function applyImportedRecords(model: ModelType, records: any[]): ImportResult {
     model,
     recordsCount: count,
     message: `تم استيراد ${count} سجل في نموذج [${model}] بنجاح`,
+  };
+}
+
+/**
+ * Generates and downloads blank templates with instructions and sample rows in XLSX, CSV, or JSON
+ */
+export function downloadBlankTemplate(
+  model: ModelType,
+  format: 'XLSX' | 'CSV' | 'JSON' = 'XLSX'
+): ExportResult {
+  const timestamp = getTimestampStr();
+
+  let templateRows: Record<string, any>[] = [];
+  let modelArabicName = 'البيانات';
+
+  switch (model) {
+    case 'ACCOUNTS':
+      modelArabicName = 'دليل_الحسابات';
+      templateRows = [
+        {
+          'كود الحساب (Serial)': '1110',
+          'اسم الحساب': 'الأراضي والعقارات',
+          'التصنيف المحاسبي': 'ASSETS',
+          'طبيعة الحساب': 'مدين',
+          'المستوى': 3,
+          'كود الحساب الرئيسي': '11',
+          'رصيد افتتاحي مدين': 1500000,
+          'رصيد افتتاحي دائن': 0,
+        },
+        {
+          'كود الحساب (Serial)': '2210',
+          'اسم الحساب': 'الموردون والتجاريون الدائنون',
+          'التصنيف المحاسبي': 'LIABILITIES',
+          'طبيعة الحساب': 'دائن',
+          'المستوى': 3,
+          'كود الحساب الرئيسي': '22',
+          'رصيد افتتاحي مدين': 0,
+          'رصيد افتتاحي دائن': 320000,
+        },
+        {
+          'كود الحساب (Serial)': '4110',
+          'اسم الحساب': 'إيرادات المبيعات والخدمات',
+          'التصنيف المحاسبي': 'REVENUES',
+          'طبيعة الحساب': 'دائن',
+          'المستوى': 3,
+          'كود الحساب الرئيسي': '41',
+          'رصيد افتتاحي مدين': 0,
+          'رصيد افتتاحي دائن': 0,
+        },
+      ];
+      break;
+
+    case 'JOURNAL':
+      modelArabicName = 'دفتر_قيود_اليومية';
+      templateRows = [
+        {
+          'رقم القيد': 'JV-2026-001',
+          'التاريخ': '2026-01-01',
+          'نوع القيد': 'GENERAL',
+          'البيان العام': 'سداد إيجار مقر الشركة الشهري بشيك بنكي',
+          'كود الحساب': '5310',
+          'اسم الحساب': 'مصروفات عمومية - إيجار مقر الشركة',
+          'مدين (ج.م)': 25000,
+          'دائن (ج.م)': 0,
+          'شرح السطر': 'إيجار شهر يناير 2026',
+          'مركز التكلفة': 'المركز الرئيسي',
+        },
+        {
+          'رقم القيد': 'JV-2026-001',
+          'التاريخ': '2026-01-01',
+          'نوع القيد': 'GENERAL',
+          'البيان العام': 'سداد إيجار مقر الشركة الشهري بشيك بنكي',
+          'كود الحساب': '1260',
+          'اسم الحساب': 'البنوك - الحساب الجاري بالجنيه',
+          'مدين (ج.م)': 0,
+          'دائن (ج.م)': 25000,
+          'شرح السطر': 'شيك بنكي رقم 94812 بنك مصر',
+          'مركز التكلفة': 'المركز الرئيسي',
+        },
+      ];
+      break;
+
+    case 'CLIENTS':
+      modelArabicName = 'سجل_الشركات_والعملاء';
+      templateRows = [
+        {
+          'كود العميل': 'CLI-101',
+          'اسم المنشأة / العميل': 'شركة النيل للصناعات الهندسية والتوريدات',
+          'نوع العميل': 'PRIMARY',
+          'الشكل القانوني': 'شركة مساهمة مصرية (ش.م.م)',
+          'رقم السجل التجاري': '109482',
+          'رقم البطاقة الضريبية': '492-817-302',
+          'مأمورية الضرائب': 'مأمورية الشركات المساهمة بالقاهرة',
+          'رقم ملف الدخل': '204/918',
+          'الهاتف': '01003335360',
+          'البريد الإلكتروني': 'info@nile-eng.com',
+          'العنوان': 'المنطقة الصناعية الثالثة - 6 أكتوبر',
+          'النشاط الرئيسي': 'تصنيع وتوريد وتصدير المعدات الهندسية',
+          'رأس المال المصدر': 5000000,
+        },
+      ];
+      break;
+
+    case 'INVOICES':
+      modelArabicName = 'فواتير_المبيعات_والأتعاب';
+      templateRows = [
+        {
+          'رقم الفاتورة': 'INV-2026-001',
+          'التاريخ': '2026-01-15',
+          'اسم العميل': 'شركة الدلتا للتجارة والتوزيع',
+          'المبلغ قبل الضريبة': 100000,
+          'ضريبة القيمة المضافة 14%': 14000,
+          'ضريبة الخصم 1%': 1000,
+          'الإجمالي النهائي': 113000,
+          'طريقة السداد': 'BANK',
+          'البيان': 'فاتورة مبيعات بضاعة توريد رقم 4910',
+        },
+      ];
+      break;
+
+    case 'FIXED_ASSETS':
+      modelArabicName = 'سجل_الأصول_الثابتة';
+      templateRows = [
+        {
+          'كود الأصل': 'AST-101',
+          'اسم الأصل': 'خط إنتاج وتعبئة آلي ألماني',
+          'تاريخ الاقتناء': '2025-01-01',
+          'تكلفة الشراء الأصلية': 850000,
+          'مجمع الإهلاك الافتتاحي': 85000,
+          'معدل الإهلاك السنوي %': 10,
+          'طريقة الإهلاك': 'قسط ثابت',
+          'الموقع أو القسم': 'عنبر الإنتاج الرئيسي',
+        },
+      ];
+      break;
+
+    case 'TREASURY':
+      modelArabicName = 'حركات_الخزينة_والإيصالات';
+      templateRows = [
+        {
+          'رقم السند': 'VOU-101',
+          'التاريخ': '2026-01-10',
+          'نوع الحركة': 'قبض أتعاب مهنية',
+          'المبلغ (ج.م)': 15000,
+          'العميل المرتبط': 'شركة الأهرام للطباعة',
+          'طريقة السداد': 'CASH',
+          'البيان التفصيلي': 'سداد دفعة مقدمة عن إعداد القوائم المالية',
+        },
+      ];
+      break;
+
+    default:
+      modelArabicName = `نموذج_${model}`;
+      templateRows = [
+        {
+          'كود البند': '001',
+          'البيان': 'سجل توضيحي إرشادي',
+          'المبلغ': 1000,
+          'التاريخ': '2026-01-01',
+          'ملاحظات': 'قم بحذف هذا السطر واستبداله ببياناتك الفعلية',
+        },
+      ];
+      break;
+  }
+
+  const baseFileName = `قالب_تعبئة_${modelArabicName}_${timestamp}`;
+
+  if (format === 'JSON') {
+    const jsonStr = JSON.stringify(
+      {
+        templateModel: model,
+        title: `قالب استيراد ${modelArabicName}`,
+        generatedAt: new Date().toISOString(),
+        instructions: 'يرجى ملء مصفوفة records بالسجلات مع الالتزام بأسماء الحقول الموضحة أدناه.',
+        records: templateRows,
+      },
+      null,
+      2
+    );
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+    const fileName = `${baseFileName}.json`;
+    triggerFileDownload(blob, fileName);
+    return {
+      success: true,
+      fileName,
+      message: `تم تحميل قالب [${modelArabicName}] بصيغة JSON بنجاح`,
+    };
+  }
+
+  if (format === 'CSV') {
+    const csvContent = convertToCsv(templateRows);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const fileName = `${baseFileName}.csv`;
+    triggerFileDownload(blob, fileName);
+    return {
+      success: true,
+      fileName,
+      message: `تم تحميل قالب [${modelArabicName}] بصيغة CSV بنجاح`,
+    };
+  }
+
+  // Default: Excel XLSX
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(templateRows);
+  formatWorksheetForArabicExport(ws, templateRows);
+  XLSX.utils.book_append_sheet(wb, ws, `نموذج ${modelArabicName.replace(/_/g, ' ')}`);
+
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const fileName = `${baseFileName}.xlsx`;
+  triggerFileDownload(blob, fileName);
+
+  return {
+    success: true,
+    fileName,
+    message: `تم تحميل قالب إكسيل [${modelArabicName}] بنجاح`,
   };
 }

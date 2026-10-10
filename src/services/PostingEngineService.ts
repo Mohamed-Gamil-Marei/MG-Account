@@ -90,7 +90,7 @@ export class PostingEngineService {
     const revenueAccount = this.findAccount(accounts, ['4110', '4100', '41'], 'REVENUES', 'إيرادات المبيعات والخدمات');
 
     // VAT Liability Account (ضريبة القيمة المضافة 14%)
-    const vatAccount = this.findAccount(accounts, ['2145', '2140', '214'], 'LIABILITIES', 'مصلحة الضرائب على القيمة المضافة');
+    const vatAccount = this.findAccount(accounts, ['2230', '2145', '2140', '214'], 'LIABILITIES', 'مصلحة الضرائب على القيمة المضافة');
 
     const totalBeforeTax = Math.round((invoice.subtotal - (invoice.totalDiscount || 0)) * 100) / 100;
     const vatAmount = Math.round((invoice.totalVat || 0) * 100) / 100;
@@ -140,8 +140,9 @@ export class PostingEngineService {
       description: `إيراد مبيعات فاتورة رقم ${invoice.invoiceNumber}`,
     });
 
-    // Line 4: Credit - VAT (14%) if applicable
+    // Line 4: Credit - VAT if applicable
     if (vatAmount > 0) {
+      const effectiveRate = totalBeforeTax > 0 ? Math.round((vatAmount / totalBeforeTax) * 100) : 14;
       lines.push({
         id: `line-${Date.now()}-4`,
         accountId: vatAccount.id,
@@ -151,7 +152,7 @@ export class PostingEngineService {
         exchangeRate: 1,
         debit: 0,
         credit: vatAmount,
-        description: `ضريبة القيمة المضافة 14% على فاتورة رقم ${invoice.invoiceNumber}`,
+        description: `ضريبة القيمة المضافة (${effectiveRate}%) على فاتورة رقم ${invoice.invoiceNumber}`,
       });
     }
 

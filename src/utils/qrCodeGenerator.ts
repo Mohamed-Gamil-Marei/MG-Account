@@ -14,15 +14,20 @@ export { generateCode128Svg, encodeCode128B };
  */
 
 export interface VerificationPayloadData {
+  recordId?: string;
+  clientId?: string;
   docType?: string;
   docNumber?: string;
   clientName?: string;
   nationalId?: string;
   commercialRegNo?: string;
   taxCardNo?: string;
+  taxOffice?: string;
   auditorName?: string;
   licenseNumber?: string;
   amount?: number;
+  totalAssets?: number;
+  netProfit?: number;
   monthlyAmount?: number;
   date?: string;
   recipient?: string;
@@ -116,35 +121,113 @@ export function buildVerificationUrl(data: VerificationPayloadData, customBaseUr
   if (rawType.includes('فاتورة') || docId.startsWith('INV')) shortType = 'INV';
   else if (rawType.includes('تقرير') || rawType.includes('مراقب') || docId.startsWith('AUD')) shortType = 'AUD';
   else if (rawType.includes('ضريب') || rawType.includes('إقرار') || docId.startsWith('TAX')) shortType = 'TAX';
-  else if (rawType.includes('قوائم') || rawType.includes('مركز') || docId.startsWith('FS')) shortType = 'FS';
-  else if (rawType.includes('دراسة') || docId.startsWith('FS')) shortType = 'FS';
+  else if (rawType.includes('قوائم') || rawType.includes('مركز') || rawType.includes('مالي') || docId.startsWith('EAS') || docId.startsWith('FIN') || docId.startsWith('FS')) shortType = 'FS';
+  else if (rawType.includes('دراسة')) shortType = 'FS';
 
   const amtParam = data.amount !== undefined ? `&amt=${encodeURIComponent(data.amount.toString())}` : '';
   const dateParam = data.date ? `&d=${encodeURIComponent(data.date)}` : '';
+  const yrParam = data.fiscalYear ? `&yr=${encodeURIComponent(data.fiscalYear.toString())}` : '';
+  const assetsParam = data.totalAssets !== undefined ? `&assets=${encodeURIComponent(data.totalAssets.toString())}` : '';
+  const netParam = data.netProfit !== undefined ? `&net=${encodeURIComponent(data.netProfit.toString())}` : '';
+  const crParam = data.commercialRegNo ? `&cr=${encodeURIComponent(data.commercialRegNo.trim().slice(0, 20))}` : '';
+  const tcParam = data.taxCardNo ? `&tc=${encodeURIComponent(data.taxCardNo.trim().slice(0, 20))}` : '';
   const hashClean = secHash.replace(/^EAS-/, '').slice(0, 9);
   const hashParam = `&h=${encodeURIComponent(hashClean)}`;
 
-  // Short client snippet (max 20 chars) to maintain small QR matrix
-  const clientSnippet = data.clientName ? `&c=${encodeURIComponent(data.clientName.trim().slice(0, 20))}` : '';
+  // Short client snippet (max 25 chars) to maintain small QR matrix
+  const clientSnippet = data.clientName ? `&c=${encodeURIComponent(data.clientName.trim().slice(0, 25))}` : '';
+  const ridParam = data.recordId && data.recordId !== docId ? `&rid=${encodeURIComponent(data.recordId.trim())}` : '';
+  const cidParam = data.clientId ? `&cid=${encodeURIComponent(data.clientId.trim())}` : '';
 
-  return `${origin}/#verify?id=${encodeURIComponent(docId)}&t=${shortType}${clientSnippet}${amtParam}${dateParam}${hashParam}`;
+  return `${origin}/#verify?id=${encodeURIComponent(docId)}&t=${shortType}${ridParam}${cidParam}${clientSnippet}${amtParam}${dateParam}${yrParam}${assetsParam}${netParam}${crParam}${tcParam}${hashParam}`;
 }
 
 /**
  * Builds Human-Readable Offline Digital Seal text (Used when scanned by standard text scanners)
  */
 export function buildHumanReadableDigitalSeal(data: VerificationPayloadData): string {
-  const secHash = data.securityHash || generateDocumentSecurityHash(data.docNumber || 'CERT', data.clientName || 'عميل', data.amount, data.date);
-  const formattedAmt = data.amount !== undefined ? `${formatNumber(data.amount)} ج.م` : 'مبين بالشهادة';
+  const secHash = data.securityHash || generateDocumentSecurityHash(data.docNumber || 'DOC', data.clientName || 'عميل', data.amount, data.date);
+  const rawType = data.docType || '';
+  const docId = data.docNumber || '';
 
+  // 1. Financial Statements & Balance Sheet
+  if (rawType.includes('قوائم') || rawType.includes('مركز') || rawType.includes('مالي') || docId.startsWith('EAS') || docId.startsWith('FIN') || docId.startsWith('FS')) {
+    const assetsStr = data.totalAssets !== undefined ? `${formatNumber(data.totalAssets)} ج.م` : 'مبين بالقوائم المعتمدة';
+    const profitStr = data.netProfit !== undefined ? `${formatNumber(data.netProfit)} ج.م` : (data.amount !== undefined ? `${formatNumber(data.amount)} ج.م` : 'مبين بالقوائم المعتمدة');
+    return `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]
+نوع المستند: اعتماد القوائم المالية السنوية والمركز المالي
+رقم القيد والاعتماد: ${data.docNumber || 'EAS-FIN-OFFICIAL'}
+الشركة / المنشأة: ${data.clientName || 'العميل المعتمد'}
+السنة المالية: ${data.fiscalYear || '2024'}
+إجمالي الأصول: ${assetsStr}
+صافي الأرباح / نتائج النشاط: ${profitStr}
+المحاسب القانوني ومراقب الحسابات: ${data.auditorName || 'محمد جميل مرعي'}
+رقم القيد بسجل المحاسبين والمراجعين: ${data.licenseNumber || 'س.م.م 43122'}
+الإطار المحاسبي: معايير المحاسبة المصرية (EAS) وقانون 159 لسنة 1981
+الحالة: معتمدة ومطابقة لدفاتر وسجلات الشركة المنتظمة ✓
+بصمة التشفير الرقمية: ${secHash}
+رابط التحقق الإلكتروني: ${buildVerificationUrl(data)}`;
+  }
+
+  // 2. Independent Auditor's Report
+  if (rawType.includes('تقرير') || rawType.includes('مراقب') || docId.startsWith('AUD')) {
+    return `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]
+نوع المستند: تقرير مراقب الحسابات المستقل عن القوائم المالية
+رقم التقرير: ${data.docNumber || 'AUD-OFFICIAL'}
+الشركة / المنشأة: ${data.clientName || 'العميل المعتمد'}
+السنة المالية: ${data.fiscalYear || '2024'}
+المحاسب القانوني ومراقب الحسابات: ${data.auditorName || 'محمد جميل مرعي'}
+رقم القيد بسجل المحاسبين والمراجعين: ${data.licenseNumber || 'س.م.م 43122'}
+الرأي المهني: ${data.purpose || 'رأي غير متحفظ (نظيف) - معايير المراجعة المصرية ESA'}
+الحالة: معتمد ومطابق لأدلة وقواعد المراجعة الرسمية ✓
+بصمة التشفير: ${secHash}
+رابط التحقق الإلكتروني: ${buildVerificationUrl(data)}`;
+  }
+
+  // 3. Tax Declaration & Return
+  if (rawType.includes('ضريب') || rawType.includes('إقرار') || docId.startsWith('TAX')) {
+    const taxAmt = data.amount !== undefined ? `${formatNumber(data.amount)} ج.م` : 'مبين بالإقرار المعتمد';
+    return `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]
+نوع المستند: اعتماد الإقرار والفحص الضريبي
+رقم الاعتماد: ${data.docNumber || 'TAX-OFFICIAL'}
+الممول / المنشأة: ${data.clientName || 'العميل المعتمد'}
+رقم التسجيل / الملف الضريبي: ${data.taxCardNo || 'معتمد'}
+السنة / الفترة الضريبية: ${data.fiscalYear || '2024'}
+صافي الضريبة / الوعاء: ${taxAmt}
+المحاسب القانوني: ${data.auditorName || 'محمد جميل مرعي'}
+رقم القيد: ${data.licenseNumber || 'س.م.م 43122'}
+الحالة: معتمد ومطابق لمنظومة مصلحة الضرائب المصرية (ETA) ✓
+بصمة التشفير: ${secHash}
+رابط التحقق الإلكتروني: ${buildVerificationUrl(data)}`;
+  }
+
+  // 4. Professional Fees Invoice
+  if (rawType.includes('فاتورة') || docId.startsWith('INV')) {
+    const invAmt = data.amount !== undefined ? `${formatNumber(data.amount)} ج.م` : 'مبين بالفاتورة';
+    return `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]
+نوع المستند: فاتورة أتعاب مهنية معتمدة
+رقم الفاتورة: ${data.docNumber || 'INV-OFFICIAL'}
+العميل: ${data.clientName || 'العميل المعتمد'}
+الإجمالي المستحق: ${invAmt}
+مكتب المحاسبة: ${data.auditorName || 'محمد جميل مرعي'}
+رقم القيد: ${data.licenseNumber || 'س.م.م 43122'}
+الحالة: فاتورة صادرة وموثقة بالسجلات الرسمية ✓
+بصمة التشفير: ${secHash}
+رابط التحقق الإلكتروني: ${buildVerificationUrl(data)}`;
+  }
+
+  // 5. Default: Professional Certificate
+  const formattedAmt = data.amount !== undefined ? `${formatNumber(data.amount)} ج.م` : 'مبين بمتن الشهادة';
   return `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]
-المستند: ${data.docType || 'شهادة مهنية رسمية'}
+نوع المستند: ${data.docType || 'شهادة مهنية رسمية معتمدة'}
 رقم القيد والتسجيل: ${data.docNumber || 'CERT-OFFICIAL'}
-العميل/الجهة: ${data.clientName || 'العميل المعتمد'}
-المبلغ: ${formattedAmt}
+العميل / المستفيد: ${data.clientName || 'العميل المعتمد'}
+المبلغ المعتمد: ${formattedAmt}
 المحاسب القانوني: ${data.auditorName || 'محمد جميل مرعي'}
 رقم القيد بسجل المحاسبين: ${data.licenseNumber || 'س.م.م 43122'}
 التاريخ: ${data.date || new Date().toISOString().slice(0, 10)}
+الجهة الموجه إليها: ${data.recipient || 'الجهات الرسمية والمصرفية'}
+الغرض: ${data.purpose || 'إثبات واعتماد مالي ورسمي'}
 بصمة التشفير: ${secHash}
 رابط التحقق الإلكتروني: ${buildVerificationUrl(data)}`;
 }
@@ -161,6 +244,8 @@ export function buildVerificationQrText(data: VerificationPayloadData, customBas
  * Builds simplified QR payload for Auditor Reports with unique ID & Verification Link
  */
 export function buildAuditorReportQrText(options: {
+  reportId?: string;
+  clientId?: string;
   auditorName?: string;
   licenseNumber?: string;
   companyName: string;
@@ -169,8 +254,10 @@ export function buildAuditorReportQrText(options: {
   refNumber?: string;
   customBaseUrl?: string;
 }): string {
-  const ref = options.refNumber || `AUD-${options.fiscalYear}-8821`;
+  const ref = options.reportId || options.refNumber || (options.clientId ? `AUD-${options.clientId}-${options.fiscalYear}` : `AUD-${options.fiscalYear}-8821`);
   return buildVerificationUrl({
+    recordId: ref,
+    clientId: options.clientId,
     docType: 'تقرير مراقب الحسابات المستقل',
     docNumber: ref,
     clientName: options.companyName,
@@ -186,23 +273,34 @@ export function buildAuditorReportQrText(options: {
  * Builds simplified QR payload for Financial Statements with unique ID & Verification Link
  */
 export function buildFinancialStatementsQrText(options: {
+  statementId?: string;
+  clientId?: string;
   auditorName?: string;
   licenseNumber?: string;
   companyName: string;
   fiscalYear: string | number;
   totalAssets?: number;
   netProfit?: number;
+  commercialRegNo?: string;
+  taxCardNo?: string;
   customBaseUrl?: string;
 }): string {
-  const ref = `EAS-FIN-${options.fiscalYear}-${Date.now().toString().slice(-4)}`;
+  const ref = options.statementId || (options.clientId ? `EAS-FIN-${options.clientId}-${options.fiscalYear}` : `EAS-FIN-${options.fiscalYear}-OFFICIAL`);
   return buildVerificationUrl({
-    docType: 'القوائم المالية السنوية المعتمدة',
+    recordId: ref,
+    clientId: options.clientId,
+    docType: 'القوائم المالية والمركز المالي المعتمد',
     docNumber: ref,
     clientName: options.companyName,
     fiscalYear: options.fiscalYear,
     amount: options.netProfit,
+    netProfit: options.netProfit,
+    totalAssets: options.totalAssets,
+    commercialRegNo: options.commercialRegNo,
+    taxCardNo: options.taxCardNo,
     auditorName: options.auditorName || 'محمد جميل مرعي',
     licenseNumber: options.licenseNumber || 'س.م.م 43122',
+    recipient: 'الجمعية العمومية والجهات الرسمية والرقابية والمصرفية',
     purpose: 'اعتماد القوائم المالية السنوية طبقاً لمعايير المحاسبة المصرية (EAS)',
     mode: 'encrypted_pdf',
   }, options.customBaseUrl);
@@ -298,18 +396,24 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
       return null;
     }
 
-    const rawDocNumber = params.get('id') || params.get('no') || params.get('code') ? decodeURIComponent((params.get('id') || params.get('no') || params.get('code'))!) : 'CERT-OFFICIAL';
+    const rawDocNumber = params.get('id') || params.get('no') || params.get('code') ? decodeURIComponent((params.get('id') || params.get('no') || params.get('code'))!) : 'DOC-OFFICIAL';
     const docNumber = rawDocNumber.trim();
-    const rawType = params.get('t') ? decodeURIComponent(params.get('t')!) : 'شهادة مهنية معتمدة';
-    let docType = rawType;
-    if (rawType === 'CERT') docType = 'شهادة مهنية معتمدة';
-    else if (rawType === 'INV') docType = 'فاتورة أتعاب مهنية معتمدة';
-    else if (rawType === 'AUD') docType = 'تقرير مراقب الحسابات المستقل';
-    else if (rawType === 'TAX') docType = 'إقرار وفحص ضريبي معتمد';
-    else if (rawType === 'FS') docType = 'قوائم ومركز مالي معتمد';
+    const recordId = params.get('rid') ? decodeURIComponent(params.get('rid')!).trim() : undefined;
+    const clientId = params.get('cid') ? decodeURIComponent(params.get('cid')!).trim() : undefined;
+    const rawType = params.get('t') ? decodeURIComponent(params.get('t')!) : 'CERT';
+    
+    let docType = 'شهادة مهنية معتمدة';
+    if (rawType === 'CERT' || rawType.includes('شهادة')) docType = 'شهادة مهنية معتمدة';
+    else if (rawType === 'INV' || rawType.includes('فاتورة')) docType = 'فاتورة أتعاب مهنية معتمدة';
+    else if (rawType === 'AUD' || rawType.includes('تقرير') || rawType.includes('مراقب')) docType = 'تقرير مراقب الحسابات المستقل';
+    else if (rawType === 'TAX' || rawType.includes('ضريب') || rawType.includes('إقرار')) docType = 'إقرار وفحص ضريبي معتمد';
+    else if (rawType === 'FS' || rawType.includes('قوائم') || rawType.includes('مركز') || docNumber.startsWith('EAS') || docNumber.startsWith('FIN')) docType = 'القوائم المالية والمركز المالي المعتمد';
 
     const clientName = params.get('c') ? decodeURIComponent(params.get('c')!) : 'العميل المعتمد';
     const amount = params.get('amt') ? parseFloat(params.get('amt')!) : undefined;
+    const totalAssets = params.get('assets') ? parseFloat(params.get('assets')!) : undefined;
+    const netProfit = params.get('net') ? parseFloat(params.get('net')!) : undefined;
+    const fiscalYear = params.get('yr') ? decodeURIComponent(params.get('yr')!) : undefined;
     const date = params.get('d') ? decodeURIComponent(params.get('d')!) : new Date().toISOString().slice(0, 10);
     const hashParam = params.get('h') || params.get('hash');
     const secHash = hashParam ? decodeURIComponent(hashParam) : generateDocumentSecurityHash(docNumber, clientName, amount, date);
@@ -318,53 +422,125 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
     try {
       const state = (db as any)?.getState?.();
       if (state) {
-        // 1. Check certificates
-        const cert = state.certificates?.find((item: any) =>
-          item.certificateNumber === docNumber || item.id === docNumber
-        );
-        if (cert) {
+        // 1. If it's financial statements (FS)
+        if (rawType === 'FS' || docType.includes('قوائم') || docNumber.startsWith('EAS') || docNumber.startsWith('FIN')) {
+          const client = state.clients?.find((c: any) =>
+            (clientId && c.id === clientId) ||
+            (recordId && recordId.includes(c.id)) ||
+            (clientName && c.name?.trim() === clientName?.trim()) ||
+            (clientName && (clientName.includes(c.name?.trim() || '---') || c.name?.trim().includes(clientName)))
+          );
           return {
-            docType: cert.customHeading || docType,
-            docNumber: cert.certificateNumber || docNumber,
-            clientName: cert.beneficiaryName || clientName,
-            nationalId: cert.nationalId,
-            commercialRegNo: cert.commercialRegNo,
-            taxCardNo: cert.taxCardNo,
-            auditorName: cert.auditorName || state.officeProfile?.auditorName || 'محمد جميل مرعي',
-            licenseNumber: cert.licenseNumber || state.officeProfile?.licenseNumber || 'س.م.م 43122',
-            amount: cert.certifiedAmount !== undefined ? cert.certifiedAmount : amount,
-            monthlyAmount: cert.monthlyAmount || (cert.certifiedAmount ? Math.round(cert.certifiedAmount / 12) : undefined),
-            date: cert.issueDate || date,
-            recipient: cert.recipient || 'الجهات الرسمية والمصرفية',
-            purpose: cert.purpose || 'إثبات واعتماد مالي ورسمي',
-            fiscalYear: cert.fiscalYear,
-            securityHash: cert.securityHash || secHash,
-            firmName: cert.firmName || state.officeProfile?.firmName,
-            mode: 'encrypted_pdf',
-          };
-        }
-
-        // 2. Check invoices
-        const inv = state.invoices?.find((item: any) =>
-          item.invoiceNumber === docNumber || item.id === docNumber
-        );
-        if (inv) {
-          return {
-            docType: 'فاتورة أتعاب مهنية معتمدة',
-            docNumber: inv.invoiceNumber,
-            clientName: inv.partnerName || clientName,
-            taxCardNo: inv.taxId,
-            commercialRegNo: inv.commercialRegister,
+            recordId: recordId || (client?.id ? `FS-${client.id}-${fiscalYear || '2026'}` : docNumber),
+            clientId: client?.id || clientId,
+            docType: 'القوائم المالية والمركز المالي المعتمد',
+            docNumber,
+            clientName: client?.name || clientName,
+            nationalId: client?.nationalId,
+            commercialRegNo: params.get('cr') ? decodeURIComponent(params.get('cr')!) : (client?.commercialRegistrationNo || undefined),
+            taxCardNo: params.get('tc') ? decodeURIComponent(params.get('tc')!) : (client?.taxCardNo || undefined),
+            taxOffice: client?.taxOffice,
             auditorName: state.officeProfile?.auditorName || 'محمد جميل مرعي',
             licenseNumber: state.officeProfile?.licenseNumber || 'س.م.م 43122',
-            amount: inv.grandTotal !== undefined ? inv.grandTotal : amount,
-            date: inv.date || date,
-            recipient: 'مصلحة الضرائب المصرية والجهات المعنية',
-            purpose: 'أتعاب محاسبة ومراجعة قانونية',
+            amount: amount,
+            netProfit: netProfit !== undefined ? netProfit : amount,
+            totalAssets: totalAssets,
+            date,
+            recipient: 'الجمعية العمومية والجهات الرقابية والمصرفية',
+            purpose: 'اعتماد القوائم المالية السنوية طبقاً لمعايير المحاسبة المصرية (EAS)',
+            fiscalYear: fiscalYear || '2024',
             securityHash: secHash,
             firmName: state.officeProfile?.firmName,
             mode: 'encrypted_pdf',
           };
+        }
+
+        // 2. If it's an auditor report (AUD)
+        if (rawType === 'AUD' || docType.includes('تقرير') || docNumber.startsWith('AUD')) {
+          const client = state.clients?.find((c: any) =>
+            (clientId && c.id === clientId) ||
+            (recordId && recordId.includes(c.id)) ||
+            (clientName && c.name?.trim() === clientName?.trim()) ||
+            (clientName && (clientName.includes(c.name?.trim() || '---') || c.name?.trim().includes(clientName)))
+          );
+          return {
+            recordId: recordId || docNumber,
+            clientId: client?.id || clientId,
+            docType: 'تقرير مراقب الحسابات المستقل',
+            docNumber,
+            clientName: client?.name || clientName,
+            commercialRegNo: params.get('cr') ? decodeURIComponent(params.get('cr')!) : (client?.commercialRegistrationNo || undefined),
+            taxCardNo: params.get('tc') ? decodeURIComponent(params.get('tc')!) : (client?.taxCardNo || undefined),
+            auditorName: state.officeProfile?.auditorName || 'محمد جميل مرعي',
+            licenseNumber: state.officeProfile?.licenseNumber || 'س.م.م 43122',
+            date,
+            fiscalYear: fiscalYear || '2024',
+            recipient: 'السادة / مساهمي وأصحاب الشركة والجهات الرسمية',
+            purpose: 'إبداء الرأي المهني في القوائم المالية وفقاً لمعايير المراجعة المصرية والقانون 159 لسنة 1981',
+            securityHash: secHash,
+            firmName: state.officeProfile?.firmName,
+            mode: 'encrypted_pdf',
+          };
+        }
+
+        // 3. If it's an invoice (INV)
+        if (rawType === 'INV' || docNumber.startsWith('INV')) {
+          const inv = state.invoices?.find((item: any) =>
+            (recordId && item.id === recordId) ||
+            item.invoiceNumber === docNumber ||
+            item.id === docNumber
+          );
+          if (inv) {
+            return {
+              recordId: inv.id,
+              docType: 'فاتورة أتعاب مهنية معتمدة',
+              docNumber: inv.invoiceNumber,
+              clientName: inv.partnerName || clientName,
+              taxCardNo: inv.taxId,
+              commercialRegNo: inv.commercialRegister,
+              auditorName: state.officeProfile?.auditorName || 'محمد جميل مرعي',
+              licenseNumber: state.officeProfile?.licenseNumber || 'س.م.م 43122',
+              amount: inv.grandTotal !== undefined ? inv.grandTotal : amount,
+              date: inv.date || date,
+              recipient: 'مصلحة الضرائب المصرية والجهات المعنية',
+              purpose: 'أتعاب محاسبة ومراجعة قانونية',
+              securityHash: secHash,
+              firmName: state.officeProfile?.firmName,
+              mode: 'encrypted_pdf',
+            };
+          }
+        }
+
+        // 4. If it's an actual certificate (CERT)
+        if (rawType === 'CERT' || docNumber.startsWith('CERT')) {
+          const cert = state.certificates?.find((item: any) =>
+            (recordId && item.id === recordId) ||
+            (recordId && item.certificateNumber === recordId) ||
+            item.certificateNumber === docNumber ||
+            item.id === docNumber
+          );
+          if (cert) {
+            return {
+              recordId: cert.id,
+              docType: cert.customHeading || cert.customCertificateHeading || 'شهادة مهنية معتمدة',
+              docNumber: cert.certificateNumber || docNumber,
+              clientName: cert.beneficiaryName || cert.clientName || clientName,
+              nationalId: cert.nationalId,
+              commercialRegNo: cert.commercialRegNo,
+              taxCardNo: cert.taxCardNo,
+              auditorName: cert.auditorName || state.officeProfile?.auditorName || 'محمد جميل مرعي',
+              licenseNumber: cert.licenseNumber || state.officeProfile?.licenseNumber || 'س.م.م 43122',
+              amount: cert.certifiedAmount !== undefined ? cert.certifiedAmount : amount,
+              monthlyAmount: cert.monthlyAmount || (cert.certifiedAmount ? Math.round(cert.certifiedAmount / 12) : undefined),
+              date: cert.issueDate || cert.date || date,
+              recipient: cert.recipientEntity || cert.recipient || 'الجهات الرسمية والمصرفية',
+              purpose: cert.purpose || 'إثبات واعتماد مالي ورسمي',
+              fiscalYear: cert.fiscalYear,
+              securityHash: cert.securityHash || secHash,
+              firmName: cert.firmName || state.officeProfile?.firmName,
+              mode: 'encrypted_pdf',
+            };
+          }
         }
       }
     } catch {
@@ -372,6 +548,8 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
     }
 
     return {
+      recordId: recordId || docNumber,
+      clientId,
       docType,
       docNumber,
       clientName,
@@ -381,11 +559,13 @@ export function parseVerificationFromUrl(rawInput?: string): VerificationPayload
       auditorName: params.get('a') ? decodeURIComponent(params.get('a')!) : 'محمد جميل مرعي',
       licenseNumber: params.get('lic') ? decodeURIComponent(params.get('lic')!) : 'س.م.م 43122',
       amount,
+      totalAssets,
+      netProfit: netProfit !== undefined ? netProfit : amount,
       monthlyAmount: params.get('m_amt') ? parseFloat(params.get('m_amt')!) : (amount ? Math.round(amount / 12) : undefined),
       date,
-      recipient: params.get('to') ? decodeURIComponent(params.get('to')!) : 'الجهات الرسمية والمصرفية',
-      purpose: params.get('p') ? decodeURIComponent(params.get('p')!) : 'إثبات واعتماد مالي ورسمي',
-      fiscalYear: params.get('yr') ? decodeURIComponent(params.get('yr')!) : undefined,
+      recipient: params.get('to') ? decodeURIComponent(params.get('to')!) : (docType.includes('قوائم') ? 'الجمعية العمومية والجهات الرقابية والمصرفية' : 'الجهات الرسمية والمصرفية'),
+      purpose: params.get('p') ? decodeURIComponent(params.get('p')!) : (docType.includes('قوائم') ? 'اعتماد القوائم المالية السنوية طبقاً لمعايير المحاسبة المصرية (EAS)' : 'إثبات واعتماد مالي ورسمي'),
+      fiscalYear: fiscalYear || '2024',
       securityHash: secHash,
       mode: (params.get('mode') as any) || 'encrypted_pdf',
     };
@@ -419,7 +599,14 @@ export function generateQrCodeSvg(
     // OFFLINE_TEXT mode: Ensure clean readable lines for phone cameras
     if (targetText.includes('|') && !targetText.includes('\n')) {
       const parts = targetText.split('|');
-      targetText = `[وثيقة محاسبية معتمدة - جمهورية مصر العربية]\nالمرجع: ${parts[1] || parts[0]}\nالمحاسب القانوني: محمد جميل مرعي\nرقم القيد: س.م.م 43122\nالحالة: معتمد وموثق رسمياً ✓`;
+      let docLabel = 'وثيقة محاسبية معتمدة';
+      if (targetText.includes('FS') || targetText.includes('EAS') || targetText.includes('قوائم')) docLabel = 'اعتماد القوائم المالية والمركز المالي (EAS)';
+      else if (targetText.includes('AUD') || targetText.includes('تقرير')) docLabel = 'تقرير مراقب الحسابات المستقل (ESA)';
+      else if (targetText.includes('TAX') || targetText.includes('ضريب')) docLabel = 'اعتماد الإقرار والفحص الضريبي';
+      else if (targetText.includes('INV') || targetText.includes('فاتورة')) docLabel = 'فاتورة أتعاب مهنية معتمدة';
+      else if (targetText.includes('CERT') || targetText.includes('شهادة')) docLabel = 'شهادة مهنية رسمية معتمدة';
+
+      targetText = `[${docLabel} - جمهورية مصر العربية]\nالمرجع: ${parts[1] || parts[0]}\nالمحاسب القانوني: محمد جميل مرعي\nرقم القيد: س.م.م 43122\nالحالة: معتمد وموثق رسمياً ✓`;
     }
   }
 

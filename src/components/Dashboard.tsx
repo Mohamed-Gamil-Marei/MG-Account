@@ -742,7 +742,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         },
       ]}
     >
-      {/* Equal-sized Square KPI Cards Grid - Seamless CSS Grid across all screens */}
+      {/* Equal-sized Robust KPI Cards Grid - Seamless CSS Grid across all screens */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
         {filteredKpis.map((kpi) => {
           const Icon = kpi.icon;
@@ -750,7 +750,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div
               key={kpi.id}
               onClick={() => navigate(kpi.targetTab)}
-              className="aspect-square rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-500/60 dark:hover:border-emerald-500/50 transition-all p-3 flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              className="min-h-[142px] sm:min-h-[150px] rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800/90 shadow-2xs hover:shadow-md hover:border-emerald-500/60 dark:hover:border-emerald-500/50 transition-all p-3 flex flex-col justify-between cursor-pointer group relative overflow-hidden"
               title={`انقر للانتقال إلى تفاصيل ${kpi.title}`}
             >
               {/* Card Top: Icon & ActionsMenu */}
@@ -777,26 +777,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
 
-              {/* Card Center: Clean Value & Title (Without anatomical descriptive fluff) */}
-              <div className="my-auto text-right min-w-0">
-                <div className="font-mono font-black text-sm sm:text-base text-slate-900 dark:text-slate-100 truncate tracking-tight">
+              {/* Card Center: Clean Value & Title */}
+              <div className="my-auto py-1 text-right min-w-0">
+                <div
+                  className="font-mono font-black text-sm sm:text-base text-slate-900 dark:text-slate-50 truncate tracking-tight"
+                  title={String(kpi.value)}
+                >
                   {kpi.value}
                 </div>
-                <h3 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-400 truncate mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
                   {kpi.title}
                 </h3>
               </div>
 
-              {/* Card Bottom: Concise Badge Indicator */}
-              <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+              {/* Card Bottom: Concise Geometric Badge Indicator */}
+              <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/80">
                 <span
-                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border truncate ${getBadgeClass(
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border truncate ${getBadgeClass(
                     kpi.badgeVariant
                   )}`}
                 >
                   {kpi.badge}
                 </span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
                   عرض ↵
                 </span>
               </div>

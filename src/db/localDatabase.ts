@@ -31,6 +31,7 @@ import {
   FiscalPeriodLock,
   FeeQuotationEstimate,
   CustomsShipment,
+  FinancialActivityLog,
 } from '../types';
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
@@ -81,6 +82,7 @@ const STORAGE_KEYS = {
   PERIOD_LOCKS: 'egy_acc_period_locks_v1',
   FEE_ESTIMATES: 'egy_acc_fee_estimates_v1',
   CUSTOMS_SHIPMENTS: 'egy_acc_customs_shipments_v1',
+  FINANCIAL_ACTIVITY_LOGS: 'egy_acc_financial_activity_logs_v1',
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
@@ -117,6 +119,7 @@ export interface DatabaseState {
   exchangeRates: DailyExchangeRateRecord[];
   fiscalPeriodLocks: FiscalPeriodLock[];
   customsShipments: CustomsShipment[];
+  financialActivityLogs?: FinancialActivityLog[];
   activeClientContext?: ActiveClientContext;
   clientArchives?: ClientArchiveRecord[];
   activeClientId?: string;
@@ -278,6 +281,7 @@ export class LocalDatabase {
       const periodLocksJson = localStorage.getItem(STORAGE_KEYS.PERIOD_LOCKS);
       const feeEstimatesJson = localStorage.getItem(STORAGE_KEYS.FEE_ESTIMATES);
       const customsJson = localStorage.getItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS);
+      const financialLogsJson = localStorage.getItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS);
 
       // Check if full purge to clean slate was enforced
       const PURGE_SYSTEM_FLAG = 'cpa_integrated_purged_clean_v6';
@@ -321,6 +325,20 @@ export class LocalDatabase {
           exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
           fiscalPeriodLocks: [],
           activeClientContext: undefined,
+          financialActivityLogs: [
+            {
+              id: 'FAL-INIT-001',
+              timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+              userId: 'user-admin',
+              userName: 'محمد جميل مرعي (المحاسب القانوني)',
+              userRole: 'مدير المنظومة ومراقب الحسابات',
+              statementType: 'GENERAL',
+              action: 'SYNC_TRIAL_BALANCE',
+              itemName: 'تهيئة الدفاتر والقوائم المالية المعتمدة',
+              notes: 'بدء الرقابة المهنية والتدقيق المستندي المعتمد على القوائم المالية',
+              fiscalYear: 2026,
+            },
+          ],
           auditLogs: [
             {
               timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -350,6 +368,7 @@ export class LocalDatabase {
           localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(cleanState.officeProfile));
           localStorage.setItem(STORAGE_KEYS.WHATSAPP_MESSAGES, JSON.stringify(cleanState.whatsappMessages));
           localStorage.setItem(STORAGE_KEYS.PERIOD_LOCKS, JSON.stringify(cleanState.fiscalPeriodLocks));
+          localStorage.setItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS, JSON.stringify(cleanState.financialActivityLogs));
           localStorage.removeItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
           localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(cleanState.auditLogs));
           localStorage.setItem(PURGE_SYSTEM_FLAG, 'true');
@@ -471,6 +490,20 @@ export class LocalDatabase {
         feeEstimates: feeEstimatesJson ? JSON.parse(feeEstimatesJson) : [],
         customsShipments: customsJson ? JSON.parse(customsJson) : [],
         activeClientContext: loadedActiveClientContext,
+        financialActivityLogs: financialLogsJson ? JSON.parse(financialLogsJson) : [
+          {
+            id: 'FAL-INIT-001',
+            timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+            userId: 'user-admin',
+            userName: 'محمد جميل مرعي (المحاسب القانوني)',
+            userRole: 'مدير المنظومة ومراقب الحسابات',
+            statementType: 'GENERAL',
+            action: 'SYNC_TRIAL_BALANCE',
+            itemName: 'المطابقة والتهيئة المعتمدة للقوائم المالية',
+            notes: 'ربط أولي لأرصدة ميزان المراجعة وقيود اليومية المعتمدة مع القوائم المالية',
+            fiscalYear: 2026,
+          },
+        ],
         auditLogs: auditLogsJson ? JSON.parse(auditLogsJson) : [
           {
             timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -505,6 +538,7 @@ export class LocalDatabase {
         exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
         fiscalPeriodLocks: [],
         activeClientContext: undefined,
+        financialActivityLogs: [],
         auditLogs: [],
       };
     }
@@ -597,6 +631,9 @@ export class LocalDatabase {
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.CUSTOMS_SHIPMENTS)) {
         localStorage.setItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS, JSON.stringify(this.state.customsShipments || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS)) {
+        localStorage.setItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS, JSON.stringify(this.state.financialActivityLogs || []));
       }
       this.dirtyKeys.clear();
 
@@ -2650,6 +2687,93 @@ export class LocalDatabase {
 
   public getAuditLogs(): AuditRecord[] {
     return this.state.auditLogs || [];
+  }
+
+  // ==========================================
+  // FINANCIAL ACTIVITY LOG METHODS (سجل النشاط المالي)
+  // ==========================================
+
+  public getFinancialActivityLogs(fiscalYear?: number, clientId?: string): FinancialActivityLog[] {
+    if (!this.state.financialActivityLogs) {
+      this.state.financialActivityLogs = [];
+    }
+    return this.state.financialActivityLogs.filter((log) => {
+      if (fiscalYear && log.fiscalYear !== fiscalYear) return false;
+      if (clientId && log.clientId && log.clientId !== clientId) return false;
+      return true;
+    });
+  }
+
+  public addFinancialActivityLog(
+    logData: Omit<FinancialActivityLog, 'id' | 'timestamp'> & {
+      id?: string;
+      timestamp?: string;
+    }
+  ): FinancialActivityLog {
+    if (!this.state.financialActivityLogs) {
+      this.state.financialActivityLogs = [];
+    }
+
+    const now = new Date();
+    const timestamp =
+      logData.timestamp ||
+      now.toISOString().replace('T', ' ').substring(0, 19);
+
+    const currentUser = this.getCurrentUser();
+    const finalUserId = logData.userId || currentUser?.id || 'user-admin';
+    const finalUserName = logData.userName || currentUser?.name || 'المحاسب القانوني';
+    const finalUserRole = logData.userRole || currentUser?.role || 'مراقب حسابات معتمد';
+
+    const newLog: FinancialActivityLog = {
+      id: logData.id || `FAL-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+      timestamp,
+      userId: finalUserId,
+      userName: finalUserName,
+      userRole: finalUserRole,
+      statementType: logData.statementType || 'GENERAL',
+      action: logData.action,
+      itemKey: logData.itemKey,
+      itemName: logData.itemName,
+      previousValue: logData.previousValue,
+      newValue: logData.newValue,
+      variance: logData.variance !== undefined ? logData.variance : (
+        typeof logData.newValue === 'number' && typeof logData.previousValue === 'number'
+          ? logData.newValue - logData.previousValue
+          : undefined
+      ),
+      notes: logData.notes,
+      fiscalYear: logData.fiscalYear || 2026,
+      clientId: logData.clientId,
+      clientName: logData.clientName,
+    };
+
+    this.state.financialActivityLogs.unshift(newLog);
+
+    // Keep up to 500 records to prevent memory bloat
+    if (this.state.financialActivityLogs.length > 500) {
+      this.state.financialActivityLogs = this.state.financialActivityLogs.slice(0, 500);
+    }
+
+    this.saveState('FINANCIAL_ACTIVITY_LOGS');
+    this.notify();
+    return newLog;
+  }
+
+  public clearFinancialActivityLogs(fiscalYear?: number, clientId?: string): void {
+    if (!this.state.financialActivityLogs) return;
+
+    if (fiscalYear || clientId) {
+      this.state.financialActivityLogs = this.state.financialActivityLogs.filter((log) => {
+        if (fiscalYear && log.fiscalYear === fiscalYear) return false;
+        if (clientId && log.clientId === clientId) return false;
+        return true;
+      });
+    } else {
+      this.state.financialActivityLogs = [];
+    }
+
+    this.saveState('FINANCIAL_ACTIVITY_LOGS');
+    this.notify();
   }
 
   // ==========================================

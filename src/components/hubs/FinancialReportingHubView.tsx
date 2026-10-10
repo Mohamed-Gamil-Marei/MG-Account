@@ -122,27 +122,28 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       {/* Central Active Client Context Selector */}
       <ClientSelector state={state} />
 
-      {/* Compact Sub-Tabs Toolbar */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
+      {/* Sub-Tabs Action Buttons Deck - Clean Visible Buttons (No Horizontal Drag Bar) */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-2.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer shrink-0 border ${
                   isActive
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                     : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
                 <span className="whitespace-nowrap">{tab.label}</span>
                 {tab.badge && (
                   <span
-                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
                       isActive
                         ? 'bg-white/20 text-white'
                         : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
@@ -170,66 +171,19 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       {/* Render Active Sub-View */}
       <div>
         {activeSubTab === 'ANNUAL_FINANCIAL_DOSSIER' && (
-          <div className="space-y-3">
-            {/* Sub-Navigator between the 3 elements of the Dossier */}
-            <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 max-w-xl">
-              <button
-                type="button"
-                onClick={() => setDossierSection('STATEMENTS')}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  dossierSection === 'STATEMENTS'
-                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>1. التقارير المالية الموحدة (الميزان + القوائم)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDossierSection('NOTES')}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  dossierSection === 'NOTES'
-                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>2. الإيضاحات المتممة</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDossierSection('AUDITOR_REPORT')}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  dossierSection === 'AUDITOR_REPORT'
-                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <FileCheck2 className="w-3.5 h-3.5" />
-                <span>3. تقرير مراقب الحسابات (700)</span>
-              </button>
-            </div>
-
-            {/* Render selected section of the Dossier */}
-            {dossierSection === 'STATEMENTS' && (
-              <UnifiedFinancialReportsView
-                state={state}
-                fiscalYear={fiscalYear}
-                initialMode="FINANCIAL_STATEMENTS"
-                onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
-                onNavigateToCreditSimulator={() => setActiveSubTab('CREDIT_SIMULATOR')}
-              />
-            )}
-            {dossierSection === 'NOTES' && (
-              <FinancialNotesBuilderView state={state} />
-            )}
-            {dossierSection === 'AUDITOR_REPORT' && (
-              <AuditorReportView state={state} fiscalYear={fiscalYear} />
-            )}
-          </div>
+          <UnifiedFinancialReportsView
+            state={state}
+            fiscalYear={fiscalYear}
+            initialMode={
+              dossierSection === 'NOTES'
+                ? 'NOTES'
+                : dossierSection === 'AUDITOR_REPORT'
+                ? 'AUDITOR_REPORT'
+                : 'BALANCE_SHEET'
+            }
+            onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
+            onNavigateToCreditSimulator={() => setActiveSubTab('CREDIT_SIMULATOR')}
+          />
         )}
 
         {activeSubTab === 'CERTIFICATES' && (

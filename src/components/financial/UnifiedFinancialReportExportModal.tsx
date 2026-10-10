@@ -185,22 +185,32 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
     return generateBalanceSheet(calculatedAccounts, incomeStatement);
   }, [calculatedAccounts, incomeStatement]);
 
+  // Immutable record ID for this unified report
+  const unifiedReportRecordId = useMemo(
+    () => `UNIFIED-FS-${activeClientId || 'CLIENT'}-${currentFiscalYear}`,
+    [activeClientId, currentFiscalYear]
+  );
+
   // QR Code Payload
   const qrPayload = useMemo(() => {
     return buildFinancialStatementsQrText({
+      statementId: unifiedReportRecordId,
+      clientId: activeClientId,
       companyName: displayCompanyName,
       fiscalYear: currentFiscalYear,
       totalAssets: balanceSheet.totalAssets,
       netProfit: incomeStatement.netProfitAfterTax,
+      commercialRegNo: activeClient?.commercialRegistrationNo,
+      taxCardNo: activeClient?.taxCardNo,
       auditorName: profile.auditorName,
       licenseNumber: profile.licenseNumber,
     });
-  }, [displayCompanyName, currentFiscalYear, balanceSheet, incomeStatement, profile]);
+  }, [unifiedReportRecordId, displayCompanyName, currentFiscalYear, balanceSheet, incomeStatement, profile, activeClient, activeClientId]);
 
   const handleExecutePrint = () => {
     setIsPrinting(true);
     setTimeout(() => {
-      PrintService.printElementById('unified-report-print-canvas', {
+      PrintService.printRecordById(unifiedReportRecordId, 'unified-report-print-canvas', {
         title: `التقرير المالي الموحد - ${displayCompanyName} - ${currentFiscalYear}`,
         orientation: 'portrait',
         margins: 'DEFAULT',
@@ -504,6 +514,7 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
 
           <div
             id="unified-report-print-canvas"
+            data-record-id={unifiedReportRecordId}
             className="w-full max-w-[210mm] bg-white text-slate-900 p-8 sm:p-10 shadow-xl border border-slate-300 rounded-sm font-sans"
             style={{ minHeight: '297mm', direction: 'rtl' }}
           >

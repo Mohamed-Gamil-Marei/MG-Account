@@ -204,7 +204,7 @@ export const AuditWorkingPapersView: React.FC<AuditWorkingPapersProps> = ({ stat
   const pendingCount = auditProcedures.filter((p) => p.result === 'PENDING').length;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div id="audit-working-papers-container" className="space-y-6 pb-12">
       {/* Compact ERP Header */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -222,6 +222,8 @@ export const AuditWorkingPapersView: React.FC<AuditWorkingPapersProps> = ({ stat
           <ScreenActionToolbar
             modelType="AUDIT_PAPERS"
             title="أوراق عمل المراجعة الميدانية والأهمية النسبية"
+            targetElementId="audit-working-papers-container"
+            printSelector="#audit-working-papers-container"
             showImport={false}
           />
         </div>

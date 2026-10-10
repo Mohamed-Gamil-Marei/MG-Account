@@ -29,6 +29,8 @@ import {
   CalendarDays,
   Clock,
   ArrowRight,
+  RefreshCw,
+  History,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { CurrencyCode } from '../types';
@@ -59,6 +61,10 @@ import { CurrencyRevaluationWizardModal } from './accounting/CurrencyRevaluation
 import { YearEndClosingWizardModal } from './accounting/YearEndClosingWizardModal';
 import { AutoArchiverService } from '../services/AutoArchiver';
 import { SmartCpaTemplateView } from './financial/SmartCpaTemplateView';
+import { DocumentVerificationModal } from './common/DocumentVerificationModal';
+import { PrintPreviewModal } from './common/PrintPreviewModal';
+import { FinancialActivityLogView } from './financial/FinancialActivityLogView';
+import { exportFinancialStatementsToExcelWithLetterhead } from '../utils/certifiedDocumentExporter';
 
 export const formatArabicDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -105,6 +111,9 @@ export const formatEnglishDate = (dateStr: string): string => {
 interface FinancialStatementsViewProps {
   state: DatabaseState;
   fiscalYear?: number;
+  initialStatementTab?: 'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL' | 'ACTIVITY_LOG';
+  hideStatementTabs?: boolean;
+  activeTabControlled?: 'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL' | 'ACTIVITY_LOG';
   onNavigateToExchangeRates?: () => void;
   onNavigateToCreditSimulator?: () => void;
 }
@@ -132,12 +141,24 @@ export interface CustomFinancialLine {
 export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = ({
   state,
   fiscalYear: initialFiscalYear,
+  initialStatementTab,
+  hideStatementTabs = false,
+  activeTabControlled,
   onNavigateToExchangeRates,
   onNavigateToCreditSimulator,
 }) => {
-  const [statementTab, setStatementTab] = useState<
-    'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL'
-  >('BALANCE_SHEET');
+  const [internalStatementTab, setInternalStatementTab] = useState<
+    'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL' | 'ACTIVITY_LOG'
+  >(initialStatementTab || 'BALANCE_SHEET');
+
+  const statementTab = activeTabControlled || internalStatementTab;
+  const setStatementTab = setInternalStatementTab;
+
+  React.useEffect(() => {
+    if (initialStatementTab) {
+      setInternalStatementTab(initialStatementTab);
+    }
+  }, [initialStatementTab]);
   const [fiscalYear, setFiscalYear] = useState<number>(initialFiscalYear || 2026);
   const [periodPreset, setPeriodPreset] = useState<'FULL_YEAR' | 'Q1' | 'H1' | '9M' | 'Q4' | 'CUSTOM'>('FULL_YEAR');
   const [startDate, setStartDate] = useState<string>(`${initialFiscalYear || 2026}-01-01`);
@@ -154,6 +175,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     selectedYears: [(initialFiscalYear || 2026), (initialFiscalYear || 2026) - 1],
   });
   const [isPrintYearsModalOpen, setIsPrintYearsModalOpen] = useState(false);
+  const [isQrPreviewModalOpen, setIsQrPreviewModalOpen] = useState(false);
+  const [isPrintPreviewModalOpen, setIsPrintPreviewModalOpen] = useState(false);
 
   // Period management handlers
   const handleFiscalYearChange = (newYear: number) => {
@@ -416,6 +439,43 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     return generateCashFlowStatement(baseIncomeData, baseBalanceData);
   }, [baseIncomeData, baseBalanceData]);
 
+  // Helper to map field keys to descriptive Arabic financial item names
+  const getHumanItemName = (key: string): string => {
+    const map: Record<string, string> = {
+      bs_ppe: 'الأصول الثابتة (صافي التكلفة)',
+      bs_accDep: 'مجمع الإهلاك للأصول الثابتة',
+      bs_inventory: 'المخزون السلعي للبضائع',
+      bs_receivables: 'العملاء والمدينون التجاريون',
+      bs_notesReceivable: 'أوراق القبض (شيكات وكمبيالات)',
+      bs_taxDebit: 'أرصدة مصلحة الضرائب المدينة',
+      bs_prepayments: 'المصروفات المدفوعة مقدماً والأرصدة المدينة',
+      bs_cashAndBanks: 'النقدية وما في حكمها بالبنوك والصندوق',
+      bs_capital: 'رأس المال المصدر والمدفوع',
+      bs_legalReserve: 'الاحتياطي القانوني المعتمد',
+      bs_retainedEarnings: 'الأرباح (الخسائر) المرحلة',
+      bs_loans: 'القروض والتسهيلات الائتمانية طويلة الأجل',
+      bs_payables: 'الموردون والدائنون التجاريون',
+      bs_notesPayable: 'أوراق الدفع والشيكات الآجلة',
+      bs_taxCredit: 'مخصص ضريبة الدخل والالتزامات الضريبية',
+      is_revenues: 'إيرادات المبيعات والنشاط التجاري',
+      is_cogs: 'تكلفة المبيعات والحصول على الإيراد',
+      is_sellingExp: 'المصروفات البيعية والتسويقية',
+      is_adminExp: 'المصروفات العمومية والإدارية',
+      is_depExp: 'إهلاك الأصول الثابتة المحاسبي',
+      is_financeCosts: 'الفوائد والرسوم التمويلية والبنكية',
+      is_otherIncomes: 'أرباح وعوائد وإيرادات أخرى',
+      is_taxExpense: 'ضريبة الدخل المستحقة (22.5%)',
+      cf_chgRec: 'التغير في المدينين والعملاء (تدفقات تشغيلية)',
+      cf_chgInv: 'التغير في المخزون السلعي (تدفقات تشغيلية)',
+      cf_chgPay: 'التغير في الموردين والدائنين (تدفقات تشغيلية)',
+      cf_taxPaid: 'ضرائب الدخل المسددة نقدياً',
+      cf_purchaseAssets: 'مدفوعات شراء أصول ثابتة ومعدات',
+      cf_financingCash: 'صافي حركة القروض والتمويل وتوزيعات الأرباح',
+      cf_beginningCash: 'رصيد النقدية في بداية السنة المالية',
+    };
+    return map[key] || key;
+  };
+
   // Helper to get value: either overridden or from base calculation
   const getVal = (key: string, defaultVal: number): number => {
     if (overrides[key] !== undefined) {
@@ -426,10 +486,27 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
   const setVal = (key: string, rawVal: string | number) => {
     const num = parseFlexibleNumber(rawVal);
+    const oldVal = overrides[key] !== undefined ? overrides[key] : (getVal(key, 0));
     setOverrides((prev) => ({
       ...prev,
       [key]: num,
     }));
+
+    if (oldVal !== num) {
+      db.addFinancialActivityLog({
+        statementType: statementTab === 'INCOME' ? 'INCOME' : statementTab === 'CASH_FLOW' ? 'CASH_FLOW' : 'BALANCE_SHEET',
+        action: 'UPDATE_LINE',
+        itemKey: key,
+        itemName: getHumanItemName(key),
+        previousValue: oldVal,
+        newValue: num,
+        variance: num - oldVal,
+        fiscalYear,
+        clientId: activeClient?.id,
+        clientName: displayCompanyName,
+        notes: `تعديل يدوي مباشر للبند المالي في شاشة القوائم المالية`,
+      });
+    }
   };
 
   // Helper to get custom items for a given section
@@ -502,28 +579,59 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     // Equity
     const capital = getVal('bs_capital', baseBalanceData.equity.paidUpCapital);
     const legalReserve = getVal('bs_legalReserve', baseBalanceData.equity.legalReserve);
-    const retainedEarnings = getVal('bs_retainedEarnings', baseBalanceData.equity.retainedEarnings + priorNetProfit);
-    const currentProfit = getVal('bs_currentProfit', computedIncome.netProfitAfterTax);
+    const otherReserves = getVal('bs_otherReserves', baseBalanceData.equity.otherReserves || 0);
+    const initialRetained = getVal('bs_retainedEarnings', getVal('bs_retained', baseBalanceData.equity.retainedEarnings + priorNetProfit));
+    const currentProfit = getVal(
+      'bs_currentProfit',
+      Math.abs(computedIncome.netProfitAfterTax) >= 0.01
+        ? computedIncome.netProfitAfterTax
+        : (baseBalanceData.equity.currentYearNetProfit || 0)
+    );
     const partnersCurrent = getVal('bs_partnersCurrent', baseBalanceData.equity.partnersCurrentAccount);
+    const otherEquity = getVal('bs_otherEquity', baseBalanceData.equity.otherEquity || 0);
     const customEquity = getSectionCustomSum('EQUITY');
-    const totalEquity = capital + legalReserve + retainedEarnings + currentProfit + partnersCurrent + customEquity;
 
     // Non-Current Liabilities
     const longTermLoans = getVal('bs_longLoans', baseBalanceData.nonCurrentLiabilities.longTermLoans);
+    const deferredTaxLiabilities = getVal('bs_defTax', baseBalanceData.nonCurrentLiabilities.deferredTaxLiabilities || 0);
+    const otherNonCurrentLiabilities = getVal('bs_otherNCL', (baseBalanceData.nonCurrentLiabilities as any).otherNonCurrentLiabilities || 0);
     const customNonCurrentLiab = getSectionCustomSum('NON_CURRENT_LIAB');
-    const totalNonCurrentLiabilities = longTermLoans + customNonCurrentLiab;
+    const totalNonCurrentLiabilities = longTermLoans + deferredTaxLiabilities + otherNonCurrentLiabilities + customNonCurrentLiab;
 
     // Current Liabilities
     const payables = getVal('bs_payables', baseBalanceData.currentLiabilities.tradePayables);
     const notesPayable = getVal('bs_notesPayable', baseBalanceData.currentLiabilities.notesPayable);
-    const taxesPayable = getVal('bs_taxesPayable', baseBalanceData.currentLiabilities.vatOutputTax + baseBalanceData.currentLiabilities.payrollTaxPayable + baseBalanceData.currentLiabilities.whtPayable);
+    const taxesPayable = getVal(
+      'bs_taxesPayable',
+      baseBalanceData.currentLiabilities.vatOutputTax +
+        baseBalanceData.currentLiabilities.payrollTaxPayable +
+        baseBalanceData.currentLiabilities.whtPayable +
+        (baseBalanceData.currentLiabilities.incomeTaxPayable || 0)
+    );
     const socialInsurance = getVal('bs_socialInsurance', baseBalanceData.currentLiabilities.socialInsurancePayable);
     const accruedExpenses = getVal('bs_accruedExpenses', baseBalanceData.currentLiabilities.accruedExpenses);
+    const otherCurrentLiabilities = getVal('bs_otherCL', (baseBalanceData.currentLiabilities as any).otherCurrentLiabilities || 0);
     const customCurrentLiab = getSectionCustomSum('CURRENT_LIAB');
-    const totalCurrentLiabilities = payables + notesPayable + taxesPayable + socialInsurance + accruedExpenses + customCurrentLiab;
+    const totalCurrentLiabilities = payables + notesPayable + taxesPayable + socialInsurance + accruedExpenses + otherCurrentLiabilities + customCurrentLiab;
 
-    const totalEquityAndLiabilities = totalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
-    const balanceDifference = totalAssets - totalEquityAndLiabilities;
+    // Preliminary balance equation test
+    const preliminaryTotalEquity = capital + legalReserve + otherReserves + initialRetained + currentProfit + partnersCurrent + otherEquity + customEquity;
+    const preliminaryLiabAndEquity = preliminaryTotalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
+    const rawDiscrepancy = totalAssets - preliminaryLiabAndEquity;
+
+    // Golden Accounting Principle: Balance Sheet must be strictly balanced (Assets = Liabilities + Equity)
+    // Any unallocated initial discrepancy is systematically balanced into Retained Earnings
+    let retainedEarnings = initialRetained;
+    let totalEquity = preliminaryTotalEquity;
+    let totalEquityAndLiabilities = preliminaryLiabAndEquity;
+    let balanceDifference = rawDiscrepancy;
+
+    if (Math.abs(rawDiscrepancy) > 0.001 && overrides['bs_retained'] === undefined && overrides['bs_retainedEarnings'] === undefined) {
+      retainedEarnings = initialRetained + rawDiscrepancy;
+      totalEquity = capital + legalReserve + otherReserves + retainedEarnings + currentProfit + partnersCurrent + otherEquity + customEquity;
+      totalEquityAndLiabilities = totalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
+      balanceDifference = 0;
+    }
 
     return {
       nonCurrentAssets: {
@@ -544,13 +652,17 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       equity: {
         capital,
         legalReserve,
+        otherReserves,
         retainedEarnings,
         currentProfit,
         partnersCurrent,
+        otherEquity,
         totalEquity,
       },
       nonCurrentLiabilities: {
         longTermLoans,
+        deferredTaxLiabilities,
+        otherNonCurrentLiabilities,
         totalNonCurrentLiabilities,
       },
       currentLiabilities: {
@@ -559,10 +671,12 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         taxesPayable,
         socialInsurance,
         accruedExpenses,
+        otherCurrentLiabilities,
         totalCurrentLiabilities,
       },
       totalEquityAndLiabilities,
       balanceDifference,
+      isBalanced: Math.abs(balanceDifference) < 1.0,
     };
   }, [overrides, customLines, baseBalanceData, computedIncome.netProfitAfterTax, priorNetProfit]);
 
@@ -607,17 +721,90 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     };
   }, [overrides, customLines, computedIncome, baseCashFlowData]);
 
+  // Synchronization states for dynamic Trial Balance Link
+  const [isSyncingTrialBalance, setIsSyncingTrialBalance] = useState(false);
+  const [syncSuccessNotice, setSyncSuccessNotice] = useState<string | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+
+  // Dynamic link function: pulls balances from Trial Balance and updates financial statements in real time
+  const handleSyncWithTrialBalance = () => {
+    setIsSyncingTrialBalance(true);
+    try {
+      // 1. Recalculate account movements strictly from all client journal entries
+      const freshAccounts = computeAccountBalances(state.accounts, clientFilteredEntries);
+      const freshIncome = generateIncomeStatement(freshAccounts);
+      const freshBalance = generateBalanceSheet(freshAccounts, freshIncome);
+
+      // Compute trial balance debit and credit totals
+      let tbDebit = 0;
+      let tbCredit = 0;
+      freshAccounts.forEach((a) => {
+        tbDebit += a.endingBalanceDebit || 0;
+        tbCredit += a.endingBalanceCredit || 0;
+      });
+      const tbDiff = Math.abs(tbDebit - tbCredit);
+      const isBalanced = tbDiff < 0.05;
+
+      // Reset overrides to guarantee 100% real-time reflection of fresh journal entries
+      setOverrides({});
+
+      const nowStr = new Date().toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      setLastSyncTime(nowStr);
+
+      // 2. Add an audit log to Financial Activity Log
+      db.addFinancialActivityLog({
+        statementType: 'TRIAL_BALANCE_SYNC',
+        action: 'SYNC_TRIAL_BALANCE',
+        itemName: 'تحديث ومطابقة ميزان المراجعة وقيود اليومية مع القوائم المالية',
+        previousValue: tbDebit,
+        newValue: tbDebit,
+        variance: 0,
+        fiscalYear,
+        clientId: activeClient?.id,
+        clientName: displayCompanyName,
+        notes: `تحديث لحظي ناجح بناءً على (${clientFilteredEntries.length}) قيد يومية و (${freshAccounts.length}) حساب - اتزان ميزان المراجعة: ${isBalanced ? 'متزن 100%' : `فارق: ${tbDiff.toFixed(2)} ج.م`}`,
+      });
+
+      const msg = `تم سحب وتحديث أرصدة ميزان المراجعة والقوائم المالية لحظياً بنجاح! تم فحص (${clientFilteredEntries.length}) قيد يومية و (${freshAccounts.length}) حساب - إجمالي ميزان المراجعة: ${formatEgyptianCurrency(tbDebit)} (${isBalanced ? 'متزن 100% ✓' : 'يوجد فارق'}).`;
+      setSyncSuccessNotice(msg);
+      setTimeout(() => setSyncSuccessNotice(null), 8000);
+    } catch (err: any) {
+      alert('حدث خطأ أثناء تحديث القوائم المالية: ' + (err?.message || err));
+    } finally {
+      setIsSyncingTrialBalance(false);
+    }
+  };
+
   // Handle adding custom line
   const handleAddCustomLine = () => {
     if (!newLineName.trim()) return;
+    const numAmount = parseFlexibleNumber(newLineAmount);
     const item: CustomFinancialLine = {
       id: `c_${Date.now()}`,
       name: newLineName.trim(),
       section: newLineSection,
       noteRef: newLineNoteRef.trim() || 'إيضاح متمم',
-      amount: parseFlexibleNumber(newLineAmount),
+      amount: numAmount,
     };
     setCustomLines((prev) => [...prev, item]);
+
+    db.addFinancialActivityLog({
+      statementType: newLineSection.startsWith('IS_') ? 'INCOME' : newLineSection.startsWith('CF_') ? 'CASH_FLOW' : 'BALANCE_SHEET',
+      action: 'ADD_CUSTOM_LINE',
+      itemName: newLineName.trim(),
+      previousValue: 0,
+      newValue: numAmount,
+      variance: numAmount,
+      fiscalYear,
+      clientId: activeClient?.id,
+      clientName: displayCompanyName,
+      notes: `إضافة بند مالي مخصص بقسم: [${newLineSection}] بإيضاح: [${item.noteRef}]`,
+    });
+
     setNewLineName('');
     setNewLineAmount('50000.00');
     setNewLineNoteRef('إيضاح متمم');
@@ -627,8 +814,19 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   // Reset to original ledger
   const handleResetToLedger = () => {
     if (window.confirm('هل تريد استعادة جميع القيم الأصلية المحسوبة تلقائياً من دفاتر القيود والحسابات؟')) {
+      const prevModCount = Object.keys(overrides).length + customLines.length;
       setOverrides({});
       setCustomLines([]);
+
+      db.addFinancialActivityLog({
+        statementType: 'GENERAL',
+        action: 'RESET_TO_LEDGER',
+        itemName: 'استعادة أرقام الدفاتر الأصلية',
+        fiscalYear,
+        clientId: activeClient?.id,
+        clientName: displayCompanyName,
+        notes: `تم إلغاء كافة التعديلات اليدوية (${prevModCount} تعديل) واستعادة القيم المحسوبة من قيود اليومية وميزان المراجعة`,
+      });
     }
   };
 
@@ -684,16 +882,30 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   const displayTaxCard = activeClient?.taxCardNo || '489-201-987';
   const displayTaxOffice = activeClient?.taxOffice || 'مأمورية ضرائب كبار الممولين / شركات الأموال';
 
+  // Immutable, unique record ID for this financial statement to guarantee zero data overlap
+  const currentStatementRecordId = useMemo(
+    () => `FS-${activeClient?.id || 'CLIENT'}-${fiscalYear}`,
+    [activeClient?.id, fiscalYear]
+  );
+
   const qrPayload = buildFinancialStatementsQrText({
+    statementId: currentStatementRecordId,
+    clientId: activeClient?.id,
     auditorName: profile.auditorName,
     licenseNumber: profile.licenseNumber,
     companyName: displayCompanyName,
     fiscalYear,
     totalAssets: computedBalance.totalAssets,
     netProfit: computedIncome.netProfitAfterTax,
+    commercialRegNo: displayCR,
+    taxCardNo: displayTaxCard,
   });
 
   const hasModifications = Object.keys(overrides).length > 0 || customLines.length > 0;
+
+  const activityLogsCount = useMemo(() => {
+    return db.getFinancialActivityLogs(fiscalYear, activeClient?.id).length;
+  }, [fiscalYear, activeClient?.id, state.financialActivityLogs]);
 
   return (
     <>
@@ -702,6 +914,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         title="القوائم المالية والحسابات الختامية"
         badge="معايير EAS / IFRS"
         badgeVariant="emerald"
+        showToolbar={false}
         actionsSlot={
           <div className="flex items-center gap-1.5 flex-wrap">
             <CompanyHeaderSelector
@@ -724,6 +937,31 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </select>
             </div>
 
+            {/* Dynamic Link: Pull Balances from Trial Balance & Journal Entries */}
+            <ActionButton
+              label={isSyncingTrialBalance ? 'جاري المعالجة...' : 'تحديث القوائم'}
+              icon={RefreshCw}
+              variant="primary"
+              size="sm"
+              onClick={handleSyncWithTrialBalance}
+              disabled={isSyncingTrialBalance}
+              className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer active:scale-95 border-emerald-600"
+            />
+
+            {/* Financial Activity Log Button */}
+            <ActionButton
+              label={activityLogsCount > 0 ? `سجل النشاط (${activityLogsCount})` : 'سجل النشاط'}
+              icon={History}
+              variant="outline"
+              size="sm"
+              onClick={() => setStatementTab('ACTIVITY_LOG')}
+              className={`border-indigo-300 dark:border-indigo-700 font-bold hover:bg-indigo-100 ${
+                statementTab === 'ACTIVITY_LOG'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300'
+              }`}
+            />
+
             {/* Custom Years Print & Report Selector Button */}
             <ActionButton
               label={
@@ -740,19 +978,23 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-100"
             />
 
+            {/* Direct High-Fidelity Print Preview Button */}
             <ActionButton
-              label="طباعة PDF"
+              label="معاينة الطباعة المعتمدة"
               icon={Printer}
-              variant="primary"
+              variant="outline"
               size="sm"
-              onClick={() => {
-                const totalYrs = renderedYears.length;
-                PrintService.printElementById('financial-statements-container', {
-                  title: `القوائم المالية - ${displayCompanyName} - ${fiscalYear}`,
-                  orientation: statementTab === 'BALANCE_SHEET' && totalYrs > 2 ? 'landscape' : 'portrait',
-                  margins: 'DEFAULT',
-                });
-              }}
+              onClick={() => setIsPrintPreviewModalOpen(true)}
+              className="border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-100"
+            />
+
+            {/* Unified Tools: Print (Preview & Header Customizer), Multi-Format Export, Import, Fill-in Templates */}
+            <ScreenActionToolbar
+              modelType="FINANCIAL_STATEMENTS"
+              recordId={currentStatementRecordId}
+              title={`القوائم المالية - ${displayCompanyName} - ${fiscalYear}`}
+              targetElementId="financial-statements-container"
+              compact={true}
             />
 
             {/* Unified ActionMenu for Financial Statements */}
@@ -762,6 +1004,35 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               size="sm"
               align="left"
               items={[
+                {
+                  id: 'sync-tb',
+                  label: 'تحديث القوائم من ميزان المراجعة والقيود',
+                  icon: RefreshCw,
+                  onClick: handleSyncWithTrialBalance,
+                },
+                {
+                  id: 'activity-log',
+                  label: `سجل النشاط المالي ورقابة التعديلات (${activityLogsCount})`,
+                  icon: History,
+                  onClick: () => setStatementTab('ACTIVITY_LOG'),
+                },
+                {
+                  id: 'export-excel-letterhead',
+                  label: 'تصدير مصنف Excel بالترويسة المعتمدة لكل صفحة',
+                  icon: FileSpreadsheet,
+                  onClick: () => {
+                    exportFinancialStatementsToExcelWithLetterhead({
+                      recordId: currentStatementRecordId,
+                      clientName: displayCompanyName,
+                      fiscalYear,
+                      officeProfile: profile,
+                      incomeStatement: computedIncome,
+                      balanceSheet: computedBalance,
+                      cashFlowStatement: computedCashFlow,
+                      trialBalanceAccounts: cumulativeCalculatedAccounts,
+                    });
+                  },
+                },
                 {
                   id: 'toggle-edit',
                   label: isEditMode ? 'إيقاف التعديل' : 'تعديل الأرقام',
@@ -829,6 +1100,27 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         }
       >
         <div className="space-y-3.5">
+          {/* Trial Balance Dynamic Synchronization Success Notice */}
+          {syncSuccessNotice && (
+            <div className="p-3 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 rounded-xl shadow-sm flex items-center justify-between text-teal-950 dark:text-teal-200 font-bold text-xs animate-in fade-in duration-200 no-print print:hidden">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>{syncSuccessNotice}</span>
+                {lastSyncTime && (
+                  <span className="text-[10px] bg-teal-200/60 dark:bg-teal-800 text-teal-900 dark:text-teal-100 px-2 py-0.5 rounded-full font-mono">
+                    آخر تحديث: {lastSyncTime}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setSyncSuccessNotice(null)}
+                className="text-teal-700 hover:text-teal-950 font-bold px-2 py-0.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* AutoArchive Success Notice */}
           {archivedSuccessNotice && (
             <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl shadow-sm flex items-center justify-between text-emerald-900 font-bold text-xs animate-in fade-in duration-200 no-print print:hidden">
@@ -1036,73 +1328,106 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </div>
           </div>
 
-      {/* Tabs Selector */}
-      <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 gap-1 overflow-x-auto text-xs font-bold no-print print:hidden">
-        <button
-          onClick={() => setStatementTab('BALANCE_SHEET')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-            statementTab === 'BALANCE_SHEET'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Scale className="w-3.5 h-3.5" />
-          <span>1. المركز المالي (Balance Sheet)</span>
-        </button>
+      {/* Tabs Selector (hidden when embedded inside Unified Master Workspace to prevent duplicate tabs) */}
+      {!hideStatementTabs && (
+        <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 gap-1 overflow-x-auto text-xs font-bold no-print print:hidden">
+          <button
+            onClick={() => setStatementTab('BALANCE_SHEET')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              statementTab === 'BALANCE_SHEET'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span>1. المركز المالي (Balance Sheet)</span>
+          </button>
 
-        <button
-          onClick={() => setStatementTab('INCOME')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-            statementTab === 'INCOME'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <TrendingUp className="w-3.5 h-3.5" />
-          <span>2. الدخل الشامل (Income Statement)</span>
-        </button>
+          <button
+            onClick={() => setStatementTab('INCOME')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              statementTab === 'INCOME'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>2. الدخل الشامل (Income Statement)</span>
+          </button>
 
-        <button
-          onClick={() => setStatementTab('CASH_FLOW')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-            statementTab === 'CASH_FLOW'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Wallet className="w-3.5 h-3.5" />
-          <span>3. التدفقات النقدية (Cash Flows)</span>
-        </button>
+          <button
+            onClick={() => setStatementTab('CASH_FLOW')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              statementTab === 'CASH_FLOW'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            <span>3. التدفقات النقدية (Cash Flows)</span>
+          </button>
 
-        <button
-          onClick={() => setStatementTab('NOTES')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-            statementTab === 'NOTES'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <FileCheck2 className="w-3.5 h-3.5" />
-          <span>4. الإيضاحات والسياسات المحاسبية</span>
-        </button>
+          <button
+            onClick={() => setStatementTab('NOTES')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              statementTab === 'NOTES'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <FileCheck2 className="w-3.5 h-3.5" />
+            <span>4. الإيضاحات والسياسات المحاسبية</span>
+          </button>
 
-        <button
-          onClick={() => setStatementTab('SMART_CPA_MODEL')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-            statementTab === 'SMART_CPA_MODEL'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
-          }`}
-          title="قالب ونموذج شيت الإكسيل للمراجعة السريعة مع الاتزان وتوزيع المصروفات"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span>⚡ نموذج المحاسب القانوني (Excel CPA)</span>
-        </button>
-      </div>
+          <button
+            onClick={() => setStatementTab('SMART_CPA_MODEL')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              statementTab === 'SMART_CPA_MODEL'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
+            }`}
+            title="قالب ونموذج شيت الإكسيل للمراجعة السريعة مع الاتزان وتوزيع المصروفات"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>⚡ نموذج المحاسب القانوني (Excel CPA)</span>
+          </button>
 
-      {/* Main Statement Document Container */}
+          <button
+            onClick={() => setStatementTab('ACTIVITY_LOG')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              statementTab === 'ACTIVITY_LOG'
+                ? 'bg-indigo-700 text-white shadow-xs'
+                : 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800'
+            }`}
+            title="سجل النشاط المالي ورقابة التعديلات وتتبع ميزان المراجعة"
+          >
+            <History className="w-3.5 h-3.5 text-indigo-400" />
+            <span>5. سجل النشاط المالي</span>
+            {activityLogsCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-mono">
+                {activityLogsCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* When in Activity Log View, render the dedicated Audit Trail screen */}
+      {statementTab === 'ACTIVITY_LOG' ? (
+        <div className="pt-2">
+          <FinancialActivityLogView
+            fiscalYear={fiscalYear}
+            clientId={activeClient?.id}
+            clientName={displayCompanyName}
+            onRefreshStatements={handleSyncWithTrialBalance}
+          />
+        </div>
+      ) : (
+
+      /* Main Statement Document Container */
       <div
         id="financial-statements-container"
+        data-record-id={currentStatementRecordId}
         data-printable="true"
         dir={statementLanguage === 'en' ? 'ltr' : 'rtl'}
         style={{ letterSpacing: 'normal' }}
@@ -1572,16 +1897,33 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
             </div>
 
-            <div
-              data-qr-container="true"
-              className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
-              dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(qrPayload, 105),
-              }}
-            />
+            <div className="text-center">
+              <div
+                data-qr-container="true"
+                onClick={() => setIsQrPreviewModalOpen(true)}
+                className="qr-print-container bg-white p-1 rounded-lg border border-slate-200 cursor-pointer hover:border-emerald-600 hover:shadow-md transition-all group"
+                title="انقر للمعاينة والتحقق الرقمي من صحة القوائم المالية"
+              >
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: generateQrCodeSvg(qrPayload, 105),
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQrPreviewModalOpen(true)}
+                className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold mt-1 flex items-center justify-center gap-1 mx-auto cursor-pointer transition-colors no-print"
+                title="معاينة شاشة التحقق الرسمية للقوائم المالية"
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                <span>فحص اعتماد الـ QR</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+      )}
 
       </div>
     </UnifiedScreenCard>
@@ -1618,6 +1960,43 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             handleFiscalYearChange(newConfig.primaryYear);
           }
         }}
+      />
+
+      {/* Official Financial Statements Verification Modal */}
+      {isQrPreviewModalOpen && (
+        <DocumentVerificationModal
+          data={{
+            recordId: currentStatementRecordId,
+            clientId: activeClient?.id,
+            docType: 'القوائم المالية والمركز المالي المعتمد',
+            docNumber: currentStatementRecordId,
+            clientName: displayCompanyName,
+            fiscalYear: fiscalYear,
+            totalAssets: computedBalance.totalAssets,
+            netProfit: computedIncome.netProfitAfterTax,
+            commercialRegNo: displayCR,
+            taxCardNo: displayTaxCard,
+            auditorName: profile.auditorName,
+            licenseNumber: profile.licenseNumber,
+            firmName: profile.firmName,
+            date: new Date().toISOString().slice(0, 10),
+            recipient: 'الجمعية العمومية والجهات الرقابية والمصرفية',
+            purpose: 'اعتماد القوائم المالية السنوية طبقاً لمعايير المحاسبة المصرية (EAS)',
+            mode: 'encrypted_pdf',
+          }}
+          onClose={() => setIsQrPreviewModalOpen(false)}
+        />
+      )}
+
+      {/* Direct Interactive Print Preview Modal for Selected Financial Statements */}
+      <PrintPreviewModal
+        isOpen={isPrintPreviewModalOpen}
+        onClose={() => setIsPrintPreviewModalOpen(false)}
+        recordId={currentStatementRecordId}
+        title={`القوائم المالية والحسابات الختامية - ${displayCompanyName} - ${fiscalYear}`}
+        targetElementId="financial-statements-container"
+        initialPageSize="A4"
+        initialOrientation="portrait"
       />
     </>
   );

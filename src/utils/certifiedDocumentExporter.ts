@@ -257,8 +257,9 @@ export interface CertifiedDocumentData {
  */
 function findTargetElement(elementIdOrSelector?: string): HTMLElement | null {
   if (elementIdOrSelector) {
+    const cleanId = elementIdOrSelector.replace(/^#/, '');
     // Try exact ID
-    let el = document.getElementById(elementIdOrSelector);
+    let el = document.getElementById(cleanId);
     if (el) return el;
 
     // Try query selector
@@ -273,22 +274,33 @@ function findTargetElement(elementIdOrSelector?: string): HTMLElement | null {
   // Intelligent fallbacks across all views
   const candidateSelectors = [
     '#printable-preview-canvas',
+    '#financial-statements-container',
+    '#trial-balance-report',
+    '#journal-entries-table-container',
+    '#printable-journal-book',
+    '#general-ledger-container',
+    '#fixed-assets-container',
+    '#office-treasury-table-container',
+    '#office-treasury-voucher-print',
+    '#payroll-payslip-canvas',
+    '#chart-of-accounts-card',
+    '#clients-archive-unified-card',
+    '#tax-agenda-printable-container',
+    '#tax-declaration-paper',
     '#official-certificate-document',
     '#credit-financials-container',
     '#credit-batch-print-wrapper',
     '#credit-printable-dossier',
     '#financial-simulator-report',
     '#auditor-report-paper',
-    '#financial-statements-container',
     '#feasibility-study-paper',
     '#feasibility-study-document',
-    '#tax-declaration-paper',
-    '#egyptian-official-tax-form',
+    '#audit-working-papers-container',
+    '#customs-hub-printable-container',
+    '#customs-dossier-printable',
     '#invoice-print-container',
     '#official-invoice-document',
-    '#trial-balance-report',
-    '#audit-working-papers-container',
-    '#payroll-payslip-canvas',
+    '#egyptian-official-tax-form',
     '#financial-notes-canvas',
     '#bank-reconciliation-print',
     '#cash-flow-predictor-print',
@@ -298,27 +310,192 @@ function findTargetElement(elementIdOrSelector?: string): HTMLElement | null {
     '.printable-canvas',
     '.printable-content',
     '.printable-certificate',
+    '.unified-screen-card',
+    '.accounting-table',
     'main',
     '#root',
   ];
 
   for (const selector of candidateSelectors) {
-    const found = document.querySelector<HTMLElement>(selector);
-    if (found && found.offsetHeight > 50) {
-      return found;
+    try {
+      const found = document.querySelector<HTMLElement>(selector);
+      if (found && found.offsetHeight > 50) {
+        return found;
+      }
+    } catch {
+      // ignore
     }
   }
 
   return document.body;
 }
 
+export interface PdfExportOptions {
+  orientation?: 'portrait' | 'landscape';
+  format?: 'a4' | 'a3' | 'letter';
+  fitToSinglePage?: boolean;
+  recordId?: string;
+  documentTitle?: string;
+  clientName?: string;
+  fiscalYear?: number | string;
+  includeLetterheadEveryPage?: boolean;
+  officeProfile?: OfficeProfile;
+}
+
 /**
- * Export HTML element to PDF with high-DPI rendering and multi-page slicing
+ * Creates high-fidelity official letterhead banner canvas for PDF exports
+ */
+export function drawLetterheadCanvas(
+  profile?: OfficeProfile,
+  recordId?: string,
+  title?: string,
+  clientName?: string,
+  widthPx: number = 1600,
+  heightPx: number = 170
+): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = widthPx;
+  c.height = heightPx;
+  const ctx = c.getContext('2d');
+  if (!ctx) return c;
+
+  // Background white
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, widthPx, heightPx);
+
+  // Top emerald accent bar
+  const grad = ctx.createLinearGradient(0, 0, widthPx, 0);
+  grad.addColorStop(0, '#064e3b');
+  grad.addColorStop(0.5, '#047857');
+  grad.addColorStop(1, '#0f766e');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, widthPx, 8);
+
+  // Right Side (RTL): Office & Auditor Credentials
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'right';
+
+  // Office Name
+  ctx.fillStyle = '#064e3b';
+  ctx.font = 'bold 28px "Cairo", "IBM Plex Sans Arabic", Tahoma, sans-serif';
+  ctx.fillText(profile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات', widthPx - 30, 44);
+
+  // Auditor & License
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 21px "Cairo", "IBM Plex Sans Arabic", Tahoma, sans-serif';
+  ctx.fillText(
+    `${profile?.auditorName || 'محمد جميل مرعي'} • قيد س.م.م: ${profile?.licenseNumber || '43122'}`,
+    widthPx - 30,
+    76
+  );
+
+  // Subtitle / Contact
+  ctx.fillStyle = '#64748b';
+  ctx.font = '15px "Cairo", "IBM Plex Sans Arabic", Tahoma, sans-serif';
+  ctx.fillText(
+    `عضو جمعية المحاسبين والمراجعين المصرية • هاتف: ${profile?.phone || '01003335360'} • ${profile?.address || 'جمهورية مصر العربية'}`,
+    widthPx - 30,
+    106
+  );
+
+  // Left Side Box: Document Title, Record ID, Date
+  ctx.direction = 'ltr';
+  ctx.textAlign = 'left';
+
+  // Rounded badge container
+  ctx.fillStyle = '#f8fafc';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(30, 16, 500, 110, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  // Document Title
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 19px "Cairo", "IBM Plex Sans Arabic", Tahoma, sans-serif';
+  const cleanDocTitle = (title || 'تقرير مالي معتمد').slice(0, 38);
+  ctx.fillText(cleanDocTitle, 45, 46);
+
+  // Record ID (Immutable)
+  if (recordId) {
+    ctx.fillStyle = '#047857';
+    ctx.font = 'bold 15px "JetBrains Mono", monospace';
+    ctx.fillText(`ID: ${recordId}`, 45, 75);
+  }
+
+  // Client Name & Date
+  ctx.fillStyle = '#64748b';
+  ctx.font = '14px "Cairo", "IBM Plex Sans Arabic", Tahoma, sans-serif';
+  const clSnippet = clientName ? `العميل: ${clientName.slice(0, 24)} • ` : '';
+  const dateStr = new Date().toISOString().slice(0, 10);
+  ctx.fillText(`${clSnippet}تاريخ: ${dateStr}`, 45, 104);
+
+  // Bottom green separating line
+  ctx.strokeStyle = '#10b981';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(25, heightPx - 6);
+  ctx.lineTo(widthPx - 25, heightPx - 6);
+  ctx.stroke();
+
+  return c;
+}
+
+/**
+ * Creates running footer canvas for PDF exports
+ */
+export function drawRunningFooterCanvas(
+  pageIndex: number,
+  totalPages: number,
+  recordId?: string,
+  widthPx: number = 1600,
+  heightPx: number = 65
+): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = widthPx;
+  c.height = heightPx;
+  const ctx = c.getContext('2d');
+  if (!ctx) return c;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, widthPx, heightPx);
+
+  // Top line
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(25, 6);
+  ctx.lineTo(widthPx - 25, 6);
+  ctx.stroke();
+
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '14px "Cairo", "IBM Plex Sans Arabic", Tahoma, sans-serif';
+  ctx.fillText(
+    `وثيقة رسمية معتمدة وفقاً لمعايير المحاسبة المصرية (EAS) • كود السجل المعتمد: [${recordId || 'FS-OFFICIAL'}]`,
+    widthPx - 30,
+    36
+  );
+
+  ctx.direction = 'ltr';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#334155';
+  ctx.font = 'bold 14px "JetBrains Mono", "Cairo", sans-serif';
+  ctx.fillText(`صفحة ${pageIndex + 1} من ${totalPages}`, 35, 36);
+
+  return c;
+}
+
+/**
+ * Export HTML element to PDF with high-DPI rendering, official office letterhead on EVERY page,
+ * and immutable record ID binding to prevent data crossover.
  */
 export async function exportElementToPdf(
   elementIdOrSelector?: string,
   filename: string = 'المستند_المعتمد.pdf',
-  options?: { orientation?: 'portrait' | 'landscape'; format?: 'a4' | 'a3' | 'letter'; fitToSinglePage?: boolean }
+  options?: PdfExportOptions
 ): Promise<boolean> {
   const element = findTargetElement(elementIdOrSelector);
   if (!element) {
@@ -327,7 +504,7 @@ export async function exportElementToPdf(
   }
 
   try {
-    // Ensure all web fonts (Cairo, IBM Plex Sans Arabic) are fully loaded before capturing
+    // Ensure all web fonts are loaded
     if (document.fonts && document.fonts.ready) {
       try {
         await document.fonts.ready;
@@ -338,6 +515,10 @@ export async function exportElementToPdf(
 
     const orientation = options?.orientation || 'portrait';
     const format = options?.format || 'a4';
+    const recordId = options?.recordId?.trim();
+    const docTitle = options?.documentTitle || filename.replace(/\.pdf$/i, '').replace(/_/g, ' ');
+    const clientName = options?.clientName;
+    const includeLetterhead = options?.includeLetterheadEveryPage !== false;
 
     // Standard A4 dimensions in mm
     const pdfWidth = orientation === 'portrait' ? 210 : 297;
@@ -350,7 +531,24 @@ export async function exportElementToPdf(
       compress: true,
     });
 
-    // Check if element contains discrete page sheets (like multi-page A4 canvas dossier)
+    // Generate letterhead image if requested
+    let letterheadImgData: string | null = null;
+    const letterheadHeightMm = includeLetterhead ? (orientation === 'portrait' ? 22 : 20) : 0;
+    const footerHeightMm = includeLetterhead ? 9 : 0;
+
+    if (includeLetterhead) {
+      const lhCanvas = drawLetterheadCanvas(
+        options?.officeProfile,
+        recordId,
+        docTitle,
+        clientName,
+        1800,
+        170
+      );
+      letterheadImgData = lhCanvas.toDataURL('image/png', 1.0);
+    }
+
+    // Check if element contains discrete page sheets
     let discreteSheets: HTMLElement[] = [];
     if (
       element.matches &&
@@ -368,47 +566,55 @@ export async function exportElementToPdf(
       }
     }
 
-    // Filter to visible sheets to avoid exporting blank/hidden filtered pages
     const visibleSheets = discreteSheets.filter(
       (s) => s.offsetParent !== null || s.offsetHeight > 0 || (s.style && s.style.display !== 'none')
     );
     const sheetsToCapture = visibleSheets.length > 0 ? visibleSheets : discreteSheets;
 
     if (sheetsToCapture.length > 0) {
-      // Multi-sheet discrete rendering: capture each page individually for exact 1:1 A4 alignment
-      for (let i = 0; i < sheetsToCapture.length; i++) {
+      const totalPages = sheetsToCapture.length;
+      for (let i = 0; i < totalPages; i++) {
         const sheet = sheetsToCapture[i];
         if (i > 0) {
           pdf.addPage();
         }
 
         const sheetCanvas = await html2canvas(sheet, {
-          scale: 2.2, // High resolution for crisp Arabic typography and lines
+          scale: 2.2,
           useCORS: true,
           allowTaint: true,
           logging: false,
           backgroundColor: '#ffffff',
           scrollX: 0,
           scrollY: 0,
-          windowWidth: 1200, // Force desktop width so A4 layout doesn't collapse into mobile breakpoint
+          windowWidth: 1200,
           onclone: (clonedDoc) => {
             sanitizeClonedDocForHtml2Canvas(clonedDoc);
           },
         });
 
         const imgData = sheetCanvas.toDataURL('image/png', 1.0);
-        // Add full-bleed exact page image (the sheet already contains internal 14-16mm padding)
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+
+        // Stamp running footer on every discrete sheet if requested
+        if (includeLetterhead) {
+          const ftCanvas = drawRunningFooterCanvas(i, totalPages, recordId, 1600, 65);
+          const ftImg = ftCanvas.toDataURL('image/png', 1.0);
+          pdf.addImage(ftImg, 'PNG', 6, pdfHeight - footerHeightMm - 2, pdfWidth - 12, footerHeightMm, undefined, 'FAST');
+        }
       }
 
-      pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+      const cleanFilename = recordId && !filename.includes(recordId)
+        ? `${filename.replace(/\.pdf$/i, '')}_${recordId}.pdf`
+        : (filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+      pdf.save(cleanFilename);
       return true;
     }
 
-    // Continuous single-element fallback with careful proportional margins
+    // Continuous element rendering with letterhead on every page
     const marginMm = 6;
     const printableWidth = pdfWidth - marginMm * 2;
-    const printableHeight = pdfHeight - marginMm * 2;
+    const contentAreaHeightMm = pdfHeight - marginMm * 2 - letterheadHeightMm - footerHeightMm - 4;
 
     const canvas = await html2canvas(element, {
       scale: 2.2,
@@ -424,44 +630,47 @@ export async function exportElementToPdf(
       },
     });
 
-    const totalHeightMm = (canvas.height * printableWidth) / canvas.width;
-    const shouldFitSinglePage = options?.fitToSinglePage || totalHeightMm <= printableHeight * 1.35;
+    const totalContentHeightMm = (canvas.height * printableWidth) / canvas.width;
+    const shouldFitSinglePage = options?.fitToSinglePage || totalContentHeightMm <= contentAreaHeightMm * 1.25;
 
     if (shouldFitSinglePage) {
-      if (totalHeightMm <= printableHeight) {
-        // Fits vertically within standard margins
-        pdf.addImage(
-          canvas.toDataURL('image/png', 1.0),
-          'PNG',
-          marginMm,
-          marginMm,
-          printableWidth,
-          totalHeightMm,
-          undefined,
-          'FAST'
-        );
-      } else {
-        // Scale down proportionally so whole document fits on 1 single page without any cutoff
-        const scaleFactor = printableHeight / totalHeightMm;
-        const scaledWidthMm = printableWidth * scaleFactor;
-        const offsetX = marginMm + (printableWidth - scaledWidthMm) / 2;
-        pdf.addImage(
-          canvas.toDataURL('image/png', 1.0),
-          'PNG',
-          offsetX,
-          marginMm,
-          scaledWidthMm,
-          printableHeight,
-          undefined,
-          'FAST'
-        );
+      // 1. Draw top letterhead banner
+      if (letterheadImgData) {
+        pdf.addImage(letterheadImgData, 'PNG', marginMm, 4, printableWidth, letterheadHeightMm, undefined, 'FAST');
       }
-      pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+
+      // 2. Draw content in the middle
+      const contentTopY = 4 + letterheadHeightMm + 2;
+      const actualHeight = Math.min(totalContentHeightMm, contentAreaHeightMm);
+      pdf.addImage(
+        canvas.toDataURL('image/png', 1.0),
+        'PNG',
+        marginMm,
+        contentTopY,
+        printableWidth,
+        actualHeight,
+        undefined,
+        'FAST'
+      );
+
+      // 3. Draw bottom running footer
+      if (includeLetterhead) {
+        const ftCanvas = drawRunningFooterCanvas(0, 1, recordId, 1600, 65);
+        const ftImg = ftCanvas.toDataURL('image/png', 1.0);
+        pdf.addImage(ftImg, 'PNG', marginMm, pdfHeight - footerHeightMm - 3, printableWidth, footerHeightMm, undefined, 'FAST');
+      }
+
+      const cleanFilename = recordId && !filename.includes(recordId)
+        ? `${filename.replace(/\.pdf$/i, '')}_${recordId}.pdf`
+        : (filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+      pdf.save(cleanFilename);
       return true;
     }
 
-    const pageCanvasHeight = Math.floor(canvas.width * (printableHeight / printableWidth));
+    // Multi-page slicing: every slice gets letterhead on top and footer on bottom!
+    const pageCanvasHeight = Math.floor(canvas.width * (contentAreaHeightMm / printableWidth));
     let sourceY = 0;
+    const totalPages = Math.ceil(canvas.height / pageCanvasHeight);
     let pageIndex = 0;
 
     while (sourceY < canvas.height) {
@@ -473,6 +682,13 @@ export async function exportElementToPdf(
       if (pageIndex > 0) {
         pdf.addPage();
       }
+
+      // Draw Top Letterhead on EVERY page
+      if (letterheadImgData) {
+        pdf.addImage(letterheadImgData, 'PNG', marginMm, 4, printableWidth, letterheadHeightMm, undefined, 'FAST');
+      }
+
+      // Draw Middle Slice Content
       const sliceCanvas = document.createElement('canvas');
       sliceCanvas.width = canvas.width;
       sliceCanvas.height = currentSliceHeight;
@@ -495,14 +711,25 @@ export async function exportElementToPdf(
 
         const sliceImgData = sliceCanvas.toDataURL('image/png', 1.0);
         const sliceHeightMm = (currentSliceHeight * printableWidth) / canvas.width;
-        pdf.addImage(sliceImgData, 'PNG', marginMm, marginMm, printableWidth, sliceHeightMm, undefined, 'FAST');
+        const contentTopY = 4 + letterheadHeightMm + 2;
+        pdf.addImage(sliceImgData, 'PNG', marginMm, contentTopY, printableWidth, sliceHeightMm, undefined, 'FAST');
+      }
+
+      // Draw Bottom Running Footer on EVERY page
+      if (includeLetterhead) {
+        const ftCanvas = drawRunningFooterCanvas(pageIndex, totalPages, recordId, 1600, 65);
+        const ftImg = ftCanvas.toDataURL('image/png', 1.0);
+        pdf.addImage(ftImg, 'PNG', marginMm, pdfHeight - footerHeightMm - 3, printableWidth, footerHeightMm, undefined, 'FAST');
       }
 
       sourceY += pageCanvasHeight;
       pageIndex++;
     }
 
-    pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+    const cleanFilename = recordId && !filename.includes(recordId)
+      ? `${filename.replace(/\.pdf$/i, '')}_${recordId}.pdf`
+      : (filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+    pdf.save(cleanFilename);
     return true;
   } catch (error) {
     console.error('Error generating PDF with html2canvas:', error);
@@ -945,6 +1172,157 @@ export function exportDocumentToXml(doc: CertifiedDocumentData, customFilename?:
     return true;
   } catch (error) {
     console.error('Error exporting XML:', error);
+    return false;
+  }
+}
+
+/**
+ * Exports complete Financial Statements workbook to Excel (.xlsx)
+ * with the official office letterhead banner embedded on EVERY worksheet,
+ * and immutable recordId reference for audit consistency.
+ */
+export function exportFinancialStatementsToExcelWithLetterhead(options: {
+  recordId: string;
+  clientName: string;
+  fiscalYear: number | string;
+  officeProfile: OfficeProfile;
+  incomeStatement?: any;
+  balanceSheet?: any;
+  cashFlowStatement?: any;
+  trialBalanceAccounts?: any[];
+  customFilename?: string;
+}): boolean {
+  try {
+    const {
+      recordId,
+      clientName,
+      fiscalYear,
+      officeProfile,
+      incomeStatement,
+      balanceSheet,
+      cashFlowStatement,
+      trialBalanceAccounts,
+      customFilename,
+    } = options;
+
+    const wb = XLSX.utils.book_new();
+
+    const makeLetterheadRows = (sheetTitle: string) => [
+      { 'البيان / الحقل الرسمي': 'اسم المنشأة المهنية', 'القيمة / التفاصيل': officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات' },
+      { 'البيان / الحقل الرسمي': 'المحاسب القانوني ومراقب الحسابات', 'القيمة / التفاصيل': officeProfile?.auditorName || 'محمد جميل مرعي' },
+      { 'البيان / الحقل الرسمي': 'رقم القيد بسجل المحاسبين (س.م.م)', 'القيمة / التفاصيل': officeProfile?.licenseNumber || 'س.م.م 43122' },
+      { 'البيان / الحقل الرسمي': 'هاتف وتواصل المكتب', 'القيمة / التفاصيل': officeProfile?.phone || '01003335360' },
+      { 'البيان / الحقل الرسمي': 'اسم الشركة / المنشأة المعتمدة', 'القيمة / التفاصيل': clientName || 'شركة النيل للصناعات الهندسية والتجارة' },
+      { 'البيان / الحقل الرسمي': 'السنة المالية / الفترة المحاسبية', 'القيمة / التفاصيل': `السنة المنتهية في 31 ديسمبر ${fiscalYear}` },
+      { 'البيان / الحقل الرسمي': 'معرف السجل المعتمد (Record ID)', 'القيمة / التفاصيل': recordId },
+      { 'البيان / الحقل الرسمي': 'عنوان القائمة / التقرير', 'القيمة / التفاصيل': sheetTitle },
+      { 'البيان / الحقل الرسمي': 'معيار الإعداد والاعتماد', 'القيمة / التفاصيل': 'معايير المحاسبة المصرية (EAS) والمعايير الدولية (IFRS)' },
+      { 'البيان / الحقل الرسمي': 'حالة الاعتماد والتوثيق', 'القيمة / التفاصيل': 'معتمد ومطابق 100% بالرمز الرقمي الموثق' },
+      { 'البيان / الحقل الرسمي': 'تاريخ وتوقيت الاستخراج', 'القيمة / التفاصيل': new Date().toLocaleString('ar-EG') },
+      { 'البيان / الحقل الرسمي': '----------------------------------------', 'القيمة / التفاصيل': '----------------------------------------' },
+    ];
+
+    // 1. Balance Sheet
+    if (balanceSheet) {
+      const bsData = [
+        ...makeLetterheadRows('قائمة المركز المالي المعتمدة (الميزانية العمومية)'),
+        { 'البيان / الحقل الرسمي': '[الأصول غير المتداولة]', 'القيمة / التفاصيل': '' },
+        { 'البيان / الحقل الرسمي': 'الأصول الثابتة بالصافي (إيضاح 4)', 'القيمة / التفاصيل': balanceSheet.nonCurrentAssets?.netFixedAssets || 0 },
+        { 'البيان / الحقل الرسمي': 'مشروعات تحت التنفيذ', 'القيمة / التفاصيل': balanceSheet.nonCurrentAssets?.projectsInProgress || 0 },
+        { 'البيان / الحقل الرسمي': 'إجمالي الأصول غير المتداولة', 'القيمة / التفاصيل': balanceSheet.nonCurrentAssets?.totalNonCurrentAssets || 0 },
+        { 'البيان / الحقل الرسمي': '[الأصول المتداولة]', 'القيمة / التفاصيل': '' },
+        { 'البيان / الحقل الرسمي': 'المخزون السلعي (إيضاح 5)', 'القيمة / التفاصيل': balanceSheet.currentAssets?.inventory || 0 },
+        { 'البيان / الحقل الرسمي': 'العملاء وأوراق القبض (إيضاح 6)', 'القيمة / التفاصيل': (balanceSheet.currentAssets?.tradeReceivables || 0) + (balanceSheet.currentAssets?.notesReceivable || 0) },
+        { 'البيان / الحقل الرسمي': 'أرصدة مدينة وأخرى (إيضاح 7)', 'القيمة / التفاصيل': balanceSheet.currentAssets?.otherDebitBalances || 0 },
+        { 'البيان / الحقل الرسمي': 'النقدية بالبنوك والصندوق (إيضاح 8)', 'القيمة / التفاصيل': balanceSheet.currentAssets?.cashAndBanks || 0 },
+        { 'البيان / الحقل الرسمي': 'إجمالي الأصول المتداولة', 'القيمة / التفاصيل': balanceSheet.currentAssets?.totalCurrentAssets || 0 },
+        { 'البيان / الحقل الرسمي': '*** إجمالي الأصول ***', 'القيمة / التفاصيل': balanceSheet.totalAssets || 0 },
+        { 'البيان / الحقل الرسمي': '[حقوق الملكية]', 'القيمة / التفاصيل': '' },
+        { 'البيان / الحقل الرسمي': 'رأس المال المصدر والمدفوع (إيضاح 9)', 'القيمة / التفاصيل': balanceSheet.equity?.paidUpCapital || 0 },
+        { 'البيان / الحقل الرسمي': 'الاحتياطي القانوني', 'القيمة / التفاصيل': balanceSheet.equity?.legalReserve || 0 },
+        { 'البيان / الحقل الرسمي': 'الأرباح (الخسائر) المرحلة', 'القيمة / التفاصيل': balanceSheet.equity?.retainedEarnings || 0 },
+        { 'البيان / الحقل الرسمي': 'صافي ربح العام الحالي', 'القيمة / التفاصيل': balanceSheet.equity?.currentYearNetProfit || 0 },
+        { 'البيان / الحقل الرسمي': 'إجمالي حقوق الملكية', 'القيمة / التفاصيل': balanceSheet.totalEquity || 0 },
+        { 'البيان / الحقل الرسمي': '[الالتزامات]', 'القيمة / التفاصيل': '' },
+        { 'البيان / الحقل الرسمي': 'التزامات غير متداولة (قروض طويلة الأجل)', 'القيمة / التفاصيل': balanceSheet.nonCurrentLiabilities?.longTermLoans || 0 },
+        { 'البيان / الحقل الرسمي': 'الموردون وأوراق الدفع (إيضاح 10)', 'القيمة / التفاصيل': (balanceSheet.currentLiabilities?.tradePayables || 0) + (balanceSheet.currentLiabilities?.notesPayable || 0) },
+        { 'البيان / الحقل الرسمي': 'مخصص الضرائب المستحقة', 'القيمة / التفاصيل': balanceSheet.currentLiabilities?.incomeTaxPayable || 0 },
+        { 'البيان / الحقل الرسمي': 'إجمالي الالتزامات المتداولة', 'القيمة / التفاصيل': balanceSheet.currentLiabilities?.totalCurrentLiabilities || 0 },
+        { 'البيان / الحقل الرسمي': '*** إجمالي حقوق الملكية والالتزامات ***', 'القيمة / التفاصيل': balanceSheet.totalEquityAndLiabilities || 0 },
+      ];
+      const wsBS = XLSX.utils.json_to_sheet(bsData);
+      wsBS['!views'] = [{ RTL: true }];
+      wsBS['!cols'] = [{ wch: 42 }, { wch: 32 }];
+      XLSX.utils.book_append_sheet(wb, wsBS, '1. المركز المالي');
+    }
+
+    // 2. Income Statement
+    if (incomeStatement) {
+      const isData = [
+        ...makeLetterheadRows('قائمة الدخل الشامل (الأرباح والخسائر)'),
+        { 'البيان / الحقل الرسمي': 'إيرادات النشاط والمبيعات', 'القيمة / التفاصيل': incomeStatement.revenuesTotal || 0 },
+        { 'البيان / الحقل الرسمي': 'يخصم: تكلفة المبيعات والحصول على الإيراد', 'القيمة / التفاصيل': -(incomeStatement.costOfGoodsSold || 0) },
+        { 'البيان / الحقل الرسمي': '*** مجمل الربح ***', 'القيمة / التفاصيل': incomeStatement.grossProfit || 0 },
+        { 'البيان / الحقل الرسمي': 'يخصم: المصروفات الإدارية والعمومية والتسويقية', 'القيمة / التفاصيل': -((incomeStatement.administrativeExpenses || 0) + (incomeStatement.sellingAndMarketingExpenses || 0)) },
+        { 'البيان / الحقل الرسمي': 'يخصم: إهلاك الأصول الثابتة', 'القيمة / التفاصيل': -(incomeStatement.depreciationExpense || 0) },
+        { 'البيان / الحقل الرسمي': 'أرباح التشغيل قبل الفوائد والضرائب (EBIT)', 'القيمة / التفاصيل': incomeStatement.operatingProfit || 0 },
+        { 'البيان / الحقل الرسمي': 'يخصم: التكاليف التمويلية والفوائد البنكية', 'القيمة / التفاصيل': -(incomeStatement.financeCosts || 0) },
+        { 'البيان / الحقل الرسمي': 'أرباح / (إيرادات) أخرى', 'القيمة / التفاصيل': incomeStatement.otherIncomes || 0 },
+        { 'البيان / الحقل الرسمي': 'صافي الأرباح قبل ضريبة الدخل (EBT)', 'القيمة / التفاصيل': incomeStatement.profitBeforeTax || 0 },
+        { 'البيان / الحقل الرسمي': 'يخصم: ضريبة الدخل المستحقة (22.5%)', 'القيمة / التفاصيل': -(incomeStatement.taxExpense || 0) },
+        { 'البيان / الحقل الرسمي': '*** صافي أرباح العام بعد الضريبة ***', 'القيمة / التفاصيل': incomeStatement.netProfitAfterTax || 0 },
+      ];
+      const wsIS = XLSX.utils.json_to_sheet(isData);
+      wsIS['!views'] = [{ RTL: true }];
+      wsIS['!cols'] = [{ wch: 42 }, { wch: 32 }];
+      XLSX.utils.book_append_sheet(wb, wsIS, '2. قائمة الدخل');
+    }
+
+    // 3. Cash Flow Statement
+    if (cashFlowStatement) {
+      const cfData = [
+        ...makeLetterheadRows('قائمة التدفقات النقدية (الطريقة غير المباشرة EAS 4)'),
+        { 'البيان / الحقل الرسمي': 'صافي التدفقات النقدية من الأنشطة التشغيلية', 'القيمة / التفاصيل': cashFlowStatement.operatingCashFlow?.netOperatingCash || 0 },
+        { 'البيان / الحقل الرسمي': 'صافي التدفقات النقدية المستخدمة في الأنشطة الاستثمارية', 'القيمة / التفاصيل': cashFlowStatement.investingCashFlow?.netInvestingCash || 0 },
+        { 'البيان / الحقل الرسمي': 'صافي التدفقات النقدية من الأنشطة التمويلية', 'القيمة / التفاصيل': cashFlowStatement.financingCashFlow?.netFinancingCash || 0 },
+        { 'البيان / الحقل الرسمي': 'صافي الزيادة (النقص) في النقدية خلال العام', 'القيمة / التفاصيل': cashFlowStatement.netChangeInCash || 0 },
+        { 'البيان / الحقل الرسمي': 'رصيد النقدية وما في حكمها في بداية السنة المالية', 'القيمة / التفاصيل': cashFlowStatement.beginningCash || 0 },
+        { 'البيان / الحقل الرسمي': '*** رصيد النقدية وما في حكمها في نهاية السنة المالية ***', 'القيمة / التفاصيل': cashFlowStatement.endingCash || 0 },
+      ];
+      const wsCF = XLSX.utils.json_to_sheet(cfData);
+      wsCF['!views'] = [{ RTL: true }];
+      wsCF['!cols'] = [{ wch: 45 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsCF, '3. التدفقات النقدية');
+    }
+
+    // 4. Trial Balance Accounts if available
+    if (trialBalanceAccounts && trialBalanceAccounts.length > 0) {
+      const tbHeader = makeLetterheadRows('ميزان المراجعة بالأرصدة والمجاميع المربوط بالقوائم');
+      const tbRows = [
+        ...tbHeader,
+        ...trialBalanceAccounts.map((a: any) => ({
+          'البيان / الحقل الرسمي': `[${a.code || ''}] ${a.name || ''}`,
+          'القيمة / التفاصيل': `رصيد مدين: ${(a.endingBalanceDebit || 0).toLocaleString('ar-EG')} | رصيد دائن: ${(a.endingBalanceCredit || 0).toLocaleString('ar-EG')}`,
+        })),
+      ];
+      const wsTB = XLSX.utils.json_to_sheet(tbRows);
+      wsTB['!views'] = [{ RTL: true }];
+      wsTB['!cols'] = [{ wch: 45 }, { wch: 55 }];
+      XLSX.utils.book_append_sheet(wb, wsTB, '4. ميزان المراجعة المربوط');
+    }
+
+    wb.Workbook = { Views: [{ RTL: true }] };
+
+    const safeClient = (clientName || 'الشركة').replace(/\s+/g, '_');
+    const filename = customFilename || `القوائم_المالية_${safeClient}_${recordId}_${fiscalYear}.xlsx`;
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+    });
+    triggerFileDownload(blob, filename);
+    return true;
+  } catch (error) {
+    console.error('Error exporting financial statements to Excel with letterhead:', error);
     return false;
   }
 }

@@ -11,17 +11,18 @@ import {
   Building,
   CreditCard,
   DollarSign,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { DatabaseState } from '../../db/localDatabase';
 import { ChartOfAccountsView } from '../ChartOfAccountsView';
 import { JournalEntriesView } from '../JournalEntriesView';
 import { GeneralLedgerView } from '../GeneralLedgerView';
 import { TrialBalanceView } from '../TrialBalanceView';
-import { UnifiedFinancialReportsView } from '../UnifiedFinancialReportsView';
 import { FixedAssetsView } from '../FixedAssetsView';
 import { BankReconciliationView } from '../accounting/BankReconciliationView';
 import { InvoiceOcrScannerView } from '../accounting/InvoiceOcrScannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
+import { UnifiedFinancialReportsView } from '../UnifiedFinancialReportsView';
 import { ClientSelector } from '../common/ClientSelector';
 import { ShieldCheck, ShieldAlert, Factory, Percent } from 'lucide-react';
 import { MultiTenantWorkspacesModal } from '../common/MultiTenantWorkspacesModal';
@@ -30,10 +31,11 @@ import { IndustrialCostManagerModal } from '../industrial/IndustrialCostManagerM
 
 export type AccountingSubTab =
   | 'JOURNAL_ENTRIES'
-  | 'OCR_INVOICE_SCANNER'
   | 'CHART_OF_ACCOUNTS'
   | 'GENERAL_LEDGER'
   | 'TRIAL_BALANCE'
+  | 'FINANCIAL_STATEMENTS'
+  | 'OCR_INVOICE_SCANNER'
   | 'FIXED_ASSETS'
   | 'BANK_RECONCILIATION'
   | 'CURRENCY_EXCHANGE_RATES';
@@ -79,11 +81,6 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
     },
     {
-      id: 'OCR_INVOICE_SCANNER',
-      label: 'مسح الفواتير (OCR)',
-      icon: Sparkles,
-    },
-    {
       id: 'CHART_OF_ACCOUNTS',
       label: 'دليل الحسابات',
       icon: FolderTree,
@@ -97,8 +94,24 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
     },
     {
       id: 'TRIAL_BALANCE',
-      label: 'ميزان المراجعة والتقارير الموحدة',
+      label: 'ميزان المراجعة',
       icon: Scale,
+      badge: 'فحص الاتزان',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+    },
+    {
+      id: 'FINANCIAL_STATEMENTS',
+      label: 'القوائم المالية والملف المعتمد',
+      icon: FileSpreadsheet,
+      badge: 'EAS 1 معتمد',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 font-bold',
+    },
+    {
+      id: 'OCR_INVOICE_SCANNER',
+      label: 'مسح الفواتير (OCR)',
+      icon: Sparkles,
+      badge: 'قيد فوري',
+      badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800',
     },
     {
       id: 'FIXED_ASSETS',
@@ -114,7 +127,7 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
     },
     {
       id: 'CURRENCY_EXCHANGE_RATES',
-      label: 'أسعار الصرف اليومية (EAS 13)',
+      label: 'أسعار الصرف (EAS 13)',
       icon: DollarSign,
       badge: 'متعدد العملات',
       badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
@@ -122,96 +135,126 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
   ];
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3" dir="rtl">
       {/* Central Active Client Context Selector */}
       <ClientSelector state={state} />
 
-      {/* Compact Sub-Tabs Toolbar */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none no-scrollbar flex-1 min-w-0">
+      {/* Clear Direct Navigation Buttons Deck (بدون أي شريط جر أو سحب جانبي - أزرار واضحة مباشرة) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+            <span className="text-xs font-black text-slate-900 dark:text-white">
+              نظام الحسابات والقوائم المالية المعتمدة:
+            </span>
+            <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
+              اضغط على أي زر للتنقل المباشر بين أقسام الدورة المحاسبية
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setIsWorkspacesModalOpen(true)}
+              title="إدارة بيئات عمل الشركات والمصانع المتعددة (Multi-Tenant Hub)"
+              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Factory className="w-3.5 h-3.5 text-amber-600" />
+              <span>بيئات الكيانات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsCostModalOpen(true)}
+              title="محاسبة التكاليف ومراكز التكلفة الصناعية FOH"
+              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <span>تكاليف FOH</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsDeprecModalOpen(true)}
+              title="الإهلاك الصناعي المعجل 30% - المادة 27 قانون 91/2005"
+              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Percent className="w-3.5 h-3.5 text-amber-600" />
+              <span>إهلاك 30%</span>
+            </button>
+
+            <span className="text-[11px] text-slate-500 font-mono mr-1">
+              مرحل: <strong className="text-emerald-600">{postedEntriesCount}</strong>
+              {unpostedEntriesCount > 0 && (
+                <> | غير مرحل: <strong className="text-amber-600">{unpostedEntriesCount}</strong></>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Clear Visible Navigation Buttons (Wrapping Grid - No Horizontal Drag Strip) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-9 gap-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeSubTab === tab.id;
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 border ${
+                className={`flex flex-col justify-between p-2.5 rounded-xl text-right transition-all cursor-pointer border ${
                   isActive
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-500/30'
+                    : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
-                <span className="whitespace-nowrap">{tab.label}</span>
-                {tab.badge !== undefined && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                <div className="flex items-center justify-between w-full mb-1.5">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    {tab.badge}
-                  </span>
-                )}
+                    <Icon className="w-4 h-4 shrink-0" />
+                  </div>
+                  {tab.badge !== undefined && (
+                    <span
+                      className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md shrink-0 font-mono ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : tab.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs font-bold leading-tight">{tab.label}</span>
               </button>
             );
           })}
-        </div>
-
-        <div className="hidden sm:flex items-center gap-1.5 text-xs shrink-0 pl-1">
-          <button
-            type="button"
-            onClick={() => setIsWorkspacesModalOpen(true)}
-            title="إدارة بيئات عمل الشركات والمصانع المتعددة (Multi-Tenant Hub)"
-            className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <Factory className="w-3.5 h-3.5 text-amber-600" />
-            <span>بيئات الكيانات</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsCostModalOpen(true)}
-            title="محاسبة التكاليف ومراكز التكلفة الصناعية FOH"
-            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <Layers className="w-3.5 h-3.5 text-indigo-600" />
-            <span>تكاليف FOH</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsDeprecModalOpen(true)}
-            title="الإهلاك الصناعي المعجل 30% - المادة 27 قانون 91/2005"
-            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <Percent className="w-3.5 h-3.5 text-amber-600" />
-            <span>إهلاك 30%</span>
-          </button>
-
-          <span className="text-[11px] text-slate-500 font-mono mr-1">
-            مرحل: <strong className="text-emerald-600">{postedEntriesCount}</strong>
-            {unpostedEntriesCount > 0 && (
-              <> | غير مرحل: <strong className="text-amber-600">{unpostedEntriesCount}</strong></>
-            )}
-          </span>
         </div>
       </div>
 
       {/* Render Active Sub-View */}
       <div>
         {activeSubTab === 'JOURNAL_ENTRIES' && <JournalEntriesView state={state} />}
+        {activeSubTab === 'CHART_OF_ACCOUNTS' && <ChartOfAccountsView state={state} />}
+        {activeSubTab === 'GENERAL_LEDGER' && <GeneralLedgerView state={state} />}
+        {activeSubTab === 'TRIAL_BALANCE' && (
+          <TrialBalanceView state={state} fiscalYear={fiscalYear} />
+        )}
+        {activeSubTab === 'FINANCIAL_STATEMENTS' && (
+          <UnifiedFinancialReportsView
+            state={state}
+            fiscalYear={fiscalYear}
+            initialMode="BALANCE_SHEET"
+            onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_EXCHANGE_RATES')}
+          />
+        )}
         {activeSubTab === 'OCR_INVOICE_SCANNER' && (
           <InvoiceOcrScannerView
             onNavigateToJournal={() => setActiveSubTab('JOURNAL_ENTRIES')}
           />
-        )}
-        {activeSubTab === 'CHART_OF_ACCOUNTS' && <ChartOfAccountsView state={state} />}
-        {activeSubTab === 'GENERAL_LEDGER' && <GeneralLedgerView state={state} />}
-        {activeSubTab === 'TRIAL_BALANCE' && (
-          <UnifiedFinancialReportsView state={state} fiscalYear={fiscalYear} initialMode="TRIAL_BALANCE" />
         )}
         {activeSubTab === 'FIXED_ASSETS' && <FixedAssetsView state={state} fiscalYear={fiscalYear} />}
         {activeSubTab === 'BANK_RECONCILIATION' && <BankReconciliationView state={state} />}

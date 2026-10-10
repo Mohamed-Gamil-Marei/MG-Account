@@ -636,7 +636,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   // Certificate Payload for Direct Document Preview and Printing
   const activeCertificatePayload = useMemo(() => {
     return {
-      id: selectedCertForView?.id || editingCertId || 'ACTIVE-CERT-DOC',
+      id: selectedCertForView?.id || editingCertId || certNumber,
       certificateNumber: certNumber,
       customCertificateHeading: activeCustomHeading,
       beneficiaryType: activeBeneficiaryType,
@@ -725,9 +725,9 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
 
   const [isDirectPreviewOpen, setIsDirectPreviewOpen] = useState(false);
 
-  // Direct print function for certificate using robust isolated iframe PrintService
+  // Direct print function for certificate using robust isolated iframe PrintService with immutable record ID
   const handlePrintCertificateDirect = () => {
-    PrintService.printElementById('official-certificate-document', {
+    PrintService.printRecordById(activeCertificatePayload.id, 'official-certificate-document', {
       title: activeCustomHeading || 'شهادة محاسبية معتمدة',
       orientation: 'portrait',
       pageSize: 'A4',
@@ -1971,6 +1971,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
           {/* ========================================================================= */}
           <div
             id="official-certificate-document"
+            data-record-id={activeCertificatePayload.id}
             style={{ breakInside: 'avoid', pageBreakInside: 'avoid', pageBreakAfter: 'avoid', breakAfter: 'avoid' }}
             className="bg-white rounded-xl border-4 border-double border-emerald-950 shadow-lg p-6 sm:p-8 print:p-6 space-y-3.5 text-slate-900 text-xs leading-relaxed max-w-4xl mx-auto print:shadow-none print:border-4 print:border-double print:border-emerald-950 print:max-w-full relative overflow-hidden"
           >
@@ -2245,6 +2246,8 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 {/* QR Code Verification if enabled */}
                 {(verificationBarcodeType === 'QR_CODE' || verificationBarcodeType === 'DUAL') && (() => {
                   const verificationPayload: VerificationPayloadData = {
+                    recordId: activeCertificatePayload.id,
+                    clientId: selectedClientId || undefined,
                     docType: activeCustomHeading,
                     docNumber: certNumber,
                     clientName: `${activeBeneficiaryTitle} ${activeBeneficiaryName}`.trim(),
@@ -2315,6 +2318,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
       <PrintPreviewModal
         isOpen={isDirectPreviewOpen}
         onClose={() => setIsDirectPreviewOpen(false)}
+        recordId={activeCertificatePayload.id}
         modelType="CERTIFICATES"
         title={activeCustomHeading || 'الشهادة المهنية المعتمدة'}
         targetElementId="official-certificate-document"

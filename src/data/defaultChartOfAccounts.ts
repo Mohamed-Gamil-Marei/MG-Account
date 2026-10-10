@@ -402,7 +402,7 @@ export const DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS: Account[] = [
     level: 2,
     parentId: 'acc-3',
     openingBalanceDebit: 0,
-    openingBalanceCredit: 413000,
+    openingBalanceCredit: 758000,
   },
   {
     id: 'acc-3500',
