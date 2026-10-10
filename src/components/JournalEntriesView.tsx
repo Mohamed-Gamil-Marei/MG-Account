@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { fetchWithAuth } from '../lib/apiClient';
 import {
   Receipt,
   Plus,
@@ -1409,7 +1410,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     );
 
     try {
-      const res = await fetch('/api/ai/suggest-entry', {
+      const res = await fetchWithAuth('/api/ai/suggest-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

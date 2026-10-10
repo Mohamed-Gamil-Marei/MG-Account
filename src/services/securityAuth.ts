@@ -1,4 +1,5 @@
 import { firebaseAuth } from './firebaseAuthService';
+import { fetchWithAuth } from '../lib/apiClient';
 
 export interface DeviceBindingInfo {
   deviceId: string;
@@ -73,8 +74,8 @@ export class SecurityAuthService {
       }
     } catch {}
 
-    // Server fallback check for default management code
-    return input.length >= 4;
+    // Custom password from preferences only
+    return false;
   }
 
   /**
@@ -83,8 +84,7 @@ export class SecurityAuthService {
   static verifyPurgePassword(password: string): boolean {
     if (firebaseAuth.isAdmin()) return true;
     if (!password) return false;
-    const input = this.normalizeInput(password);
-    return input.length >= 4;
+    return false;
   }
 
   /**
@@ -93,19 +93,17 @@ export class SecurityAuthService {
   static async verifyWithServer(passcode: string, type: 'EDIT' | 'PURGE' = 'EDIT'): Promise<boolean> {
     if (firebaseAuth.isAdmin()) return true;
     try {
-      const token = await firebaseAuth.getIdToken();
-      const res = await fetch('/api/auth/verify-master', {
+      const res = await fetchWithAuth('/api/auth/verify-master', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ passcode, type }),
       });
       const data = await res.json();
       return !!data.authorized;
     } catch {
-      return this.verifyPassword(passcode);
+      return false;
     }
   }
 

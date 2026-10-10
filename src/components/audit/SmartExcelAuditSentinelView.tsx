@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { fetchWithAuth } from '../../lib/apiClient';
 import {
   FileSpreadsheet,
   Upload,
@@ -417,7 +418,7 @@ export const SmartExcelAuditSentinelView: React.FC<SmartExcelAuditSentinelViewPr
         reason: a.mathematicalReason,
       }));
 
-      const res = await fetch('/api/ai/audit-excel-anomalies', {
+      const res = await fetchWithAuth('/api/ai/audit-excel-anomalies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

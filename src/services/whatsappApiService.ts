@@ -1,3 +1,5 @@
+import { fetchWithAuth } from '../lib/apiClient';
+
 /**
  * WhatsApp Business API Service
  * Connects frontend directly to server-side WhatsApp Business Gateway & Meta Cloud API
@@ -135,7 +137,7 @@ export class WhatsAppApiService {
     error?: string;
   }> {
     try {
-      const res = await fetch('/api/whatsapp/send-quotation', {
+      const res = await fetchWithAuth('/api/whatsapp/send-quotation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -158,7 +160,7 @@ export class WhatsAppApiService {
     error?: string;
   }> {
     try {
-      const res = await fetch('/api/whatsapp/send-certified-report', {
+      const res = await fetchWithAuth('/api/whatsapp/send-certified-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -185,7 +187,7 @@ export class WhatsAppApiService {
     }
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await fetchWithAuth('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -207,7 +209,7 @@ export class WhatsAppApiService {
    */
   public static async getConfig(): Promise<WhatsAppApiServerConfig | null> {
     try {
-      const res = await fetch('/api/whatsapp/config');
+      const res = await fetchWithAuth('/api/whatsapp/config');
       const data = await res.json();
       return data.success ? data.data : null;
     } catch (err) {
@@ -223,7 +225,7 @@ export class WhatsAppApiService {
     config: Partial<WhatsAppApiServerConfig>
   ): Promise<{ success: boolean; data?: WhatsAppApiServerConfig; message?: string; error?: string }> {
     try {
-      const res = await fetch('/api/whatsapp/config', {
+      const res = await fetchWithAuth('/api/whatsapp/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
@@ -240,7 +242,7 @@ export class WhatsAppApiService {
    */
   public static async getDiagnostics(): Promise<WhatsAppApiDiagnostics | null> {
     try {
-      const res = await fetch('/api/whatsapp/diagnostics');
+      const res = await fetchWithAuth('/api/whatsapp/diagnostics');
       const data = await res.json();
       return data.success ? data.data : null;
     } catch (err) {
@@ -254,7 +256,7 @@ export class WhatsAppApiService {
    */
   public static async getLogs(): Promise<WhatsAppApiLogItem[]> {
     try {
-      const res = await fetch('/api/whatsapp/logs');
+      const res = await fetchWithAuth('/api/whatsapp/logs');
       const data = await res.json();
       return data.success ? data.data : [];
     } catch (err) {
@@ -307,7 +309,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
    */
   public static async getSessionStatus(): Promise<WhatsAppApiSessionStatus | null> {
     try {
-      const res = await fetch('/api/whatsapp/session-status');
+      const res = await fetchWithAuth('/api/whatsapp/session-status');
       const data = await res.json();
       return data.success ? data.data : null;
     } catch (err) {
@@ -321,7 +323,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
    */
   public static async startSession(): Promise<WhatsAppApiSessionStatus | null> {
     try {
-      const res = await fetch('/api/whatsapp/start-session', { method: 'POST' });
+      const res = await fetchWithAuth('/api/whatsapp/start-session', { method: 'POST' });
       const data = await res.json();
       return data.success ? data.data : null;
     } catch (err) {
@@ -335,7 +337,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
    */
   public static async disconnectSession(): Promise<WhatsAppApiSessionStatus | null> {
     try {
-      const res = await fetch('/api/whatsapp/disconnect-session', { method: 'POST' });
+      const res = await fetchWithAuth('/api/whatsapp/disconnect-session', { method: 'POST' });
       const data = await res.json();
       return data.success ? data.data : null;
     } catch (err) {
@@ -354,7 +356,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
     caption?: string
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const res = await fetch('/api/whatsapp/send-document', {
+      const res = await fetchWithAuth('/api/whatsapp/send-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -376,7 +378,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
    */
   public static async clearLogs(): Promise<boolean> {
     try {
-      const res = await fetch('/api/whatsapp/logs', { method: 'DELETE' });
+      const res = await fetchWithAuth('/api/whatsapp/logs', { method: 'DELETE' });
       const data = await res.json();
       return data.success;
     } catch (err) {
@@ -390,7 +392,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
    */
   public static async getChatThreads(): Promise<WhatsAppChatThread[]> {
     try {
-      const res = await fetch('/api/whatsapp/chats');
+      const res = await fetchWithAuth('/api/whatsapp/chats');
       const data = await res.json();
       return data.success && Array.isArray(data.data) ? data.data : [];
     } catch (err) {
@@ -404,7 +406,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
    */
   public static async getChatMessages(phone: string): Promise<WhatsAppChatMessage[]> {
     try {
-      const res = await fetch(`/api/whatsapp/chat/${encodeURIComponent(phone)}`);
+      const res = await fetchWithAuth(`/api/whatsapp/chat/${encodeURIComponent(phone)}`);
       const data = await res.json();
       return data.success && Array.isArray(data.data) ? data.data : [];
     } catch (err) {
@@ -422,7 +424,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
     clientName?: string
   ): Promise<{ success: boolean; messages?: WhatsAppChatMessage[]; error?: string }> {
     try {
-      const res = await fetch('/api/whatsapp/chat/send', {
+      const res = await fetchWithAuth('/api/whatsapp/chat/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, message, clientName }),
@@ -443,7 +445,7 @@ _للاعتماد والموافقة يرجى الرد على هذه الرسا�
     clientName?: string
   ): Promise<{ success: boolean; data?: { incoming: WhatsAppChatMessage; reply?: WhatsAppChatMessage }; error?: string }> {
     try {
-      const res = await fetch('/api/whatsapp/chat/simulate-incoming', {
+      const res = await fetchWithAuth('/api/whatsapp/chat/simulate-incoming', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, text, clientName }),

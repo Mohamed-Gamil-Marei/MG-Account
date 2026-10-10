@@ -8,6 +8,8 @@ import {
 import {
   doc,
   getDoc,
+  getDocs,
+  collection,
   setDoc,
   updateDoc,
   serverTimestamp,
@@ -95,7 +97,7 @@ class FirebaseAuthService {
    * Fetches the user profile from Firestore collection 'users'
    * If it doesn't exist, provisions a new profile with the appropriate default role.
    */
-  public async fetchOrCreateUserProfile(user: FirebaseUser, requestedRole?: UserRole, requestedName?: string): Promise<FirebaseUserProfile> {
+  public async fetchOrCreateUserProfile(user: FirebaseUser, requestedName?: string): Promise<FirebaseUserProfile> {
     const userDocRef = doc(firestoreDb, 'users', user.uid);
     const snap = await getDoc(userDocRef);
 
@@ -116,21 +118,22 @@ class FirebaseAuthService {
       };
     }
 
-    // Default role assignment:
-    // midotota580@gmail.com or admin emails -> ADMIN (مدير)
-    const isOwnerOrAdmin =
-      user.email === 'midotota580@gmail.com' ||
-      user.email?.toLowerCase().includes('admin') ||
-      user.email?.toLowerCase().includes('owner') ||
-      requestedRole === 'ADMIN';
+    // Check if any users exist in the system to determine if this is the first user (ADMIN) or subsequent (PENDING)
+    let isFirstUser = false;
+    try {
+      const usersSnap = await getDocs(collection(firestoreDb, 'users'));
+      if (usersSnap.empty) {
+        isFirstUser = true;
+      }
+    } catch {
+      // If collection read fails or rules restrict, default to PENDING unless explicitly first
+    }
 
-    const defaultRole: UserRole = isOwnerOrAdmin ? 'ADMIN' : (requestedRole || 'ACCOUNTANT');
+    const defaultRole: UserRole = isFirstUser ? 'ADMIN' : 'PENDING';
     const roleTitle =
       defaultRole === 'ADMIN'
         ? 'مدير النظام والشريك المسؤول'
-        : defaultRole === 'ACCOUNTANT'
-        ? 'محاسب مالي ومراقب حسابات'
-        : 'سكرتارية واستقبال';
+        : 'قيد الانتظار (PENDING - بانتظار تفعيل المدير)';
 
     const newProfile: FirebaseUserProfile = {
       uid: user.uid,
@@ -139,11 +142,11 @@ class FirebaseAuthService {
       role: defaultRole,
       roleTitleArabic: roleTitle,
       canAccessTreasury: defaultRole === 'ADMIN',
-      canAccessAuditTrail: defaultRole === 'ADMIN' || defaultRole === 'ACCOUNTANT',
-      canAccessCreditFiles: defaultRole === 'ADMIN' || defaultRole === 'ACCOUNTANT',
-      canAccessTaxReports: defaultRole === 'ADMIN' || defaultRole === 'ACCOUNTANT',
+      canAccessAuditTrail: defaultRole === 'ADMIN',
+      canAccessCreditFiles: defaultRole === 'ADMIN',
+      canAccessTaxReports: defaultRole === 'ADMIN',
       canManageUsers: defaultRole === 'ADMIN',
-      canPostEntries: defaultRole === 'ADMIN' || defaultRole === 'ACCOUNTANT',
+      canPostEntries: defaultRole === 'ADMIN',
       canEditPostedEntries: defaultRole === 'ADMIN',
       canDeleteRecords: defaultRole === 'ADMIN',
       createdAt: serverTimestamp(),
@@ -201,9 +204,9 @@ class FirebaseAuthService {
   /**
    * Register a new user with Email and Password
    */
-  public async register(email: string, pass: string, name: string, role: UserRole = 'ACCOUNTANT'): Promise<FirebaseUserProfile> {
+  public async register(email: string, pass: string, name: string): Promise<FirebaseUserProfile> {
     const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-    const profile = await this.fetchOrCreateUserProfile(cred.user, role, name);
+    const profile = await this.fetchOrCreateUserProfile(cred.user, name);
     this.currentUserProfile = profile;
     this.syncWithLocalDatabase(profile);
     this.notifyListeners();

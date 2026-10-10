@@ -7,6 +7,7 @@
  */
 
 import { Invoice, InvoiceItem, EtaConfig, EtaDocumentType } from '../types';
+import { fetchWithAuth } from '../lib/apiClient';
 
 export const DEFAULT_ETA_CONFIG: EtaConfig = {
   environment: 'PREPROD',
@@ -48,7 +49,7 @@ export class EtaSdkService {
     try {
       localStorage.setItem(ETA_STORAGE_KEY, JSON.stringify(this.config));
       // Asynchronously sync with server middleware
-      fetch('/api/eta/config', {
+      fetchWithAuth('/api/eta/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(this.config),
@@ -679,7 +680,7 @@ ${invoice.items
 
     // 2. Call Server-Side Middleware Proxy
     try {
-      const response = await fetch('/api/eta/documents/submit', {
+      const response = await fetchWithAuth('/api/eta/documents/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoice }),
@@ -750,7 +751,7 @@ ${invoice.items
     message: string;
   }> {
     try {
-      const response = await fetch('/api/eta/documents/batch-submit', {
+      const response = await fetchWithAuth('/api/eta/documents/batch-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoices }),
@@ -786,7 +787,7 @@ ${invoice.items
   // --- Diagnostics Check ---
   public async runDiagnostics(): Promise<any> {
     try {
-      const res = await fetch('/api/eta/diagnostics');
+      const res = await fetchWithAuth('/api/eta/diagnostics');
       if (res.ok) {
         const json = await res.json();
         return json.data;
@@ -810,7 +811,7 @@ ${invoice.items
   // --- Transmission Logs ---
   public async getTransmissionLogs(): Promise<any[]> {
     try {
-      const res = await fetch('/api/eta/logs');
+      const res = await fetchWithAuth('/api/eta/logs');
       if (res.ok) {
         const json = await res.json();
         return json.data || [];
@@ -824,7 +825,7 @@ ${invoice.items
   // --- Clear Transmission Logs ---
   public async clearTransmissionLogs(): Promise<boolean> {
     try {
-      const res = await fetch('/api/eta/logs', { method: 'DELETE' });
+      const res = await fetchWithAuth('/api/eta/logs', { method: 'DELETE' });
       return res.ok;
     } catch {
       return false;
@@ -834,7 +835,7 @@ ${invoice.items
   // --- Check Document Status on Portal ---
   public async checkDocumentStatus(uuid: string): Promise<any> {
     try {
-      const res = await fetch(`/api/eta/documents/${encodeURIComponent(uuid)}`);
+      const res = await fetchWithAuth(`/api/eta/documents/${encodeURIComponent(uuid)}`);
       if (res.ok) {
         const json = await res.json();
         return json.data;

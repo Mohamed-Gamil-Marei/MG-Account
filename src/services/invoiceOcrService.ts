@@ -1,4 +1,5 @@
 import { OcrInvoiceResult, Account, JournalEntry, JournalEntryLine } from '../types';
+import { fetchWithAuth } from '../lib/apiClient';
 
 /**
  * Compresses an image File or Base64 string before uploading to OCR API
@@ -63,7 +64,7 @@ export async function scanInvoiceWithOcr(
   context?: { clientName?: string; clientSector?: string }
 ): Promise<OcrInvoiceResult> {
   try {
-    const response = await fetch('/api/ocr/scan-invoice', {
+    const response = await fetchWithAuth('/api/ocr/scan-invoice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

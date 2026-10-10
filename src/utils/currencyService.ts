@@ -1,4 +1,5 @@
 import { CurrencyCode, CurrencyRateInfo } from '../types';
+import { fetchWithAuth } from '../lib/apiClient';
 
 export const SUPPORTED_CURRENCIES: CurrencyRateInfo[] = [
   {
@@ -131,7 +132,7 @@ class CurrencyService {
 
     this.isFetching = true;
     try {
-      const res = await fetch('/api/currency/rates');
+      const res = await fetchWithAuth('/api/currency/rates');
       if (res.ok) {
         const data: LiveRatesResponse = await res.json();
         if (data.success && data.rates) {

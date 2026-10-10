@@ -4,6 +4,7 @@ import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../util
 import { DatabaseState, db } from '../../db/localDatabase';
 import { JournalEntry, JournalEntryLine, Account } from '../../types';
 import { formatEgyptianCurrency } from '../../utils/egyptianTaxCalculations';
+import { fetchWithAuth } from '../../lib/apiClient';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -178,7 +179,7 @@ export const JournalErrorsAuditModal: React.FC<JournalErrorsAuditModalProps> = (
     setIsScanningWithAi(true);
     setAiAnalysisSummary(null);
     try {
-      const res = await fetch('/api/ai/audit-journal-entries', {
+      const res = await fetchWithAuth('/api/ai/audit-journal-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

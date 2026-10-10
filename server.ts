@@ -120,16 +120,6 @@ async function startServer() {
         }
       }
 
-      // Fallback decode JWT payload if direct network lookup is unavailable
-      const parts = idToken.split(".");
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
-        if (!payload.exp || payload.exp * 1000 > Date.now()) {
-          (req as any).user = payload;
-          return next();
-        }
-      }
-
       return res.status(401).json({
         success: false,
         error: "انتهت صلاحية رمز المصادقة أو أنه غير صالح. يرجى إعادة تسجيل الدخول.",
@@ -154,26 +144,20 @@ async function startServer() {
       return res.status(400).json({ success: false, authorized: false });
     }
 
-    const purgePass = process.env.MASTER_PURGE_PASSWORD || "Mgacc120";
-    const editPass = process.env.MASTER_EDIT_PASSWORD || "Mg120";
+    const purgePass = process.env.MASTER_PURGE_PASSWORD;
+    const editPass = process.env.MASTER_EDIT_PASSWORD;
 
-    const normalized = String(passcode).trim().toLowerCase();
+    if (!purgePass || !editPass) {
+      return res.status(500).json({ success: false, error: "Master passwords not configured in server environment." });
+    }
+
+    const normalized = String(passcode).trim();
     let authorized = false;
 
     if (type === "PURGE") {
-      authorized = (
-        normalized === purgePass.toLowerCase() ||
-        normalized === "admin" ||
-        normalized === "mgacc120"
-      );
+      authorized = (normalized === purgePass);
     } else {
-      authorized = (
-        normalized === editPass.toLowerCase() ||
-        normalized === purgePass.toLowerCase() ||
-        normalized === "admin" ||
-        normalized === "mg120" ||
-        normalized === "mgacc120"
-      );
+      authorized = (normalized === editPass || normalized === purgePass);
     }
 
     res.json({ success: true, authorized });
