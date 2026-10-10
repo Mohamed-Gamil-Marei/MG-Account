@@ -64,10 +64,10 @@ class FirebaseAuthService {
             uid: user.uid,
             email: user.email || 'user@cpa-egypt.com',
             name: user.displayName || user.email?.split('@')[0] || 'مستخدم النظام',
-            role: user.email?.includes('admin') || user.email === 'midotota580@gmail.com' ? 'ADMIN' : 'ACCOUNTANT',
-            roleTitleArabic: user.email?.includes('admin') || user.email === 'midotota580@gmail.com' ? 'مدير النظام والشريك المسؤول' : 'محاسب ومراجع مالي',
-            canAccessTreasury: true,
-            canAccessAuditTrail: true,
+            role: 'PENDING',
+            roleTitleArabic: 'قيد الانتظار (PENDING - بانتظار تفعيل المدير)',
+            canAccessTreasury: false,
+            canAccessAuditTrail: false,
           };
           this.syncWithLocalDatabase(this.currentUserProfile);
         }

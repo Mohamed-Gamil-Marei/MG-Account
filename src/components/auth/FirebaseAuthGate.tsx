@@ -27,7 +27,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('ADMIN');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,9 +55,9 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           setIsLoading(false);
           return;
         }
-        const profile = await firebaseAuth.register(email, password, name.trim(), selectedRole);
-        setSuccessMsg(`تم إنشاء الحساب بنجاح بصلاحية: ${profile.roleTitleArabic}`);
-        setTimeout(() => onAuthenticated(profile), 600);
+        const profile = await firebaseAuth.register(email, password, name.trim());
+        setSuccessMsg('تم إنشاء الحساب بنجاح. حسابك بانتظار تفعيل المدير.');
+        setTimeout(() => onAuthenticated(profile), 1200);
       } else {
         const profile = await firebaseAuth.signIn(email, password);
         setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
@@ -86,11 +85,10 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   };
 
   // Quick helper to fill test credentials
-  const fillPreset = (presetEmail: string, presetRole: UserRole, presetName: string) => {
+  const fillPreset = (presetEmail: string, presetName: string) => {
     setEmail(presetEmail);
     setPassword('Pass123456');
     setName(presetName);
-    setSelectedRole(presetRole);
     setError(null);
   };
 
@@ -134,50 +132,21 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
             {isRegisterMode && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    الاسم الكامل للمستخدم:
-                  </label>
-                  <div className="relative">
-                    <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="أ.د. محمد جميل مرعي"
-                      className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  الاسم الكامل للمستخدم:
+                </label>
+                <div className="relative">
+                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="أ.د. محمد جميل مرعي"
+                    className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    تحديد الدور والصلاحية في Firestore:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { role: 'ADMIN', label: 'مدير', desc: 'كامل الصلاحيات' },
-                      { role: 'ACCOUNTANT', label: 'محاسب', desc: 'قيود ودفاتر' },
-                      { role: 'SECRETARY', label: 'سكرتارية', desc: 'استقبال وفواتير' },
-                    ].map((item) => (
-                      <button
-                        type="button"
-                        key={item.role}
-                        onClick={() => setSelectedRole(item.role as UserRole)}
-                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                          selectedRole === item.role
-                            ? 'bg-blue-600/20 border-blue-500 text-blue-300 font-bold shadow-xs'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs font-bold">{item.label}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">{item.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
+              </div>
             )}
 
             <div>
@@ -271,21 +240,21 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             <div className="grid grid-cols-3 gap-1.5 text-[10px]">
               <button
                 type="button"
-                onClick={() => fillPreset('midotota580@gmail.com', 'ADMIN', 'محمد جميل مرعي')}
+                onClick={() => fillPreset('midotota580@gmail.com', 'محمد جميل مرعي')}
                 className="py-1 px-1.5 bg-slate-950 hover:bg-slate-800 border border-blue-900/50 rounded-lg text-blue-300 font-medium truncate cursor-pointer text-center"
               >
                 👑 مدير (Owner)
               </button>
               <button
                 type="button"
-                onClick={() => fillPreset('accountant@cpa-office.com', 'ACCOUNTANT', 'أحمد مراجعة - محاسب')}
+                onClick={() => fillPreset('accountant@cpa-office.com', 'أحمد مراجعة - محاسب')}
                 className="py-1 px-1.5 bg-slate-950 hover:bg-slate-800 border border-emerald-900/50 rounded-lg text-emerald-300 font-medium truncate cursor-pointer text-center"
               >
                 📊 محاسب (Accountant)
               </button>
               <button
                 type="button"
-                onClick={() => fillPreset('secretary@cpa-office.com', 'SECRETARY', 'منى استقبال - سكرتارية')}
+                onClick={() => fillPreset('secretary@cpa-office.com', 'منى استقبال - سكرتارية')}
                 className="py-1 px-1.5 bg-slate-950 hover:bg-slate-800 border border-purple-900/50 rounded-lg text-purple-300 font-medium truncate cursor-pointer text-center"
               >
                 📋 سكرتارية (Secretary)
