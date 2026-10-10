@@ -286,7 +286,16 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
         otherNonCurrentAssets += debitBal;
       }
     } else if (acc.category === 'LIABILITIES') {
-      if (acc.code === '2110') {
+      // 1. التزامات ضريبة القيمة المضافة ومصلحة الضرائب (أولوية الكود أولاً كالتزامات متداولة)
+      if (
+        acc.code === '2145' ||
+        acc.code === '2140' ||
+        acc.code === '214' ||
+        acc.code.startsWith('214') ||
+        acc.code === '2230'
+      ) {
+        vatOutputTax += creditBal;
+      } else if (acc.code === '2110') {
         longTermLoans += creditBal;
       } else if (acc.code === '2120') {
         deferredTaxLiabilities += creditBal;
@@ -296,8 +305,6 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
         tradePayables += creditBal;
       } else if (acc.code === '2220') {
         notesPayable += creditBal;
-      } else if (acc.code === '2230') {
-        vatOutputTax += creditBal;
       } else if (acc.code === '2235') {
         payrollTaxPayable += creditBal;
       } else if (acc.code === '2238') {
@@ -358,9 +365,22 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
 
   const totalNonCurrentLiabilities = longTermLoans + deferredTaxLiabilities + otherNonCurrentLiabilities;
 
-  // Under Egyptian Accounting Standards (EAS 1 & EAS 24), if tax expense is deducted from Net Profit,
-  // the corresponding income tax liability must be presented under Current Liabilities to preserve the fundamental accounting equation.
-  const incomeTaxPayable = incomeData.taxExpense || 0;
+  // التحقق مما إذا كانت ضريبة الدخل مسجلة بقيد فعلياً أو بحساب التزام في الدفاتر:
+  // 1. إذا وُجد حساب مصروف ضريبة (كود 55 أو اسمه ضريبة الدخل) له رصيد/حركة، فهذا يعني وجود قيد استحقاق فعلي
+  // 2. إذا وُجد حساب التزام لضريبة الدخل (كود 2260 أو كود يبدأ بـ 226 أو اسمه ضريبة دخل) له رصيد دائن
+  const isTaxRecordedInJournal =
+    calculatedAccounts.some(
+      (acc) =>
+        (acc.category === 'EXPENSES' &&
+          (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) &&
+          (acc.movementDebit > 0 || acc.endingBalanceDebit > 0)) ||
+        (acc.category === 'LIABILITIES' &&
+          (acc.code === '2260' || acc.code.startsWith('226') || acc.name.includes('ضريبة الدخل')) &&
+          (acc.endingBalanceCredit > 0 || acc.movementCredit > 0))
+    );
+
+  // لا يضاف incomeTaxPayable كالتزام تقديري إذا كانت الضريبة مسجلة بقيد فعلاً في الدفاتر لتجنب الازدواج
+  const incomeTaxPayable = isTaxRecordedInJournal ? 0 : (incomeData?.taxExpense || 0);
 
   const totalCurrentLiabilities =
     tradePayables +
@@ -374,19 +394,11 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     otherCurrentLiabilities;
 
   const totalLiabilities = totalNonCurrentLiabilities + totalCurrentLiabilities;
-  let totalEquityAndLiabilities = totalEquity + totalLiabilities;
+  const totalEquityAndLiabilities = totalEquity + totalLiabilities;
 
-  // Professional Accounting Standards (EAS 1):
-  // Guarantee 100% mathematical balance: Any unallocated variance is absorbed into Retained Earnings
-  const rawDiff = totalAssets - totalEquityAndLiabilities;
-  if (Math.abs(rawDiff) > 0.001) {
-    retainedEarnings += rawDiff;
-    totalEquity += rawDiff;
-    totalEquityAndLiabilities = totalAssets;
-  }
-
+  // الحساب الدقيق للفارق الحقيقي والاتزان دون أي تعديل أو امتصاص للأرقام في الأرباح المرحلة
   const variance = Math.abs(totalAssets - totalEquityAndLiabilities);
-  const isBalanced = variance < 1.0;
+  const isBalanced = variance < 0.05;
 
   return {
     nonCurrentAssets: {
@@ -519,5 +531,122 @@ export function generateCashFlowStatement(
     netChangeInCash,
     beginningCash,
     endingCash,
+  };
+}
+
+export interface DiscrepancySuspect {
+  type: 'ENTRY' | 'ACCOUNT' | 'UNKNOWN';
+  name: string;
+  code?: string;
+  details: string;
+  amount?: number;
+}
+
+/**
+ * يحدد القيد أو الحساب المشتبه في تسببه في اختلال توازن الميزانية أو القوائم المالية
+ */
+export function findSuspectedDiscrepancyCause(
+  accounts: (Account | CalculatedAccount)[],
+  entries: JournalEntry[],
+  variance: number
+): DiscrepancySuspect | null {
+  if (variance < 0.05) return null;
+
+  // 1. فحص قيود اليومية غير المتزنة بذاتها أولاً
+  for (const entry of entries) {
+    const diff = Math.abs((entry.totalDebit || 0) - (entry.totalCredit || 0));
+    if (diff > 0.01) {
+      return {
+        type: 'ENTRY',
+        name: `قيد اليومية رقم ${entry.serialNumber || entry.entryNumber}`,
+        details: `القيد غير متزن بذاته بفارق (${diff.toFixed(2)} ج.م): ${entry.description}`,
+        amount: diff,
+      };
+    }
+  }
+
+  // 2. فحص قيد يطابق فارقه قيمة عدم اتزان الميزانية بالضبط
+  for (const entry of entries) {
+    const diff = Math.abs((entry.totalDebit || 0) - (entry.totalCredit || 0));
+    if (Math.abs(diff - variance) < 1.0) {
+      return {
+        type: 'ENTRY',
+        name: `قيد اليومية رقم ${entry.serialNumber || entry.entryNumber}`,
+        details: `فارق أطراف القيد يطابق تماماً فارق عدم اتزان الميزانية (${diff.toFixed(2)} ج.م)`,
+        amount: diff,
+      };
+    }
+  }
+
+  // 3. فحص الحسابات ذات الرصيد الشاذ أو التي يطابق رصيدها قيمة الفارق
+  for (const acc of accounts) {
+    const debit = (acc as any).endingBalanceDebit ?? acc.openingBalanceDebit ?? 0;
+    const credit = (acc as any).endingBalanceCredit ?? acc.openingBalanceCredit ?? 0;
+    const net = debit - credit;
+    const absNet = Math.abs(net);
+
+    // حساب رصيده يطابق الفارق تماماً
+    if (Math.abs(absNet - variance) < 1.0 && absNet > 0) {
+      return {
+        type: 'ACCOUNT',
+        name: `${acc.code} - ${acc.name}`,
+        code: acc.code,
+        details: `رصيد هذا الحساب (${absNet.toFixed(2)} ج.م) يطابق تماماً قيمة فارق عدم اتزان المركز المالي`,
+        amount: absNet,
+      };
+    }
+
+    // حساب أصول برصيد دائن شاذ
+    if (acc.category === 'ASSETS' && net < -1.0 && acc.code !== '1190' && !acc.name.includes('مجمع إهلاك') && acc.nature !== 'CREDIT') {
+      return {
+        type: 'ACCOUNT',
+        name: `${acc.code} - ${acc.name}`,
+        code: acc.code,
+        details: `حساب أصول بطبيعة مدينة ويحمل رصيداً دائناً شاذّاً بقيمة (${absNet.toFixed(2)} ج.م)`,
+        amount: absNet,
+      };
+    }
+
+    // حساب التزامات أو ملكية برصيد مدين شاذ
+    if ((acc.category === 'LIABILITIES' || acc.category === 'EQUITY') && net > 1.0 && acc.code !== '3400' && acc.nature !== 'DEBIT') {
+      return {
+        type: 'ACCOUNT',
+        name: `${acc.code} - ${acc.name}`,
+        code: acc.code,
+        details: `حساب التزامات/حقوق ملكية بطبيعة دائنة ويحمل رصيداً مديناً شاذّاً بقيمة (${net.toFixed(2)} ج.م)`,
+        amount: net,
+      };
+    }
+  }
+
+  // 4. فحص حركة حسابات تطابق الفارق
+  for (const acc of accounts) {
+    const movDeb = (acc as any).movementDebit || 0;
+    const movCred = (acc as any).movementCredit || 0;
+    if (Math.abs(movDeb - variance) < 1.0 && movDeb > 0) {
+      return {
+        type: 'ACCOUNT',
+        name: `${acc.code} - ${acc.name}`,
+        code: acc.code,
+        details: `حركة الحساب المدينة (${movDeb.toFixed(2)} ج.م) تطابق فارق عدم الاتزان`,
+        amount: movDeb,
+      };
+    }
+    if (Math.abs(movCred - variance) < 1.0 && movCred > 0) {
+      return {
+        type: 'ACCOUNT',
+        name: `${acc.code} - ${acc.name}`,
+        code: acc.code,
+        details: `حركة الحساب الدائنة (${movCred.toFixed(2)} ج.م) تطابق فارق عدم الاتزان`,
+        amount: movCred,
+      };
+    }
+  }
+
+  return {
+    type: 'UNKNOWN',
+    name: 'حسابات التسوية أو قيود اليومية غير المرحلة',
+    details: 'يوجد عدم تطابق بين إجمالي الأصول وإجمالي الالتزامات وحقوق الملكية يتطلب تدقيق قيود الإدخال',
+    amount: variance,
   };
 }

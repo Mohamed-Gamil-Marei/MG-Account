@@ -65,6 +65,8 @@ interface ScreenActionToolbarProps {
   whatsAppProcedureType?: ProcedureWhatsAppType;
   compact?: boolean;
   className?: string;
+  disablePrintAndExport?: boolean;
+  disableReason?: string;
 }
 
 export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
@@ -90,6 +92,8 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
   whatsAppProcedureType,
   compact: _compact = true,
   className = '',
+  disablePrintAndExport = false,
+  disableReason,
 }) => {
   const effectiveModelType = (modelType || 'ALL_DATA') as ModelType;
   const effectiveTitle = title || screenTitle || 'المستند المالي';
@@ -338,28 +342,46 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
          ======================================================== */}
       {(showPreview || showPrint) && (
         <div className="relative">
-          <div className="inline-flex rounded-lg border border-slate-700/80 bg-slate-800 text-white shadow-2xs">
+          <div className={`inline-flex rounded-lg border shadow-2xs ${disablePrintAndExport ? 'border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 text-slate-400 opacity-60' : 'border-slate-700/80 bg-slate-800 text-white'}`}>
             {/* Primary Click: Opens WYSIWYG Print Preview Modal FIRST */}
             <button
               onClick={() => {
+                if (disablePrintAndExport) {
+                  showFeedback('error', disableReason || 'تم منع الطباعة الرسمية لوجود فارق عدم اتزان في القوائم المالية');
+                  return;
+                }
                 if (showPreview) setIsPreviewModalOpen(true);
                 else handlePrint(pageSize, orientation, true);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 hover:bg-slate-700 rounded-r-lg text-xs font-bold transition-all cursor-pointer border-l border-slate-700 active:scale-95 text-slate-100"
-              title="معاينة الطباعة أولاً (عرض تفاعلي)"
+              disabled={disablePrintAndExport}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold transition-all border-l ${
+                disablePrintAndExport
+                  ? 'cursor-not-allowed text-slate-400 border-slate-300 dark:border-slate-700'
+                  : 'hover:bg-slate-700 rounded-r-lg cursor-pointer border-slate-700 active:scale-95 text-slate-100'
+              }`}
+              title={disablePrintAndExport ? (disableReason || 'الطباعة معطلة لعدم اتزان الميزانية') : 'معاينة الطباعة أولاً (عرض تفاعلي)'}
             >
-              <Printer className="w-3.5 h-3.5 text-emerald-400" />
+              <Printer className={`w-3.5 h-3.5 ${disablePrintAndExport ? 'text-slate-400' : 'text-emerald-400'}`} />
               <span>معاينة وطباعة</span>
             </button>
             <button
               onClick={() => {
+                if (disablePrintAndExport) {
+                  showFeedback('error', disableReason || 'تم منع الطباعة الرسمية لوجود فارق عدم اتزان في القوائم المالية');
+                  return;
+                }
                 setIsPrintMenuOpen(!isPrintMenuOpen);
                 setIsExportMenuOpen(false);
                 setIsImportMenuOpen(false);
                 setIsTemplateMenuOpen(false);
               }}
-              className="px-1.5 py-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded-l-lg text-xs transition-all cursor-pointer"
-              title="خيارات الطباعة والترويسة والورق"
+              disabled={disablePrintAndExport}
+              className={`px-1.5 py-1 text-xs transition-all ${
+                disablePrintAndExport
+                  ? 'cursor-not-allowed text-slate-400'
+                  : 'hover:bg-slate-700 text-slate-300 hover:text-white rounded-l-lg cursor-pointer'
+              }`}
+              title={disablePrintAndExport ? (disableReason || 'خيارات الطباعة معطلة لعدم الاتزان') : 'خيارات الطباعة والترويسة والورق'}
             >
               <ChevronDown className="w-3 h-3" />
             </button>
@@ -486,19 +508,27 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
         <div className="relative">
           <button
             onClick={() => {
+              if (disablePrintAndExport) {
+                showFeedback('error', disableReason || 'تم منع التصدير الرسمي لوجود فارق عدم اتزان في القوائم المالية');
+                return;
+              }
               setIsExportMenuOpen(!isExportMenuOpen);
               setIsPrintMenuOpen(false);
               setIsImportMenuOpen(false);
               setIsTemplateMenuOpen(false);
             }}
-            disabled={isExporting}
-            className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs border border-slate-300 transition-all cursor-pointer disabled:opacity-50"
-            title="تصدير بصيغ متعددة"
+            disabled={isExporting || disablePrintAndExport}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-xs border transition-all ${
+              disablePrintAndExport
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 cursor-pointer disabled:opacity-50'
+            }`}
+            title={disablePrintAndExport ? (disableReason || 'التصدير معطل لعدم اتزان الميزانية') : 'تصدير بصيغ متعددة'}
           >
             {isExporting ? (
               <Loader2 className="w-3.5 h-3.5 text-slate-600 animate-spin" />
             ) : (
-              <Download className="w-3.5 h-3.5 text-blue-700" />
+              <Download className={`w-3.5 h-3.5 ${disablePrintAndExport ? 'text-slate-400' : 'text-blue-700'}`} />
             )}
             <span>تصدير</span>
             <ChevronDown className="w-3 h-3 text-slate-500" />

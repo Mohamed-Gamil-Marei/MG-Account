@@ -1408,9 +1408,11 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     const currentPartnerAccount = yearsData[yr]?.partnerCurrentAccount !== undefined
       ? yearsData[yr]?.partnerCurrentAccount!
       : (yearsData[yr]?.legalReserve || 0);
-    const newPartnerAccount = Math.round((currentPartnerAccount + cd.balanceDiff) * 100) / 100;
+    const diff = cd.balanceDiff || 0;
+    const newPartnerAccount = Math.round((currentPartnerAccount + diff) * 100) / 100;
     handleUpdateFinancialStatementCell('partnerCurrentAccount', yr, newPartnerAccount);
     handleUpdateFinancialStatementCell('legalReserve', yr, newPartnerAccount);
+    handleUpdateFinancialStatementCell('autoBalanceAdjustment', yr, diff);
   };
 
   const handleAutoBalanceAllYears = () => {

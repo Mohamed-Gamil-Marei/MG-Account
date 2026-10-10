@@ -1461,6 +1461,12 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
   };
 
   const handleRequestEdit = (entry: JournalEntry) => {
+    if (entry.source === 'AUDIT_DIRECT_ENTRY') {
+      alert(
+        '⚠️ لا يمكن تعديل هذا القيد يدويًا لأنه قيد مولّد آلياً من وضع المراجعة (الإدخال المباشر).\nلتعديل الأرقام يرجى حذف التوليد أو إعادة التوليد من شاشة القوائم المالية / وضع المراجعة منعاً لحدوث أي تضارب محاسبي.'
+      );
+      return;
+    }
     setEntryToEdit(entry);
     setEntryClientId(entry.clientId || null);
     if (!SecurityAuthService.isSecurityAuthEnabled()) {
@@ -2274,6 +2280,13 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                       <span>{entry.currency} {entry.foreignTotalDebit ? Number(entry.foreignTotalDebit).toLocaleString() : ''} (سعر: {entry.exchangeRate || 1} ج.م)</span>
                     </span>
                   )}
+
+                  {/* Audit Direct Entry Badge */}
+                  {entry.source === 'AUDIT_DIRECT_ENTRY' && (
+                    <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-700 flex items-center gap-1 font-mono">
+                      <span>⚡ مولّد بمراجعة مباشرة</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -2301,9 +2314,9 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                         onClick: () => setSelectedEntryForView(entry),
                       },
                       {
-                        label: 'تعديل القيد',
+                        label: entry.source === 'AUDIT_DIRECT_ENTRY' ? 'تعديل القيد (محمي - وضع المراجعة)' : 'تعديل القيد',
                         icon: Lock,
-                        variant: 'warning',
+                        variant: entry.source === 'AUDIT_DIRECT_ENTRY' ? 'default' : 'warning',
                         onClick: () => handleRequestEdit(entry),
                       },
                       {

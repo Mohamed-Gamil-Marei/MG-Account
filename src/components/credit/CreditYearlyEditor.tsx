@@ -55,6 +55,8 @@ export interface FiscalYearData {
   legalReserve?: number;
   partnerCurrentAccount?: number;
   retainedEarningsAndProfit?: number;
+  autoBalanceAdjustment?: number;
+  actualStatutoryReserve?: number;
 }
 
 interface CreditYearlyEditorProps {

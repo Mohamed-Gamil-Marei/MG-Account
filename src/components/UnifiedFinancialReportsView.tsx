@@ -273,11 +273,16 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
               targetElementId="financial-statements-container"
               printSelector="#financial-statements-container"
               compact={true}
+              disablePrintAndExport={!summary.isBsBalanced}
+              disableReason={`تم حظر الطباعة والتصدير لوجود فارق عدم اتزان في الميزانية بمقدار (${formatEgyptianCurrency(summary.bsDiff)})`}
               actions={[
                 {
                   label: 'تصدير الملف المالي الكامل',
                   icon: Printer,
-                  onClick: () => setIsExportModalOpen(true),
+                  onClick: () => {
+                    if (!summary.isBsBalanced) return;
+                    setIsExportModalOpen(true);
+                  },
                 },
               ]}
             />

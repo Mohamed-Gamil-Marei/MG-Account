@@ -33,6 +33,8 @@ import { ActionMenu } from '../common/ActionMenu';
 import { DisclosureDetailModal } from './DisclosureDetailModal';
 import { FixedAssetCategoryItem } from './CreditFixedAssetsTab';
 import { AdminExpenseItem } from './CreditAdminExpensesTab';
+import { db } from '../../db/localDatabase';
+import { firebaseAuth } from '../../services/firebaseAuthService';
 
 export interface StatementLineItem {
   id: string;
@@ -123,6 +125,67 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
   // Local state if not controlled from parent
   const [localCustomItems, setLocalCustomItems] = useState<StatementLineItem[]>([]);
   const activeCustomItems = propCustomItems || localCustomItems;
+
+  // Partner Current Account Auto-Balance Confirmation Modal State & Handlers
+  const [pendingBalanceYear, setPendingBalanceYear] = useState<number | null>(null);
+  const [secondConfirmChecked, setSecondConfirmChecked] = useState<boolean>(false);
+  const [balanceSuccessNotice, setBalanceSuccessNotice] = useState<string | null>(null);
+
+  const requestBalanceYear = (yr: number) => {
+    setPendingBalanceYear(yr);
+    setSecondConfirmChecked(false);
+  };
+
+  const pendingCd = pendingBalanceYear ? computedData[pendingBalanceYear] : null;
+  const pendingDiff = pendingCd?.balanceDiff ?? 0;
+  const pendingTotalAssets = pendingCd?.totalAssets || 1;
+  const pendingDiffRatio = (Math.abs(pendingDiff) / pendingTotalAssets) * 100;
+  const isHighRatio = pendingDiffRatio > 1.0;
+
+  const currentPartnerBalance = pendingBalanceYear
+    ? (yearsData[pendingBalanceYear]?.partnerCurrentAccount !== undefined
+        ? yearsData[pendingBalanceYear]?.partnerCurrentAccount!
+        : (yearsData[pendingBalanceYear]?.legalReserve || 0))
+    : 0;
+
+  const newPartnerBalance = Math.round((currentPartnerBalance + pendingDiff) * 100) / 100;
+
+  const handleConfirmExecuteBalance = () => {
+    if (!pendingBalanceYear) return;
+    const yr = pendingBalanceYear;
+    const diff = pendingDiff;
+    const beforeVal = currentPartnerBalance;
+    const afterVal = newPartnerBalance;
+    const ratioStr = pendingDiffRatio.toFixed(2);
+
+    // 1. Audit trail logging (السنة، المبلغ، المستخدم، الوقت)
+    const currentUser =
+      firebaseAuth.getCurrentProfile()?.name ||
+      db.getState().officeProfile.auditorName ||
+      'المحاسب المسؤول';
+
+    db.logAudit(
+      'UPDATE',
+      `موازنة جاري الشركاء آلياً لسنة ${yr}: تسوية فرق بمبلغ ${diff >= 0 ? '+' : ''}${formatEgyptianCurrency(diff, true)} ج.م (قبل: ${formatEgyptianCurrency(beforeVal)} ج.م، بعد: ${formatEgyptianCurrency(afterVal)} ج.م) بنسبة (${ratioStr}%) من إجمالي الأصول. المستخدم: ${currentUser}`
+    );
+
+    // 2. 2-way sync cell update if provided
+    if (onUpdateCell) {
+      onUpdateCell('partnerCurrentAccount', yr, afterVal);
+      onUpdateCell('legalReserve', yr, afterVal);
+      onUpdateCell('autoBalanceAdjustment', yr, diff);
+    }
+
+    // 3. Trigger parent onAutoBalanceYear handler
+    if (onAutoBalanceYear) {
+      onAutoBalanceYear(yr);
+    }
+
+    setBalanceSuccessNotice(`تمت موازنة سنة ${yr} بنجاح وتسجيلها في سجل التدقيق الرقابي.`);
+    setTimeout(() => setBalanceSuccessNotice(null), 4000);
+    setPendingBalanceYear(null);
+    setSecondConfirmChecked(false);
+  };
 
   const handleOpenNoteModalByNum = (num: number) => {
     const target = supplementaryNotes.find((n) => Number(n.noteNumber) === num) || supplementaryNotes[0];
@@ -737,6 +800,13 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
               </div>
             </div>
 
+            {balanceSuccessNotice && (
+              <div className="mx-4 mb-2 p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-2 text-xs font-bold text-emerald-900 animate-in fade-in">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{balanceSuccessNotice}</span>
+              </div>
+            )}
+
             {/* Collapsible Year-by-Year Comparison Cards */}
             {isBalancePanelOpen && (
               <div className="px-4 pb-4">
@@ -802,7 +872,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                             {onAutoBalanceYear && (
                               <button
                                 type="button"
-                                onClick={() => onAutoBalanceYear(y)}
+                                onClick={() => requestBalanceYear(y)}
                                 className="w-full py-1 px-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
                               >
                                 <Sparkles className="w-3 h-3 text-rose-200" />
@@ -1121,6 +1191,28 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                   </tr>
                 )}
 
+                {!isItemHidden('actualStatutoryReserve') && (
+                  <tr>
+                    <td className="p-2.5">
+                      {renderItemNameWithActions('actualStatutoryReserve', 'الاحتياطي القانوني النظامي (5% من الأرباح)')}
+                    </td>
+                    <td className="p-2.5 text-center text-slate-500 font-mono">{renderNoteBadge(10)}</td>
+                    {yearsList.map((y) =>
+                      renderEditableCell('actualStatutoryReserve', y, (yearsData[y] as any)?.actualStatutoryReserve || 0, 'text-blue-900 font-bold', true)
+                    )}
+                    <td className="p-2.5 text-center no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOrHide('actualStatutoryReserve', false)}
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer transition-colors"
+                        title="استبعاد هذا البند من الميزانية"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
                 {!isItemHidden('retainedEarningsAndProfit') && (
                   <tr className="bg-indigo-50/40 dark:bg-indigo-950/20">
                     <td className="p-2.5">
@@ -1363,7 +1455,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                             {onAutoBalanceYear && (
                               <button
                                 type="button"
-                                onClick={() => onAutoBalanceYear(y)}
+                                onClick={() => requestBalanceYear(y)}
                                 className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded font-sans cursor-pointer transition-colors shadow-2xs"
                                 title="موازنة الفرق في جاري الشركاء فورياً"
                               >
@@ -1805,6 +1897,131 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
           assetCategories={assetCategories}
           adminExpenses={adminExpenses}
         />
+      )}
+
+      {/* Partner Current Account Auto-Balancing Confirmation Modal */}
+      {pendingBalanceYear !== null && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-rose-600 text-white rounded-lg">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">تأكيد موازنة جاري الشركاء آلياً</h3>
+                  <p className="text-[11px] text-slate-300">
+                    السنة المالية: <span className="font-mono font-bold text-amber-300">{pendingBalanceYear}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingBalanceYear(null)}
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              {/* Financial Metrics Summary */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200/70 dark:border-slate-700/60">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">السنة المالية المستهدفة:</span>
+                  <span className="font-mono font-black text-sm text-slate-900 dark:text-white">سنة {pendingBalanceYear}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200/70 dark:border-slate-700/60">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">قيمة فرق عدم الاتزان:</span>
+                  <span className="font-mono font-black text-rose-700 dark:text-rose-400 text-sm">
+                    {formatEgyptianCurrency(pendingDiff, true)} ج.م
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200/70 dark:border-slate-700/60">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">جاري الشركاء قبل الموازنة:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {formatEgyptianCurrency(currentPartnerBalance, true)} ج.م
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200/70 dark:border-slate-700/60">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">جاري الشركاء بعد الموازنة:</span>
+                  <span className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm">
+                    {formatEgyptianCurrency(newPartnerBalance, true)} ج.م
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">نسبة الفرق من إجمالي الأصول:</span>
+                  <span className={`font-mono font-black text-xs px-2 py-0.5 rounded-md ${
+                    isHighRatio
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-300'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
+                  }`}>
+                    {pendingDiffRatio.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+
+              {/* High Ratio (> 1%) Critical Warning Banner */}
+              {isHighRatio && (
+                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-500 rounded-xl space-y-2 text-rose-950 dark:text-rose-200">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1 bg-rose-600 text-white rounded shrink-0 mt-0.5">
+                      <AlertTriangle className="w-4 h-4 animate-pulse" />
+                    </div>
+                    <div>
+                      <p className="font-black text-xs text-rose-700 dark:text-rose-300">
+                        الفرق كبير وغالبًا خطأ إدخال، راجع الأرقام قبل الموازنة
+                      </p>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-200 mt-0.5 leading-relaxed font-semibold">
+                        نسبة الفرق ({pendingDiffRatio.toFixed(2)}%) تتجاوز 1.00% من إجمالي الأصول ({formatEgyptianCurrency(pendingTotalAssets)} ج.م). يجب التأكيد الإضافي لمتابعة الإجراء.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-start gap-2 pt-2 border-t border-rose-200 dark:border-rose-900/60 cursor-pointer text-[11px] font-bold text-rose-900 dark:text-rose-200">
+                    <input
+                      type="checkbox"
+                      checked={secondConfirmChecked}
+                      onChange={(e) => setSecondConfirmChecked(e.target.checked)}
+                      className="mt-0.5 rounded text-rose-600 focus:ring-0 cursor-pointer"
+                    />
+                    <span>أؤكد أنني راجعت الأرقام والقوائم بنفسي وأرغب بالمتابعة والموازنة للمرة الثانية.</span>
+                  </label>
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                * ملاحظة رقابية: سيتم تسجيل هذه الموازنة المحاسبية تلقائياً في سجل التدقيق مع توثيق الوقت واسم المستخدم والمبلغ، مع إدراج إيضاح متمم رسمي للبنك.
+              </p>
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPendingBalanceYear(null)}
+                className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-xl font-bold cursor-pointer transition-colors text-xs"
+              >
+                إلغاء التراجع
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExecuteBalance}
+                disabled={isHighRatio && !secondConfirmChecked}
+                className={`px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
+                  isHighRatio && !secondConfirmChecked
+                    ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                    : 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-95'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>تأكيد وتنفيذ الموازنة</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

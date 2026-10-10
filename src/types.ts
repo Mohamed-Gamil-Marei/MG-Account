@@ -113,6 +113,7 @@ export interface JournalEntry {
   isPosted: boolean;
   entryType: 'GENERAL' | 'ADJUSTING' | 'CLOSING' | 'RECEIPT' | 'PAYMENT' | 'SALES' | 'PURCHASE';
   referenceNumber?: string;
+  source?: 'AUDIT_DIRECT_ENTRY' | string;
   qrPayload?: string;
   attachedFileUrl?: string;
   attachedFileName?: string;

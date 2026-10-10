@@ -583,14 +583,32 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                   <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.paidUpCapital || 0)}</td>
                   <td className="p-1 text-left font-mono text-slate-600">{(((d.paidUpCapital || 0) / totalAssets) * 100).toFixed(1)}%</td>
                 </tr>
+                {((d.actualStatutoryReserve || 0) > 0) && (
+                  <tr>
+                    <td className="p-1 font-bold">الاحتياطي القانوني النظامي</td>
+                    <td className="p-1 text-center font-mono text-slate-500">(11)</td>
+                    <td className="p-1 text-left font-mono">{formatEgyptianCurrency(d.actualStatutoryReserve || 0)}</td>
+                    <td className="p-1 text-left font-mono text-slate-600">{(((d.actualStatutoryReserve || 0) / totalAssets) * 100).toFixed(1)}%</td>
+                  </tr>
+                )}
                 <tr>
-                  <td className="p-1 font-bold">الاحتياطيات والأرباح المرحلة وجاري الشركاء</td>
+                  <td className="p-1 font-bold">جاري الشركاء (أصحاب المنشأة)</td>
                   <td className="p-1 text-center font-mono text-slate-500">(12)</td>
                   <td className="p-1 text-left font-mono">
-                    {formatEgyptianCurrency((d.legalReserve || 0) + (d.retainedEarningsAndProfit || 0), true)}
+                    {formatEgyptianCurrency(d.legalReserve || 0, true)}
                   </td>
                   <td className="p-1 text-left font-mono text-slate-600">
-                    {((((d.legalReserve || 0) + (d.retainedEarningsAndProfit || 0)) / totalAssets) * 100).toFixed(1)}%
+                    {((((d.legalReserve || 0)) / totalAssets) * 100).toFixed(1)}%
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-1 font-bold">الأرباح المرحلة وصافي ربح العام</td>
+                  <td className="p-1 text-center font-mono text-slate-500">(12)</td>
+                  <td className="p-1 text-left font-mono">
+                    {formatEgyptianCurrency(d.retainedEarningsAndProfit || 0, true)}
+                  </td>
+                  <td className="p-1 text-left font-mono text-slate-600">
+                    {((((d.retainedEarningsAndProfit || 0)) / totalAssets) * 100).toFixed(1)}%
                   </td>
                 </tr>
                 <tr className="bg-blue-50 font-black text-blue-950">
@@ -747,16 +765,13 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                   { label: 'الالتزامات غير المتداولة (قروض طويلة الأجل)', note: '(10)', k: 'longLoans', isLiab: true },
                   { label: 'إجمالي الالتزامات', note: '-', k: 'totalLiabilities', isSubtotal: true, color: 'text-red-900' },
                   { label: 'رأس المال المصدر والمدفوع', note: '(11)', k: 'paidUpCapital' },
-                  { label: 'الاحتياطيات والأرباح وجاري الشركاء', note: '(12)', k: 'retainedSum' },
+                  { label: 'جاري الشركاء (أصحاب المنشأة)', note: '(12)', k: 'legalReserve' },
+                  { label: 'الأرباح المرحلة وصافي ربح العام', note: '(12)', k: 'retainedEarningsAndProfit' },
                   { label: 'إجمالي حقوق الملكية', note: '-', k: 'totalEquity', isSubtotal: true, color: 'text-blue-900' },
                   { label: 'إجمالي الالتزامات وحقوق الملكية (مطابق)', note: '-', k: 'totalEquityAndLiabilities', isTotalDark: true },
                 ].map((row, idx) => {
-                  const valCur = row.k === 'retainedSum'
-                    ? (cur.legalReserve || 0) + (cur.retainedEarningsAndProfit || 0)
-                    : (cur[row.k] || 0);
-                  const valPrev = row.k === 'retainedSum'
-                    ? (prev.legalReserve || 0) + (prev.retainedEarningsAndProfit || 0)
-                    : (prev[row.k] || 0);
+                  const valCur = (cur as any)[row.k] || 0;
+                  const valPrev = (prev as any)[row.k] || 0;
                   const v = calcVar(valCur, valPrev);
 
                   const trClass = row.isTotalDark
@@ -1740,7 +1755,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-1.5 text-slate-800 font-medium">الاحتياطي القانوني النظامي (محتجز 5% سنوياً طبقاً للمادة 40 ق 159)</td>
+                      <td className="p-1.5 text-slate-800 font-medium">جاري الشركاء وأصحاب المنشأة (اتزان المركز المالي)</td>
                       <td className="p-1.5 text-center font-mono font-bold text-slate-900">
                         {formatEgyptianCurrency(d.legalReserve || 0)}
                       </td>
@@ -1748,6 +1763,17 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                         {formatEgyptianCurrency(prevD.legalReserve || Math.round((d.legalReserve || 0) * 0.85))}
                       </td>
                     </tr>
+                    {((d.actualStatutoryReserve || 0) > 0 || (prevD.actualStatutoryReserve || 0) > 0) && (
+                      <tr>
+                        <td className="p-1.5 text-slate-800 font-medium">الاحتياطي القانوني النظامي (محتجز 5% سنوياً طبقاً للمادة 40 ق 159)</td>
+                        <td className="p-1.5 text-center font-mono font-bold text-slate-900">
+                          {formatEgyptianCurrency(d.actualStatutoryReserve || 0)}
+                        </td>
+                        <td className="p-1.5 text-center font-mono text-slate-600">
+                          {formatEgyptianCurrency(prevD.actualStatutoryReserve || 0)}
+                        </td>
+                      </tr>
+                    )}
                     <tr>
                       <td className="p-1.5 text-slate-800 font-medium">الأرباح المرحلة وصافي أرباح العام المعتمدة</td>
                       <td className="p-1.5 text-center font-mono font-bold text-slate-900">
@@ -1757,6 +1783,19 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                         {formatEgyptianCurrency(prevD.retainedEarningsAndProfit || Math.round((d.retainedEarningsAndProfit || 0) * 0.85))}
                       </td>
                     </tr>
+                    {((d.autoBalanceAdjustment || 0) !== 0 || (prevD.autoBalanceAdjustment || 0) !== 0) && (
+                      <tr className="bg-amber-50/70 border-t border-amber-200">
+                        <td className="p-1.5 text-amber-900 font-bold text-[9.5px]">
+                          إيضاح متمم (إفصاح مصرفي للبنك): تسوية وموازنة جاري الشركاء الآلية المضافة لمعادلة المركز المالي
+                        </td>
+                        <td className="p-1.5 text-center font-mono font-bold text-amber-900 text-[10px]">
+                          {formatEgyptianCurrency(d.autoBalanceAdjustment || 0, true)}
+                        </td>
+                        <td className="p-1.5 text-center font-mono text-slate-600 text-[10px]">
+                          {formatEgyptianCurrency(prevD.autoBalanceAdjustment || 0, true)}
+                        </td>
+                      </tr>
+                    )}
                     <tr className="bg-emerald-50/70 font-black text-emerald-950 border-t border-emerald-300">
                       <td className="p-1.5">إجمالي حقوق الملكية (مطابق لقائمة المركز المالي)</td>
                       <td className="p-1.5 text-center font-mono font-black text-emerald-900">

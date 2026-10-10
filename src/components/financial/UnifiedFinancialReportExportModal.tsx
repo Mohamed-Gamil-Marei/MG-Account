@@ -208,6 +208,9 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
   }, [unifiedReportRecordId, displayCompanyName, currentFiscalYear, balanceSheet, incomeStatement, profile, activeClient, activeClientId]);
 
   const handleExecutePrint = () => {
+    if (!balanceSheet.isBalanced) {
+      return;
+    }
     setIsPrinting(true);
     setTimeout(() => {
       PrintService.printRecordById(unifiedReportRecordId, 'unified-report-print-canvas', {
@@ -273,11 +276,22 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
             <button
               type="button"
               onClick={handleExecutePrint}
-              disabled={isPrinting}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              disabled={isPrinting || !balanceSheet.isBalanced}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all ${
+                !balanceSheet.isBalanced
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-50'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 disabled:opacity-50'
+              }`}
+              title={!balanceSheet.isBalanced ? `الطباعة محظورة لوجود فارق غير متزن (${formatEgyptianCurrency(balanceSheet.variance)})` : 'طباعة وتصدير PDF الآن'}
             >
               <Printer className="w-4 h-4" />
-              <span>{isPrinting ? 'جاري تجهيز الطباعة...' : 'طباعة وتصدير PDF الآن'}</span>
+              <span>
+                {!balanceSheet.isBalanced
+                  ? `غير متزن (${formatEgyptianCurrency(balanceSheet.variance)})`
+                  : isPrinting
+                  ? 'جاري تجهيز الطباعة...'
+                  : 'طباعة وتصدير PDF الآن'}
+              </span>
             </button>
 
             <button
@@ -497,6 +511,28 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
 
         {/* Scrollable Printable Preview Canvas */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200 dark:bg-slate-950 flex flex-col items-center">
+          {/* Critical Unbalanced Alert in Export Modal */}
+          {!balanceSheet.isBalanced && (
+            <div className="max-w-[210mm] w-full mb-3 p-3.5 bg-rose-50 dark:bg-rose-950/70 border-2 border-rose-500 rounded-xl shadow-sm flex items-start gap-3 text-rose-950 dark:text-rose-100">
+              <div className="p-1.5 bg-rose-600 text-white rounded-lg shrink-0 mt-0.5">
+                <AlertTriangle className="w-4 h-4 animate-pulse" />
+              </div>
+              <div className="flex-1 space-y-0.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-black text-rose-700 dark:text-rose-300">
+                    تنبيه: قائمة المركز المالي غير متزنة! تم حظر الطباعة والتصدير الرسمي.
+                  </span>
+                  <span className="px-2 py-0.5 bg-rose-600 text-white font-mono font-bold rounded text-[11px]">
+                    الفارق الحقيقي: {formatEgyptianCurrency(balanceSheet.variance)}
+                  </span>
+                </div>
+                <p className="text-rose-800 dark:text-rose-200 text-[11px] font-semibold">
+                  إجمالي الأصول ({formatEgyptianCurrency(balanceSheet.totalAssets)}) لا يطابق إجمالي حقوق الملكية والالتزامات ({formatEgyptianCurrency(balanceSheet.totalEquityAndLiabilities)}).
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Quick Notice above canvas */}
           <div className="flex items-center justify-between text-[11px] mb-2 max-w-[210mm] w-full px-1 text-slate-600 dark:text-slate-400">
             <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-400">
@@ -767,7 +803,7 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
                     </div>
                     <div className="flex justify-between font-bold text-slate-900 bg-slate-50 p-1 rounded border border-slate-200">
                       <span>إجمالي الالتزامات وحقوق الملكية:</span>
-                      <span className="text-blue-700">{formatEgyptianCurrency(balanceSheet.totalLiabilitiesAndEquity)}</span>
+                      <span className="text-blue-700">{formatEgyptianCurrency(balanceSheet.totalEquityAndLiabilities)}</span>
                     </div>
                   </div>
                 </div>

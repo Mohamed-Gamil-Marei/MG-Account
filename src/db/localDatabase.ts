@@ -1,7 +1,9 @@
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 import {
   Account,
+  AccountCategory,
   JournalEntry,
+  JournalEntryLine,
   ClientArchiveRecord,
   ClientProcedureTask,
   ClientDocumentFolder,
@@ -806,7 +808,56 @@ export class LocalDatabase {
   }
 
   // --- Journal Entries CRUD ---
+  public validateJournalEntryDraft(entry: { totalDebit: number; totalCredit: number; lines: JournalEntryLine[] }): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const totalDebit = Number(entry.totalDebit || 0);
+    const totalCredit = Number(entry.totalCredit || 0);
+    const diff = Math.abs(totalDebit - totalCredit);
+
+    // 1. Balance verification
+    if (diff > 0.01) {
+      errors.push(`القيد غير متزن: إجمالي المدين (${totalDebit.toFixed(2)}) لا يساوي إجمالي الدائن (${totalCredit.toFixed(2)}) بفارق (${diff.toFixed(2)} ج.م)`);
+    }
+
+    if (!entry.lines || entry.lines.length < 2) {
+      errors.push('يجب أن يحتوي القيد على طرفين محاسبيين على الأقل (مدين ودائن)');
+    }
+
+    // 2. Lines debit/credit and accounts verification
+    for (let i = 0; i < (entry.lines || []).length; i++) {
+      const line = entry.lines[i];
+      const d = Number(line.debit || 0);
+      const c = Number(line.credit || 0);
+
+      // Debit/credit mutual exclusion
+      if (d > 0 && c > 0) {
+        errors.push(`الطرف رقم (${i + 1}): الحساب (${line.accountName || line.accountCode}) مسجل كمدين ودائن في نفس الوقت`);
+      }
+      if (d <= 0 && c <= 0) {
+        errors.push(`الطرف رقم (${i + 1}): الحساب (${line.accountName || line.accountCode}) يجب أن يحتوي على مبلغ مدين أو دائن أكبر من صفر`);
+      }
+
+      // Existing accounts check
+      const accExists = this.state.accounts.some(
+        (a) => (line.accountId && a.id === line.accountId) || (line.accountCode && a.code === line.accountCode)
+      );
+      if (!accExists) {
+        errors.push(`الطرف رقم (${i + 1}): الحساب كود (${line.accountCode || 'مجهول'}) غير موجود في شجرة الحسابات المعتمدة`);
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+    };
+  }
+
   public addJournalEntry(entry: Omit<JournalEntry, 'id' | 'serialNumber' | 'entryNumber' | 'createdAt' | 'updatedAt' | 'auditTrail'>): JournalEntry {
+    const validation = this.validateJournalEntryDraft(entry as any);
+    if (!validation.isValid) {
+      throw new Error(`تعذر حفظ القيد المحاسبي:\n${validation.errors.join('\n')}`);
+    }
+
     const nextNum = (this.state.journalEntries.length > 0
       ? Math.max(...this.state.journalEntries.map((e) => e.entryNumber || 0))
       : 0) + 1;
@@ -837,10 +888,42 @@ export class LocalDatabase {
     return newEntry;
   }
 
+  private getOrCreateAccount(
+    code: string,
+    defaultName: string,
+    category: AccountCategory,
+    nature: 'DEBIT' | 'CREDIT'
+  ): Account {
+    let acc = this.state.accounts.find(
+      (a) => a.code === code || a.name.trim() === defaultName.trim()
+    );
+    if (!acc) {
+      acc = this.addAccount({
+        code,
+        name: defaultName,
+        category,
+        nature,
+        level: 2,
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        isSystem: false,
+      });
+    }
+    return acc;
+  }
+
   public updateJournalEntry(id: string, updates: Partial<JournalEntry>): JournalEntry | null {
     const index = this.state.journalEntries.findIndex((e) => e.id === id);
     if (index === -1) return null;
     const old = this.state.journalEntries[index];
+
+    // Enforce requirement 2.3: AUDIT_DIRECT_ENTRY entries cannot be edited manually
+    if (old.source === 'AUDIT_DIRECT_ENTRY' && (updates as any).allowAuditDirectUpdate !== true) {
+      throw new Error(
+        'لا يمكن تعديل هذا القيد يدويًا لأنه قيد مولّد آلياً من وضع المراجعة (الإدخال المباشر). لتعديل القيد يجب حذف التوليد أو إعادة التوليد من وضع المراجعة منعاً لحدوث أي تضارب محاسبي.'
+      );
+    }
+
     const now = new Date().toISOString();
 
     const audit: AuditRecord = {
@@ -870,6 +953,308 @@ export class LocalDatabase {
     this.logAudit('DELETE', `حذف قيد اليومية رقم ${entry.serialNumber}`);
     this.saveState();
     return true;
+  }
+
+  /**
+   * حذف كافة القيود المولّدة من وضع المراجعة (الإدخال المباشر) لعميل أو سنة معينة
+   */
+  public deleteGeneratedAuditEntries(fiscalYear?: number, clientId?: string): number {
+    const initialCount = this.state.journalEntries.length;
+    const removedSerials: string[] = [];
+    this.state.journalEntries = this.state.journalEntries.filter((e) => {
+      if (e.source !== 'AUDIT_DIRECT_ENTRY') return true;
+      if (clientId && e.clientId && e.clientId !== clientId) return true;
+      if (fiscalYear) {
+        const entryYear = new Date(e.date).getFullYear();
+        if (entryYear !== fiscalYear) return true;
+      }
+      removedSerials.push(e.serialNumber);
+      return false;
+    });
+    const deletedCount = initialCount - this.state.journalEntries.length;
+    if (deletedCount > 0) {
+      this.logAudit(
+        'DELETE',
+        `حذف عدد (${deletedCount}) قيد مولّد من وضع المراجعة (الإدخال المباشر) لسنة ${fiscalYear || 'الكل'}: [${removedSerials.join(', ')}]`
+      );
+      this.saveState();
+      this.notify();
+    }
+    return deletedCount;
+  }
+
+  /**
+   * وضع المراجعة: توليد قيود اليومية المزدوجة من بيانات الإدخال المباشر
+   * كل قيد يمر بكافة فحوصات addJournalEntry (التوازن، صحة الحسابات، عدم ازدواج المدين/الدائن)
+   * ويتعلم بمصدر AUDIT_DIRECT_ENTRY
+   */
+  public generateAuditDirectEntries(params: {
+    fiscalYear: number;
+    clientId?: string;
+    clientName?: string;
+    date?: string;
+    incomeData: {
+      revenues?: number;
+      costOfGoodsSold?: number;
+      sellingAndMarketingExpenses?: number;
+      administrativeExpenses?: number;
+      depreciationExpense?: number;
+      financeCosts?: number;
+      otherIncomes?: number;
+      taxExpense?: number;
+      netProfitAfterTax?: number;
+    };
+    balanceData: {
+      nonCurrentAssets: {
+        ppe: number;
+        accDep: number;
+      };
+      currentAssets: {
+        inventory: number;
+        receivables: number;
+        notesReceivable: number;
+        taxDebit: number;
+        prepayments: number;
+        cashAndBanks: number;
+      };
+      equity: {
+        capital: number;
+        legalReserve: number;
+        otherReserves?: number;
+        retainedEarnings: number;
+        currentProfit: number;
+        partnersCurrent: number;
+        otherEquity?: number;
+      };
+      nonCurrentLiabilities: {
+        longTermLoans: number;
+        deferredTaxLiabilities?: number;
+        otherNonCurrentLiabilities?: number;
+      };
+      currentLiabilities: {
+        payables: number;
+        notesPayable: number;
+        taxesPayable: number;
+        socialInsurance: number;
+        accruedExpenses: number;
+        otherCurrentLiabilities?: number;
+      };
+    };
+    customLines?: Array<{
+      id: string;
+      name: string;
+      section: string;
+      amount: number;
+    }>;
+  }): { success: boolean; generatedEntries: JournalEntry[]; errors?: string[] } {
+    const yr = params.fiscalYear;
+    const entryDate = params.date || `${yr}-12-31`;
+    const clientId = params.clientId;
+    const clientName = params.clientName;
+    const errors: string[] = [];
+    const generated: JournalEntry[] = [];
+
+    // حذف القيود المولدة سابقاً لنفس السنة والعميل لعدم حدوث ازدواج
+    this.deleteGeneratedAuditEntries(yr, clientId);
+
+    // 1. توليد قيد الدخل والنشاط التشغيلي
+    const inc = params.incomeData;
+    const rev = Number(inc.revenues || 0);
+    const cogs = Number(inc.costOfGoodsSold || 0);
+    const selling = Number(inc.sellingAndMarketingExpenses || 0);
+    const admin = Number(inc.administrativeExpenses || 0);
+    const dep = Number(inc.depreciationExpense || 0);
+    const fin = Number(inc.financeCosts || 0);
+    const otherInc = Number(inc.otherIncomes || 0);
+    const taxExp = Number(inc.taxExpense || 0);
+    const netProfit = Number(
+      inc.netProfitAfterTax !== undefined
+        ? inc.netProfitAfterTax
+        : rev + otherInc - (cogs + selling + admin + dep + fin + taxExp)
+    );
+
+    const hasOperatingData =
+      rev > 0 || cogs > 0 || admin > 0 || selling > 0 || dep > 0 || fin > 0 || otherInc > 0 || taxExp > 0;
+
+    if (hasOperatingData) {
+      const incLines: JournalEntryLine[] = [];
+
+      if (cogs > 0) {
+        const acc = this.getOrCreateAccount('5110', 'تكلفة المبيعات والنشاط', 'EXPENSES', 'DEBIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: cogs, credit: 0, description: 'تكلفة المبيعات المحققة' });
+      }
+      if (admin > 0) {
+        const acc = this.getOrCreateAccount('5201', 'مصروفات عمومية وإدارية', 'EXPENSES', 'DEBIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: admin, credit: 0, description: 'المصروفات الإدارية والعمومية' });
+      }
+      if (selling > 0) {
+        const acc = this.getOrCreateAccount('5202', 'مصروفات بيعية وتسويقية', 'EXPENSES', 'DEBIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: selling, credit: 0, description: 'مصروفات البيع والتسويق' });
+      }
+      if (dep > 0) {
+        const acc = this.getOrCreateAccount('5203', 'مصروف إهلاك الأصول الثابتة', 'EXPENSES', 'DEBIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: dep, credit: 0, description: 'إهلاك الأصول عن السنة' });
+      }
+      if (fin > 0) {
+        const acc = this.getOrCreateAccount('5301', 'فوائد وأعباء تمويلية', 'EXPENSES', 'DEBIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: fin, credit: 0, description: 'أعباء وفوائد بنكية تمويلية' });
+      }
+      if (taxExp > 0) {
+        const acc = this.getOrCreateAccount('5401', 'ضريبة الدخل عن العام', 'EXPENSES', 'DEBIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: taxExp, credit: 0, description: 'مخصص / عبء ضريبة الدخل السنوية' });
+      }
+
+      // إقفال صافي الربح / الخسارة
+      if (netProfit > 0) {
+        const acc = this.getOrCreateAccount('3140', 'أرباح العام / الأرباح المرحلة', 'EQUITY', 'CREDIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: netProfit, credit: 0, description: 'صافي ربح العام بعد الضريبة المحول للأرباح' });
+      } else if (netProfit < 0) {
+        const acc = this.getOrCreateAccount('3140', 'أرباح العام / الأرباح المرحلة', 'EQUITY', 'CREDIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: Math.abs(netProfit), description: 'صافي خسارة العام المحولة للمرحلة' });
+      }
+
+      if (rev > 0) {
+        const acc = this.getOrCreateAccount('4110', 'إيرادات النشاط والمبيعات', 'REVENUE', 'CREDIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: rev, description: 'إيرادات المبيعات والنشاط السنوي' });
+      }
+      if (otherInc > 0) {
+        const acc = this.getOrCreateAccount('4201', 'إيرادات وأرباح أخرى', 'REVENUE', 'CREDIT');
+        incLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: otherInc, description: 'إيرادات وأرباح متنوعة أخرى' });
+      }
+
+      const totalDebitInc = Math.round(incLines.reduce((sum, l) => sum + (l.debit || 0), 0) * 100) / 100;
+      const totalCreditInc = Math.round(incLines.reduce((sum, l) => sum + (l.credit || 0), 0) * 100) / 100;
+
+      if (incLines.length >= 2) {
+        try {
+          const entry = this.addJournalEntry({
+            date: entryDate,
+            description: `قيد إثبات النشاط والدخل الشامل لسنة ${yr} (وضع المراجعة - إدخال مباشر)`,
+            entryType: 'ADJUSTING',
+            totalDebit: totalDebitInc,
+            totalCredit: totalCreditInc,
+            isPosted: true,
+            source: 'AUDIT_DIRECT_ENTRY',
+            clientId,
+            clientName,
+            lines: incLines,
+          });
+          generated.push(entry);
+        } catch (err: any) {
+          errors.push(`خطأ في قيد الدخل: ${err?.message || ''}`);
+        }
+      }
+    }
+
+    // 2. توليد قيد المركز المالي والأرصدة الختامية
+    const bs = params.balanceData;
+    const bsLines: JournalEntryLine[] = [];
+
+    const addDebit = (code: string, name: string, category: AccountCategory, val: number, desc: string) => {
+      const v = Math.round(Number(val || 0) * 100) / 100;
+      if (v > 0) {
+        const acc = this.getOrCreateAccount(code, name, category, 'DEBIT');
+        bsLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: v, credit: 0, description: desc });
+      }
+    };
+
+    const addCredit = (code: string, name: string, category: AccountCategory, val: number, desc: string) => {
+      const v = Math.round(Number(val || 0) * 100) / 100;
+      if (v > 0) {
+        const acc = this.getOrCreateAccount(code, name, category, 'CREDIT');
+        bsLines.push({ accountId: acc.id, accountCode: acc.code, accountName: acc.name, debit: 0, credit: v, description: desc });
+      }
+    };
+
+    // الأصول
+    addDebit('1110', 'الأصول الثابتة', 'ASSETS', bs.nonCurrentAssets.ppe, 'الأصول الثابتة بالتكلفة التاريخية');
+    addDebit('1210', 'مخزون بضاعة آخر المدة', 'ASSETS', bs.currentAssets.inventory, 'مخزون بضاعة وخامات آخر المدة');
+    addDebit('1220', 'العملاء والمدينون التجاريون', 'ASSETS', bs.currentAssets.receivables, 'أرصدة العملاء والمدينين');
+    addDebit('1225', 'أوراق القبض', 'ASSETS', bs.currentAssets.notesReceivable, 'أوراق قبض تجارية برسم التحصيل');
+    addDebit('1230', 'مصلحة الضرائب - رصيد مدين', 'ASSETS', bs.currentAssets.taxDebit, 'أرصدة ضريبية مدينة ومسدد تحت الحساب');
+    addDebit('1250', 'مصروفات مدفوعة مقدماً وأرصدة مدينة', 'ASSETS', bs.currentAssets.prepayments, 'مصروفات مدفوعة مقدماً وأرصدة مدينة أخرى');
+    addDebit('1260', 'نقدية بالصندوق والبنوك', 'ASSETS', bs.currentAssets.cashAndBanks, 'النقدية بالبنوك والصندوق');
+
+    // بنود الأصول المخصصة
+    (params.customLines || []).forEach((cl) => {
+      if (cl.section === 'NON_CURRENT_ASSETS' && cl.amount > 0) {
+        addDebit(`1180_${cl.id}`, cl.name, 'ASSETS', cl.amount, cl.name);
+      } else if (cl.section === 'CURRENT_ASSETS' && cl.amount > 0) {
+        addDebit(`1280_${cl.id}`, cl.name, 'ASSETS', cl.amount, cl.name);
+      }
+    });
+
+    // الخصوم وحقوق الملكية
+    addCredit('1190', 'مجمع إهلاك الأصول الثابتة', 'ASSETS', bs.nonCurrentAssets.accDep, 'مجمع إهلاك الأصول الثابتة');
+    addCredit('3110', 'رأس المال المدفوع', 'EQUITY', bs.equity.capital, 'رأس المال المصدر والمدفوع');
+    addCredit('3120', 'الاحتياطي القانوني', 'EQUITY', bs.equity.legalReserve, 'الاحتياطي القانوني النظامي');
+    addCredit('3130', 'احتياطيات أخرى', 'EQUITY', bs.equity.otherReserves || 0, 'احتياطيات أخرى');
+    addCredit('3140', 'أرباح مرحلة', 'EQUITY', bs.equity.retainedEarnings, 'الأرباح المرحلة');
+
+    const profitVal = Number(bs.equity.currentProfit || 0);
+    if (profitVal > 0) {
+      addCredit('3141', 'صافي ربح العام', 'EQUITY', profitVal, 'صافي أرباح العام الحالي');
+    } else if (profitVal < 0) {
+      addDebit('3142', 'صافي خسارة العام', 'EQUITY', Math.abs(profitVal), 'صافي خسائر العام الحالي');
+    }
+
+    addCredit('3150', 'جاري الشركاء وأصحاب المنشأة', 'EQUITY', bs.equity.partnersCurrent, 'جاري الشركاء');
+    addCredit('3190', 'حقوق ملكية أخرى', 'EQUITY', bs.equity.otherEquity || 0, 'حقوق ملكية أخرى');
+    addCredit('2210', 'قروض وتسهيلات طويلة الأجل', 'LIABILITIES', bs.nonCurrentLiabilities.longTermLoans, 'قروض وتسهيلات بنكية طويلة الأجل');
+    addCredit('2220', 'التزامات ضريبية مؤجلة', 'LIABILITIES', bs.nonCurrentLiabilities.deferredTaxLiabilities || 0, 'التزامات ضريبية مؤجلة');
+    addCredit('2290', 'التزامات غير متداولة أخرى', 'LIABILITIES', bs.nonCurrentLiabilities.otherNonCurrentLiabilities || 0, 'التزامات غير متداولة أخرى');
+
+    addCredit('2110', 'الموردون والدائنون التجاريون', 'LIABILITIES', bs.currentLiabilities.payables, 'أرصدة الموردين والدائنين');
+    addCredit('2115', 'أوراق الدفع', 'LIABILITIES', bs.currentLiabilities.notesPayable, 'أوراق دفع وتعهدات سداد');
+    addCredit('2140', 'مصلحة الضرائب - مستحقات دائنة', 'LIABILITIES', bs.currentLiabilities.taxesPayable, 'ضرائب مستحقة واجبة السداد');
+    addCredit('2145', 'الهيئة القومية للتأمين الاجتماعي', 'LIABILITIES', bs.currentLiabilities.socialInsurance, 'تأمينات اجتماعية مستحقة');
+    addCredit('2150', 'مصروفات مستحقة وأرصدة دائنة', 'LIABILITIES', bs.currentLiabilities.accruedExpenses, 'مصروفات مستحقة وأرصدة دائنة');
+    addCredit('2190', 'التزامات متداولة أخرى', 'LIABILITIES', bs.currentLiabilities.otherCurrentLiabilities || 0, 'التزامات متداولة أخرى');
+
+    // بنود الخصوم والملكية المخصصة
+    (params.customLines || []).forEach((cl) => {
+      if (cl.section === 'EQUITY' && cl.amount > 0) {
+        addCredit(`3180_${cl.id}`, cl.name, 'EQUITY', cl.amount, cl.name);
+      } else if (cl.section === 'NON_CURRENT_LIAB' && cl.amount > 0) {
+        addCredit(`2280_${cl.id}`, cl.name, 'LIABILITIES', cl.amount, cl.name);
+      } else if (cl.section === 'CURRENT_LIAB' && cl.amount > 0) {
+        addCredit(`2180_${cl.id}`, cl.name, 'LIABILITIES', cl.amount, cl.name);
+      }
+    });
+
+    const totalDebitBs = Math.round(bsLines.reduce((sum, l) => sum + (l.debit || 0), 0) * 100) / 100;
+    const totalCreditBs = Math.round(bsLines.reduce((sum, l) => sum + (l.credit || 0), 0) * 100) / 100;
+
+    if (bsLines.length >= 2) {
+      try {
+        const entry = this.addJournalEntry({
+          date: entryDate,
+          description: `قيد المركز المالي والأرصدة الختامية لسنة ${yr} (وضع المراجعة - إدخال مباشر)`,
+          entryType: 'CLOSING',
+          totalDebit: totalDebitBs,
+          totalCredit: totalCreditBs,
+          isPosted: true,
+          source: 'AUDIT_DIRECT_ENTRY',
+          clientId,
+          clientName,
+          lines: bsLines,
+        });
+        generated.push(entry);
+      } catch (err: any) {
+        errors.push(`خطأ في قيد المركز المالي: ${err?.message || ''}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      return { success: false, generatedEntries: generated, errors };
+    }
+
+    this.logAudit(
+      'CREATE',
+      `توليد قيود اليومية بنجاح من وضع المراجعة (الإدخال المباشر) لسنة ${yr} بعدد (${generated.length}) قيد بإجمالي ${totalDebitBs} ج.م`
+    );
+
+    return { success: true, generatedEntries: generated };
   }
 
   public togglePostEntry(id: string): JournalEntry | null {

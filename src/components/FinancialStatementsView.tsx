@@ -40,6 +40,7 @@ import {
   generateIncomeStatement,
   generateBalanceSheet,
   generateCashFlowStatement,
+  findSuspectedDiscrepancyCause,
 } from '../utils/accountingCalculations';
 import {
   generateQrCodeSvg,
@@ -111,9 +112,23 @@ export const formatEnglishDate = (dateStr: string): string => {
 interface FinancialStatementsViewProps {
   state: DatabaseState;
   fiscalYear?: number;
-  initialStatementTab?: 'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL' | 'ACTIVITY_LOG';
+  initialStatementTab?:
+    | 'BALANCE_SHEET'
+    | 'INCOME'
+    | 'CASH_FLOW'
+    | 'NOTES'
+    | 'SMART_CPA_MODEL'
+    | 'AUDIT_DIRECT_ENTRY'
+    | 'ACTIVITY_LOG';
   hideStatementTabs?: boolean;
-  activeTabControlled?: 'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL' | 'ACTIVITY_LOG';
+  activeTabControlled?:
+    | 'BALANCE_SHEET'
+    | 'INCOME'
+    | 'CASH_FLOW'
+    | 'NOTES'
+    | 'SMART_CPA_MODEL'
+    | 'AUDIT_DIRECT_ENTRY'
+    | 'ACTIVITY_LOG';
   onNavigateToExchangeRates?: () => void;
   onNavigateToCreditSimulator?: () => void;
 }
@@ -148,7 +163,13 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   onNavigateToCreditSimulator,
 }) => {
   const [internalStatementTab, setInternalStatementTab] = useState<
-    'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'SMART_CPA_MODEL' | 'ACTIVITY_LOG'
+    | 'BALANCE_SHEET'
+    | 'INCOME'
+    | 'CASH_FLOW'
+    | 'NOTES'
+    | 'SMART_CPA_MODEL'
+    | 'AUDIT_DIRECT_ENTRY'
+    | 'ACTIVITY_LOG'
   >(initialStatementTab || 'BALANCE_SHEET');
 
   const statementTab = activeTabControlled || internalStatementTab;
@@ -614,24 +635,11 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     const customCurrentLiab = getSectionCustomSum('CURRENT_LIAB');
     const totalCurrentLiabilities = payables + notesPayable + taxesPayable + socialInsurance + accruedExpenses + otherCurrentLiabilities + customCurrentLiab;
 
-    // Preliminary balance equation test
-    const preliminaryTotalEquity = capital + legalReserve + otherReserves + initialRetained + currentProfit + partnersCurrent + otherEquity + customEquity;
-    const preliminaryLiabAndEquity = preliminaryTotalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
-    const rawDiscrepancy = totalAssets - preliminaryLiabAndEquity;
-
-    // Golden Accounting Principle: Balance Sheet must be strictly balanced (Assets = Liabilities + Equity)
-    // Any unallocated initial discrepancy is systematically balanced into Retained Earnings
-    let retainedEarnings = initialRetained;
-    let totalEquity = preliminaryTotalEquity;
-    let totalEquityAndLiabilities = preliminaryLiabAndEquity;
-    let balanceDifference = rawDiscrepancy;
-
-    if (Math.abs(rawDiscrepancy) > 0.001 && overrides['bs_retained'] === undefined && overrides['bs_retainedEarnings'] === undefined) {
-      retainedEarnings = initialRetained + rawDiscrepancy;
-      totalEquity = capital + legalReserve + otherReserves + retainedEarnings + currentProfit + partnersCurrent + otherEquity + customEquity;
-      totalEquityAndLiabilities = totalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
-      balanceDifference = 0;
-    }
+    // الحساب الدقيق لمعادلة المركز المالي بدون امتصاص الفارق في الأرباح المرحلة
+    const totalEquity = capital + legalReserve + otherReserves + initialRetained + currentProfit + partnersCurrent + otherEquity + customEquity;
+    const totalEquityAndLiabilities = totalEquity + totalNonCurrentLiabilities + totalCurrentLiabilities;
+    const balanceDifference = totalAssets - totalEquityAndLiabilities;
+    const retainedEarnings = initialRetained;
 
     return {
       nonCurrentAssets: {
@@ -679,6 +687,15 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       isBalanced: Math.abs(balanceDifference) < 1.0,
     };
   }, [overrides, customLines, baseBalanceData, computedIncome.netProfitAfterTax, priorNetProfit]);
+
+  const suspectedDiscrepancy = useMemo(() => {
+    if (computedBalance.isBalanced) return null;
+    return findSuspectedDiscrepancyCause(
+      cumulativeCalculatedAccounts,
+      clientFilteredEntries,
+      Math.abs(computedBalance.balanceDifference || 0)
+    );
+  }, [computedBalance.isBalanced, computedBalance.balanceDifference, cumulativeCalculatedAccounts, clientFilteredEntries]);
 
   // 3. RECALCULATED CASH FLOW FIGURES
   const computedCashFlow = useMemo(() => {
@@ -984,8 +1001,18 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               icon={Printer}
               variant="outline"
               size="sm"
-              onClick={() => setIsPrintPreviewModalOpen(true)}
-              className="border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-100"
+              disabled={!computedBalance.isBalanced}
+              onClick={() => {
+                if (!computedBalance.isBalanced) {
+                  return;
+                }
+                setIsPrintPreviewModalOpen(true);
+              }}
+              className={
+                !computedBalance.isBalanced
+                  ? 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold opacity-60 cursor-not-allowed'
+                  : 'border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-100'
+              }
             />
 
             {/* Unified Tools: Print (Preview & Header Customizer), Multi-Format Export, Import, Fill-in Templates */}
@@ -995,6 +1022,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               title={`القوائم المالية - ${displayCompanyName} - ${fiscalYear}`}
               targetElementId="financial-statements-container"
               compact={true}
+              disablePrintAndExport={!computedBalance.isBalanced}
+              disableReason={`تم حظر الطباعة والتصدير لوجود فارق عدم اتزان في الميزانية بمقدار (${formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))})`}
             />
 
             {/* Unified ActionMenu for Financial Statements */}
@@ -1020,7 +1049,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   id: 'export-excel-letterhead',
                   label: 'تصدير مصنف Excel بالترويسة المعتمدة لكل صفحة',
                   icon: FileSpreadsheet,
+                  disabled: !computedBalance.isBalanced,
                   onClick: () => {
+                    if (!computedBalance.isBalanced) return;
                     exportFinancialStatementsToExcelWithLetterhead({
                       recordId: currentStatementRecordId,
                       clientName: displayCompanyName,
@@ -1100,6 +1131,39 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         }
       >
         <div className="space-y-3.5">
+          {/* Critical Unbalanced Equation Alert Banner */}
+          {!computedBalance.isBalanced && (
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/70 border-2 border-rose-500 rounded-2xl shadow-sm flex items-start gap-3 text-rose-950 dark:text-rose-100 animate-in fade-in duration-200 no-print print:hidden">
+              <div className="p-2 bg-rose-600 text-white rounded-xl shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-black text-sm text-rose-700 dark:text-rose-300">
+                    تنبيه عدم اتزان القوائم المالية: معادلة المركز المالي غير متطابقة!
+                  </span>
+                  <span className="px-3 py-1 bg-rose-600 text-white font-mono font-black rounded-lg text-xs shadow-2xs">
+                    فارق الميزانية: {formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))}
+                  </span>
+                </div>
+                <p className="text-xs text-rose-800 dark:text-rose-200 leading-relaxed font-semibold">
+                  إجمالي الأصول ({formatEgyptianCurrency(computedBalance.totalAssets)}) لا يساوي إجمالي الالتزامات وحقوق الملكية ({formatEgyptianCurrency(computedBalance.totalEquityAndLiabilities)}). تم حظر أوامر الطباعة والتصدير الرسمي لحين ضبط قيود اليومية أو معالجة الفارق.
+                </p>
+                {suspectedDiscrepancy && (
+                  <div className="mt-2.5 p-2.5 bg-rose-100/90 dark:bg-rose-900/50 rounded-xl border border-rose-300 dark:border-rose-800 text-xs flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-rose-950 dark:text-rose-200">🔍 الحساب/القيد المشتبه فيه:</span>
+                    <span className="font-mono font-black text-rose-800 dark:text-rose-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-700">
+                      {suspectedDiscrepancy.name}
+                    </span>
+                    <span className="text-rose-900 dark:text-rose-300 text-[11px] font-semibold">
+                      ({suspectedDiscrepancy.details})
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Trial Balance Dynamic Synchronization Success Notice */}
           {syncSuccessNotice && (
             <div className="p-3 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 rounded-xl shadow-sm flex items-center justify-between text-teal-950 dark:text-teal-200 font-bold text-xs animate-in fade-in duration-200 no-print print:hidden">

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { parseFlexibleNumber } from '../../utils/qrCodeGenerator';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { parseFlexibleNumber, formatEgyptianCurrency as formatEgyptianCurrencyBase } from '../../utils/qrCodeGenerator';
 import { CustomFinancialLine } from '../FinancialStatementsView';
 import { CurrencyCode } from '../../types';
 import { currencyService, formatFinancialCurrency } from '../../utils/currencyService';
@@ -134,8 +135,35 @@ export const BalanceSheetTable: React.FC<BalanceSheetTableProps> = ({
     );
   };
 
+  const isBalancedState = computedBalance?.isBalanced ?? (Math.abs(computedBalance?.balanceDifference || 0) < 0.05);
+  const diffAmount = Math.abs(computedBalance?.balanceDifference || 0);
+
   return (
     <div className="space-y-6 text-xs" dir={isEn ? 'ltr' : 'rtl'}>
+      {/* Real Balance Check Alert Banner */}
+      {!isBalancedState && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-500 rounded-2xl shadow-sm flex items-start gap-3 text-rose-950 dark:text-rose-100 animate-in fade-in duration-200">
+          <div className="p-2 bg-rose-600 text-white rounded-xl shrink-0 mt-0.5">
+            <AlertTriangle className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-black text-sm text-rose-700 dark:text-rose-300">
+                {isEn ? 'BALANCE SHEET EQUATION OUT OF BALANCE' : 'تنبيه محاسبي حرج: قائمة المركز المالي غير متزنة!'}
+              </span>
+              <span className="px-2.5 py-0.5 bg-rose-600 text-white font-mono font-bold rounded-lg text-xs">
+                {isEn ? `Variance: ${formatEgyptianCurrency(diffAmount)}` : `قيمة الفارق الحقيقي: ${formatEgyptianCurrency(diffAmount)}`}
+              </span>
+            </div>
+            <p className="text-xs text-rose-800 dark:text-rose-200 leading-relaxed font-semibold">
+              {isEn
+                ? `Total Assets (${formatEgyptianCurrency(computedBalance.totalAssets)}) do not equal Total Liabilities and Equity (${formatEgyptianCurrency(computedBalance.totalEquityAndLiabilities)}). Official printing and certified exports are strictly disabled until the balance is reconciled.`
+                : `إجمالي الأصول (${formatEgyptianCurrency(computedBalance.totalAssets)}) لا يتطابق مع إجمالي الالتزامات وحقوق الملكية (${formatEgyptianCurrency(computedBalance.totalEquityAndLiabilities)}). تم حظر الطباعة والتصدير الرسمي لحين مراجعة وضبط القيود المحاسبية.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="text-center space-y-1">
         <h2 className="text-base sm:text-lg font-black text-slate-900 underline underline-offset-4">
           {asOfDateFormatted
