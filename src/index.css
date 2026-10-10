@@ -8,13 +8,45 @@
     width: 100%;
     margin: 0;
     padding: 0;
+    max-width: 100%;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
-  /* Custom sleek scrollbar for webkit browsers */
+  /* Flex and Grid safety for mobile horizontal overflow */
+  .flex, .grid {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Tables container horizontal scroll only */
+  .table-responsive-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbars but allow smooth touch scroll */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Minimum touch target 44px on mobile */
+  @media (max-width: 768px) {
+    button, input, select, textarea, [role="button"] {
+      min-height: 44px;
+    }
+  }
+
+  /* Custom sleek scrollbar for desktop webkit browsers */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;

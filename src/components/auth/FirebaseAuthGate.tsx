@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Lock,
   Mail,
@@ -19,7 +19,7 @@ interface FirebaseAuthGateProps {
 }
 
 export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthenticated }) => {
-  const [isSetupMode, setIsSetupMode] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -27,16 +27,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    firebaseAuth.checkSetup().then((needsSetup) => {
-      setIsSetupMode(needsSetup);
-      if (needsSetup) {
-        setName('أ.د. محمد جميل مرعي');
-        setEmail('admin@mg-office.com');
-      }
-    });
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,15 +45,19 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
     setIsLoading(true);
     try {
-      if (isSetupMode) {
+      if (isRegistering) {
         if (!name.trim()) {
-          setError('يرجى كتابة الاسم الكامل للمدير.');
+          setError('يرجى كتابة الاسم الكامل.');
           setIsLoading(false);
           return;
         }
-        const profile = await firebaseAuth.setupAdmin(name.trim(), email.trim(), password);
-        setSuccessMsg('تم إنشاء حساب المدير الرئيسي بنجاح.');
-        setTimeout(() => onAuthenticated(profile), 800);
+        const profile = await firebaseAuth.signUp(name.trim(), email.trim(), password);
+        setSuccessMsg('تم إنشاء الحساب بنجاح وهو الآن قيد الانتظار (PENDING) بانتظار تفعيل المدير.');
+        setTimeout(() => {
+          if (profile.role !== 'PENDING') {
+            onAuthenticated(profile);
+          }
+        }, 1500);
       } else {
         const profile = await firebaseAuth.signIn(email, password);
         setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
@@ -79,14 +73,12 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 overflow-y-auto" dir="rtl">
-      {/* Background glowing accents */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/15 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
-        {/* Header Banner */}
         <div className="bg-gradient-to-r from-blue-900/40 via-slate-900 to-emerald-900/40 p-6 border-b border-slate-800 text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/30 text-blue-400 mb-3 shadow-inner">
             <Building2 className="w-8 h-8 text-blue-400" />
@@ -95,11 +87,10 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             منظومة المحاسب القانوني ومراقب الحسابات
           </h1>
           <p className="text-xs text-slate-400 mt-1 font-medium">
-            {isSetupMode ? 'شاشة الإعداد الأولي - إنشاء حساب المدير الرئيسي' : 'تسجيل الدخول الإجباري المؤمن عبر نظام السيرفر المحلي'}
+            {isRegistering ? 'تسجيل حساب جديد (دور PENDING افتراضياً)' : 'تسجيل الدخول الآمن عبر Firebase Spark'}
           </p>
         </div>
 
-        {/* Content Form */}
         <div className="p-6 space-y-4">
           {error && (
             <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
@@ -116,10 +107,10 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
-            {isSetupMode && (
+            {isRegistering && (
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  الاسم الكامل للمدير الرئيسي:
+                  الاسم الكامل:
                 </label>
                 <div className="relative">
                   <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -127,7 +118,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="أ.د. محمد جميل مرعي"
+                    placeholder="اسم المستخدم"
                     required
                     className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
@@ -145,7 +136,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@mg-office.com"
+                  placeholder="name@example.com"
                   required
                   className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
@@ -189,17 +180,25 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  <span>{isSetupMode ? 'إنشاء حساب المدير الرئيسي' : 'تسجيل الدخول'}</span>
+                  <span>{isRegistering ? 'تسجيل حساب جديد' : 'تسجيل الدخول'}</span>
                 </>
               )}
             </button>
           </form>
 
-          {!isSetupMode && (
-            <div className="pt-2 text-center text-[11px] text-slate-400">
-              ملاحظة: يتم إنشاء الحسابات الجديدة وتفعيل أدوارها حصرياً بواسطة مدير المنظومة من شاشة إدارة المستخدمين.
-            </div>
-          )}
+          <div className="pt-3 text-center border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError(null);
+                setSuccessMsg(null);
+              }}
+              className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+            >
+              {isRegistering ? 'لديك حساب بالفعل؟ تسجيل الدخول' : 'ليس لديك حساب؟ تسجيل حساب جديد (PENDING)'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
