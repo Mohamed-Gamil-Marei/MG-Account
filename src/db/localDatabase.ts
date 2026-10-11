@@ -618,9 +618,12 @@ export class LocalDatabase {
             details: 'تهيئة منظومة المحاسب القانوني المتكامل',
           },
         ],
-        closingChecklists: closingChecklistsJson ? JSON.parse(closingChecklistsJson) : {},
-        clientDeadlines: clientDeadlinesJson ? JSON.parse(clientDeadlinesJson) : [],
-        openItems: openItemsJson ? JSON.parse(openItemsJson) : [],
+        closingChecklists: closingChecklistsJson ? (() => { try { return JSON.parse(closingChecklistsJson); } catch { return {}; } })() : {},
+        clientDeadlines: clientDeadlinesJson ? (() => { try { return JSON.parse(clientDeadlinesJson); } catch { return []; } })() : [],
+        openItems: openItemsJson ? (() => { try { return JSON.parse(openItemsJson); } catch { return []; } })() : [],
+        approvedStatements: approvedStatementsJson ? (() => { try { return JSON.parse(approvedStatementsJson); } catch { return []; } })() : [],
+        feeAgreements: feeAgreementsJson ? (() => { try { return JSON.parse(feeAgreementsJson); } catch { return []; } })() : [],
+        feeCollections: feeCollectionsJson ? (() => { try { return JSON.parse(feeCollectionsJson); } catch { return []; } })() : [],
       };
     } catch (e) {
       console.error('Error loading database state:', e);
@@ -726,6 +729,15 @@ export class LocalDatabase {
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.OPEN_ITEMS)) {
         localStorage.setItem(STORAGE_KEYS.OPEN_ITEMS, JSON.stringify(this.state.openItems || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.APPROVED_STATEMENTS)) {
+        localStorage.setItem(STORAGE_KEYS.APPROVED_STATEMENTS, JSON.stringify(this.state.approvedStatements || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.FEE_AGREEMENTS)) {
+        localStorage.setItem(STORAGE_KEYS.FEE_AGREEMENTS, JSON.stringify(this.state.feeAgreements || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.FEE_COLLECTIONS)) {
+        localStorage.setItem(STORAGE_KEYS.FEE_COLLECTIONS, JSON.stringify(this.state.feeCollections || []));
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.SYSTEM_USERS)) {
         localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(this.state.users));
@@ -1175,6 +1187,15 @@ export class LocalDatabase {
     const index = this.state.clients.findIndex((c) => c.id === id);
     if (index === -1) return false;
     const cl = this.state.clients[index];
+
+    const hasApproved = (this.state.approvedStatements || []).some(s => s.clientId === id);
+    if (hasApproved) {
+      const confirmed = typeof window !== 'undefined'
+        ? window.confirm(`تنبيه: هذا العميل (${cl.name}) لديه نسخ قوائم مالية معتمدة ومؤرشفة. هل تريد المتابعة وحذف العميل وبياناته؟`)
+        : true;
+      if (!confirmed) return false;
+    }
+
     this.state.clients.splice(index, 1);
     
     // If the active client was deleted, reset or select next
@@ -1186,7 +1207,7 @@ export class LocalDatabase {
       }
     }
 
-    // Clean up associated closing checklists, deadlines, and open items
+    // Clean up associated closing checklists, deadlines, open items, fee agreements, and fee collections
     if (this.state.closingChecklists) {
       for (const k of Object.keys(this.state.closingChecklists)) {
         if (k.startsWith(`${id}_`)) {
@@ -1199,6 +1220,12 @@ export class LocalDatabase {
     }
     if (this.state.openItems) {
       this.state.openItems = this.state.openItems.filter((i) => i.clientId !== id);
+    }
+    if (this.state.feeAgreements) {
+      this.state.feeAgreements = this.state.feeAgreements.filter((a) => a.clientId !== id);
+    }
+    if (this.state.feeCollections) {
+      this.state.feeCollections = this.state.feeCollections.filter((c) => c.clientId !== id);
     }
     
     this.logAudit('DELETE', `حذف ملف العميل: ${cl.name}`);
@@ -2447,21 +2474,20 @@ export class LocalDatabase {
     };
 
     this.state.approvedStatements.unshift(newSnapshot);
-    this.saveState();
+    this.saveState('APPROVED_STATEMENTS' as any);
 
-    this.logAudit({
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      user: this.getCurrentUser()?.name || 'محاسب',
-      action: 'CREATE',
-      details: `اعتماد وأرشفة نسخة قوائم مالية رقم ${newVersionNo} للعميل ${data.clientId} عن سنة ${data.fiscalYear}`,
-    });
+    this.logAudit('CREATE', `اعتماد وأرشفة نسخة قوائم مالية رقم ${newVersionNo} للعميل ${data.clientId} عن سنة ${data.fiscalYear}`);
 
     return newSnapshot;
   }
 
-  public deleteApprovedStatement(id: string, isManager: boolean, reason: string): boolean {
-    if (!isManager) {
-      console.warn('Unauthorized deletion attempt of approved statement');
+  public deleteApprovedStatement(id: string, reason: string): boolean {
+    if (this.getCurrentUser()?.role !== 'ADMIN') {
+      console.warn('Unauthorized: Admin role required to delete approved statement');
+      return false;
+    }
+    if (!reason || !reason.trim()) {
+      console.warn('Deletion reason is mandatory');
       return false;
     }
     if (!this.state.approvedStatements) return false;
@@ -2470,14 +2496,8 @@ export class LocalDatabase {
     this.state.approvedStatements = this.state.approvedStatements.filter(s => s.id !== id);
 
     if (this.state.approvedStatements.length < initialLen) {
-      this.saveState();
-      this.logAudit({
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        user: this.getCurrentUser()?.name || 'مدير النظام',
-        action: 'DELETE',
-        details: `حذف نسخة معتمدة ${id} بواسطة مدير النظام. السبب: ${reason || 'غير محدد'}`,
-        previousValue: target,
-      });
+      this.saveState('APPROVED_STATEMENTS' as any);
+      this.logAudit('DELETE', `حذف نسخة معتمدة ${id} بواسطة مدير النظام. السبب: ${reason.trim()}`, target);
       return true;
     }
     return false;
@@ -2495,13 +2515,13 @@ export class LocalDatabase {
     } else {
       this.state.feeAgreements.unshift(agreement);
     }
-    this.saveState();
+    this.saveState('FEE_AGREEMENTS' as any);
   }
 
   public deleteFeeAgreement(id: string): void {
     if (!this.state.feeAgreements) return;
     this.state.feeAgreements = this.state.feeAgreements.filter(a => a.id !== id);
-    this.saveState();
+    this.saveState('FEE_AGREEMENTS' as any);
   }
 
   public getFeeCollections(): ClientFeeCollection[] {
@@ -2511,13 +2531,13 @@ export class LocalDatabase {
   public addFeeCollection(collection: ClientFeeCollection): void {
     if (!this.state.feeCollections) this.state.feeCollections = [];
     this.state.feeCollections.unshift(collection);
-    this.saveState();
+    this.saveState('FEE_COLLECTIONS' as any);
   }
 
   public deleteFeeCollection(id: string): void {
     if (!this.state.feeCollections) return;
     this.state.feeCollections = this.state.feeCollections.filter(c => c.id !== id);
-    this.saveState();
+    this.saveState('FEE_COLLECTIONS' as any);
   }
 
   // --- Full Backup JSON Export & Import ---
@@ -2579,6 +2599,9 @@ export class LocalDatabase {
             : {},
           clientDeadlines: Array.isArray(dataToImport.clientDeadlines) ? dataToImport.clientDeadlines : [],
           openItems: Array.isArray(dataToImport.openItems) ? dataToImport.openItems : [],
+          approvedStatements: Array.isArray(dataToImport.approvedStatements) ? dataToImport.approvedStatements : [],
+          feeAgreements: Array.isArray(dataToImport.feeAgreements) ? dataToImport.feeAgreements : [],
+          feeCollections: Array.isArray(dataToImport.feeCollections) ? dataToImport.feeCollections : [],
           officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
           users: dataToImport.users || SAMPLE_SYSTEM_USERS,
           currentUserId: dataToImport.currentUserId || 'user-admin',

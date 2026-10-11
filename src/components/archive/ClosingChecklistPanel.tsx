@@ -13,6 +13,7 @@ import {
   Info,
 } from 'lucide-react';
 import { db } from '../../db/localDatabase';
+import { escapeHtml } from '../../utils/escapeHtml';
 import {
   ClosingStep,
   ClosingStepStatus,
@@ -106,12 +107,16 @@ export const ClosingChecklistPanel: React.FC<ClosingChecklistPanelProps> = ({
   };
 
   const handlePrintChecklist = () => {
-    const yearStr = String(selectedYear);
+    const escapedClientName = escapeHtml(clientName);
+    const escapedYearStr = escapeHtml(String(selectedYear));
+    const escapedUserName = escapeHtml(currentUser?.name || 'مكتب المحاسبة');
+    const finalizationText = escapeHtml(finalizationResult.ok ? 'مكتملة ومستوفاة' : 'غير مكتملة');
+
     const openItemsNoticeHtml = pendingOpenItems.length > 0
       ? `<div style="background-color: #fffbeb; border: 1px solid #fde68a; padding: 10px; margin-top: 15px; border-radius: 6px; font-size: 12px; color: #92400e;">
-           <strong>تحذير رقابي قبل الاعتماد النهائي:</strong> يوجد عدد (${pendingOpenItems.length}) بنود ومستندات مفتوحة/معلقة للعميل عن السنة المالية ${yearStr}:
+           <strong>تحذير رقابي قبل الاعتماد النهائي:</strong> يوجد عدد (${escapeHtml(pendingOpenItems.length)}) بنود ومستندات مفتوحة/معلقة للعميل عن السنة المالية ${escapedYearStr}:
            <ul style="margin-top: 5px; padding-right: 20px;">
-             ${pendingOpenItems.map((item) => `<li>[${item.kind}] ${item.text}</li>`).join('')}
+             ${pendingOpenItems.map((item) => `<li>[${escapeHtml(item.kind)}] ${escapeHtml(item.text)}</li>`).join('')}
            </ul>
          </div>`
       : '';
@@ -119,10 +124,10 @@ export const ClosingChecklistPanel: React.FC<ClosingChecklistPanelProps> = ({
     const html = `
       <div style="font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; padding: 20px;">
         <h2 style="font-size: 20px; font-weight: bold; border-bottom: 2px solid #334155; padding-bottom: 8px;">
-          قائمة الإقفال المعتمدة للملف المالي - ${clientName} (${yearStr})
+          قائمة الإقفال المعتمدة للملف المالي - ${escapedClientName} (${escapedYearStr})
         </h2>
         <p style="margin: 10px 0; color: #475569; font-size: 13px;">
-          حالة الاعتماد: <strong>${finalizationResult.ok ? 'مكتملة ومستوفاة' : 'غير مكتملة'}</strong> | المحاسب المسؤول: ${currentUser?.name || 'مكتب المحاسبة'}
+          حالة الاعتماد: <strong>${finalizationText}</strong> | المحاسب المسؤول: ${escapedUserName}
         </p>
 
         ${openItemsNoticeHtml}
@@ -144,7 +149,7 @@ export const ClosingChecklistPanel: React.FC<ClosingChecklistPanelProps> = ({
                 (step, idx) => `
               <tr>
                 <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center;">${idx + 1}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold;">${step.label}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold;">${escapeHtml(step.label)}</td>
                 <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center;">${step.required ? 'إجباري' : 'اختياري'}</td>
                 <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center;">
                   ${
@@ -156,9 +161,9 @@ export const ClosingChecklistPanel: React.FC<ClosingChecklistPanelProps> = ({
                   }
                 </td>
                 <td style="border: 1px solid #cbd5e1; padding: 8px;">
-                  ${step.doneBy ? `${step.doneBy} (${step.doneAt || ''})` : '-'}
+                  ${step.doneBy ? `${escapeHtml(step.doneBy)} (${escapeHtml(step.doneAt || '')})` : '-'}
                 </td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px;">${step.note || '-'}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 8px;">${escapeHtml(step.note || '-')}</td>
               </tr>
             `
               )
@@ -174,7 +179,7 @@ export const ClosingChecklistPanel: React.FC<ClosingChecklistPanelProps> = ({
         <!DOCTYPE html>
         <html dir="rtl" lang="ar">
           <head>
-            <title>قائمة إقفال ${clientName} - ${yearStr}</title>
+            <title>قائمة إقفال ${escapedClientName} - ${escapedYearStr}</title>
             <style>
               body { font-family: system-ui, sans-serif; direction: rtl; padding: 20px; }
               table { width: 100%; border-collapse: collapse; margin-top: 15px; }

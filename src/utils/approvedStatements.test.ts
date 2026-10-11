@@ -9,10 +9,10 @@ function compareSnapshots(snapA: ApprovedStatementsSnapshot, snapB: ApprovedStat
   const mapA = new Map(itemsA.map((i: any) => [i.key || i.name, i.amount || 0]));
   const mapB = new Map(itemsB.map((i: any) => [i.key || i.name, i.amount || 0]));
 
-  const allKeys = new Set([...mapA.keys(), ...mapB.keys()]);
+  const allKeys = new Set<string>([...mapA.keys(), ...mapB.keys()] as string[]);
   for (const k of allKeys) {
-    const valA = mapA.get(k) || 0;
-    const valB = mapB.get(k) || 0;
+    const valA = (mapA.get(k) as number) || 0;
+    const valB = (mapB.get(k) as number) || 0;
     diffs[k] = { valueA: valA, valueB: valB, diff: valB - valA };
   }
   return diffs;

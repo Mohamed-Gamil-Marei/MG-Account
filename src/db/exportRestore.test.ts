@@ -71,4 +71,36 @@ describe('export and restore of closingChecklists, clientDeadlines, and openItem
       },
     ]);
   });
+
+  it('adds approved statement and fee agreement, flushes to localStorage, reloads state, and verifies persistence', () => {
+    const snapshot = db.addApprovedStatement({
+      clientId: 'c-test',
+      fiscalYear: 2026,
+      approvedBy: 'مراقب الحسابات',
+      source: 'LEDGER',
+      trialBalanceRows: [],
+      incomeStatement: {},
+      balanceSheet: {},
+      cashFlow: {},
+      checklistStatus: { ok: true, missing: [] },
+    });
+
+    db.saveFeeAgreement({
+      id: 'fa-test',
+      clientId: 'c-test',
+      fiscalYear: 2026,
+      description: 'Audit fee',
+      amount: 15000,
+      status: 'ACTIVE',
+    });
+
+    db.flushDirtyStorage();
+
+    const newState = (db as any).loadInitialState();
+    const approvedList = newState.approvedStatements || [];
+    const feeList = newState.feeAgreements || [];
+
+    expect(approvedList.some((s: any) => s.id === snapshot.id)).toBe(true);
+    expect(feeList.some((a: any) => a.id === 'fa-test')).toBe(true);
+  });
 });
