@@ -204,6 +204,7 @@ export const SmartCpaTemplateView: React.FC<SmartCpaTemplateViewProps> = ({
     handleUpdateCurrentYear({
       sales,
       totalExpensesInput: expenses,
+      dataSource: 'SIMULATION',
     });
   };
 

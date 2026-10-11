@@ -71,7 +71,19 @@ async function startServer() {
       expires_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT
+    );
   `);
+
+  db.prepare(`
+    INSERT OR IGNORE INTO settings (key, value, updated_at, updated_by)
+    VALUES ('sendClientDataToGemini', 'false', datetime('now'), 'system')
+  `).run();
 
   const entityTypes = [
     "clients",
@@ -348,13 +360,22 @@ async function startServer() {
   app.use("/api/ai", aiRateLimiter);
   app.use("/api/ocr", aiRateLimiter);
 
-  // Gemini AI Consent Middleware (إرسال بيانات العميل لـ Gemini: مطفأ افتراضياً)
-  const requireGeminiConsent = (req: any, res: any, next: any) => {
-    const isConsentGiven =
-      req.headers['x-send-client-data'] === 'true' ||
-      req.body?.sendClientDataToGemini === true;
+  // Gemini AI Consent Middleware (يقرأ من جدول settings بالسيرفر فقط - يتجاهل الهيدر والـ body)
+  const requireGeminiConsent = (_req: any, res: any, next: any) => {
+    try {
+      const row = db.prepare("SELECT value FROM settings WHERE key = 'sendClientDataToGemini'").get() as { value: string } | undefined;
+      const isConsentGiven = row?.value === 'true';
 
-    if (!isConsentGiven) {
+      if (!isConsentGiven) {
+        return res.status(403).json({
+          success: false,
+          disabled: true,
+          error: "الميزة معطلة",
+          message: "الميزة معطلة",
+        });
+      }
+      next();
+    } catch {
       return res.status(403).json({
         success: false,
         disabled: true,
@@ -362,11 +383,42 @@ async function startServer() {
         message: "الميزة معطلة",
       });
     }
-    next();
   };
 
   app.use("/api/ai", requireGeminiConsent);
   app.use("/api/audit", requireGeminiConsent);
+  app.use("/api/ocr", requireGeminiConsent);
+
+  // Settings Endpoints
+  app.get("/api/settings/gemini-consent", (_req, res) => {
+    try {
+      const row = db.prepare("SELECT value FROM settings WHERE key = 'sendClientDataToGemini'").get() as { value: string } | undefined;
+      res.json({ success: true, sendClientDataToGemini: row?.value === 'true' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/settings/gemini-consent", (req: any, res: any) => {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "فقط مدير النظام يمكنه تغيير هذا الإعداد" });
+    }
+    const { sendClientDataToGemini } = req.body;
+    const valueStr = sendClientDataToGemini === true ? 'true' : 'false';
+    const now = new Date().toISOString();
+
+    try {
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_at, updated_by)
+        VALUES ('sendClientDataToGemini', ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+      `).run(valueStr, now, req.user?.email || 'admin');
+
+      res.json({ success: true, sendClientDataToGemini: sendClientDataToGemini === true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
 
   // --- Auth Endpoints ---
   app.get("/api/auth/check-setup", (_req, res) => {

@@ -38,6 +38,7 @@ export const SMART_EXPENSE_RATIOS = [
 
 export interface SmartCpaYearData {
   year: number;
+  dataSource?: 'ACTUAL' | 'SIMULATION';
   isManualMode: boolean; // false = smart auto calculation, true = custom manual edit
   // Top Inputs
   sales: number;

@@ -10,13 +10,18 @@ import {
   Sparkles,
   TrendingUp,
   Repeat,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { numberToArabicWords } from '../../utils/numberToWordsArabic';
 import { AccountingNumberInput } from '../common/AccountingNumberInput';
+import { ConfirmActualDataModal } from './ConfirmActualDataModal';
 
 export interface FiscalYearData {
   year: number;
+  dataSource?: 'ACTUAL' | 'SIMULATION';
   sales: number;
   cogsRatio: number;
   adminExpRatio: number;
@@ -83,6 +88,7 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
   // Collapsed by default for a clean, non-intrusive layout
   const [isExpanded, setIsExpanded] = useState(false);
   const [ratioSection, setRatioSection] = useState<'OPERATING' | 'BALANCE_SHEET'>('OPERATING');
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   const current = yearsData[activeYear] || {
     year: activeYear,
@@ -99,6 +105,16 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
     suppliersRatio: 18,
     shortLoansRatio: 12,
     longLoansRatio: 15,
+  };
+
+  const currentDataSource = current.dataSource || 'ACTUAL';
+
+  const handleToggleDataSource = () => {
+    if (currentDataSource === 'SIMULATION') {
+      setIsConfirmModalOpen(true);
+    } else {
+      onUpdateYearData(activeYear, { dataSource: 'SIMULATION' });
+    }
   };
 
   return (
@@ -120,6 +136,34 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* DataSource Status Toggle Button */}
+          <button
+            type="button"
+            onClick={handleToggleDataSource}
+            className={`text-[11px] px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs ${
+              currentDataSource === 'SIMULATION'
+                ? 'bg-amber-100 text-amber-950 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-400/80 hover:bg-amber-200'
+                : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 hover:bg-emerald-100'
+            }`}
+            title={
+              currentDataSource === 'SIMULATION'
+                ? 'بيانات هذه السنة ناتجة عن محاكاة/توزيع. انقر للتأكيد والتحويل إلى قوائم فعلية (ACTUAL)'
+                : 'بيانات هذه السنة قوائم فعلية معتمدة. انقر للتحويل إلى وضع المحاكاة'
+            }
+          >
+            {currentDataSource === 'SIMULATION' ? (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>محاكاة تحليلية (SIMULATION)</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>قوائم فعلية (ACTUAL)</span>
+              </>
+            )}
+          </button>
+
           {onRollForwardFromPreviousYear && (
             <button
               type="button"
@@ -483,6 +527,16 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for switching to ACTUAL */}
+      <ConfirmActualDataModal
+        isOpen={isConfirmModalOpen}
+        year={activeYear}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={() => {
+          onUpdateYearData(activeYear, { dataSource: 'ACTUAL' });
+        }}
+      />
     </div>
   );
 };

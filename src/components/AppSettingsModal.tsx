@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchWithAuth } from '../lib/apiClient';
 import {
   Settings,
   Globe,
@@ -141,6 +142,19 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     officeProfile.sendClientDataToGemini === true
   );
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchWithAuth('/api/settings/gemini-consent')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && typeof data.sendClientDataToGemini === 'boolean') {
+            setSendClientDataToGemini(data.sendClientDataToGemini);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
   const brandOptions: { id: BrandColor; nameAr: string; nameEn: string; bgClass: string; ringClass: string }[] = [
     { id: 'blue', nameAr: 'أزرق كلاسيكي مصرفي', nameEn: 'Banking Navy Blue', bgClass: 'bg-blue-600', ringClass: 'ring-blue-500' },
     { id: 'emerald', nameAr: 'أخضر مالي وضريبي', nameEn: 'Emerald Green', bgClass: 'bg-emerald-600', ringClass: 'ring-emerald-500' },
@@ -208,6 +222,12 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       defaultWhtRate: Number(defaultWhtRate) || 0,
       sendClientDataToGemini,
     });
+
+    fetchWithAuth('/api/settings/gemini-consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sendClientDataToGemini }),
+    }).catch(() => {});
 
     setSavedSuccess(true);
     setTimeout(() => {

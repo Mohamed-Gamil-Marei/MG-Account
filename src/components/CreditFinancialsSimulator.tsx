@@ -140,6 +140,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   const [yearsData, setYearsData] = useState<Record<number, FiscalYearData>>({
     2026: {
       year: 2026,
+      dataSource: 'ACTUAL',
       sales: 23540850,
       cogs: 14124510,
       grossProfit: 9416340,
@@ -177,6 +178,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     },
     2025: {
       year: 2025,
+      dataSource: 'ACTUAL',
       sales: 38133805,
       cogs: 22880000,
       grossProfit: 15253805,
@@ -213,6 +215,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     },
     2024: {
       year: 2024,
+      dataSource: 'ACTUAL',
       sales: 9845663,
       cogs: 7011525,
       grossProfit: 2834138,
@@ -1415,6 +1418,13 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     handleUpdateFinancialStatementCell('partnerCurrentAccount', yr, newPartnerAccount);
     handleUpdateFinancialStatementCell('legalReserve', yr, newPartnerAccount);
     handleUpdateFinancialStatementCell('autoBalanceAdjustment', yr, diff);
+    setYearsData((prev) => ({
+      ...prev,
+      [yr]: {
+        ...prev[yr],
+        dataSource: 'SIMULATION',
+      },
+    }));
   };
 
   const handleAutoBalanceAllYears = () => {
@@ -1728,32 +1738,12 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
   return (
     <div className="space-y-4">
-      {/* تنبيه قانوني ورقابي صارم - محاكاة تحليلية */}
-      <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-500 text-amber-950 dark:text-amber-100 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-xs select-none">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="font-black text-sm sm:text-base text-amber-950 dark:text-amber-100">
-              محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
-            </h2>
-            <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
-              تنبيه قانوني ومحاسبي: أرقام ونماذج هذا الملف لأغراض المحاكاة الائتمانية والتحليل المصرفي الداخلي فقط، وليست قوائم مالية معتمدة ولا يجوز تقديمها لأي جهات رسمية أو خارجية.
-            </p>
-          </div>
-        </div>
-        <span className="shrink-0 px-2.5 py-1 bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-100 font-black text-xs rounded-lg border border-amber-400">
-          محاكاة فقط
-        </span>
-      </div>
-
       {/* Top Header Unified Card */}
       <UnifiedScreenCard
         id="credit-financials-screen-card"
         title="ملف الائتمان البنكي والمحاكي المالي المتكامل"
-        badgeText="محاكاة تحليلية"
-        badgeVariant="amber"
+        badgeText={yearsData[selectedYear]?.dataSource === 'SIMULATION' ? 'محاكاة تحليلية' : 'قوائم فعلية'}
+        badgeVariant={yearsData[selectedYear]?.dataSource === 'SIMULATION' ? 'amber' : 'emerald'}
         actionsSlot={
           <div className="flex items-center gap-2">
             <CompanyHeaderSelector
@@ -2162,10 +2152,12 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
       {/* ACTIVE TAB CONTENT WRAPPED IN PRINTABLE CONTAINER */}
       <div id="credit-financials-container" data-printable="true" className="space-y-6">
-        {/* شريط التحذير الإلزامي في أي طباعة */}
-        <div className="w-full text-center py-1.5 px-3 bg-amber-50 print:bg-slate-100 border border-amber-300 print:border-slate-500 text-amber-950 print:text-black rounded-xl font-black text-xs sm:text-sm tracking-wide">
-          ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
-        </div>
+        {/* شريط التحذير الشرطي في أي طباعة إذا كانت بيانات السنة محاكاة */}
+        {yearsData[selectedYear]?.dataSource === 'SIMULATION' && (
+          <div className="w-full text-center py-1.5 px-3 bg-amber-50 print:bg-slate-100 border border-amber-300 print:border-slate-500 text-amber-950 print:text-black rounded-xl font-black text-xs sm:text-sm tracking-wide">
+            ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
+          </div>
+        )}
 
         {/* Official Letterhead Header for Direct Browser/Canvas Printing */}
         <OfficialReportHeader

@@ -2355,6 +2355,12 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
   const shouldResequence = pageRangeConfig?.resequencePageNumbers !== false;
   const effectiveTotalCount = shouldResequence ? filteredPages.length : totalPagesCount;
 
+  // Check if any year in print scope is simulated
+  const isAnyYearSimulatedInPrint = React.useMemo(() => {
+    const targetYears = customYearsList && customYearsList.length > 0 ? customYearsList : (yearsList || [selectedYear]);
+    return targetYears.some((y) => yearsData[y]?.dataSource === 'SIMULATION');
+  }, [yearsData, yearsList, customYearsList, selectedYear]);
+
   return (
     <div id="credit-printable-dossier" className="space-y-10 print:space-y-0 text-slate-900 w-full max-w-[210mm] mx-auto">
       {filteredPages.length > 0 ? (
@@ -2404,10 +2410,12 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                   breakInside: 'avoid',
                 }}
               >
-                {/* شريط التحذير الإلزامي في أي طباعة */}
-                <div className="w-full text-center py-1 px-2 mb-2 bg-amber-50/90 print:bg-slate-100 border border-amber-300 print:border-slate-400 text-amber-950 print:text-black rounded text-[11px] font-black tracking-wide shrink-0">
-                  ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
-                </div>
+                {/* شريط التحذير الإلزامي في أي طباعة إذا كان أحد سنوات المستند محاكاة */}
+                {isAnyYearSimulatedInPrint && (
+                  <div className="w-full text-center py-1 px-2 mb-2 bg-amber-50/90 print:bg-slate-100 border border-amber-300 print:border-slate-400 text-amber-950 print:text-black rounded text-[11px] font-black tracking-wide shrink-0">
+                    ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
+                  </div>
+                )}
                 {page.render(displayPageNum, displayTotal)}
               </div>
             </div>

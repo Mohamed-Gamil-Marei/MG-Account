@@ -617,12 +617,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const getBadgeClass = (variant: KpiCardItem['badgeVariant']) => {
     switch (variant) {
-      case 'emerald':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'rose':
-        return 'bg-red-50 text-red-700 border-red-200';
+        return 'bg-white text-red-600 border-red-200 font-semibold';
       default:
-        return 'bg-slate-50 text-slate-700 border-slate-200';
+        return 'bg-slate-50 text-slate-600 border-slate-200 font-normal';
     }
   };
 
@@ -747,30 +745,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
         },
       ]}
     >
-      {/* Equal-sized Robust KPI Cards Grid - Seamless CSS Grid across all screens */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      {/* Compact Clean KPI Items Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
         {filteredKpis.map((kpi) => {
-          const Icon = kpi.icon;
+          const isNegativeOrAlert =
+            String(kpi.value).includes('-') ||
+            kpi.badgeVariant === 'rose' ||
+            String(kpi.value).includes('فارق') ||
+            String(kpi.value).includes('عجز');
+
           return (
             <div
               key={kpi.id}
               onClick={() => navigate(kpi.targetTab)}
-              className="min-h-[120px] rounded-lg bg-white border border-slate-200 shadow-sm hover:border-slate-400 transition-all p-3 flex flex-col justify-between cursor-pointer group relative"
+              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-2.5 flex flex-col justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors"
               title={`انقر للانتقال إلى تفاصيل ${kpi.title}`}
             >
-              {/* Card Top: Icon & ActionsMenu */}
-              <div className="flex items-center justify-between gap-1">
-                <div
-                  className="w-7 h-7 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0"
-                >
-                  <Icon className="w-3.5 h-3.5 text-slate-700" />
-                </div>
-
-                {/* Stop propagation so clicking the menu button doesn't trigger card navigation */}
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  className="shrink-0"
-                >
+              <div className="flex items-center justify-between gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <span className="truncate">{kpi.title}</span>
+                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
                   <ActionMenu
                     items={kpi.actions}
                     title="خيارات المؤشر"
@@ -782,30 +775,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
 
-              {/* Card Center: Clean Value & Title */}
-              <div className="my-auto py-1 text-right min-w-0">
-                <div
-                  className="font-mono font-bold text-sm sm:text-base text-slate-900 truncate tracking-tight"
-                  title={String(kpi.value)}
-                >
-                  {kpi.value}
-                </div>
-                <h3 className="text-xs font-medium text-slate-600 truncate mt-0.5">
-                  {kpi.title}
-                </h3>
+              <div
+                className={`font-mono text-sm sm:text-base font-semibold truncate my-1.5 ${
+                  isNegativeOrAlert ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100'
+                }`}
+                title={String(kpi.value)}
+              >
+                {kpi.value}
               </div>
 
-              {/* Card Bottom: Concise Geometric Badge Indicator */}
-              <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100">
-                <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded border truncate ${getBadgeClass(
-                    kpi.badgeVariant
-                  )}`}
-                >
+              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700/50">
+                <span className={isNegativeOrAlert ? 'text-red-600 font-semibold' : 'text-slate-500'}>
                   {kpi.badge}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
-                  عرض ↵
                 </span>
               </div>
             </div>
@@ -813,7 +794,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         })}
 
         {filteredKpis.length === 0 && (
-          <div className="col-span-full py-12 text-center text-slate-400 text-xs bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+          <div className="col-span-full py-8 text-center text-slate-400 text-xs bg-slate-50/50 dark:bg-slate-800/30 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
             لا توجد مؤشرات تطابق معايير البحث أو التصفية الحالية.
           </div>
         )}

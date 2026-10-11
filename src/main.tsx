@@ -13,7 +13,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-class RootErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };

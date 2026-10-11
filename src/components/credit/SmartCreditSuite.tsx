@@ -235,6 +235,7 @@ export const SmartCreditSuite: React.FC<SmartCreditSuiteProps> = ({
       const targetEquity = Math.max(requiredMinEquity, totalTargetAssets - totalLiabilities);
 
       const updatedYearData: Partial<FiscalYearData> = {
+        dataSource: 'SIMULATION',
         sales: targetSales,
         cogs: targetCogs,
         grossProfit: targetGrossProfit,

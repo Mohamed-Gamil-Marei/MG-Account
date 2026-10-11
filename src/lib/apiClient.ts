@@ -14,7 +14,7 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
   }
 
   const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
-  const isAiOrAudit = urlStr.includes('/api/ai/') || urlStr.includes('/api/audit/');
+  const isAiOrAudit = urlStr.includes('/api/ai/') || urlStr.includes('/api/audit/') || urlStr.includes('/api/ocr');
 
   if (isAiOrAudit) {
     const officeProfile = db.getState().officeProfile;

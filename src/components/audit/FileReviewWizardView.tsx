@@ -104,6 +104,210 @@ export interface GeminiReviewReportData {
   summaryText?: string;
 }
 
+/**
+ * دالة مشتركة لتحليل وقراءة أعمدة ميزان المراجعة وتحديد الحسابات المربوطة وغير المربوطة
+ */
+export function parseTrialBalanceSheet(
+  wb: XLSX.WorkBook,
+  sheetName: string,
+  accounts: Account[]
+) {
+  const ws = wb.Sheets[sheetName];
+  if (!ws) {
+    return {
+      matrix: [],
+      headerRowIdx: 0,
+      codeCol: -1,
+      nameCol: -1,
+      debitCol: -1,
+      creditCol: -1,
+      openingDebitCol: -1,
+      openingCreditCol: -1,
+      mappedRows: [],
+      unmappedAccounts: [],
+      totalDebit: 0,
+      totalCredit: 0,
+      isBalanced: true,
+    };
+  }
+
+  const matrix: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  if (!matrix || matrix.length === 0) {
+    return {
+      matrix: [],
+      headerRowIdx: 0,
+      codeCol: -1,
+      nameCol: -1,
+      debitCol: -1,
+      creditCol: -1,
+      openingDebitCol: -1,
+      openingCreditCol: -1,
+      mappedRows: [],
+      unmappedAccounts: [],
+      totalDebit: 0,
+      totalCredit: 0,
+      isBalanced: true,
+    };
+  }
+
+  let bestHeaderIdx = 0;
+  for (let r = 0; r < Math.min(matrix.length, 10); r++) {
+    const rowStr = matrix[r].map((cell) => String(cell).toLowerCase()).join(' ');
+    if (
+      rowStr.includes('كود') ||
+      rowStr.includes('اسم') ||
+      rowStr.includes('مدين') ||
+      rowStr.includes('دائن') ||
+      rowStr.includes('code') ||
+      rowStr.includes('account') ||
+      rowStr.includes('debit') ||
+      rowStr.includes('credit')
+    ) {
+      bestHeaderIdx = r;
+      break;
+    }
+  }
+
+  const headerRow = matrix[bestHeaderIdx] || [];
+  let detectedCode = -1;
+  let detectedName = -1;
+  let detectedDebit = -1;
+  let detectedCredit = -1;
+  let detectedOpDebit = -1;
+  let detectedOpCredit = -1;
+
+  headerRow.forEach((cell: any, idx: number) => {
+    const val = String(cell).trim().toLowerCase();
+    if (val.includes('كود') || val === 'code' || val.includes('رقم الحساب')) {
+      if (detectedCode === -1) detectedCode = idx;
+    }
+    if (val.includes('اسم') || val.includes('حساب') || val.includes('account') || val.includes('name')) {
+      if (detectedName === -1 && !val.includes('كود')) detectedName = idx;
+    }
+    if (val.includes('افتتاحي') && val.includes('مدين')) {
+      detectedOpDebit = idx;
+    } else if (val.includes('افتتاحي') && val.includes('دائن')) {
+      detectedOpCredit = idx;
+    } else if (val.includes('مدين') || val.includes('debit') || val.includes('منه')) {
+      if (detectedDebit === -1) detectedDebit = idx;
+    } else if (val.includes('دائن') || val.includes('credit') || val.includes('له')) {
+      if (detectedCredit === -1) detectedCredit = idx;
+    }
+  });
+
+  const codeCol = detectedCode !== -1 ? detectedCode : 0;
+  const nameCol = detectedName !== -1 ? detectedName : 1;
+  const debitCol = detectedDebit !== -1 ? detectedDebit : 2;
+  const creditCol = detectedCredit !== -1 ? detectedCredit : 3;
+  const openingDebitCol = detectedOpDebit;
+  const openingCreditCol = detectedOpCredit;
+
+  const dataRows = matrix.slice(bestHeaderIdx + 1);
+  const mappedRows: MappedAccountRow[] = [];
+
+  dataRows.forEach((row, idx) => {
+    const rawCode = String(row[codeCol] || '').trim();
+    const rawName = String(row[nameCol] || '').trim();
+    if (!rawCode && !rawName) return;
+
+    const debitVal = parseFloat(String(row[debitCol] || '0').replace(/,/g, '')) || 0;
+    const creditVal = parseFloat(String(row[creditCol] || '0').replace(/,/g, '')) || 0;
+    const opDebitVal =
+      openingDebitCol >= 0 ? parseFloat(String(row[openingDebitCol] || '0').replace(/,/g, '')) || 0 : 0;
+    const opCreditVal =
+      openingCreditCol >= 0 ? parseFloat(String(row[openingCreditCol] || '0').replace(/,/g, '')) || 0 : 0;
+
+    const netBalance = debitVal - creditVal;
+
+    // Deterministic Match 1: By Code
+    const exactCodeMatch = accounts.find((a) => a.code === rawCode);
+    if (exactCodeMatch) {
+      mappedRows.push({
+        id: `tb-row-${idx}-${Date.now()}`,
+        originalCode: rawCode,
+        originalName: rawName,
+        debit: debitVal,
+        credit: creditVal,
+        openingDebit: opDebitVal,
+        openingCredit: opCreditVal,
+        netBalance,
+        mappedCode: exactCodeMatch.code,
+        mappedName: exactCodeMatch.name,
+        matchType: 'EXACT_CODE',
+        confidence: 1.0,
+        aiReasoning: 'طابق كود الحساب بالدليل المعياري للنظام تماماً',
+        isApproved: true,
+      });
+      return;
+    }
+
+    // Deterministic Match 2: By Name
+    const exactNameMatch = accounts.find(
+      (a) => a.name.trim().toLowerCase() === rawName.toLowerCase()
+    );
+    if (exactNameMatch) {
+      mappedRows.push({
+        id: `tb-row-${idx}-${Date.now()}`,
+        originalCode: rawCode,
+        originalName: rawName,
+        debit: debitVal,
+        credit: creditVal,
+        openingDebit: opDebitVal,
+        openingCredit: opCreditVal,
+        netBalance,
+        mappedCode: exactNameMatch.code,
+        mappedName: exactNameMatch.name,
+        matchType: 'EXACT_NAME',
+        confidence: 0.95,
+        aiReasoning: 'طابق اسم الحساب مع دليل الحسابات بالاسم',
+        isApproved: true,
+      });
+      return;
+    }
+
+    // Unmapped (Do NOT auto-approve)
+    mappedRows.push({
+      id: `tb-row-${idx}-${Date.now()}`,
+      originalCode: rawCode,
+      originalName: rawName,
+      debit: debitVal,
+      credit: creditVal,
+      openingDebit: opDebitVal,
+      openingCredit: opCreditVal,
+      netBalance,
+      mappedCode: '',
+      mappedName: '',
+      matchType: 'UNMAPPED',
+      confidence: 0,
+      isApproved: false,
+    });
+  });
+
+  const unmappedAccounts = mappedRows
+    .filter((r) => r.matchType === 'UNMAPPED' || !r.mappedCode)
+    .map((r) => ({ originalCode: r.originalCode, originalName: r.originalName }));
+
+  const totalDebit = round2(mappedRows.reduce((s, r) => s + (r.debit || 0), 0));
+  const totalCredit = round2(mappedRows.reduce((s, r) => s + (r.credit || 0), 0));
+  const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
+
+  return {
+    matrix,
+    headerRowIdx: bestHeaderIdx,
+    codeCol,
+    nameCol,
+    debitCol,
+    creditCol,
+    openingDebitCol,
+    openingCreditCol,
+    mappedRows,
+    unmappedAccounts,
+    totalDebit,
+    totalCredit,
+    isBalanced,
+  };
+}
+
 export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   state,
   onNavigateToTab,
@@ -171,6 +375,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   const [priorSheetNames, setPriorSheetNames] = useState<string[]>([]);
   const [priorActiveSheet, setPriorActiveSheet] = useState<string>('');
   const [priorMappedRows, setPriorMappedRows] = useState<MappedAccountRow[] | null>(null);
+  const [priorUnmappedAccounts, setPriorUnmappedAccounts] = useState<Array<{ originalCode: string; originalName: string }>>([]);
   const [priorStats, setPriorStats] = useState<{
     totalRows: number;
     totalDebit: number;
@@ -209,142 +414,14 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   };
 
   const parseAndMapPriorSheetData = (wb: XLSX.WorkBook, sheetName: string) => {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) return;
-    const matrix: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    if (!matrix || matrix.length === 0) return;
-
-    let bestHeaderIdx = 0;
-    for (let r = 0; r < Math.min(matrix.length, 10); r++) {
-      const rowStr = matrix[r].map((cell) => String(cell).toLowerCase()).join(' ');
-      if (
-        rowStr.includes('كود') ||
-        rowStr.includes('اسم') ||
-        rowStr.includes('مدين') ||
-        rowStr.includes('دائن') ||
-        rowStr.includes('code') ||
-        rowStr.includes('account') ||
-        rowStr.includes('debit') ||
-        rowStr.includes('credit')
-      ) {
-        bestHeaderIdx = r;
-        break;
-      }
-    }
-
-    const headerRow = matrix[bestHeaderIdx] || [];
-    let detectedCode = -1;
-    let detectedName = -1;
-    let detectedDebit = -1;
-    let detectedCredit = -1;
-
-    headerRow.forEach((cell: any, idx: number) => {
-      const val = String(cell).trim().toLowerCase();
-      if (val.includes('كود') || val === 'code' || val.includes('رقم الحساب')) {
-        if (detectedCode === -1) detectedCode = idx;
-      }
-      if (val.includes('اسم') || val.includes('حساب') || val.includes('account') || val.includes('name')) {
-        if (detectedName === -1 && !val.includes('كود')) detectedName = idx;
-      }
-      if (val.includes('مدين') || val.includes('debit') || val.includes('منه')) {
-        if (!val.includes('افتتاحي') && detectedDebit === -1) detectedDebit = idx;
-      }
-      if (val.includes('دائن') || val.includes('credit') || val.includes('له')) {
-        if (!val.includes('افتتاحي') && detectedCredit === -1) detectedCredit = idx;
-      }
-    });
-
-    const cCol = detectedCode !== -1 ? detectedCode : 0;
-    const nCol = detectedName !== -1 ? detectedName : 1;
-    const dCol = detectedDebit !== -1 ? detectedDebit : 2;
-    const crCol = detectedCredit !== -1 ? detectedCredit : 3;
-
-    const dataRows = matrix.slice(bestHeaderIdx + 1);
-    const systemAccounts = state.accounts;
-    const parsedRows: MappedAccountRow[] = [];
-
-    dataRows.forEach((row, idx) => {
-      const rawCode = String(row[cCol] || '').trim();
-      const rawName = String(row[nCol] || '').trim();
-      if (!rawCode && !rawName) return;
-
-      const debitVal = parseFloat(String(row[dCol] || '0').replace(/,/g, '')) || 0;
-      const creditVal = parseFloat(String(row[crCol] || '0').replace(/,/g, '')) || 0;
-      const netBalance = debitVal - creditVal;
-
-      // Deterministic Match 1: By Code
-      const exactCodeMatch = systemAccounts.find((a) => a.code === rawCode);
-      if (exactCodeMatch) {
-        parsedRows.push({
-          id: `prior-row-${idx}-${Date.now()}`,
-          originalCode: rawCode,
-          originalName: rawName,
-          debit: debitVal,
-          credit: creditVal,
-          openingDebit: 0,
-          openingCredit: 0,
-          netBalance,
-          mappedCode: exactCodeMatch.code,
-          mappedName: exactCodeMatch.name,
-          matchType: 'EXACT_CODE',
-          confidence: 1.0,
-          aiReasoning: 'طابق كود الحساب بالدليل المعياري',
-          isApproved: true,
-        });
-        return;
-      }
-
-      // Deterministic Match 2: By Name
-      const exactNameMatch = systemAccounts.find(
-        (a) => a.name.trim().toLowerCase() === rawName.toLowerCase()
-      );
-      if (exactNameMatch) {
-        parsedRows.push({
-          id: `prior-row-${idx}-${Date.now()}`,
-          originalCode: rawCode,
-          originalName: rawName,
-          debit: debitVal,
-          credit: creditVal,
-          openingDebit: 0,
-          openingCredit: 0,
-          netBalance,
-          mappedCode: exactNameMatch.code,
-          mappedName: exactNameMatch.name,
-          matchType: 'EXACT_NAME',
-          confidence: 0.95,
-          aiReasoning: 'طابق اسم الحساب مع دليل الحسابات بالاسم',
-          isApproved: true,
-        });
-        return;
-      }
-
-      // Default with raw code and name
-      parsedRows.push({
-        id: `prior-row-${idx}-${Date.now()}`,
-        originalCode: rawCode,
-        originalName: rawName,
-        debit: debitVal,
-        credit: creditVal,
-        openingDebit: 0,
-        openingCredit: 0,
-        netBalance,
-        mappedCode: rawCode,
-        mappedName: rawName || rawCode,
-        matchType: 'MANUAL_MODIFIED',
-        confidence: 0.5,
-        isApproved: true,
-      });
-    });
-
-    const totDeb = round2(parsedRows.reduce((s, r) => s + (r.debit || 0), 0));
-    const totCred = round2(parsedRows.reduce((s, r) => s + (r.credit || 0), 0));
-
-    setPriorMappedRows(parsedRows);
+    const result = parseTrialBalanceSheet(wb, sheetName, state.accounts);
+    setPriorMappedRows(result.mappedRows);
+    setPriorUnmappedAccounts(result.unmappedAccounts);
     setPriorStats({
-      totalRows: parsedRows.length,
-      totalDebit: totDeb,
-      totalCredit: totCred,
-      isBalanced: Math.abs(totDeb - totCred) < 0.01,
+      totalRows: result.mappedRows.length,
+      totalDebit: result.totalDebit,
+      totalCredit: result.totalCredit,
+      isBalanced: result.isBalanced,
     });
   };
 
@@ -362,6 +439,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     setPriorSheetNames([]);
     setPriorActiveSheet('');
     setPriorMappedRows(null);
+    setPriorUnmappedAccounts([]);
     setPriorStats(null);
     if (priorFileInputRef.current) {
       priorFileInputRef.current.value = '';
@@ -394,13 +472,15 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   };
 
   const parseSheetData = (wb: XLSX.WorkBook, sheetName: string) => {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) return;
-    const matrix: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    setRawMatrix(matrix);
-
-    // Auto-detect columns intelligently
-    autoDetectColumns(matrix);
+    const result = parseTrialBalanceSheet(wb, sheetName, state.accounts);
+    setRawMatrix(result.matrix);
+    setHeaderRowIdx(result.headerRowIdx);
+    setCodeCol(result.codeCol);
+    setNameCol(result.nameCol);
+    setDebitCol(result.debitCol);
+    setCreditCol(result.creditCol);
+    setOpeningDebitCol(result.openingDebitCol);
+    setOpeningCreditCol(result.openingCreditCol);
   };
 
   const handleSheetChange = (sName: string) => {
@@ -1007,12 +1087,12 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
         clientName: activeClient.name,
       });
 
-      // فحص بعد الحفظ: احسب computeAccountBalances على القيد المحفوظ وتأكد إن ميزان المراجعة متزن، وإلا اعرض خطأ
+      // فحص بعد الحفظ: احسب computeAccountBalances على القيد المحفوظ وتأكد إن حركة ميزان المراجعة متزنة، وإلا اعرض خطأ
       const currentAccounts = db.getState().accounts;
       const calculatedAccounts = computeAccountBalances(currentAccounts, [savedEntry]);
-      const totalDebit = calculatedAccounts.reduce((sum, a) => sum + a.totalDebit, 0);
-      const totalCredit = calculatedAccounts.reduce((sum, a) => sum + a.totalCredit, 0);
-      const diff = Math.abs(totalDebit - totalCredit);
+      const movementDebit = calculatedAccounts.reduce((sum, a) => sum + a.movementDebit, 0);
+      const movementCredit = calculatedAccounts.reduce((sum, a) => sum + a.movementCredit, 0);
+      const diff = Math.abs(movementDebit - movementCredit);
 
       if (diff > 0.01) {
         setSaveError(`خطأ في ميزان المراجعة بعد الحفظ: غير متزن بفارق قدره ${diff.toFixed(2)} ج.م`);
@@ -1373,7 +1453,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
                 {priorStats && (
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="p-2 rounded bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">الحسابات المربوطة</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">إجمالي الحسابات</span>
                       <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">{priorStats.totalRows}</span>
                     </div>
                     <div className="p-2 rounded bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
@@ -1383,6 +1463,25 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
                     <div className="p-2 rounded bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
                       <span className="text-[10px] text-slate-500 dark:text-slate-400 block">إجمالي الدائن</span>
                       <span className="font-bold text-rose-600 font-mono">{priorStats.totalCredit.toLocaleString('ar-EG')} ج.م</span>
+                    </div>
+                  </div>
+                )}
+
+                {priorUnmappedAccounts.length > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>
+                        تحذير: ميزان السنة السابقة يحتوي على ({priorUnmappedAccounts.length}) حساب(ات) غير مربوطة بالدليل المعياري (ولم تُعتمد تلقائياً):
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-mono space-y-0.5 max-h-28 overflow-y-auto pr-2 bg-amber-100/50 dark:bg-amber-900/30 p-2 rounded-lg border border-amber-200/50 dark:border-amber-800/40">
+                      {priorUnmappedAccounts.map((acc, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="text-amber-600 font-bold">•</span>
+                          <span>{acc.originalCode ? `[${acc.originalCode}] ` : ''}{acc.originalName || 'حساب بدون اسم'}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

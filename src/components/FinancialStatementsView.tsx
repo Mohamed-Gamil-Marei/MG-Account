@@ -187,7 +187,29 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       setInternalStatementTab(initialStatementTab);
     }
   }, [initialStatementTab]);
-  const [topViewMode, setTopViewMode] = useState<'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER'>('STATEMENTS_FROM_BOOKS');
+  const [topViewMode, setTopViewMode] = useState<'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER'>(() => {
+    try {
+      const saved = localStorage.getItem('financial_statements_top_mode');
+      if (saved === 'STATEMENTS_FROM_BOOKS' || saved === 'FILE_REVIEW' || saved === 'QUICK_BANK_DOSSIER') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'STATEMENTS_FROM_BOOKS';
+  });
+
+  const handleTopModeChange = (mode: 'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER') => {
+    setTopViewMode(mode);
+    try {
+      localStorage.setItem('financial_statements_top_mode', mode);
+    } catch {
+      // ignore
+    }
+    if (mode === 'QUICK_BANK_DOSSIER' && onNavigateToCreditSimulator) {
+      onNavigateToCreditSimulator();
+    }
+  };
   const [fiscalYear, setFiscalYear] = useState<number>(initialFiscalYear || 2026);
   const [periodPreset, setPeriodPreset] = useState<'FULL_YEAR' | 'Q1' | 'H1' | '9M' | 'Q4' | 'CUSTOM'>('FULL_YEAR');
   const [startDate, setStartDate] = useState<string>(`${initialFiscalYear || 2026}-01-01`);
@@ -967,24 +989,46 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
   return (
     <div className="space-y-4">
-      {/* 3 Top Modes Bar: قوائم من الدفاتر / مراجعة ملف / ملف بنكي سريع */}
-      <div className="no-print print:hidden">
-        <ResponsiveSubTabBar
-          activeTab={topViewMode}
-          onTabChange={(tabId) => {
-            const mode = tabId as 'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER';
-            setTopViewMode(mode);
-            if (mode === 'QUICK_BANK_DOSSIER' && onNavigateToCreditSimulator) {
-              onNavigateToCreditSimulator();
-            }
-          }}
-          maxVisibleTabs={3}
-          tabs={[
-            { id: 'STATEMENTS_FROM_BOOKS', label: 'قوائم من الدفاتر', icon: <Scale className="w-4 h-4" /> },
-            { id: 'FILE_REVIEW', label: 'مراجعة ملف', icon: <ShieldCheck className="w-4 h-4" /> },
-            { id: 'QUICK_BANK_DOSSIER', label: 'ملف بنكي سريع', icon: <Building2 className="w-4 h-4 text-amber-500" /> },
-          ]}
-        />
+      {/* 3 Top Modes Bar: ثلاثة أزرار كبيرة متساوية، الوضع النشط بلون واحد */}
+      <div className="no-print print:hidden grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+        <button
+          type="button"
+          onClick={() => handleTopModeChange('STATEMENTS_FROM_BOOKS')}
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            topViewMode === 'STATEMENTS_FROM_BOOKS'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Scale className="w-4 h-4 shrink-0" />
+          <span className="truncate">قوائم من الدفاتر</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTopModeChange('FILE_REVIEW')}
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            topViewMode === 'FILE_REVIEW'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 shrink-0" />
+          <span className="truncate">مراجعة ملف</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTopModeChange('QUICK_BANK_DOSSIER')}
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            topViewMode === 'QUICK_BANK_DOSSIER'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Building2 className="w-4 h-4 shrink-0" />
+          <span className="truncate">ملف بنكي سريع</span>
+        </button>
       </div>
 
       {topViewMode === 'FILE_REVIEW' ? (
@@ -1021,18 +1065,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   </select>
                 </div>
 
-                {/* Zarr 1: حفظ (Save / Sync) */}
-                <ActionButton
-                  label={isSyncingTrialBalance ? 'جاري الحفظ...' : 'حفظ'}
-                  icon={Save}
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSyncWithTrialBalance}
-                  disabled={isSyncingTrialBalance}
-                  className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer active:scale-95 border-emerald-600"
-                />
-
-                {/* Zarr 2: طباعة (Print) */}
+                {/* Zarr 1: طباعة (Print) */}
                 <ActionButton
                   label="طباعة"
                   icon={Printer}
@@ -1050,7 +1083,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   }
                 />
 
-                {/* Zarr 3: تصدير (Export Toolbar) */}
+                {/* Zarr 2: تصدير (Export Toolbar) */}
                 <ScreenActionToolbar
                   modelType="FINANCIAL_STATEMENTS"
                   recordId={currentStatementRecordId}
@@ -1065,7 +1098,18 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   disableReason={`تم حظر التصدير لوجود فارق عدم اتزان في الميزانية بمقدار (${formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))})`}
                 />
 
-                {/* قائمة "المزيد ⋯": تضم الأوامر (أرشفة، إقفال، فروق عملة، تخصيص الطباعة، سجل النشاط) */}
+                {/* Zarr 3: حفظ (Save / Sync) */}
+                <ActionButton
+                  label={isSyncingTrialBalance ? 'جاري الحفظ...' : 'حفظ'}
+                  icon={Save}
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSyncWithTrialBalance}
+                  disabled={isSyncingTrialBalance}
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer active:scale-95 border-emerald-600"
+                />
+
+                {/* قائمة "المزيد ⋯": تضم الأوامر الأُخرى */}
                 <ActionMenu
                   title="المزيد ⋯"
                   triggerType="button_text"
@@ -1154,38 +1198,6 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             }
           >
         <div className="space-y-3.5">
-          {/* Critical Unbalanced Equation Alert Banner */}
-          {!computedBalance.isBalanced && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl shadow-sm flex items-start gap-3 text-red-950 no-print print:hidden">
-              <div className="p-2 bg-red-600 text-white rounded-lg shrink-0 mt-0.5">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-black text-sm text-rose-700 dark:text-rose-300">
-                    تنبيه عدم اتزان القوائم المالية: معادلة المركز المالي غير متطابقة!
-                  </span>
-                  <span className="px-3 py-1 bg-rose-600 text-white font-mono font-black rounded-lg text-xs shadow-2xs">
-                    فارق الميزانية: {formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))}
-                  </span>
-                </div>
-                <p className="text-xs text-rose-800 dark:text-rose-200 leading-relaxed font-semibold">
-                  إجمالي الأصول ({formatEgyptianCurrency(computedBalance.totalAssets)}) لا يساوي إجمالي الالتزامات وحقوق الملكية ({formatEgyptianCurrency(computedBalance.totalEquityAndLiabilities)}). تم حظر أوامر الطباعة والتصدير الرسمي لحين ضبط قيود اليومية أو معالجة الفارق.
-                </p>
-                {suspectedDiscrepancy && (
-                  <div className="mt-2.5 p-2.5 bg-rose-100/90 dark:bg-rose-900/50 rounded-xl border border-rose-300 dark:border-rose-800 text-xs flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-rose-950 dark:text-rose-200">🔍 الحساب/القيد المشتبه فيه:</span>
-                    <span className="font-mono font-black text-rose-800 dark:text-rose-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-700">
-                      {suspectedDiscrepancy.name}
-                    </span>
-                    <span className="text-rose-900 dark:text-rose-300 text-[11px] font-semibold">
-                      ({suspectedDiscrepancy.details})
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Trial Balance Dynamic Synchronization Success Notice */}
           {syncSuccessNotice && (
@@ -1984,6 +1996,12 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
       </div>
     </UnifiedScreenCard>
+
+    {!computedBalance.isBalanced && (
+      <div className="no-print print:hidden text-center py-2 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100/60 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 max-w-2xl mx-auto">
+        تنبيه: يوجد فارق عدم اتزان في الميزانية بمقدار ({formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))}).
+      </div>
+    )}
 
       {/* Currency Revaluation Wizard Modal (EAS 13 / IAS 21) */}
       <CurrencyRevaluationWizardModal
