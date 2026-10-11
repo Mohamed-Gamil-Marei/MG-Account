@@ -40,6 +40,7 @@ import {
   generateCashFlowStatement,
   round2,
 } from '../../utils/accountingCalculations';
+import { buildAuditFromTrialBalance } from '../../utils/auditFromTrialBalance';
 
 interface FileReviewWizardViewProps {
   state: DatabaseState;
@@ -143,6 +144,8 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   const [unclassifiedWarnings, setUnclassifiedWarnings] = useState<string[]>([]);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [showPartnerBalanceModal, setShowPartnerBalanceModal] = useState<boolean>(false);
+  const [partnerBalanceNotice, setPartnerBalanceNotice] = useState<string | null>(null);
+  const [partnerBalanceSecondConfirm, setPartnerBalanceSecondConfirm] = useState<boolean>(false);
 
   // Step 5: Financial Statements & Direct Audit Entries
   const [generatedEntries, setGeneratedEntries] = useState<JournalEntry[]>([]);
@@ -554,7 +557,19 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     });
   };
 
-  // Handler for optional Partner Current Account balancing (Item 3e)
+  // Estimated total assets for partner balance ratio check (Requirement 2d)
+  const totalAssetsApprox = useMemo(() => {
+    const assetsNet = mappedRows
+      .filter((r) => r.mappedCode.startsWith('1'))
+      .reduce((sum, r) => sum + Math.max(0, (r.debit || 0) - (r.credit || 0)), 0);
+    return round2(assetsNet) || (staticCheck?.totalDebit || 0);
+  }, [mappedRows, staticCheck]);
+
+  const diffAmount = Math.abs(staticCheck?.difference || 0);
+  const diffRatio = totalAssetsApprox > 0 ? (diffAmount / totalAssetsApprox) : 0;
+  const isHighRatio = diffRatio > 0.01;
+
+  // Handler for optional Partner Current Account balancing (Item 3e / 2d)
   const handleBalanceWithPartnerAccount = () => {
     if (!staticCheck) return;
     const diff = round2(staticCheck.totalDebit - staticCheck.totalCredit);
@@ -635,6 +650,10 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
 
     setMappedRows(updatedRows);
     setShowPartnerBalanceModal(false);
+    setPartnerBalanceSecondConfirm(false);
+
+    const partnerNotice = `تمت موازنة ميزان المراجعة بمبلغ ${Math.abs(diff).toLocaleString('ar-EG')} ج.م في حساب جاري الشركاء`;
+    setPartnerBalanceNotice(partnerNotice);
 
     const totDebit = round2(updatedRows.reduce((sum, r) => sum + (r.debit || 0), 0));
     const totCredit = round2(updatedRows.reduce((sum, r) => sum + (r.credit || 0), 0));
@@ -649,7 +668,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     } : null);
   };
 
-  // Step 4 -> Step 5: Generate Entries & Statements using accountingCalculations directly (Requirement 3)
+  // Step 4 -> Step 5: Pure buildAuditFromTrialBalance delegation (Requirement 2a)
   const handleProceedToGeneration = () => {
     setGenerationError(null);
     setUnclassifiedWarnings([]);
@@ -659,65 +678,76 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
       return;
     }
 
-    // a) Map every row in mappedRows to a JournalEntryLine in a single balanced journal entry with source AUDIT_DIRECT_ENTRY
-    const lines: JournalEntryLine[] = mappedRows.map((row, index) => {
-      const existingAcc = state.accounts.find(a => a.code === row.mappedCode);
-      const accId = existingAcc ? existingAcc.id : `acc-audit-${row.mappedCode}`;
-      const accName = existingAcc ? existingAcc.name : row.mappedName;
+    try {
+      const result = buildAuditFromTrialBalance(
+        mappedRows,
+        state.accounts,
+        selectedFiscalYear,
+        activeClient?.name,
+        activeClient?.id
+      );
 
-      return {
-        id: `line-audit-${index}-${Date.now()}`,
-        accountId: accId,
-        accountCode: row.mappedCode,
-        accountName: accName,
-        debit: round2(row.debit || 0),
-        credit: round2(row.credit || 0),
-        description: `رصيد ميزان المراجعة - ${row.originalName}`,
-      };
-    });
+      setUnclassifiedWarnings(result.warnings);
 
-    const totalDebit = round2(lines.reduce((sum, l) => sum + (l.debit || 0), 0));
-    const totalCredit = round2(lines.reduce((sum, l) => sum + (l.credit || 0), 0));
-    const trialBalanceDiff = round2(totalDebit - totalCredit);
+      if (!result.balanceData.isBalanced || Math.abs(result.balanceData.variance) > 0.01) {
+        setGenerationError(
+          `تعذر الانتقال للخطوة 5: الميزانية العمومية غير متزنة! إجمالي الأصول: ${result.balanceData.totalAssets.toLocaleString('ar-EG')} - إجمالي الالتزامات وحقوق الملكية: ${result.balanceData.totalEquityAndLiabilities.toLocaleString('ar-EG')} (الفرق: ${result.balanceData.variance.toLocaleString('ar-EG')} ج.م).`
+        );
+        return;
+      }
 
-    // Check trial balance balance
-    if (Math.abs(trialBalanceDiff) > 0.01) {
-      setGenerationError(`ميزان المراجعة غير متزن! إجمالي المدين: ${totalDebit.toLocaleString('ar-EG')} - إجمالي الدائن: ${totalCredit.toLocaleString('ar-EG')} (الفرق: ${trialBalanceDiff.toLocaleString('ar-EG')} ج.م). غير مسموح بتوليد القوائم إلا بعد تعديل الميزان أو الموازنة بجاري الشركاء.`);
-      return;
+      setFinancialSummary({
+        clientName: activeClient?.name || 'العميل',
+        fiscalYear: selectedFiscalYear,
+        revenues: result.incomeData.revenuesTotal,
+        costOfGoodsSold: result.incomeData.costOfGoodsSold,
+        grossProfit: result.incomeData.grossProfit,
+        sellingAndMarketingExpenses: result.incomeData.sellingAndMarketingExpenses,
+        administrativeExpenses: result.incomeData.administrativeExpenses,
+        depreciationExpense: result.incomeData.depreciationExpense,
+        financeCosts: result.incomeData.financeCosts,
+        otherIncomes: result.incomeData.otherIncomes,
+        netProfitBeforeTax: result.incomeData.netProfitBeforeTax,
+        taxExpense: result.incomeData.taxExpense,
+        netProfitAfterTax: result.incomeData.netProfitAfterTax,
+        
+        // Balance Sheet
+        nonCurrentAssets: result.balanceData.nonCurrentAssetsTotal,
+        currentAssets: result.balanceData.currentAssetsTotal,
+        totalAssets: result.balanceData.totalAssets,
+        equity: result.balanceData.equityTotal,
+        nonCurrentLiabilities: result.balanceData.nonCurrentLiabilitiesTotal,
+        currentLiabilities: result.balanceData.currentLiabilitiesTotal,
+        totalLiabilitiesAndEquity: result.balanceData.totalEquityAndLiabilities,
+        isBalanced: result.balanceData.isBalanced,
+        cashFlow: result.cashFlowData,
+      });
+
+      setGeneratedEntries([result.entry]);
+      setIsSavedToDb(false);
+      setCurrentStep(5);
+    } catch (err: any) {
+      setGenerationError(err?.message || 'حدث خطأ أثناء بناء وتوليد القوائم المالية من ميزان المراجعة');
     }
+  };
 
-    const auditEntry: JournalEntry = {
-      id: `audit-direct-entry-${selectedFiscalYear}-${Date.now()}`,
-      entryNumber: Date.now(),
-      serialNumber: `AUDIT-${selectedFiscalYear}-0001`,
-      entryType: 'ADJUSTING',
-      date: `${selectedFiscalYear}-12-31`,
-      description: `قيد ميزان المراجعة المباشر المعتمد لسنة ${selectedFiscalYear} (وضع المراجعة)`,
-      totalDebit,
-      totalCredit,
-      isPosted: true,
-      source: 'AUDIT_DIRECT_ENTRY',
-      clientId: activeClient?.id,
-      clientName: activeClient?.name,
-      lines,
-      auditTrail: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  // Step 5: Save entry to database (Requirement 2c)
+  const handleSaveEntryToDatabase = () => {
+    if (!generatedEntries.length || !activeClient) return;
+    const entryToSave = generatedEntries[0];
 
-    // Prepare temp account structure for computation
-    const evalAccounts: Account[] = [...state.accounts];
-    mappedRows.forEach(row => {
-      if (!evalAccounts.some(a => a.code === row.mappedCode)) {
-        evalAccounts.push({
-          id: `acc-audit-${row.mappedCode}`,
-          code: row.mappedCode,
-          name: row.mappedName,
-          category: row.mappedCode.startsWith('1') ? 'ASSETS' :
-                    row.mappedCode.startsWith('2') ? 'LIABILITIES' :
-                    row.mappedCode.startsWith('3') ? 'EQUITY' :
-                    row.mappedCode.startsWith('4') ? 'REVENUES' : 'EXPENSES',
-          nature: (row.mappedCode.startsWith('1') || row.mappedCode.startsWith('5')) ? 'DEBIT' : 'CREDIT',
+    // 1. إنشاء الحسابات الناقصة بـ addAccount أولاً
+    entryToSave.lines.forEach((line) => {
+      const exists = state.accounts.some((a) => a.code === line.accountCode);
+      if (!exists) {
+        db.addAccount({
+          code: line.accountCode,
+          name: line.accountName,
+          category: line.accountCode.startsWith('1') ? 'ASSETS' :
+                    line.accountCode.startsWith('2') ? 'LIABILITIES' :
+                    line.accountCode.startsWith('3') ? 'EQUITY' :
+                    line.accountCode.startsWith('4') ? 'REVENUES' : 'EXPENSES',
+          nature: (line.accountCode.startsWith('1') || line.accountCode.startsWith('5')) ? 'DEBIT' : 'CREDIT',
           level: 2,
           openingBalanceDebit: 0,
           openingBalanceCredit: 0,
@@ -726,59 +756,25 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
       }
     });
 
-    // b) Compute statements using computeAccountBalances, generateIncomeStatement, generateBalanceSheet
-    const calculatedAccounts = computeAccountBalances(evalAccounts, [auditEntry]);
-    const incomeData = generateIncomeStatement(calculatedAccounts);
-    const balanceData = generateBalanceSheet(calculatedAccounts, incomeData);
-    const cashFlowData = generateCashFlowStatement(incomeData, balanceData);
+    // 2. استخدام deleteGeneratedAuditEntries لنفس العميل والسنة قبل الحفظ
+    db.deleteGeneratedAuditEntries(selectedFiscalYear, activeClient.id);
 
-    // c) Warning for any account code that is unclassified or not standard
-    const unclassified: string[] = [];
-    mappedRows.forEach(row => {
-      const c = row.mappedCode;
-      const isRecognized = c.startsWith('1') || c.startsWith('2') || c.startsWith('3') || c.startsWith('4') || c.startsWith('5');
-      if (!isRecognized) {
-        unclassified.push(`الحساب (${row.originalName}) بالكود (${c}) غير مصنف ضمن بنود القوائم المالية المعتمدة.`);
-      }
-    });
-    setUnclassifiedWarnings(unclassified);
-
-    // d) If generation failed or balance sheet is not balanced, do NOT proceed to step 5
-    if (!balanceData.isBalanced || Math.abs(balanceData.variance) > 0.01) {
-      setGenerationError(`تعذر الانتقال للخطوة 5: الميزانية العمومية غير متزنة! إجمالي الأصول: ${balanceData.totalAssets.toLocaleString('ar-EG')} - إجمالي الالتزامات وحقوق الملكية: ${balanceData.totalEquityAndLiabilities.toLocaleString('ar-EG')} (الفرق: ${balanceData.variance.toLocaleString('ar-EG')} ج.م).`);
-      return;
-    }
-
-    // Set output summary and entries
-    setFinancialSummary({
-      clientName: activeClient?.name || 'العميل',
-      fiscalYear: selectedFiscalYear,
-      revenues: incomeData.revenuesTotal,
-      costOfGoodsSold: incomeData.costOfGoodsSold,
-      grossProfit: incomeData.grossProfit,
-      sellingAndMarketingExpenses: incomeData.sellingAndMarketingExpenses,
-      administrativeExpenses: incomeData.administrativeExpenses,
-      depreciationExpense: incomeData.depreciationExpense,
-      financeCosts: incomeData.financeCosts,
-      otherIncomes: incomeData.otherIncomes,
-      netProfitBeforeTax: incomeData.netProfitBeforeTax,
-      taxExpense: incomeData.taxExpense,
-      netProfitAfterTax: incomeData.netProfitAfterTax,
-      
-      // Balance Sheet
-      nonCurrentAssets: balanceData.nonCurrentAssetsTotal,
-      currentAssets: balanceData.currentAssetsTotal,
-      totalAssets: balanceData.totalAssets,
-      equity: balanceData.equityTotal,
-      nonCurrentLiabilities: balanceData.nonCurrentLiabilitiesTotal,
-      currentLiabilities: balanceData.currentLiabilitiesTotal,
-      totalLiabilitiesAndEquity: balanceData.totalEquityAndLiabilities,
-      isBalanced: balanceData.isBalanced,
-      cashFlow: cashFlowData,
+    // 3. ثم db.addJournalEntry
+    db.addJournalEntry({
+      ...entryToSave,
+      isPosted: true,
+      clientId: activeClient.id,
+      clientName: activeClient.name,
     });
 
-    setGeneratedEntries([auditEntry]);
-    setCurrentStep(5);
+    // 4. يُفعّل isSavedToDb
+    setIsSavedToDb(true);
+
+    // 5. يُسجل في سجل التدقيق
+    db.logAudit(
+      'CREATE',
+      `حفظ قيد ميزان المراجعة المباشر المعتمد لسنة ${selectedFiscalYear} للعميل ${activeClient.name} بالدفتر المحاسبي بنجاح`
+    );
   };
 
   // Step 5 -> Step 6: Generate Gemini Report (Numbers Only Input - NO Invention)
@@ -799,11 +795,36 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          setReviewReport(json.data);
+          const rep: GeminiReviewReportData = json.data;
+          // سطر ثابت في تقرير المراجعة لو تمت موازنة جاري الشركاء (Requirement 2d)
+          if (partnerBalanceNotice) {
+            const notes = rep.auditNotes || [];
+            if (!notes.includes(partnerBalanceNotice)) {
+              rep.auditNotes = [partnerBalanceNotice, ...notes];
+            }
+          }
+          setReviewReport(rep);
         }
+      } else if (partnerBalanceNotice) {
+        setReviewReport({
+          clientName: activeClient?.name || 'العميل',
+          fiscalYear: selectedFiscalYear,
+          auditNotes: [partnerBalanceNotice],
+          financialRatios: [],
+          draftDisclosures: '',
+        });
       }
     } catch (err) {
       console.warn('Gemini report generation error:', err);
+      if (partnerBalanceNotice) {
+        setReviewReport({
+          clientName: activeClient?.name || 'العميل',
+          fiscalYear: selectedFiscalYear,
+          auditNotes: [partnerBalanceNotice],
+          financialRatios: [],
+          draftDisclosures: '',
+        });
+      }
     } finally {
       setIsGeneratingReport(false);
     }
@@ -1480,6 +1501,27 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
                 </div>
               </div>
 
+              {isHighRatio && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-700 text-rose-800 dark:text-rose-200 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-xs text-rose-900 dark:text-rose-100">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                    <span>تحذير رقابي حرج: نسبة الفرق تجاوزت 1% من إجمالي الأصول!</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    نسبة فرق عدم الاتزان تبلغ <strong>{(diffRatio * 100).toFixed(2)}%</strong> من إجمالي الأصول ({totalAssetsApprox.toLocaleString('ar-EG')} ج.م). هذا الفرق يتجاوز الحدود المعيارية ويؤثر جوهرياً على عدالة القوائم.
+                  </p>
+                  <label className="flex items-start gap-2.5 text-xs font-bold text-rose-900 dark:text-rose-100 cursor-pointer pt-1 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg border border-rose-300 dark:border-rose-800">
+                    <input
+                      type="checkbox"
+                      checked={partnerBalanceSecondConfirm}
+                      onChange={(e) => setPartnerBalanceSecondConfirm(e.target.checked)}
+                      className="w-4 h-4 text-rose-600 rounded mt-0.5"
+                    />
+                    <span>تأكيد ثانٍ: أقرّ كمراجع حسابات معتمد بالاطلاع على التنبيه وتحمل المسؤولية المهنية لموازنة هذا الفرق في جاري الشركاء</span>
+                  </label>
+                </div>
+              )}
+
               <p className="text-slate-500 text-[11px] leading-relaxed">
                 سيتم إضافة/تعديل سطر القيد الخاص بحساب جاري الشركاء بمبلغ التسوية وتدويل العمليات في سجل تعديلات المراجع.
               </p>
@@ -1488,15 +1530,19 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
-                onClick={() => setShowPartnerBalanceModal(false)}
+                onClick={() => {
+                  setShowPartnerBalanceModal(false);
+                  setPartnerBalanceSecondConfirm(false);
+                }}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs"
               >
                 إلغاء
               </button>
               <button
                 type="button"
+                disabled={isHighRatio && !partnerBalanceSecondConfirm}
                 onClick={handleBalanceWithPartnerAccount}
-                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs"
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 تأكيد الموازنة وتسجيل الأثر
               </button>
@@ -1582,7 +1628,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setCurrentStep(4)}
@@ -1590,6 +1636,29 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             >
               <ArrowRight className="w-4 h-4" />
               <span>السابق</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSaveEntryToDatabase}
+              disabled={isSavedToDb}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all ${
+                isSavedToDb
+                  ? 'bg-emerald-700 text-white cursor-default'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
+              }`}
+            >
+              {isSavedToDb ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                  <span>تم حفظ القيد في الدفتر بنجاح ✓</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>حفظ القيد في الدفتر</span>
+                </>
+              )}
             </button>
 
             <button

@@ -42,6 +42,7 @@ import {
   generateBalanceSheet,
   generateCashFlowStatement,
   findSuspectedDiscrepancyCause,
+  round2,
 } from '../utils/accountingCalculations';
 import {
   generateQrCodeSvg,
@@ -707,29 +708,55 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
   // 3. RECALCULATED CASH FLOW FIGURES
   const computedCashFlow = useMemo(() => {
+    if (!baseCashFlowData.hasComparativeData) {
+      return {
+        hasComparativeData: false,
+        netProfit: null,
+        depAdj: null,
+        chgReceivables: null,
+        chgInventory: null,
+        chgPayables: null,
+        taxPaid: null,
+        netOperatingCash: null,
+        purchaseAssets: null,
+        netInvestingCash: null,
+        netFinancingCash: null,
+        netChangeInCash: null,
+        beginningCash: null,
+        endingCash: null,
+        reconciliationDifference: 0,
+      };
+    }
+
     const netProfit = getVal('cf_netProfit', computedIncome.profitBeforeTax);
     const depAdj = getVal('cf_depAdj', computedIncome.depExp);
-    const chgReceivables = getVal('cf_chgRec', baseCashFlowData.operatingCashFlow.changeInReceivables);
-    const chgInventory = getVal('cf_chgInv', baseCashFlowData.operatingCashFlow.changeInInventory);
-    const chgPayables = getVal('cf_chgPay', baseCashFlowData.operatingCashFlow.changeInPayables);
-    const taxPaid = getVal('cf_taxPaid', baseCashFlowData.operatingCashFlow.taxPaid);
+    const chgReceivables = getVal('cf_chgRec', baseCashFlowData.operatingCashFlow?.changeInReceivables ?? 0);
+    const chgInventory = getVal('cf_chgInv', baseCashFlowData.operatingCashFlow?.changeInInventory ?? 0);
+    const chgPayables = getVal('cf_chgPay', baseCashFlowData.operatingCashFlow?.changeInPayables ?? 0);
+    const taxPaid = getVal('cf_taxPaid', baseCashFlowData.operatingCashFlow?.taxPaid ?? 0);
     const customOp = getSectionCustomSum('CF_OPERATING');
 
     const netOperatingCash = netProfit + depAdj + chgReceivables + chgInventory + chgPayables + taxPaid + customOp;
 
-    const purchaseAssets = getVal('cf_purchaseAssets', baseCashFlowData.investingCashFlow.purchaseOfFixedAssets);
+    const purchaseAssets = getVal('cf_purchaseAssets', baseCashFlowData.investingCashFlow?.purchaseOfFixedAssets ?? 0);
     const customInv = getSectionCustomSum('CF_INVESTING');
     const netInvestingCash = purchaseAssets + customInv;
 
-    const financingCash = getVal('cf_financingCash', baseCashFlowData.financingCashFlow.netFinancingCash);
+    const financingCash = getVal('cf_financingCash', baseCashFlowData.financingCashFlow?.netFinancingCash ?? 0);
     const customFin = getSectionCustomSum('CF_FINANCING');
     const netFinancingCash = financingCash + customFin;
 
     const netChangeInCash = netOperatingCash + netInvestingCash + netFinancingCash;
-    const beginningCash = getVal('cf_beginningCash', baseCashFlowData.beginningCash);
+    const beginningCash = getVal('cf_beginningCash', baseCashFlowData.beginningCash ?? 0);
     const endingCash = beginningCash + netChangeInCash;
 
+    const totalFlows = round2(netOperatingCash + netInvestingCash + netFinancingCash);
+    const reconciliationDifference = baseCashFlowData.reconciliationDifference !== undefined
+      ? baseCashFlowData.reconciliationDifference
+      : round2(Math.abs(totalFlows - netChangeInCash));
+
     return {
+      hasComparativeData: true,
       netProfit,
       depAdj,
       chgReceivables,
@@ -743,6 +770,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       netChangeInCash,
       beginningCash,
       endingCash,
+      reconciliationDifference,
     };
   }, [overrides, customLines, computedIncome, baseCashFlowData]);
 
@@ -1725,137 +1753,163 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </h2>
             </div>
 
-            <div className="border border-slate-300 rounded-2xl overflow-hidden divide-y divide-slate-200">
-              <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
-                {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_OPERATING_ACTIVITIES.en : 'أولاً: التدفقات النقدية من الأنشطة التشغيلية (Operating Activities)'}
+            {!computedCashFlow.hasComparativeData ? (
+              <div className="p-8 text-center bg-slate-50 border border-slate-300 rounded-2xl space-y-3 shadow-sm">
+                <div className="w-12 h-12 mx-auto rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
+                  <Wallet className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-800">لا توجد بيانات سنة مقارنة</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  تتطلب قائمة التدفقات النقدية توفر أرقام المركز المالي للسنة المالية المقارنة لحساب التغيرات النقدية في الأنشطة التشغيلية والاستثمارية والتمويلية.
+                </p>
               </div>
-              <div className="p-3.5 space-y-2 text-slate-700 pr-4">
-                <div className="flex items-center justify-between font-bold">
-                  <span>{statementLanguage === 'en' ? 'Net profit before income tax:' : 'صافي الربح المحاسبي قبل الضريبة:'}</span>
-                  <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.netProfit, true)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{statementLanguage === 'en' ? 'Add: Depreciation of fixed assets (non-cash):' : 'يضاف: إهلاك الأصول الثابتة (بند غير نقدي):'}</span>
-                  <span className="font-mono">+{formatEgyptianCurrency(computedCashFlow.depAdj)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{statementLanguage === 'en' ? 'Change in trade receivables & debtors:' : 'التغير في المدينين والعملاء:'}</span>
-                  {isEditMode ? (
-                    <input
-                      type="text"
-                      value={overrides['cf_chgRec'] !== undefined ? overrides['cf_chgRec'] : baseCashFlowData.operatingCashFlow.changeInReceivables}
-                      onChange={(e) => setVal('cf_chgRec', e.target.value)}
-                      className="w-32 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
-                    />
-                  ) : (
-                    <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.chgReceivables, true)}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{statementLanguage === 'en' ? 'Change in inventories:' : 'التغير في المخزون السلعي:'}</span>
-                  {isEditMode ? (
-                    <input
-                      type="text"
-                      value={overrides['cf_chgInv'] !== undefined ? overrides['cf_chgInv'] : baseCashFlowData.operatingCashFlow.changeInInventory}
-                      onChange={(e) => setVal('cf_chgInv', e.target.value)}
-                      className="w-32 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
-                    />
-                  ) : (
-                    <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.chgInventory, true)}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{statementLanguage === 'en' ? 'Change in trade payables & creditors:' : 'التغير في الموردين والدائنين:'}</span>
-                  {isEditMode ? (
-                    <input
-                      type="text"
-                      value={overrides['cf_chgPay'] !== undefined ? overrides['cf_chgPay'] : baseCashFlowData.operatingCashFlow.changeInPayables}
-                      onChange={(e) => setVal('cf_chgPay', e.target.value)}
-                      className="w-32 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
-                    />
-                  ) : (
-                    <span className="font-mono">+{formatEgyptianCurrency(computedCashFlow.chgPayables)}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between text-red-700">
-                  <span>{statementLanguage === 'en' ? 'Income tax paid:' : 'ضرائب دخل مسددة:'}</span>
-                  {isEditMode ? (
-                    <input
-                      type="text"
-                      value={overrides['cf_taxPaid'] !== undefined ? overrides['cf_taxPaid'] : baseCashFlowData.operatingCashFlow.taxPaid}
-                      onChange={(e) => setVal('cf_taxPaid', e.target.value)}
-                      className="w-32 text-left px-2 py-0.5 bg-red-50 border border-red-300 rounded font-mono text-xs text-red-900"
-                    />
-                  ) : (
-                    <span className="font-mono">({formatEgyptianCurrency(Math.abs(computedCashFlow.taxPaid))})</span>
-                  )}
-                </div>
-              </div>
-              <div className="p-3 bg-emerald-50 flex justify-between items-center font-bold text-emerald-900">
-                <span>{statementLanguage === 'en' ? 'Net cash generated from operating activities:' : 'صافي التدفق النقدي من الأنشطة التشغيلية:'}</span>
-                <span className="font-mono font-black">{formatEgyptianCurrency(computedCashFlow.netOperatingCash, true)}</span>
-              </div>
-
-              <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
-                {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_INVESTING_ACTIVITIES.en : 'ثانياً: التدفقات النقدية من الأنشطة الاستثمارية (Investing Activities)'}
-              </div>
-              <div className="p-3.5 flex items-center justify-between text-slate-700 pr-4">
-                <span>{statementLanguage === 'en' ? 'Payments for purchase of property, plant & equipment:' : 'مدفوعات لشراء أصول ثابتة ومعدات:'}</span>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={overrides['cf_purchaseAssets'] !== undefined ? overrides['cf_purchaseAssets'] : baseCashFlowData.investingCashFlow.purchaseOfFixedAssets}
-                    onChange={(e) => setVal('cf_purchaseAssets', e.target.value)}
-                    className="w-36 text-left px-2 py-0.5 bg-slate-50 border border-red-300 rounded font-mono text-xs text-red-900"
-                  />
-                ) : (
-                  <span className="font-mono text-red-700">({formatEgyptianCurrency(Math.abs(computedCashFlow.purchaseAssets))})</span>
+            ) : (
+              <>
+                {computedCashFlow.reconciliationDifference > 0.01 && (
+                  <div className="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-xl text-rose-800 text-xs flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-2 font-bold">
+                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                      <span>فرق مطابقة التدفقات النقدية مع التغير بالنقدية:</span>
+                    </div>
+                    <span className="font-mono font-bold text-rose-700 dir-ltr">
+                      {formatEgyptianCurrency(computedCashFlow.reconciliationDifference)} ج.م
+                    </span>
+                  </div>
                 )}
-              </div>
-              <div className="p-3 bg-slate-50 flex justify-between items-center font-bold text-slate-900">
-                <span>{statementLanguage === 'en' ? 'Net cash used in investing activities:' : 'صافي التدفق النقدي المستخدم في الأنشطة الاستثمارية:'}</span>
-                <span className="font-mono font-bold">{formatEgyptianCurrency(computedCashFlow.netInvestingCash, true)}</span>
-              </div>
 
-              <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
-                {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_FINANCING_ACTIVITIES.en : 'ثالثاً: التدفقات النقدية من الأنشطة التمويلية (Financing Activities)'}
-              </div>
-              <div className="p-3.5 flex items-center justify-between text-slate-700 pr-4">
-                <span>{statementLanguage === 'en' ? 'Net movements in borrowings & dividends:' : 'صافي حركة القروض والتمويل وتوزيعات الأرباح:'}</span>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={overrides['cf_financingCash'] !== undefined ? overrides['cf_financingCash'] : baseCashFlowData.financingCashFlow.netFinancingCash}
-                    onChange={(e) => setVal('cf_financingCash', e.target.value)}
-                    className="w-36 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
-                  />
-                ) : (
-                  <span className="font-mono">+{formatEgyptianCurrency(computedCashFlow.netFinancingCash)}</span>
-                )}
-              </div>
+                <div className="border border-slate-300 rounded-2xl overflow-hidden divide-y divide-slate-200">
+                  <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
+                    {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_OPERATING_ACTIVITIES.en : 'أولاً: التدفقات النقدية من الأنشطة التشغيلية (Operating Activities)'}
+                  </div>
+                  <div className="p-3.5 space-y-2 text-slate-700 pr-4">
+                    <div className="flex items-center justify-between font-bold">
+                      <span>{statementLanguage === 'en' ? 'Net profit before income tax:' : 'صافي الربح المحاسبي قبل الضريبة:'}</span>
+                      <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.netProfit || 0, true)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{statementLanguage === 'en' ? 'Add: Depreciation of fixed assets (non-cash):' : 'يضاف: إهلاك الأصول الثابتة (بند غير نقدي):'}</span>
+                      <span className="font-mono">+{formatEgyptianCurrency(computedCashFlow.depAdj || 0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{statementLanguage === 'en' ? 'Change in trade receivables & debtors:' : 'التغير في المدينين والعملاء:'}</span>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={overrides['cf_chgRec'] !== undefined ? overrides['cf_chgRec'] : (baseCashFlowData.operatingCashFlow?.changeInReceivables ?? 0)}
+                          onChange={(e) => setVal('cf_chgRec', e.target.value)}
+                          className="w-32 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
+                        />
+                      ) : (
+                        <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.chgReceivables || 0, true)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{statementLanguage === 'en' ? 'Change in inventories:' : 'التغير في المخزون السلعي:'}</span>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={overrides['cf_chgInv'] !== undefined ? overrides['cf_chgInv'] : (baseCashFlowData.operatingCashFlow?.changeInInventory ?? 0)}
+                          onChange={(e) => setVal('cf_chgInv', e.target.value)}
+                          className="w-32 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
+                        />
+                      ) : (
+                        <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.chgInventory || 0, true)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{statementLanguage === 'en' ? 'Change in trade payables & creditors:' : 'التغير في الموردين والدائنين:'}</span>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={overrides['cf_chgPay'] !== undefined ? overrides['cf_chgPay'] : (baseCashFlowData.operatingCashFlow?.changeInPayables ?? 0)}
+                          onChange={(e) => setVal('cf_chgPay', e.target.value)}
+                          className="w-32 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
+                        />
+                      ) : (
+                        <span className="font-mono">+{formatEgyptianCurrency(computedCashFlow.chgPayables || 0)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-red-700">
+                      <span>{statementLanguage === 'en' ? 'Income tax paid:' : 'ضرائب دخل مسددة:'}</span>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={overrides['cf_taxPaid'] !== undefined ? overrides['cf_taxPaid'] : (baseCashFlowData.operatingCashFlow?.taxPaid ?? 0)}
+                          onChange={(e) => setVal('cf_taxPaid', e.target.value)}
+                          className="w-32 text-left px-2 py-0.5 bg-red-50 border border-red-300 rounded font-mono text-xs text-red-900"
+                        />
+                      ) : (
+                        <span className="font-mono">({formatEgyptianCurrency(Math.abs(computedCashFlow.taxPaid || 0))})</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-3 bg-emerald-50 flex justify-between items-center font-bold text-emerald-900">
+                    <span>{statementLanguage === 'en' ? 'Net cash generated from operating activities:' : 'صافي التدفق النقدي من الأنشطة التشغيلية:'}</span>
+                    <span className="font-mono font-black">{formatEgyptianCurrency(computedCashFlow.netOperatingCash || 0, true)}</span>
+                  </div>
 
-              <div className="p-4 bg-slate-900 text-white flex justify-between items-center font-black text-sm">
-                <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.NET_CHANGE_IN_CASH.en : 'صافي الزيادة (النقص) في النقدية وما في حكمها خلال العام'}:</span>
-                <span className="font-mono text-emerald-400">{formatEgyptianCurrency(computedCashFlow.netChangeInCash, true)}</span>
-              </div>
-              <div className="p-3.5 bg-slate-100 flex justify-between items-center font-bold text-slate-900">
-                <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.CASH_AT_BEGINNING_OF_YEAR.en : 'رصيد النقدية في أول العام'}:</span>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={overrides['cf_beginningCash'] !== undefined ? overrides['cf_beginningCash'] : baseCashFlowData.beginningCash}
-                    onChange={(e) => setVal('cf_beginningCash', e.target.value)}
-                    className="w-36 text-left px-2 py-0.5 bg-white border border-slate-300 rounded font-mono text-xs"
-                  />
-                ) : (
-                  <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.beginningCash)}</span>
-                )}
-              </div>
-              <div className="p-4 bg-emerald-900 text-white flex justify-between items-center font-black text-base">
-                <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.CASH_AT_END_OF_YEAR.en : 'رصيد النقدية في نهاية العام (كما بالمركز المالي)'}:</span>
-                <span className="font-mono text-emerald-300">{formatEgyptianCurrency(computedCashFlow.endingCash)}</span>
-              </div>
-            </div>
+                  <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
+                    {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_INVESTING_ACTIVITIES.en : 'ثانياً: التدفقات النقدية من الأنشطة الاستثمارية (Investing Activities)'}
+                  </div>
+                  <div className="p-3.5 flex items-center justify-between text-slate-700 pr-4">
+                    <span>{statementLanguage === 'en' ? 'Payments for purchase of property, plant & equipment:' : 'مدفوعات لشراء أصول ثابتة ومعدات:'}</span>
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        value={overrides['cf_purchaseAssets'] !== undefined ? overrides['cf_purchaseAssets'] : (baseCashFlowData.investingCashFlow?.purchaseOfFixedAssets ?? 0)}
+                        onChange={(e) => setVal('cf_purchaseAssets', e.target.value)}
+                        className="w-36 text-left px-2 py-0.5 bg-slate-50 border border-red-300 rounded font-mono text-xs text-red-900"
+                      />
+                    ) : (
+                      <span className="font-mono text-red-700">({formatEgyptianCurrency(Math.abs(computedCashFlow.purchaseAssets || 0))})</span>
+                    )}
+                  </div>
+                  <div className="p-3 bg-slate-50 flex justify-between items-center font-bold text-slate-900">
+                    <span>{statementLanguage === 'en' ? 'Net cash used in investing activities:' : 'صافي التدفق النقدي المستخدم في الأنشطة الاستثمارية:'}</span>
+                    <span className="font-mono font-bold">{formatEgyptianCurrency(computedCashFlow.netInvestingCash || 0, true)}</span>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
+                    {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_FINANCING_ACTIVITIES.en : 'ثالثاً: التدفقات النقدية من الأنشطة التمويلية (Financing Activities)'}
+                  </div>
+                  <div className="p-3.5 flex items-center justify-between text-slate-700 pr-4">
+                    <span>{statementLanguage === 'en' ? 'Net movements in borrowings & dividends:' : 'صافي حركة القروض والتمويل وتوزيعات الأرباح:'}</span>
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        value={overrides['cf_financingCash'] !== undefined ? overrides['cf_financingCash'] : (baseCashFlowData.financingCashFlow?.netFinancingCash ?? 0)}
+                        onChange={(e) => setVal('cf_financingCash', e.target.value)}
+                        className="w-36 text-left px-2 py-0.5 bg-slate-50 border rounded font-mono text-xs"
+                      />
+                    ) : (
+                      <span className="font-mono">+{formatEgyptianCurrency(computedCashFlow.netFinancingCash || 0)}</span>
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-slate-900 text-white flex justify-between items-center font-black text-sm">
+                    <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.NET_CHANGE_IN_CASH.en : 'صافي الزيادة (النقص) في النقدية وما في حكمها خلال العام'}:</span>
+                    <span className="font-mono text-emerald-400">{formatEgyptianCurrency(computedCashFlow.netChangeInCash || 0, true)}</span>
+                  </div>
+                  <div className="p-3.5 bg-slate-100 flex justify-between items-center font-bold text-slate-900">
+                    <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.CASH_AT_BEGINNING_OF_YEAR.en : 'رصيد النقدية في أول العام'}:</span>
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        value={overrides['cf_beginningCash'] !== undefined ? overrides['cf_beginningCash'] : (baseCashFlowData.beginningCash ?? 0)}
+                        onChange={(e) => setVal('cf_beginningCash', e.target.value)}
+                        className="w-36 text-left px-2 py-0.5 bg-white border border-slate-300 rounded font-mono text-xs"
+                      />
+                    ) : (
+                      <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.beginningCash || 0)}</span>
+                    )}
+                  </div>
+                  <div className="p-4 bg-emerald-900 text-white flex justify-between items-center font-black text-base">
+                    <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.CASH_AT_END_OF_YEAR.en : 'رصيد النقدية في نهاية العام (كما بالمركز المالي)'}:</span>
+                    <span className="font-mono text-emerald-300">{formatEgyptianCurrency(computedCashFlow.endingCash || 0)}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

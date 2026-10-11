@@ -181,6 +181,7 @@ export function generateIncomeStatement(
     netProfitBeforeTax: round2(profitBeforeTax),
     taxExpense: round2(effectiveTax),
     netProfitAfterTax: round2(netProfitAfterTax),
+    hasTaxRecorded,
   };
 }
 
@@ -494,26 +495,27 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
 export interface CashFlowStatementData {
   hasComparativeData: boolean;
   operatingCashFlow: {
-    netProfitBeforeTax: number;
-    depreciationAdjustment: number;
-    changeInReceivables: number;
-    changeInInventory: number;
-    changeInPayables: number;
-    taxPaid: number;
-    netOperatingCash: number;
+    netProfitBeforeTax: number | null;
+    depreciationAdjustment: number | null;
+    changeInReceivables: number | null;
+    changeInInventory: number | null;
+    changeInPayables: number | null;
+    taxPaid: number | null;
+    netOperatingCash: number | null;
   };
   investingCashFlow: {
-    purchaseOfFixedAssets: number;
-    netInvestingCash: number;
+    purchaseOfFixedAssets: number | null;
+    netInvestingCash: number | null;
   };
   financingCashFlow: {
-    loansReceivedOrPaid: number;
-    drawings: number;
-    netFinancingCash: number;
+    loansReceivedOrPaid: number | null;
+    drawings: number | null;
+    netFinancingCash: number | null;
   };
-  netChangeInCash: number;
-  beginningCash: number;
-  endingCash: number;
+  netChangeInCash: number | null;
+  beginningCash: number | null;
+  endingCash: number | null;
+  reconciliationDifference: number;
 }
 
 export function generateCashFlowStatement(
@@ -521,36 +523,36 @@ export function generateCashFlowStatement(
   balanceData: BalanceSheetData,
   priorBalanceData?: BalanceSheetData | null
 ): CashFlowStatementData {
-  const depreciation = round2(incomeData.depreciationExpense || 0);
-  const netProfit = round2(incomeData.profitBeforeTax);
-
   if (!priorBalanceData) {
-    const endingCash = round2(balanceData.currentAssets.cashAndBanks);
     return {
       hasComparativeData: false,
       operatingCashFlow: {
-        netProfitBeforeTax: round2(netProfit),
-        depreciationAdjustment: round2(depreciation),
-        changeInReceivables: 0,
-        changeInInventory: 0,
-        changeInPayables: 0,
-        taxPaid: 0,
-        netOperatingCash: round2(netProfit + depreciation),
+        netProfitBeforeTax: null,
+        depreciationAdjustment: null,
+        changeInReceivables: null,
+        changeInInventory: null,
+        changeInPayables: null,
+        taxPaid: null,
+        netOperatingCash: null,
       },
       investingCashFlow: {
-        purchaseOfFixedAssets: 0,
-        netInvestingCash: 0,
+        purchaseOfFixedAssets: null,
+        netInvestingCash: null,
       },
       financingCashFlow: {
-        loansReceivedOrPaid: 0,
-        drawings: 0,
-        netFinancingCash: 0,
+        loansReceivedOrPaid: null,
+        drawings: null,
+        netFinancingCash: null,
       },
-      netChangeInCash: 0,
-      beginningCash: endingCash,
-      endingCash: endingCash,
+      netChangeInCash: null,
+      beginningCash: null,
+      endingCash: null,
+      reconciliationDifference: 0,
     };
   }
+
+  const depreciation = round2(incomeData.depreciationExpense || 0);
+  const netProfit = round2(incomeData.profitBeforeTax);
 
   // Indirect method cash flow calculations based on changes in balance sheet accounts:
   const priorReceivables = priorBalanceData.currentAssets.tradeReceivables + priorBalanceData.currentAssets.notesReceivable;
@@ -590,6 +592,10 @@ export function generateCashFlowStatement(
   const endingCash = round2(balanceData.currentAssets.cashAndBanks);
   const netChangeInCash = round2(endingCash - beginningCash);
 
+  // Check reconciliation: netOperatingCash + netInvestingCash + netFinancingCash vs netChangeInCash
+  const totalFlows = round2(netOperatingCash + netInvestingCash + netFinancingCash);
+  const reconciliationDifference = round2(Math.abs(totalFlows - netChangeInCash));
+
   return {
     hasComparativeData: true,
     operatingCashFlow: {
@@ -613,6 +619,7 @@ export function generateCashFlowStatement(
     netChangeInCash: round2(netChangeInCash),
     beginningCash: round2(beginningCash),
     endingCash: round2(endingCash),
+    reconciliationDifference,
   };
 }
 

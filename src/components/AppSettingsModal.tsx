@@ -37,7 +37,6 @@ import { getTranslation } from '../utils/i18n';
 import defaultFirebaseConfig from '../../firebase-applet-config.json';
 import { CloudSync } from '../services/cloudSyncService';
 import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
-import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
 import { PrintExportSettingsPanel } from './common/PrintExportSettingsPanel';
 import { PrintExportSettingsUnit } from './common/PrintExportSettingsUnit';
 

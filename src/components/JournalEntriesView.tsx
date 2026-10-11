@@ -2106,7 +2106,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
           )}
 
           {/* Quick Shortcut Presets */}
-          <div className="pt-2 border-t border-slate-800 flex items-center gap-1.5 overflow-x-auto text-[11px] pb-0.5 scrollbar-none">
+          <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center gap-1.5 text-[11px] pb-0.5">
             <span className="text-slate-500 font-medium shrink-0">شائع:</span>
             {[
               { label: 'سداد إيجار نقداً', desc: 'سداد إيجار المقر نقداً من الخزينة', amount: 8000 },
@@ -2347,7 +2347,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                 <table className="w-full text-right text-[11px] accounting-table">
                   <thead>
                     <tr className="bg-slate-50/90 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200/80 dark:border-slate-800 text-[10px]">
-                      <th className="py-1 px-2.5">كود الحساب</th>
+                      <th className="py-1 px-2.5 sticky right-0 bg-slate-50 dark:bg-slate-800 z-10">كود الحساب</th>
                       <th className="py-1 px-2.5">اسم الحساب</th>
                       {entry.currency && entry.currency !== 'EGP' && (
                         <>
@@ -2363,7 +2363,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {entry.lines.map((line, idx) => (
                       <tr key={line.id || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors">
-                        <td className="py-1 px-2.5 font-mono text-slate-600 dark:text-slate-300 text-[10.5px]">{line.accountCode}</td>
+                        <td className="py-1 px-2.5 font-mono text-slate-600 dark:text-slate-300 text-[10.5px] sticky right-0 bg-white dark:bg-slate-900 z-10">{line.accountCode}</td>
                         <td className="py-1 px-2.5 font-medium text-slate-900 dark:text-slate-100">{line.accountName}</td>
                         {entry.currency && entry.currency !== 'EGP' && (
                           <>
