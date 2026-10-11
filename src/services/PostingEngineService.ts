@@ -37,10 +37,12 @@ export class PostingEngineService {
       if (acc) return { id: acc.id, code: acc.code, name: acc.name };
     }
 
-    // 2. Try partial code match
+    // 2. Try partial code match (only if partial code matches exactly one account)
     for (const code of preferredCodes) {
-      const acc = accounts.find((a) => a.code.startsWith(code));
-      if (acc) return { id: acc.id, code: acc.code, name: acc.name };
+      const matching = accounts.filter((a) => a.code.startsWith(code));
+      if (matching.length === 1) {
+        return { id: matching[0].id, code: matching[0].code, name: matching[0].name };
+      }
     }
 
     // 3. Try name matching
@@ -49,11 +51,7 @@ export class PostingEngineService {
     );
     if (nameMatch) return { id: nameMatch.id, code: nameMatch.code, name: nameMatch.name };
 
-    // 4. Fallback to category
-    const catMatch = accounts.find((a) => a.category === fallbackCategory && a.level >= 2);
-    if (catMatch) return { id: catMatch.id, code: catMatch.code, name: catMatch.name };
-
-    // If account not found in chart of accounts, throw clear error
+    // If account not found by code or name, throw clear error
     throw new Error(
       `تعذر ترحيل القيد: الحساب [${fallbackName}] بكود (${preferredCodes.join(', ')}) غير موجود في دليل الحسابات المعتمد. يُرجى إنشاء الحساب أولاً.`
     );

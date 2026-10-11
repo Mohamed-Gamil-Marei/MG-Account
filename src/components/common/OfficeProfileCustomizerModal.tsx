@@ -125,6 +125,7 @@ export const OfficeProfileCustomizerModal: React.FC<OfficeProfileCustomizerModal
       branchOfficeAddress: 'المباركية مول - مدينة العاشر من رمضان - الشرقية',
       showBranchOfficeAddress: true,
       address: 'المكتب الرئيسي: ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية | الفرع: المباركية مول - مدينة العاشر من رمضان - الشرقية',
+      sendClientDataToGemini: false,
     };
     setFormData(defaultProfile);
     setActivePreset('OFFICIAL_CPA');

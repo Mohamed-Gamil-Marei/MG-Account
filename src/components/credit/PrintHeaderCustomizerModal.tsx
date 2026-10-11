@@ -127,6 +127,7 @@ export const PrintHeaderCustomizerModal: React.FC<PrintHeaderCustomizerModalProp
       showOfficePhones: true,
       showLogo: true,
       headerStyle: 'standard',
+      sendClientDataToGemini: false,
     };
     setDraftOffice(defaultOffice);
   };

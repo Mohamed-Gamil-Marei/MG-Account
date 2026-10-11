@@ -404,6 +404,10 @@ export const SmartExcelAuditSentinelView: React.FC<SmartExcelAuditSentinelViewPr
    */
   const handleGenerateAiMemo = async () => {
     if (!summary || !benfordResult) return;
+    if (!officeProfile?.sendClientDataToGemini) {
+      alert('الميزة معطلة');
+      return;
+    }
     setIsAiLoading(true);
     try {
       const anomaliesSample = anomalies.slice(0, 15).map((a) => ({

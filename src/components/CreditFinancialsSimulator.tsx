@@ -38,10 +38,12 @@ import {
   ChevronRight,
   SlidersHorizontal,
   ArrowRightLeft,
+  AlertTriangle,
 } from 'lucide-react';
 import { DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import { ResponsiveSubTabBar } from './common/ThemeUIComponents';
 import { OfficialReportHeader } from './common/OfficialReportHeader';
 import { exportElementToPdf, exportElementToImage } from '../utils/certifiedDocumentExporter';
 import { PrintService } from '../services/PrintService';
@@ -1726,12 +1728,32 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
   return (
     <div className="space-y-4">
+      {/* تنبيه قانوني ورقابي صارم - محاكاة تحليلية */}
+      <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-500 text-amber-950 dark:text-amber-100 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-xs select-none">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-black text-sm sm:text-base text-amber-950 dark:text-amber-100">
+              محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
+            </h2>
+            <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+              تنبيه قانوني ومحاسبي: أرقام ونماذج هذا الملف لأغراض المحاكاة الائتمانية والتحليل المصرفي الداخلي فقط، وليست قوائم مالية معتمدة ولا يجوز تقديمها لأي جهات رسمية أو خارجية.
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 px-2.5 py-1 bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-100 font-black text-xs rounded-lg border border-amber-400">
+          محاكاة فقط
+        </span>
+      </div>
+
       {/* Top Header Unified Card */}
       <UnifiedScreenCard
         id="credit-financials-screen-card"
         title="ملف الائتمان البنكي والمحاكي المالي المتكامل"
-        badgeText="معتمد EAS"
-        badgeVariant="emerald"
+        badgeText="محاكاة تحليلية"
+        badgeVariant="amber"
         actionsSlot={
           <div className="flex items-center gap-2">
             <CompanyHeaderSelector
@@ -2073,79 +2095,78 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         )}
       </div>
 
-      {/* Streamlined Unified Navigation Bar - Dropdown & Quick Actions */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 no-print">
-        {/* Main Screen / Module Selector Dropdown */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <UnifiedSelectDropdown<SimulatorTab>
-            id="simulator-main-screen-dropdown"
-            label="الشاشة المعروضة"
-            icon={Layers}
-            value={activeTab}
-            size="lg"
-            variant="default"
-            menuWidth="w-80 sm:w-96"
-            className="w-full sm:w-auto"
-            options={navTabs.map((t) => ({
-              id: t.id,
-              label: t.label,
-              sublabel: t.sublabel,
-              icon: t.icon,
-            }))}
-            onChange={(tab) => setActiveTab(tab)}
-          />
-        </div>
-
-        {/* Quick Context Chips and Controls */}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Active Year indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/80 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-300">
-            <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>السنة النشطة:</span>
-            <span className="font-mono text-blue-700 dark:text-blue-200">{selectedYear}</span>
+      {/* Responsive Sub Tab Bar (5 visible tabs, rest in المزيد ⋯, no overflow-x-auto) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3 no-print">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <ResponsiveSubTabBar
+              activeTab={activeTab}
+              onTabChange={(tabId) => setActiveTab(tabId as SimulatorTab)}
+              maxVisibleTabs={5}
+              tabs={navTabs.map((t) => ({
+                id: t.id,
+                label: t.label,
+                icon: <t.icon className="w-3.5 h-3.5" />,
+              }))}
+            />
           </div>
 
-          {/* Quick toggle to Dedicated Year Workspace if not already in it */}
-          {activeTab !== 'DEDICATED_YEAR' ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab('DEDICATED_YEAR')}
-              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="الانتقال إلى لوحة السنة المنفصلة المعزولة"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span>لوحة السنة المنفصلة</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setActiveTab('STATEMENTS')}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="العودة للقوائم المقارنة"
-            >
-              <Scale className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>القوائم المقارنة</span>
-            </button>
-          )}
+          {/* Quick Context Chips and Controls */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Active Year indicator */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/80 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-300">
+              <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>السنة النشطة:</span>
+              <span className="font-mono text-blue-700 dark:text-blue-200">{selectedYear}</span>
+            </div>
 
-          {/* Fast Print Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setPrintScope('CURRENT_VIEW' as any);
-              setIsPrintModalOpen(true);
-            }}
-            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
-            title="طباعة الشاشة الحالية"
-          >
-            <Printer className="w-3.5 h-3.5 text-emerald-400 dark:text-blue-200" />
-            <span className="hidden sm:inline">طباعة سريعة</span>
-          </button>
+            {/* Quick toggle to Dedicated Year Workspace if not already in it */}
+            {activeTab !== 'DEDICATED_YEAR' ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab('DEDICATED_YEAR')}
+                className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="الانتقال إلى لوحة السنة المنفصلة المعزولة"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>لوحة السنة المنفصلة</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setActiveTab('STATEMENTS')}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="العودة للقوائم المقارنة"
+              >
+                <Scale className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>القوائم المقارنة</span>
+              </button>
+            )}
+
+            {/* Fast Print Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setPrintScope('CURRENT_VIEW' as any);
+                setIsPrintModalOpen(true);
+              }}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
+              title="طباعة الشاشة الحالية"
+            >
+              <Printer className="w-3.5 h-3.5 text-emerald-400 dark:text-blue-200" />
+              <span className="hidden sm:inline">طباعة سريعة</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ACTIVE TAB CONTENT WRAPPED IN PRINTABLE CONTAINER */}
       <div id="credit-financials-container" data-printable="true" className="space-y-6">
+        {/* شريط التحذير الإلزامي في أي طباعة */}
+        <div className="w-full text-center py-1.5 px-3 bg-amber-50 print:bg-slate-100 border border-amber-300 print:border-slate-500 text-amber-950 print:text-black rounded-xl font-black text-xs sm:text-sm tracking-wide">
+          ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
+        </div>
+
         {/* Official Letterhead Header for Direct Browser/Canvas Printing */}
         <OfficialReportHeader
           officeProfile={officeProfile}

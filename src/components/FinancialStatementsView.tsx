@@ -32,6 +32,8 @@ import {
   ArrowRight,
   RefreshCw,
   History,
+  Save,
+  Building2,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { CurrencyCode } from '../types';
@@ -69,6 +71,8 @@ import { DocumentVerificationModal } from './common/DocumentVerificationModal';
 import { PrintPreviewModal } from './common/PrintPreviewModal';
 import { FinancialActivityLogView } from './financial/FinancialActivityLogView';
 import { exportFinancialStatementsToExcelWithLetterhead } from '../utils/certifiedDocumentExporter';
+import { FileReviewWizardView } from './audit/FileReviewWizardView';
+import { CreditFinancialsSimulator } from './CreditFinancialsSimulator';
 
 export const formatArabicDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -183,6 +187,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       setInternalStatementTab(initialStatementTab);
     }
   }, [initialStatementTab]);
+  const [topViewMode, setTopViewMode] = useState<'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER'>('STATEMENTS_FROM_BOOKS');
   const [fiscalYear, setFiscalYear] = useState<number>(initialFiscalYear || 2026);
   const [periodPreset, setPeriodPreset] = useState<'FULL_YEAR' | 'Q1' | 'H1' | '9M' | 'Q4' | 'CUSTOM'>('FULL_YEAR');
   const [startDate, setStartDate] = useState<string>(`${initialFiscalYear || 2026}-01-01`);
@@ -961,211 +966,193 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   }, [fiscalYear, activeClient?.id, state.financialActivityLogs]);
 
   return (
-    <>
-      <UnifiedScreenCard
-        id="financial-statements-unified-card"
-        title="القوائم المالية والحسابات الختامية"
-        badge="معايير EAS / IFRS"
-        badgeVariant="emerald"
-        showToolbar={false}
-        actionsSlot={
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <CompanyHeaderSelector
-              state={state}
-              title="الشركة:"
-              allOptionLabel="شركة النيل للصناعات الهندسية"
-            />
+    <div className="space-y-4">
+      {/* 3 Top Modes Bar: قوائم من الدفاتر / مراجعة ملف / ملف بنكي سريع */}
+      <div className="no-print print:hidden">
+        <ResponsiveSubTabBar
+          activeTab={topViewMode}
+          onTabChange={(tabId) => {
+            const mode = tabId as 'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER';
+            setTopViewMode(mode);
+            if (mode === 'QUICK_BANK_DOSSIER' && onNavigateToCreditSimulator) {
+              onNavigateToCreditSimulator();
+            }
+          }}
+          maxVisibleTabs={3}
+          tabs={[
+            { id: 'STATEMENTS_FROM_BOOKS', label: 'قوائم من الدفاتر', icon: <Scale className="w-4 h-4" /> },
+            { id: 'FILE_REVIEW', label: 'مراجعة ملف', icon: <ShieldCheck className="w-4 h-4" /> },
+            { id: 'QUICK_BANK_DOSSIER', label: 'ملف بنكي سريع', icon: <Building2 className="w-4 h-4 text-amber-500" /> },
+          ]}
+        />
+      </div>
 
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200">
-              <span className="text-[11px] text-slate-500">السنة الأساسية:</span>
-              <select
-                value={fiscalYear}
-                onChange={(e) => handleFiscalYearChange(Number(e.target.value))}
-                className="bg-transparent font-mono font-bold focus:outline-none cursor-pointer"
-              >
-                <option value={2026}>2026</option>
-                <option value={2025}>2025</option>
-                <option value={2024}>2024</option>
-                <option value={2023}>2023</option>
-              </select>
-            </div>
+      {topViewMode === 'FILE_REVIEW' ? (
+        <FileReviewWizardView state={state} onNavigateToTab={() => {}} />
+      ) : topViewMode === 'QUICK_BANK_DOSSIER' ? (
+        <CreditFinancialsSimulator state={state} />
+      ) : (
+        <>
+          <UnifiedScreenCard
+            id="financial-statements-unified-card"
+            title="القوائم المالية والحسابات الختامية"
+            badge="معايير EAS / IFRS"
+            badgeVariant="emerald"
+            showToolbar={false}
+            actionsSlot={
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <CompanyHeaderSelector
+                  state={state}
+                  title="الشركة:"
+                  allOptionLabel="شركة النيل للصناعات الهندسية"
+                />
 
-            {/* Dynamic Link: Pull Balances from Trial Balance & Journal Entries */}
-            <ActionButton
-              label={isSyncingTrialBalance ? 'جاري المعالجة...' : 'تحديث القوائم'}
-              icon={RefreshCw}
-              variant="primary"
-              size="sm"
-              onClick={handleSyncWithTrialBalance}
-              disabled={isSyncingTrialBalance}
-              className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer active:scale-95 border-emerald-600"
-            />
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200">
+                  <span className="text-[11px] text-slate-500">السنة الأساسية:</span>
+                  <select
+                    value={fiscalYear}
+                    onChange={(e) => handleFiscalYearChange(Number(e.target.value))}
+                    className="bg-transparent font-mono font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value={2026}>2026</option>
+                    <option value={2025}>2025</option>
+                    <option value={2024}>2024</option>
+                    <option value={2023}>2023</option>
+                  </select>
+                </div>
 
-            {/* Financial Activity Log Button */}
-            <ActionButton
-              label={activityLogsCount > 0 ? `سجل النشاط (${activityLogsCount})` : 'سجل النشاط'}
-              icon={History}
-              variant="outline"
-              size="sm"
-              onClick={() => setStatementTab('ACTIVITY_LOG')}
-              className={`border-indigo-300 dark:border-indigo-700 font-bold hover:bg-indigo-100 ${
-                statementTab === 'ACTIVITY_LOG'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300'
-              }`}
-            />
+                {/* Zarr 1: حفظ (Save / Sync) */}
+                <ActionButton
+                  label={isSyncingTrialBalance ? 'جاري الحفظ...' : 'حفظ'}
+                  icon={Save}
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSyncWithTrialBalance}
+                  disabled={isSyncingTrialBalance}
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer active:scale-95 border-emerald-600"
+                />
 
-            {/* Custom Years Print & Report Selector Button */}
-            <ActionButton
-              label={
-                printYearsConfig.mode === 'SINGLE_YEAR'
-                  ? `طباعة سنة ${printYearsConfig.primaryYear}`
-                  : printYearsConfig.mode === 'CUSTOM_COMPARISON'
-                  ? `مقارنة (${printYearsConfig.primaryYear}/${printYearsConfig.comparisonYear})`
-                  : `طباعة (${printYearsConfig.selectedYears.length} سنوات)`
-              }
-              icon={CalendarDays}
-              variant="outline"
-              size="sm"
-              onClick={() => setIsPrintYearsModalOpen(true)}
-              className="border-emerald-300 dark:border-emerald-700 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-100"
-            />
-
-            {/* Direct High-Fidelity Print Preview Button */}
-            <ActionButton
-              label="معاينة الطباعة المعتمدة"
-              icon={Printer}
-              variant="outline"
-              size="sm"
-              disabled={!computedBalance.isBalanced}
-              onClick={() => {
-                if (!computedBalance.isBalanced) {
-                  return;
-                }
-                setIsPrintPreviewModalOpen(true);
-              }}
-              className={
-                !computedBalance.isBalanced
-                  ? 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold opacity-60 cursor-not-allowed'
-                  : 'border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-100'
-              }
-            />
-
-            {/* Unified Tools: Print (Preview & Header Customizer), Multi-Format Export, Import, Fill-in Templates */}
-            <ScreenActionToolbar
-              modelType="FINANCIAL_STATEMENTS"
-              recordId={currentStatementRecordId}
-              title={`القوائم المالية - ${displayCompanyName} - ${fiscalYear}`}
-              targetElementId="financial-statements-container"
-              compact={true}
-              disablePrintAndExport={!computedBalance.isBalanced}
-              disableReason={`تم حظر الطباعة والتصدير لوجود فارق عدم اتزان في الميزانية بمقدار (${formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))})`}
-            />
-
-            {/* Unified ActionMenu for Financial Statements */}
-            <ActionMenu
-              title="إجراءات"
-              triggerType="three_dots_vertical"
-              size="sm"
-              align="left"
-              items={[
-                {
-                  id: 'sync-tb',
-                  label: 'تحديث القوائم من ميزان المراجعة والقيود',
-                  icon: RefreshCw,
-                  onClick: handleSyncWithTrialBalance,
-                },
-                {
-                  id: 'activity-log',
-                  label: `سجل النشاط المالي ورقابة التعديلات (${activityLogsCount})`,
-                  icon: History,
-                  onClick: () => setStatementTab('ACTIVITY_LOG'),
-                },
-                {
-                  id: 'export-excel-letterhead',
-                  label: 'تصدير مصنف Excel بالترويسة المعتمدة لكل صفحة',
-                  icon: FileSpreadsheet,
-                  disabled: !computedBalance.isBalanced,
-                  onClick: () => {
+                {/* Zarr 2: طباعة (Print) */}
+                <ActionButton
+                  label="طباعة"
+                  icon={Printer}
+                  variant="outline"
+                  size="sm"
+                  disabled={!computedBalance.isBalanced}
+                  onClick={() => {
                     if (!computedBalance.isBalanced) return;
-                    exportFinancialStatementsToExcelWithLetterhead({
-                      recordId: currentStatementRecordId,
-                      clientName: displayCompanyName,
-                      fiscalYear,
-                      officeProfile: profile,
-                      incomeStatement: computedIncome,
-                      balanceSheet: computedBalance,
-                      cashFlowStatement: computedCashFlow,
-                      trialBalanceAccounts: cumulativeCalculatedAccounts,
-                    });
-                  },
-                },
-                {
-                  id: 'toggle-edit',
-                  label: isEditMode ? 'إيقاف التعديل' : 'تعديل الأرقام',
-                  icon: Edit3,
-                  onClick: () => setIsEditMode(!isEditMode),
-                },
-                ...(isEditMode
-                  ? [
-                      {
-                        id: 'add-line',
-                        label: 'إضافة بند مالي مخصص',
-                        icon: Plus,
-                        onClick: () => setIsAddLineModalOpen(true),
+                    setIsPrintPreviewModalOpen(true);
+                  }}
+                  className={
+                    !computedBalance.isBalanced
+                      ? 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold opacity-60 cursor-not-allowed'
+                      : 'border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-100'
+                  }
+                />
+
+                {/* Zarr 3: تصدير (Export Toolbar) */}
+                <ScreenActionToolbar
+                  modelType="FINANCIAL_STATEMENTS"
+                  recordId={currentStatementRecordId}
+                  title={`القوائم المالية - ${displayCompanyName} - ${fiscalYear}`}
+                  targetElementId="financial-statements-container"
+                  compact={true}
+                  showPrint={false}
+                  showPreview={false}
+                  showImport={false}
+                  showTemplates={false}
+                  disablePrintAndExport={!computedBalance.isBalanced}
+                  disableReason={`تم حظر التصدير لوجود فارق عدم اتزان في الميزانية بمقدار (${formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))})`}
+                />
+
+                {/* قائمة "المزيد ⋯": تضم الأوامر (أرشفة، إقفال، فروق عملة، تخصيص الطباعة، سجل النشاط) */}
+                <ActionMenu
+                  title="المزيد ⋯"
+                  triggerType="button_text"
+                  size="sm"
+                  align="left"
+                  items={[
+                    {
+                      id: 'auto-archive',
+                      label: isArchiving ? 'جاري الأرشفة...' : 'أرشفة القوائم المالية',
+                      icon: ShieldCheck,
+                      onClick: handleAutoArchiveFinancials,
+                    },
+                    {
+                      id: 'year-closing',
+                      label: isPeriodLocked ? 'إدارة إقفال السنة' : 'إقفال الحسابات والسنة المالية',
+                      icon: isPeriodLocked ? Unlock : Lock,
+                      onClick: () => setIsYearClosingModalOpen(true),
+                    },
+                    {
+                      id: 'fx-wizard',
+                      label: 'فروق العملة والتسويات (EAS 13)',
+                      icon: Coins,
+                      onClick: () => setIsFxRevaluationModalOpen(true),
+                    },
+                    {
+                      id: 'print-years-config',
+                      label: 'تخصيص سنوات وخيارات الطباعة...',
+                      icon: CalendarDays,
+                      onClick: () => setIsPrintYearsModalOpen(true),
+                    },
+                    {
+                      id: 'activity-log',
+                      label: `سجل النشاط المالي ورقابة التعديلات (${activityLogsCount})`,
+                      icon: History,
+                      onClick: () => setStatementTab('ACTIVITY_LOG'),
+                    },
+                    {
+                      id: 'export-excel-letterhead',
+                      label: 'تصدير مصنف Excel بالترويسة المعتمدة',
+                      icon: FileSpreadsheet,
+                      disabled: !computedBalance.isBalanced,
+                      onClick: () => {
+                        if (!computedBalance.isBalanced) return;
+                        exportFinancialStatementsToExcelWithLetterhead({
+                          recordId: currentStatementRecordId,
+                          clientName: displayCompanyName,
+                          fiscalYear,
+                          officeProfile: profile,
+                          incomeStatement: computedIncome,
+                          balanceSheet: computedBalance,
+                          cashFlowStatement: computedCashFlow,
+                          trialBalanceAccounts: cumulativeCalculatedAccounts,
+                        });
                       },
-                    ]
-                  : []),
-                ...(hasModifications
-                  ? [
-                      {
-                        id: 'reset-ledger',
-                        label: 'استعادة أرقام الدفاتر الأصلية',
-                        icon: RotateCcw,
-                        variant: 'danger' as const,
-                        onClick: handleResetToLedger,
-                      },
-                    ]
-                  : []),
-                {
-                  id: 'auto-archive',
-                  label: isArchiving ? 'جاري الأرشفة...' : 'أرشفة القوائم المالية',
-                  icon: ShieldCheck,
-                  onClick: handleAutoArchiveFinancials,
-                },
-                ...(onNavigateToCreditSimulator
-                  ? [
-                      {
-                        id: 'credit-simulator',
-                        label: 'الملف الائتماني والتقييم البنكي',
-                        icon: TrendingUp,
-                        onClick: onNavigateToCreditSimulator,
-                      },
-                    ]
-                  : []),
-                {
-                  id: 'fx-wizard',
-                  label: 'فروق العملة (EAS 13)',
-                  icon: Coins,
-                  onClick: () => setIsFxRevaluationModalOpen(true),
-                },
-                {
-                  id: 'year-closing',
-                  label: isPeriodLocked ? 'إدارة إقفال السنة' : 'الإقفال السنوي',
-                  icon: isPeriodLocked ? Unlock : Lock,
-                  onClick: () => setIsYearClosingModalOpen(true),
-                },
-                {
-                  id: 'print-years-config',
-                  label: 'تخصيص سنوات الطباعة والتقرير...',
-                  icon: CalendarDays,
-                  onClick: () => setIsPrintYearsModalOpen(true),
-                },
-              ]}
-            />
-          </div>
-        }
-      >
+                    },
+                    {
+                      id: 'toggle-edit',
+                      label: isEditMode ? 'إيقاف التعديل' : 'تعديل الأرقام',
+                      icon: Edit3,
+                      onClick: () => setIsEditMode(!isEditMode),
+                    },
+                    ...(isEditMode
+                      ? [
+                          {
+                            id: 'add-line',
+                            label: 'إضافة بند مالي مخصص',
+                            icon: Plus,
+                            onClick: () => setIsAddLineModalOpen(true),
+                          },
+                        ]
+                      : []),
+                    ...(hasModifications
+                      ? [
+                          {
+                            id: 'reset-ledger',
+                            label: 'استعادة أرقام الدفاتر الأصلية',
+                            icon: RotateCcw,
+                            variant: 'danger' as const,
+                            onClick: handleResetToLedger,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </div>
+            }
+          >
         <div className="space-y-3.5">
           {/* Critical Unbalanced Equation Alert Banner */}
           {!computedBalance.isBalanced && (
@@ -2068,6 +2055,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         initialPageSize="A4"
         initialOrientation="portrait"
       />
-    </>
+        </>
+      )}
+    </div>
   );
 };

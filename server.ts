@@ -348,6 +348,26 @@ async function startServer() {
   app.use("/api/ai", aiRateLimiter);
   app.use("/api/ocr", aiRateLimiter);
 
+  // Gemini AI Consent Middleware (إرسال بيانات العميل لـ Gemini: مطفأ افتراضياً)
+  const requireGeminiConsent = (req: any, res: any, next: any) => {
+    const isConsentGiven =
+      req.headers['x-send-client-data'] === 'true' ||
+      req.body?.sendClientDataToGemini === true;
+
+    if (!isConsentGiven) {
+      return res.status(403).json({
+        success: false,
+        disabled: true,
+        error: "الميزة معطلة",
+        message: "الميزة معطلة",
+      });
+    }
+    next();
+  };
+
+  app.use("/api/ai", requireGeminiConsent);
+  app.use("/api/audit", requireGeminiConsent);
+
   // --- Auth Endpoints ---
   app.get("/api/auth/check-setup", (_req, res) => {
     const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
@@ -1636,6 +1656,7 @@ ${JSON.stringify(financialSummary || {}, null, 2)}
       }
 
       const prompt = `أنت خبير ائتمان ومراجع حسابات قانوني مصري.
+تنبيه نظامي إلزامي: هذا العمل عبارة عن "محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية".
 المطلوب إعداد محاكاة وتوزيع لقوائم مالية (دخل ومركز مالي) لملف ائتمان بنكي بناءً على حجم مبيعات مستهدف: ${targetSales} ج.م
 النشاط: ${industry || 'تجاري / صناعي / خدمي'}
 هامش صافي الربح المستهدف التقريبي: ${targetNetProfitMargin || '8% - 15%'}
@@ -1644,6 +1665,8 @@ ${JSON.stringify(financialSummary || {}, null, 2)}
 
 أجب بصيغة JSON نقية:
 {
+  "notice": "محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية",
+  "disclaimer": "محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية",
   "sales": ${targetSales},
   "costOfGoodsSold": 0,
   "grossProfit": 0,
@@ -1704,7 +1727,13 @@ ${JSON.stringify(financialSummary || {}, null, 2)}
 
       const text = response.text || "{}";
       const parsed = JSON.parse(text);
-      res.json({ success: true, data: parsed });
+      parsed.disclaimer = "محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية";
+      parsed.notice = "محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية";
+      res.json({
+        success: true,
+        disclaimer: "محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية",
+        data: parsed,
+      });
     } catch (err: any) {
       console.error("AI Error:", err);
       res.status(500).json({ success: false, error: err.message });

@@ -787,6 +787,7 @@ export interface OfficeProfile {
   defaultTaxRate?: number; // النسبة الافتراضية لضريبة القيمة المضافة %
   defaultWhtEnabled?: boolean; // هل يطبق خصم الأرباح التجارية أ.ت.ص افتراضياً
   defaultWhtRate?: number; // النسبة الافتراضية للخصم %
+  sendClientDataToGemini?: boolean; // إرسال بيانات العميل لـ Gemini (مطفأ افتراضياً)
 }
 
 // Tax Mandates & Task Scheduler Types

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Printer,
   Eye,
@@ -103,6 +103,7 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
+  const [isMoreToolbarOpen, setIsMoreToolbarOpen] = useState(false);
 
   // Modals
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
@@ -120,7 +121,18 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [acceptedFormat, setAcceptedFormat] = useState<string>('.xlsx,.xls,.csv,.json');
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setIsMoreToolbarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
 
   // Resolve target selector with smart DOM fallback
   const getResolvedTarget = (): string | undefined => {
@@ -311,480 +323,352 @@ export const ScreenActionToolbar: React.FC<ScreenActionToolbarProps> = ({
     }
   };
 
-  return (
-    <div ref={toolbarRef} className={`flex items-center gap-1.5 flex-wrap ${className} no-print text-xs select-none`}>
-      {/* Hidden File Input for Direct Import */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleImportFile}
-        accept={acceptedFormat}
-        className="hidden"
+  const allActionNodes: React.ReactNode[] = [];
+
+  if (customActions) {
+    allActionNodes.push(<React.Fragment key="custom">{customActions}</React.Fragment>);
+  }
+
+  actions?.forEach((act, idx) => {
+    allActionNodes.push(
+      <ActionButton
+        key={`act-${idx}`}
+        label={act.label}
+        icon={act.icon}
+        onClick={act.onClick}
+        variant={act.variant === 'outline' ? 'outline' : 'primary'}
+        size="sm"
       />
+    );
+  });
 
-      {/* Optional Custom Injected Actions */}
-      {customActions}
-
-      {/* Action Buttons passed as array using unified ActionButton */}
-      {actions?.map((act, idx) => (
-        <ActionButton
-          key={idx}
-          label={act.label}
-          icon={act.icon}
-          onClick={act.onClick}
-          variant={act.variant === 'outline' ? 'outline' : 'primary'}
-          size="sm"
-        />
-      ))}
-
-      {/* ========================================================
-          1. UNIFIED PRINT & PREVIEW (عرض أولاً + تحكم الترويسة)
-         ======================================================== */}
-      {(showPreview || showPrint) && (
-        <div className="relative">
-          <div className={`inline-flex rounded-lg border shadow-2xs ${disablePrintAndExport ? 'border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 text-slate-400 opacity-60' : 'border-slate-700/80 bg-slate-800 text-white'}`}>
-            {/* Primary Click: Opens WYSIWYG Print Preview Modal FIRST */}
-            <button
-              onClick={() => {
-                if (disablePrintAndExport) {
-                  showFeedback('error', disableReason || 'تم منع الطباعة الرسمية لوجود فارق عدم اتزان في القوائم المالية');
-                  return;
-                }
-                if (showPreview) setIsPreviewModalOpen(true);
-                else handlePrint(pageSize, orientation, true);
-              }}
-              disabled={disablePrintAndExport}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold transition-all border-l ${
-                disablePrintAndExport
-                  ? 'cursor-not-allowed text-slate-400 border-slate-300 dark:border-slate-700'
-                  : 'hover:bg-slate-700 rounded-r-lg cursor-pointer border-slate-700 active:scale-95 text-slate-100'
-              }`}
-              title={disablePrintAndExport ? (disableReason || 'الطباعة معطلة لعدم اتزان الميزانية') : 'معاينة الطباعة أولاً (عرض تفاعلي)'}
-            >
-              <Printer className={`w-3.5 h-3.5 ${disablePrintAndExport ? 'text-slate-400' : 'text-emerald-400'}`} />
-              <span>معاينة وطباعة</span>
-            </button>
-            <button
-              onClick={() => {
-                if (disablePrintAndExport) {
-                  showFeedback('error', disableReason || 'تم منع الطباعة الرسمية لوجود فارق عدم اتزان في القوائم المالية');
-                  return;
-                }
-                setIsPrintMenuOpen(!isPrintMenuOpen);
-                setIsExportMenuOpen(false);
-                setIsImportMenuOpen(false);
-                setIsTemplateMenuOpen(false);
-              }}
-              disabled={disablePrintAndExport}
-              className={`px-1.5 py-1 text-xs transition-all ${
-                disablePrintAndExport
-                  ? 'cursor-not-allowed text-slate-400'
-                  : 'hover:bg-slate-700 text-slate-300 hover:text-white rounded-l-lg cursor-pointer'
-              }`}
-              title={disablePrintAndExport ? (disableReason || 'خيارات الطباعة معطلة لعدم الاتزان') : 'خيارات الطباعة والترويسة والورق'}
-            >
-              <ChevronDown className="w-3 h-3" />
-            </button>
-          </div>
-
-          {isPrintMenuOpen && (
-            <div className="absolute left-0 mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2.5 text-xs text-slate-800 animate-in fade-in zoom-in-95 duration-100">
-              <div className="font-bold text-slate-900 pb-1.5 border-b border-slate-100 mb-2 flex items-center justify-between">
-                <span>خيارات الطباعة والترويسة</span>
-                <span className="text-[10px] text-emerald-700 font-mono bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                  معتمد
-                </span>
-              </div>
-
-              {/* 1.1 Open Preview First (عرض أولاً) */}
-              <button
-                onClick={() => {
-                  setIsPrintMenuOpen(false);
-                  setIsPreviewModalOpen(true);
-                }}
-                className="w-full mb-1.5 py-1.5 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-lg font-bold text-xs flex items-center justify-between cursor-pointer"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Eye className="w-4 h-4 text-emerald-700" />
-                  <span>معاينة الطباعة أولاً (WYSIWYG)</span>
-                </div>
-                <span className="text-[10px] text-emerald-600 bg-emerald-100/70 px-1 rounded">مستحسن</span>
-              </button>
-
-              {/* 1.2 Quick Direct Print: With Letterhead */}
-              <button
-                onClick={() => handlePrint(pageSize, orientation, true)}
-                className="w-full mb-1 py-1.5 px-2.5 hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-lg font-medium text-xs flex items-center gap-2 cursor-pointer text-right"
-              >
-                <Printer className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold">طباعة بالترويسة المعتمدة</div>
-                  <div className="text-[10px] text-slate-400">إظهار ترويسة المكتب والشعار والبيانات</div>
-                </div>
-              </button>
-
-              {/* 1.3 Quick Direct Print: Without Letterhead */}
-              <button
-                onClick={() => handlePrint(pageSize, orientation, false)}
-                className="w-full mb-2 py-1.5 px-2.5 hover:bg-amber-50 text-slate-800 border border-slate-200 rounded-lg font-medium text-xs flex items-center gap-2 cursor-pointer text-right"
-              >
-                <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold">طباعة بدون ترويسة</div>
-                  <div className="text-[10px] text-slate-400">للطباعة على ورق رسمي مسبق التجهيز</div>
-                </div>
-              </button>
-
-              {/* 1.4 Full Header Customizer Button */}
-              <div className="border-t border-slate-100 pt-2 mb-2">
-                <button
-                  onClick={() => {
-                    setIsPrintMenuOpen(false);
-                    setIsHeaderCustomizerOpen(true);
-                  }}
-                  className="w-full py-1.5 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-950 border border-blue-200 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                  <span>تعديل وتخصيص بيانات الترويسة والشعار</span>
-                </button>
-              </div>
-
-              {/* Paper Size & Orientation selectors */}
-              <div className="pt-2 border-t border-slate-100 space-y-1.5 text-[11px]">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>المقاس:</span>
-                  <div className="flex gap-1">
-                    {(['A4', 'A3', 'Thermal80mm'] as PageSizeOption[]).map((sz) => (
-                      <button
-                        key={sz}
-                        onClick={() => setPageSize(sz)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                          pageSize === sz
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        {sz === 'Thermal80mm' ? 'إيصال' : sz}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>الاتجاه:</span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setOrientation('portrait')}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                        orientation === 'portrait'
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      طولي
-                    </button>
-                    <button
-                      onClick={() => setOrientation('landscape')}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                        orientation === 'landscape'
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      عرضي
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================
-          2. UNIFIED EXPORT (تصدير بصيغ متعددة: Excel, CSV, PDF, Images, JSON)
-         ======================================================== */}
-      {showExport && (
-        <div className="relative">
+  if (showPreview || showPrint) {
+    allActionNodes.push(
+      <div key="print-prev" className="relative">
+        <div className={`inline-flex rounded-lg border shadow-2xs ${disablePrintAndExport ? 'border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 text-slate-400 opacity-60' : 'border-slate-700/80 bg-slate-800 text-white'}`}>
           <button
             onClick={() => {
               if (disablePrintAndExport) {
-                showFeedback('error', disableReason || 'تم منع التصدير الرسمي لوجود فارق عدم اتزان في القوائم المالية');
+                showFeedback('error', disableReason || 'تم منع الطباعة الرسمية لوجود فارق عدم اتزان في القوائم المالية');
                 return;
               }
-              setIsExportMenuOpen(!isExportMenuOpen);
-              setIsPrintMenuOpen(false);
-              setIsImportMenuOpen(false);
-              setIsTemplateMenuOpen(false);
+              if (showPreview) setIsPreviewModalOpen(true);
+              else handlePrint(pageSize, orientation, true);
             }}
-            disabled={isExporting || disablePrintAndExport}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-xs border transition-all ${
+            disabled={disablePrintAndExport}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold transition-all border-l ${
               disablePrintAndExport
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 cursor-pointer disabled:opacity-50'
+                ? 'cursor-not-allowed text-slate-400 border-slate-300 dark:border-slate-700'
+                : 'hover:bg-slate-700 rounded-r-lg cursor-pointer border-slate-700 active:scale-95 text-slate-100'
             }`}
-            title={disablePrintAndExport ? (disableReason || 'التصدير معطل لعدم اتزان الميزانية') : 'تصدير بصيغ متعددة'}
+            title={disablePrintAndExport ? (disableReason || 'الطباعة معطلة لعدم اتزان الميزانية') : 'معاينة الطباعة أولاً (عرض تفاعلي)'}
           >
-            {isExporting ? (
-              <Loader2 className="w-3.5 h-3.5 text-slate-600 animate-spin" />
-            ) : (
-              <Download className={`w-3.5 h-3.5 ${disablePrintAndExport ? 'text-slate-400' : 'text-blue-700'}`} />
-            )}
-            <span>تصدير</span>
-            <ChevronDown className="w-3 h-3 text-slate-500" />
+            <Printer className={`w-3.5 h-3.5 ${disablePrintAndExport ? 'text-slate-400' : 'text-emerald-400'}`} />
+            <span>معاينة وطباعة</span>
           </button>
-
-          {isExportMenuOpen && (
-            <div className="absolute left-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-1.5 text-xs text-slate-800 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 mb-1 flex items-center justify-between">
-                <span>تصدير {effectiveTitle}</span>
-                <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
-                  صيغ متعددة
-                </span>
-              </div>
-
-              {/* 2.1 Excel Export */}
-              <button
-                onClick={() => handleExport('XLSX')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 text-slate-700 hover:text-emerald-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">مصنف Excel (.xlsx)</div>
-                  <div className="text-[10px] text-slate-400">شيت إكسل منسق بالكامل (RTL)</div>
-                </div>
-              </button>
-
-              {/* 2.2 PDF Export */}
-              <button
-                onClick={() => handleExport('PDF')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 text-slate-700 hover:text-rose-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileText className="w-4 h-4 text-rose-600 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">مستند PDF رسمي</div>
-                  <div className="text-[10px] text-slate-400">ملف جاهز للطباعة والتوثيق</div>
-                </div>
-              </button>
-
-              {/* 2.3 Image PNG Export */}
-              <button
-                onClick={() => handleExport('IMAGE_PNG')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-purple-50 text-slate-700 hover:text-purple-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <ImageIcon className="w-4 h-4 text-purple-600 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">صورة عالية الدقة (PNG)</div>
-                  <div className="text-[10px] text-slate-400">مشاركة فورية واضحة</div>
-                </div>
-              </button>
-
-              {/* 2.4 CSV Export */}
-              <button
-                onClick={() => handleExport('CSV')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-slate-700 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                <span className="text-xs">تصدير جدول CSV (.csv)</span>
-              </button>
-
-              {/* 2.5 JSON Export */}
-              <button
-                onClick={() => handleExport('JSON')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-slate-700 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileCode className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                <span className="text-xs">تصدير هيكل بيانات JSON</span>
-              </button>
-
-              {/* 2.6 Auto Archiving */}
-              <div className="border-t border-slate-100 my-1 pt-1">
-                <button
-                  onClick={() => {
-                    setIsExportMenuOpen(false);
-                    const res = AutoArchiverService.archiveDocument({
-                      category:
-                        String(effectiveModelType).includes('FINANCIAL')
-                          ? 'FINANCIAL_STATEMENTS'
-                          : 'GENERAL_REPORT',
-                      title: `${effectiveTitle} [معتمد وموثق]`,
-                      notes: `أرشفة آلية مباشرة من شريط الأدوات للشاشة: ${effectiveTitle}`,
-                    });
-                    if (res.success && res.timestampCode) {
-                      showFeedback(
-                        'success',
-                        `تمت الأرشفة الآلية في ملف العميل! كود التوثيق: ${res.timestampCode}`
-                      );
-                    } else {
-                      showFeedback('error', res.error || 'تعذر إتمام الأرشفة');
-                    }
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold transition-all text-right cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span className="font-bold text-xs truncate">أرشفة وتوثيق في ملف العميل</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================
-          3. UNIFIED IMPORT (استيراد بصيغ متعددة: Excel, CSV, JSON)
-         ======================================================== */}
-      {showImport && (
-        <div className="relative">
           <button
             onClick={() => {
-              setIsImportMenuOpen(!isImportMenuOpen);
-              setIsPrintMenuOpen(false);
-              setIsExportMenuOpen(false);
-              setIsTemplateMenuOpen(false);
-            }}
-            disabled={isImporting}
-            className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 rounded-lg font-bold text-xs border border-slate-300 transition-all cursor-pointer disabled:opacity-50"
-            title="استيراد بصيغ متعددة"
-          >
-            {isImporting ? (
-              <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-            ) : (
-              <Upload className="w-3.5 h-3.5 text-emerald-700" />
-            )}
-            <span>استيراد</span>
-            <ChevronDown className="w-3 h-3 text-slate-500" />
-          </button>
-
-          {isImportMenuOpen && (
-            <div className="absolute left-0 mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-1.5 text-xs text-slate-800 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 mb-1 flex items-center justify-between">
-                <span>استيراد بيانات</span>
-                <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">
-                  متعدد الصيغ
-                </span>
-              </div>
-
-              {/* 3.1 Excel Import */}
-              <button
-                onClick={() => triggerImport('.xlsx,.xls')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 text-slate-700 hover:text-emerald-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">استيراد من مصنف إكسل (.xlsx)</div>
-                  <div className="text-[10px] text-slate-400">قراءة وتوزيع الأعمدة آلياً</div>
-                </div>
-              </button>
-
-              {/* 3.2 CSV Import */}
-              <button
-                onClick={() => triggerImport('.csv')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 text-slate-700 hover:text-amber-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileText className="w-4 h-4 text-amber-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">استيراد من ملف CSV (.csv)</div>
-                  <div className="text-[10px] text-slate-400">جداول نصية ومفصولة بفواصل</div>
-                </div>
-              </button>
-
-              {/* 3.3 JSON Import */}
-              <button
-                onClick={() => triggerImport('.json')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileCode className="w-4 h-4 text-blue-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">استيراد من ملف JSON (.json)</div>
-                  <div className="text-[10px] text-slate-400">بيانات مهيكلة أو نسخ احتياطي</div>
-                </div>
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================
-          4. UNIFIED DOWNLOAD FILL-IN TEMPLATES (قوالب التعبئة للاستيراد)
-         ======================================================== */}
-      {showTemplates && (
-        <div className="relative">
-          <button
-            onClick={() => {
-              setIsTemplateMenuOpen(!isTemplateMenuOpen);
-              setIsPrintMenuOpen(false);
+              if (disablePrintAndExport) {
+                showFeedback('error', disableReason || 'تم منع الطباعة الرسمية لوجود فارق عدم اتزان في القوائم المالية');
+                return;
+              }
+              setIsPrintMenuOpen(!isPrintMenuOpen);
               setIsExportMenuOpen(false);
               setIsImportMenuOpen(false);
+              setIsTemplateMenuOpen(false);
             }}
-            className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-900 rounded-lg font-bold text-xs border border-slate-300 transition-all cursor-pointer"
-            title="تنزيل قوالب جاهزة للتعبئة والاستيراد"
+            disabled={disablePrintAndExport}
+            className={`px-1.5 py-1 text-xs transition-all ${
+              disablePrintAndExport
+                ? 'cursor-not-allowed text-slate-400'
+                : 'hover:bg-slate-700 text-slate-300 hover:text-white rounded-l-lg cursor-pointer'
+            }`}
+            title="خيارات الطباعة"
           >
-            <FileDown className="w-3.5 h-3.5 text-purple-700" />
-            <span>قوالب التعبئة</span>
-            <ChevronDown className="w-3 h-3 text-slate-500" />
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        </div>
+
+        {isPrintMenuOpen && (
+          <div className="absolute left-0 mt-1.5 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 p-2.5 text-xs text-slate-800 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100">
+            <div className="font-bold text-slate-900 dark:text-slate-100 pb-1.5 border-b border-slate-100 dark:border-slate-800 mb-2 flex items-center justify-between">
+              <span>خيارات الطباعة والترويسة</span>
+              <span className="text-[10px] text-emerald-700 font-mono bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                معتمد
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setIsPrintMenuOpen(false);
+                setIsPreviewModalOpen(true);
+              }}
+              className="w-full mb-1.5 py-1.5 px-2.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 rounded-lg font-bold text-xs flex items-center justify-between cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5">
+                <Eye className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                <span>معاينة الطباعة أولاً (WYSIWYG)</span>
+              </div>
+              <span className="text-[10px] text-emerald-600 bg-emerald-100/70 px-1 rounded">مستحسن</span>
+            </button>
+            <button
+              onClick={() => handlePrint(pageSize, orientation, true)}
+              className="w-full mb-1 py-1.5 px-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg font-medium text-xs flex items-center gap-2 cursor-pointer text-right"
+            >
+              <Printer className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <div className="flex-1 truncate">
+                <div className="font-bold">طباعة بالترويسة المعتمدة</div>
+                <div className="text-[10px] text-slate-400">إظهار ترويسة المكتب والشعار والبيانات</div>
+              </div>
+            </button>
+            <button
+              onClick={() => handlePrint(pageSize, orientation, false)}
+              className="w-full mb-2 py-1.5 px-2.5 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg font-medium text-xs flex items-center gap-2 cursor-pointer text-right"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <div className="flex-1 truncate">
+                <div className="font-bold">طباعة بدون ترويسة</div>
+                <div className="text-[10px] text-slate-400">للطباعة على ورق رسمي مسبق التجهيز</div>
+              </div>
+            </button>
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-2 mb-2">
+              <button
+                onClick={() => {
+                  setIsPrintMenuOpen(false);
+                  setIsHeaderCustomizerOpen(true);
+                }}
+                className="w-full py-1.5 px-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 text-blue-950 dark:text-blue-200 border border-blue-200 dark:border-blue-800 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                <span>تعديل وتخصيص بيانات الترويسة والشعار</span>
+              </button>
+            </div>
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <span>المقاس:</span>
+                <div className="flex gap-1">
+                  {(['A4', 'A3', 'Thermal80mm'] as PageSizeOption[]).map((sz) => (
+                    <button
+                      key={sz}
+                      onClick={() => setPageSize(sz)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                        pageSize === sz ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {sz === 'Thermal80mm' ? 'إيصال' : sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <span>الاتجاه:</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setOrientation('portrait')}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                      orientation === 'portrait' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    طولي
+                  </button>
+                  <button
+                    onClick={() => setOrientation('landscape')}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                      orientation === 'landscape' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    عرضي
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (showExport) {
+    allActionNodes.push(
+      <div key="export-group" className="relative">
+        <button
+          onClick={() => {
+            if (disablePrintAndExport) {
+              showFeedback('error', disableReason || 'تم منع التصدير الرسمي لوجود فارق عدم اتزان في القوائم المالية');
+              return;
+            }
+            setIsExportMenuOpen(!isExportMenuOpen);
+            setIsPrintMenuOpen(false);
+            setIsImportMenuOpen(false);
+            setIsTemplateMenuOpen(false);
+          }}
+          disabled={isExporting || disablePrintAndExport}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-xs border transition-all ${
+            disablePrintAndExport
+              ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'
+              : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 cursor-pointer disabled:opacity-50'
+          }`}
+        >
+          {isExporting ? <Loader2 className="w-3.5 h-3.5 text-slate-600 animate-spin" /> : <Download className={`w-3.5 h-3.5 ${disablePrintAndExport ? 'text-slate-400' : 'text-blue-700'}`} />}
+          <span>تصدير</span>
+          <ChevronDown className="w-3 h-3 text-slate-500" />
+        </button>
+
+        {isExportMenuOpen && (
+          <div className="absolute left-0 mt-1.5 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 p-1.5 text-xs text-slate-800 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100">
+            <div className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 dark:border-slate-800 mb-1 flex items-center justify-between">
+              <span>تصدير {effectiveTitle}</span>
+              <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">صيغ متعددة</span>
+            </div>
+            <button onClick={() => handleExport('XLSX')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>مصنف Excel (.xlsx)</span>
+            </button>
+            <button onClick={() => handleExport('PDF')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>مستند PDF رسمي</span>
+            </button>
+            <button onClick={() => handleExport('IMAGE_PNG')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-purple-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <ImageIcon className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>صورة عالية الدقة (PNG)</span>
+            </button>
+            <button onClick={() => handleExport('CSV')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              <span>تصدير جدول CSV (.csv)</span>
+            </button>
+            <button onClick={() => handleExport('JSON')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileCode className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+              <span>تصدير هيكل بيانات JSON</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (showImport) {
+    allActionNodes.push(
+      <div key="import-group" className="relative">
+        <button
+          onClick={() => {
+            setIsImportMenuOpen(!isImportMenuOpen);
+            setIsPrintMenuOpen(false);
+            setIsExportMenuOpen(false);
+            setIsTemplateMenuOpen(false);
+          }}
+          disabled={isImporting}
+          className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs border border-slate-300 dark:border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+        >
+          {isImporting ? <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-emerald-700" />}
+          <span>استيراد</span>
+          <ChevronDown className="w-3 h-3 text-slate-500" />
+        </button>
+
+        {isImportMenuOpen && (
+          <div className="absolute left-0 mt-1.5 w-60 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 p-1.5 text-xs text-slate-800 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100">
+            <div className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 dark:border-slate-800 mb-1">
+              <span>استيراد بيانات</span>
+            </div>
+            <button onClick={() => triggerImport('.xlsx,.xls')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>استيراد من مصنف إكسل (.xlsx)</span>
+            </button>
+            <button onClick={() => triggerImport('.csv')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileText className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>استيراد من ملف CSV (.csv)</span>
+            </button>
+            <button onClick={() => triggerImport('.json')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileCode className="w-4 h-4 text-blue-700 shrink-0" />
+              <span>استيراد من ملف JSON (.json)</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (showTemplates) {
+    allActionNodes.push(
+      <div key="templates-group" className="relative">
+        <button
+          onClick={() => {
+            setIsTemplateMenuOpen(!isTemplateMenuOpen);
+            setIsPrintMenuOpen(false);
+            setIsExportMenuOpen(false);
+            setIsImportMenuOpen(false);
+          }}
+          className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs border border-slate-300 dark:border-slate-700 transition-all cursor-pointer"
+        >
+          <FileDown className="w-3.5 h-3.5 text-purple-600" />
+          <span>قوالب التعبئة</span>
+          <ChevronDown className="w-3 h-3 text-slate-500" />
+        </button>
+
+        {isTemplateMenuOpen && (
+          <div className="absolute left-0 mt-1.5 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 p-1.5 text-xs text-slate-800 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100">
+            <div className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 dark:border-slate-800 mb-1">
+              <span>قوالب التعبئة للاستيراد</span>
+            </div>
+            <button onClick={() => handleDownloadTemplate('XLSX')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>قالب إكسل للتعبئة (.xlsx)</span>
+            </button>
+            <button onClick={() => handleDownloadTemplate('CSV')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileText className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>قالب CSV للتعبئة (.csv)</span>
+            </button>
+            <button onClick={() => handleDownloadTemplate('JSON')} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-slate-700 dark:text-slate-300 font-medium transition-all text-right cursor-pointer">
+              <FileCode className="w-4 h-4 text-blue-700 shrink-0" />
+              <span>قالب JSON للتعبئة (.json)</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (showWhatsApp) {
+    allActionNodes.push(
+      <button
+        key="whatsapp-btn"
+        onClick={() => setIsWhatsAppModalOpen(true)}
+        className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold text-xs border border-emerald-600 transition-all cursor-pointer"
+      >
+        <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
+        <span>واتساب</span>
+      </button>
+    );
+  }
+
+  const visibleActions = allActionNodes.slice(0, 3);
+  const overflowActions = allActionNodes.slice(3);
+
+  return (
+    <div ref={toolbarRef} className={`flex items-center gap-1.5 flex-wrap ${className} no-print text-xs select-none`}>
+      <input type="file" ref={fileInputRef} onChange={handleImportFile} accept={acceptedFormat} className="hidden" />
+
+      {visibleActions}
+
+      {overflowActions.length > 0 && (
+        <div className="relative" ref={moreMenuRef}>
+          <button
+            type="button"
+            onClick={() => setIsMoreToolbarOpen(!isMoreToolbarOpen)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg font-bold text-xs border border-slate-300 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
+          >
+            <span>المزيد ⋯</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${isMoreToolbarOpen ? 'rotate-180' : ''}`} />
           </button>
 
-          {isTemplateMenuOpen && (
-            <div className="absolute left-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-1.5 text-xs text-slate-800 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 mb-1 flex items-center justify-between">
-                <span>قوالب التعبئة للاستيراد</span>
-                <span className="text-[9px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-bold">
-                  جاهزة للتعبئة
-                </span>
-              </div>
-
-              {/* 4.1 Excel Template */}
-              <button
-                onClick={() => handleDownloadTemplate('XLSX')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 text-slate-700 hover:text-emerald-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">قالب إكسل للتعبئة (.xlsx)</div>
-                  <div className="text-[10px] text-slate-400">مع شيت التعليمات وتنسيق RTL</div>
+          {isMoreToolbarOpen && (
+            <div className="absolute left-0 mt-1.5 w-60 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-150 max-h-80 overflow-y-auto">
+              {overflowActions.map((node, i) => (
+                <div key={i} onClick={() => setIsMoreToolbarOpen(false)}>
+                  {node}
                 </div>
-              </button>
-
-              {/* 4.2 CSV Template */}
-              <button
-                onClick={() => handleDownloadTemplate('CSV')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 text-slate-700 hover:text-amber-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileText className="w-4 h-4 text-amber-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">قالب CSV للتعبئة (.csv)</div>
-                  <div className="text-[10px] text-slate-400">متوافق مع ترميز UTF-8 العربي</div>
-                </div>
-              </button>
-
-              {/* 4.3 JSON Template */}
-              <button
-                onClick={() => handleDownloadTemplate('JSON')}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-950 font-medium transition-all text-right cursor-pointer"
-              >
-                <FileCode className="w-4 h-4 text-blue-700 shrink-0" />
-                <div className="flex-1 truncate">
-                  <div className="font-bold text-xs">قالب JSON للتعبئة (.json)</div>
-                  <div className="text-[10px] text-slate-400">هيكل بيانات مطابق لمنظومة الـ ERP</div>
-                </div>
-              </button>
+              ))}
             </div>
           )}
         </div>
-      )}
-
-      {/* ========================================================
-          5. OPTIONAL DIRECT WHATSAPP PROCEDURE NOTIFICATION
-         ======================================================== */}
-      {showWhatsApp && (
-        <button
-          onClick={() => setIsWhatsAppModalOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold text-xs border border-emerald-600 transition-all cursor-pointer active:scale-95"
-          title="إرسال إشعار واتساب مباشر"
-        >
-          <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
-          <span>واتساب</span>
-        </button>
       )}
 
       {/* Live Feedback Toast Notification */}

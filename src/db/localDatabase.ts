@@ -487,6 +487,9 @@ export class LocalDatabase {
         if (loadedOfficeProfile.showBranchOfficeAddress === undefined) {
           loadedOfficeProfile.showBranchOfficeAddress = true;
         }
+        if (loadedOfficeProfile.sendClientDataToGemini === undefined) {
+          loadedOfficeProfile.sendClientDataToGemini = false;
+        }
       }
 
       let loadedActiveClientContext: ActiveClientContext | undefined = undefined;
@@ -802,7 +805,7 @@ export class LocalDatabase {
   public addAccount(account: Omit<Account, 'id'>): Account {
     const newAccount: Account = {
       ...account,
-      id: `acc-${Date.now()}`,
+      id: crypto.randomUUID(),
     };
     this.state.accounts.push(newAccount);
     this.logAudit('CREATE', `إضافة حساب جديد بالدليل: [${newAccount.code}] ${newAccount.name}`);

@@ -1399,6 +1399,10 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
       alert('يرجى كتابة وصف العملية المحاسبية أولاً');
       return;
     }
+    if (!state.officeProfile?.sendClientDataToGemini) {
+      alert('الميزة معطلة');
+      return;
+    }
     setIsAiLoading(true);
 
     // Check historical patterns matching the prompt first

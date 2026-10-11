@@ -176,6 +176,10 @@ export const JournalErrorsAuditModal: React.FC<JournalErrorsAuditModalProps> = (
 
   // Run deep AI scan
   const handleDeepAiScan = async () => {
+    if (!state.officeProfile?.sendClientDataToGemini) {
+      setAiAnalysisSummary('الميزة معطلة: تم إيقاف إرسال بيانات العميل لـ Gemini في إعدادات المكتب.');
+      return;
+    }
     setIsScanningWithAi(true);
     setAiAnalysisSummary(null);
     try {

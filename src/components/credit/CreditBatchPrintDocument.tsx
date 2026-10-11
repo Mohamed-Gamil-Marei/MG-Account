@@ -2404,6 +2404,10 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
                   breakInside: 'avoid',
                 }}
               >
+                {/* شريط التحذير الإلزامي في أي طباعة */}
+                <div className="w-full text-center py-1 px-2 mb-2 bg-amber-50/90 print:bg-slate-100 border border-amber-300 print:border-slate-400 text-amber-950 print:text-black rounded text-[11px] font-black tracking-wide shrink-0">
+                  ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
+                </div>
                 {page.render(displayPageNum, displayTotal)}
               </div>
             </div>

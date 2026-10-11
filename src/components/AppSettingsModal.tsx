@@ -136,6 +136,11 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const [defaultWhtEnabled, setDefaultWhtEnabled] = useState<boolean>(officeProfile.defaultWhtEnabled !== false);
   const [defaultWhtRate, setDefaultWhtRate] = useState<number>(officeProfile.defaultWhtRate ?? 1);
 
+  // Gemini AI Consent State (مطفأ افتراضياً: حظر إرسال اسم العميل وأرقامه للذكاء الاصطناعي)
+  const [sendClientDataToGemini, setSendClientDataToGemini] = useState<boolean>(
+    officeProfile.sendClientDataToGemini === true
+  );
+
   const brandOptions: { id: BrandColor; nameAr: string; nameEn: string; bgClass: string; ringClass: string }[] = [
     { id: 'blue', nameAr: 'أزرق كلاسيكي مصرفي', nameEn: 'Banking Navy Blue', bgClass: 'bg-blue-600', ringClass: 'ring-blue-500' },
     { id: 'emerald', nameAr: 'أخضر مالي وضريبي', nameEn: 'Emerald Green', bgClass: 'bg-emerald-600', ringClass: 'ring-emerald-500' },
@@ -201,6 +206,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       defaultTaxRate: Number(defaultTaxRate) || 0,
       defaultWhtEnabled,
       defaultWhtRate: Number(defaultWhtRate) || 0,
+      sendClientDataToGemini,
     });
 
     setSavedSuccess(true);
@@ -453,6 +459,47 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   يُستخدم هذا الرابط لإنشاء كود الـ QR بحيث يفتح مباشرة في هواتف العملاء وكاميرات الهواتف الذكية عند مسحه من الأوراق المطبوعة والشهادات الرسمية.
                 </p>
+              </div>
+
+              {/* Gemini AI Client Privacy & Data Transmission Setting */}
+              <div className="p-4 bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/80 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-purple-950 dark:text-purple-200 block">
+                        إرسال بيانات العميل لـ Gemini
+                      </span>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                        مطفأ افتراضيًا لحماية سرية العميل. عند التعطيل لن يتم إرسال اسم العميل ولا الأرقام المالية لأي خدمة ذكاء اصطناعي وتظهر رسالة "الميزة معطلة".
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={sendClientDataToGemini}
+                      onChange={(e) => setSendClientDataToGemini(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+                <div className="pt-1.5 border-t border-purple-200/60 dark:border-purple-800/40 text-[11px] font-bold">
+                  {sendClientDataToGemini ? (
+                    <span className="text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      الميزة مفعّلة: يُسمح بنقل بيانات العميل والأرقام للذكاء الاصطناعي عند طلب عمليات الفحص
+                    </span>
+                  ) : (
+                    <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5" />
+                      الميزة معطلة (الوضع الافتراضي): حظر كامل لإرسال اسم العميل أو أرقامه المالية لأي طرف خارجي
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )}

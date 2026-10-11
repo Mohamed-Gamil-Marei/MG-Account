@@ -29,6 +29,8 @@ import {
   ListFilter,
   Eye,
   Lock,
+  Trash2,
+  Wallet,
 } from 'lucide-react';
 import { DatabaseState, db } from '../../db/localDatabase';
 import { Account, JournalEntry, JournalEntryLine, OfficeProfile } from '../../types';
@@ -94,10 +96,12 @@ export interface AuditStaticCheckResult {
 }
 
 export interface GeminiReviewReportData {
+  clientName?: string;
+  fiscalYear?: number;
   auditNotes: string[];
   financialRatios: Array<{ ratioName: string; value: string; interpretation: string }>;
   draftDisclosures: string;
-  summaryText: string;
+  summaryText?: string;
 }
 
 export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
@@ -151,6 +155,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   const [generatedEntries, setGeneratedEntries] = useState<JournalEntry[]>([]);
   const [financialSummary, setFinancialSummary] = useState<any | null>(null);
   const [isSavedToDb, setIsSavedToDb] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Step 6: Gemini Report
   const [reviewReport, setReviewReport] = useState<GeminiReviewReportData | null>(null);
@@ -159,9 +164,209 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   // Step 7: Export & Finish
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Prior Year Trial Balance (Optional - for comparative cash flows)
+  const [priorFile, setPriorFile] = useState<File | null>(null);
+  const [priorFileName, setPriorFileName] = useState<string>('');
+  const [priorWorkbook, setPriorWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [priorSheetNames, setPriorSheetNames] = useState<string[]>([]);
+  const [priorActiveSheet, setPriorActiveSheet] = useState<string>('');
+  const [priorMappedRows, setPriorMappedRows] = useState<MappedAccountRow[] | null>(null);
+  const [priorStats, setPriorStats] = useState<{
+    totalRows: number;
+    totalDebit: number;
+    totalCredit: number;
+    isBalanced: boolean;
+  } | null>(null);
+  const priorFileInputRef = useRef<HTMLInputElement>(null);
+
   const activeClient = useMemo(() => {
     return state.clients.find((c) => c.id === selectedClientId) || state.clients[0];
   }, [state.clients, selectedClientId]);
+
+  // Handler: Step 1 Upload & Read Prior Year File (Optional)
+  const handlePriorFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFile = e.target.files?.[0];
+    if (!uploadedFile) return;
+
+    setPriorFile(uploadedFile);
+    setPriorFileName(uploadedFile.name);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        setPriorWorkbook(wb);
+        setPriorSheetNames(wb.SheetNames);
+        const firstSheet = wb.SheetNames[0] || '';
+        setPriorActiveSheet(firstSheet);
+        parseAndMapPriorSheetData(wb, firstSheet);
+      } catch (err) {
+        alert('تعذر قراءة ملف ميزان السنة السابقة. يرجى التأكد من أن الملف سليم بصيغة .xlsx أو .csv');
+      }
+    };
+    reader.readAsBinaryString(uploadedFile);
+  };
+
+  const parseAndMapPriorSheetData = (wb: XLSX.WorkBook, sheetName: string) => {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return;
+    const matrix: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (!matrix || matrix.length === 0) return;
+
+    let bestHeaderIdx = 0;
+    for (let r = 0; r < Math.min(matrix.length, 10); r++) {
+      const rowStr = matrix[r].map((cell) => String(cell).toLowerCase()).join(' ');
+      if (
+        rowStr.includes('كود') ||
+        rowStr.includes('اسم') ||
+        rowStr.includes('مدين') ||
+        rowStr.includes('دائن') ||
+        rowStr.includes('code') ||
+        rowStr.includes('account') ||
+        rowStr.includes('debit') ||
+        rowStr.includes('credit')
+      ) {
+        bestHeaderIdx = r;
+        break;
+      }
+    }
+
+    const headerRow = matrix[bestHeaderIdx] || [];
+    let detectedCode = -1;
+    let detectedName = -1;
+    let detectedDebit = -1;
+    let detectedCredit = -1;
+
+    headerRow.forEach((cell: any, idx: number) => {
+      const val = String(cell).trim().toLowerCase();
+      if (val.includes('كود') || val === 'code' || val.includes('رقم الحساب')) {
+        if (detectedCode === -1) detectedCode = idx;
+      }
+      if (val.includes('اسم') || val.includes('حساب') || val.includes('account') || val.includes('name')) {
+        if (detectedName === -1 && !val.includes('كود')) detectedName = idx;
+      }
+      if (val.includes('مدين') || val.includes('debit') || val.includes('منه')) {
+        if (!val.includes('افتتاحي') && detectedDebit === -1) detectedDebit = idx;
+      }
+      if (val.includes('دائن') || val.includes('credit') || val.includes('له')) {
+        if (!val.includes('افتتاحي') && detectedCredit === -1) detectedCredit = idx;
+      }
+    });
+
+    const cCol = detectedCode !== -1 ? detectedCode : 0;
+    const nCol = detectedName !== -1 ? detectedName : 1;
+    const dCol = detectedDebit !== -1 ? detectedDebit : 2;
+    const crCol = detectedCredit !== -1 ? detectedCredit : 3;
+
+    const dataRows = matrix.slice(bestHeaderIdx + 1);
+    const systemAccounts = state.accounts;
+    const parsedRows: MappedAccountRow[] = [];
+
+    dataRows.forEach((row, idx) => {
+      const rawCode = String(row[cCol] || '').trim();
+      const rawName = String(row[nCol] || '').trim();
+      if (!rawCode && !rawName) return;
+
+      const debitVal = parseFloat(String(row[dCol] || '0').replace(/,/g, '')) || 0;
+      const creditVal = parseFloat(String(row[crCol] || '0').replace(/,/g, '')) || 0;
+      const netBalance = debitVal - creditVal;
+
+      // Deterministic Match 1: By Code
+      const exactCodeMatch = systemAccounts.find((a) => a.code === rawCode);
+      if (exactCodeMatch) {
+        parsedRows.push({
+          id: `prior-row-${idx}-${Date.now()}`,
+          originalCode: rawCode,
+          originalName: rawName,
+          debit: debitVal,
+          credit: creditVal,
+          openingDebit: 0,
+          openingCredit: 0,
+          netBalance,
+          mappedCode: exactCodeMatch.code,
+          mappedName: exactCodeMatch.name,
+          matchType: 'EXACT_CODE',
+          confidence: 1.0,
+          aiReasoning: 'طابق كود الحساب بالدليل المعياري',
+          isApproved: true,
+        });
+        return;
+      }
+
+      // Deterministic Match 2: By Name
+      const exactNameMatch = systemAccounts.find(
+        (a) => a.name.trim().toLowerCase() === rawName.toLowerCase()
+      );
+      if (exactNameMatch) {
+        parsedRows.push({
+          id: `prior-row-${idx}-${Date.now()}`,
+          originalCode: rawCode,
+          originalName: rawName,
+          debit: debitVal,
+          credit: creditVal,
+          openingDebit: 0,
+          openingCredit: 0,
+          netBalance,
+          mappedCode: exactNameMatch.code,
+          mappedName: exactNameMatch.name,
+          matchType: 'EXACT_NAME',
+          confidence: 0.95,
+          aiReasoning: 'طابق اسم الحساب مع دليل الحسابات بالاسم',
+          isApproved: true,
+        });
+        return;
+      }
+
+      // Default with raw code and name
+      parsedRows.push({
+        id: `prior-row-${idx}-${Date.now()}`,
+        originalCode: rawCode,
+        originalName: rawName,
+        debit: debitVal,
+        credit: creditVal,
+        openingDebit: 0,
+        openingCredit: 0,
+        netBalance,
+        mappedCode: rawCode,
+        mappedName: rawName || rawCode,
+        matchType: 'MANUAL_MODIFIED',
+        confidence: 0.5,
+        isApproved: true,
+      });
+    });
+
+    const totDeb = round2(parsedRows.reduce((s, r) => s + (r.debit || 0), 0));
+    const totCred = round2(parsedRows.reduce((s, r) => s + (r.credit || 0), 0));
+
+    setPriorMappedRows(parsedRows);
+    setPriorStats({
+      totalRows: parsedRows.length,
+      totalDebit: totDeb,
+      totalCredit: totCred,
+      isBalanced: Math.abs(totDeb - totCred) < 0.01,
+    });
+  };
+
+  const handlePriorSheetChange = (sName: string) => {
+    setPriorActiveSheet(sName);
+    if (priorWorkbook) {
+      parseAndMapPriorSheetData(priorWorkbook, sName);
+    }
+  };
+
+  const handleRemovePriorFile = () => {
+    setPriorFile(null);
+    setPriorFileName('');
+    setPriorWorkbook(null);
+    setPriorSheetNames([]);
+    setPriorActiveSheet('');
+    setPriorMappedRows(null);
+    setPriorStats(null);
+    if (priorFileInputRef.current) {
+      priorFileInputRef.current.value = '';
+    }
+  };
 
   // Handler: Step 1 Upload & Read File
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -368,6 +573,10 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     allRows: MappedAccountRow[],
     unmappedList: MappedAccountRow[]
   ) => {
+    if (!officeProfile?.sendClientDataToGemini) {
+      alert('الميزة معطلة');
+      return;
+    }
     setIsAiSuggesting(true);
     try {
       const payloadUnmapped = unmappedList.map((u) => ({
@@ -557,16 +766,25 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     });
   };
 
-  // Estimated total assets for partner balance ratio check (Requirement 2d)
-  const totalAssetsApprox = useMemo(() => {
+  // Total assets from all accounts of category ASSETS at net balance (including accumulated depreciation as negative)
+  const totalAssets = useMemo(() => {
     const assetsNet = mappedRows
-      .filter((r) => r.mappedCode.startsWith('1'))
-      .reduce((sum, r) => sum + Math.max(0, (r.debit || 0) - (r.credit || 0)), 0);
-    return round2(assetsNet) || (staticCheck?.totalDebit || 0);
-  }, [mappedRows, staticCheck]);
+      .filter((r) => {
+        const acc = state.accounts.find((a) => a.code === r.mappedCode);
+        if (acc) {
+          return acc.category === 'ASSETS';
+        }
+        const code = String(r.mappedCode || r.originalCode || '').trim();
+        return code.startsWith('1');
+      })
+      .reduce((sum, r) => sum + ((r.debit || 0) - (r.credit || 0)), 0);
+
+    const rounded = round2(assetsNet);
+    return rounded > 0 ? rounded : (staticCheck?.totalDebit || 0);
+  }, [mappedRows, state.accounts, staticCheck]);
 
   const diffAmount = Math.abs(staticCheck?.difference || 0);
-  const diffRatio = totalAssetsApprox > 0 ? (diffAmount / totalAssetsApprox) : 0;
+  const diffRatio = totalAssets > 0 ? (diffAmount / totalAssets) : 0;
   const isHighRatio = diffRatio > 0.01;
 
   // Handler for optional Partner Current Account balancing (Item 3e / 2d)
@@ -684,7 +902,8 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
         state.accounts,
         selectedFiscalYear,
         activeClient?.name,
-        activeClient?.id
+        activeClient?.id,
+        priorMappedRows
       );
 
       setUnclassifiedWarnings(result.warnings);
@@ -725,61 +944,112 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
 
       setGeneratedEntries([result.entry]);
       setIsSavedToDb(false);
+      setSaveError(null);
       setCurrentStep(5);
     } catch (err: any) {
       setGenerationError(err?.message || 'حدث خطأ أثناء بناء وتوليد القوائم المالية من ميزان المراجعة');
     }
   };
 
-  // Step 5: Save entry to database (Requirement 2c)
+  // Step 5: Save entry to database (Requirement 2c & Item 2)
   const handleSaveEntryToDatabase = () => {
     if (!generatedEntries.length || !activeClient) return;
+    setSaveError(null);
     const entryToSave = generatedEntries[0];
 
-    // 1. إنشاء الحسابات الناقصة بـ addAccount أولاً
-    entryToSave.lines.forEach((line) => {
-      const exists = state.accounts.some((a) => a.code === line.accountCode);
-      if (!exists) {
-        db.addAccount({
-          code: line.accountCode,
-          name: line.accountName,
-          category: line.accountCode.startsWith('1') ? 'ASSETS' :
-                    line.accountCode.startsWith('2') ? 'LIABILITIES' :
-                    line.accountCode.startsWith('3') ? 'EQUITY' :
-                    line.accountCode.startsWith('4') ? 'REVENUES' : 'EXPENSES',
-          nature: (line.accountCode.startsWith('1') || line.accountCode.startsWith('5')) ? 'DEBIT' : 'CREDIT',
-          level: 2,
-          openingBalanceDebit: 0,
-          openingBalanceCredit: 0,
-          isSystem: false,
-        });
+    try {
+      const codeToId: Record<string, string> = {};
+
+      // 1. إنشاء الحسابات الناقصة بـ addAccount أولاً وحفظ الـ id في خريطة codeToId
+      entryToSave.lines.forEach((line) => {
+        const existing = state.accounts.find((a) => a.code === line.accountCode);
+        if (!existing) {
+          const created = db.addAccount({
+            code: line.accountCode,
+            name: line.accountName,
+            category: line.accountCode.startsWith('1') ? 'ASSETS' :
+                      line.accountCode.startsWith('2') ? 'LIABILITIES' :
+                      line.accountCode.startsWith('3') ? 'EQUITY' :
+                      line.accountCode.startsWith('4') ? 'REVENUES' : 'EXPENSES',
+            nature: (line.accountCode.startsWith('1') || line.accountCode.startsWith('5')) ? 'DEBIT' : 'CREDIT',
+            level: 2,
+            openingBalanceDebit: 0,
+            openingBalanceCredit: 0,
+            isSystem: false,
+          });
+          codeToId[line.accountCode] = created.id;
+        } else {
+          codeToId[line.accountCode] = existing.id;
+        }
+      });
+
+      // 2. استخدام deleteGeneratedAuditEntries لنفس العميل والسنة قبل الحفظ
+      db.deleteGeneratedAuditEntries(selectedFiscalYear, activeClient.id);
+
+      // وقبل db.addJournalEntry عدّل كل line.accountId = codeToId[line.accountCode] || id الحساب الموجود في state.accounts بنفس الكود
+      const updatedLines = entryToSave.lines.map((line) => {
+        const targetAccountId =
+          codeToId[line.accountCode] ||
+          state.accounts.find((a) => a.code === line.accountCode)?.id ||
+          line.accountId;
+        return {
+          ...line,
+          accountId: targetAccountId,
+        };
+      });
+
+      // 3. ثم db.addJournalEntry
+      const savedEntry = db.addJournalEntry({
+        ...entryToSave,
+        lines: updatedLines,
+        isPosted: true,
+        clientId: activeClient.id,
+        clientName: activeClient.name,
+      });
+
+      // فحص بعد الحفظ: احسب computeAccountBalances على القيد المحفوظ وتأكد إن ميزان المراجعة متزن، وإلا اعرض خطأ
+      const currentAccounts = db.getState().accounts;
+      const calculatedAccounts = computeAccountBalances(currentAccounts, [savedEntry]);
+      const totalDebit = calculatedAccounts.reduce((sum, a) => sum + a.totalDebit, 0);
+      const totalCredit = calculatedAccounts.reduce((sum, a) => sum + a.totalCredit, 0);
+      const diff = Math.abs(totalDebit - totalCredit);
+
+      if (diff > 0.01) {
+        setSaveError(`خطأ في ميزان المراجعة بعد الحفظ: غير متزن بفارق قدره ${diff.toFixed(2)} ج.م`);
+        return;
       }
-    });
 
-    // 2. استخدام deleteGeneratedAuditEntries لنفس العميل والسنة قبل الحفظ
-    db.deleteGeneratedAuditEntries(selectedFiscalYear, activeClient.id);
+      // 4. يُفعّل isSavedToDb
+      setIsSavedToDb(true);
 
-    // 3. ثم db.addJournalEntry
-    db.addJournalEntry({
-      ...entryToSave,
-      isPosted: true,
-      clientId: activeClient.id,
-      clientName: activeClient.name,
-    });
-
-    // 4. يُفعّل isSavedToDb
-    setIsSavedToDb(true);
-
-    // 5. يُسجل في سجل التدقيق
-    db.logAudit(
-      'CREATE',
-      `حفظ قيد ميزان المراجعة المباشر المعتمد لسنة ${selectedFiscalYear} للعميل ${activeClient.name} بالدفتر المحاسبي بنجاح`
-    );
+      // 5. يُسجل في سجل التدقيق
+      db.logAudit(
+        'CREATE',
+        `حفظ قيد ميزان المراجعة المباشر المعتمد لسنة ${selectedFiscalYear} للعميل ${activeClient.name} بالدفتر المحاسبي بنجاح`
+      );
+    } catch (err: any) {
+      setSaveError(err?.message || 'حدث خطأ أثناء حفظ القيد في الدفتر المحاسبي');
+    }
   };
 
   // Step 5 -> Step 6: Generate Gemini Report (Numbers Only Input - NO Invention)
   const handleGenerateGeminiReport = async () => {
     setCurrentStep(6);
+    if (!officeProfile?.sendClientDataToGemini) {
+      alert('الميزة معطلة');
+      setIsGeneratingReport(false);
+      setReviewReport({
+        clientName: activeClient?.name || 'العميل',
+        fiscalYear: selectedFiscalYear,
+        auditNotes: [
+          'الميزة معطلة: تم إيقاف إرسال بيانات العميل لـ Gemini في إعدادات المكتب لحماية الخصوصية.',
+          ...(partnerBalanceNotice ? [partnerBalanceNotice] : []),
+        ],
+        financialRatios: [],
+        draftDisclosures: 'الميزة معطلة: تم إيقاف إرسال بيانات العميل والبيانات المالية لـ Gemini في إعدادات المكتب.',
+      });
+      return;
+    }
     setIsGeneratingReport(true);
     try {
       const res = await fetchWithAuth('/api/audit/generate-review-report', {
@@ -963,48 +1233,162 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             </div>
           </div>
 
-          {/* Upload Zone */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-blue-300 dark:border-blue-800 hover:border-blue-500 rounded-2xl p-8 text-center cursor-pointer bg-blue-50/50 dark:bg-blue-950/20 transition-all group"
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept=".xlsx, .xls, .csv"
-              className="hidden"
-            />
-            <FileSpreadsheet className="w-12 h-12 text-blue-600 dark:text-blue-400 mx-auto mb-3 group-hover:scale-110 transition-transform" />
-            <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-              {fileName ? `الملف المحدد: ${fileName}` : 'اضغط هنا لرفع ملف الميزان (Excel / CSV)'}
-            </h4>
-            <p className="text-xs text-slate-500 mt-1">يدعم ملفات .xlsx, .xls, .csv ذات الجداول المترابطة</p>
+          {/* Section 1: Current Year Upload (Required) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                1. ميزان مراجعة السنة المالية الحالية ({selectedFiscalYear}) <span className="text-rose-500">*مطلوب</span>:
+              </label>
+              {file && (
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>تم تجهيز الملف</span>
+                </span>
+              )}
+            </div>
+
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-blue-300 dark:border-blue-800 hover:border-blue-500 rounded-2xl p-7 text-center cursor-pointer bg-blue-50/50 dark:bg-blue-950/20 transition-all group"
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+              />
+              <FileSpreadsheet className="w-10 h-10 text-blue-600 dark:text-blue-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                {fileName ? `الملف المحدد: ${fileName}` : `اضغط هنا لرفع ميزان سنة ${selectedFiscalYear} (Excel / CSV)`}
+              </h4>
+              <p className="text-xs text-slate-500 mt-1">يدعم ملفات .xlsx, .xls, .csv ذات الجداول المترابطة</p>
+            </div>
+
+            {sheetNames.length > 1 && (
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  اختر ورقة العمل (Sheet) المطلوبة للمراجعة:
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {sheetNames.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleSheetChange(s)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        activeSheet === s
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {sheetNames.length > 1 && (
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                اختر ورقة العمل (Sheet) المطلوبة للمراجعة:
+          {/* Section 2: Prior Year Upload (Optional) */}
+          <div className="space-y-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                2. ميزان مراجعة السنة السابقة ({selectedFiscalYear - 1}) <span className="text-slate-400 font-normal">(اختياري - لمقارنة التدفقات النقدية)</span>:
               </label>
-              <div className="flex gap-2 flex-wrap">
-                {sheetNames.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => handleSheetChange(s)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      activeSheet === s
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              {priorFile && (
+                <button
+                  type="button"
+                  onClick={handleRemovePriorFile}
+                  className="text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>إلغاء ميزان السنة السابقة</span>
+                </button>
+              )}
             </div>
-          )}
+
+            {!priorFile ? (
+              <div
+                onClick={() => priorFileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600 rounded-2xl p-5 text-center cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-all group"
+              >
+                <input
+                  type="file"
+                  ref={priorFileInputRef}
+                  onChange={handlePriorFileUpload}
+                  accept=".xlsx, .xls, .csv"
+                  className="hidden"
+                />
+                <Upload className="w-8 h-8 text-slate-400 dark:text-slate-500 mx-auto mb-2 group-hover:scale-110 group-hover:text-blue-500 transition-all" />
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  اضغط هنا لرفع ميزان السنة المقارنة {selectedFiscalYear - 1} (اختياري)
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  يُستخدم تلقائياً كبيانات مقارنة (priorBalanceData) لتوليد قائمة التدفقات النقدية. لو لم يُرفع، تظل قائمة التدفقات "لا توجد بيانات سنة مقارنة".
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      تم رفع وقراءة ميزان سنة {selectedFiscalYear - 1}: <span className="font-mono text-emerald-700 dark:text-emerald-300">{priorFileName}</span>
+                    </span>
+                  </div>
+                  {priorStats && (
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                      priorStats.isBalanced
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'
+                    }`}>
+                      {priorStats.isBalanced ? 'الميزان المقارن متزن ✓' : 'يوجد فارق في الميزان المقارن'}
+                    </span>
+                  )}
+                </div>
+
+                {priorSheetNames.length > 1 && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-500 dark:text-slate-400">ورقة العمل:</span>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {priorSheetNames.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => handlePriorSheetChange(s)}
+                          className={`px-2 py-1 rounded text-[11px] font-bold transition-all ${
+                            priorActiveSheet === s
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {priorStats && (
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2 rounded bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">الحسابات المربوطة</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">{priorStats.totalRows}</span>
+                    </div>
+                    <div className="p-2 rounded bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">إجمالي المدين</span>
+                      <span className="font-bold text-emerald-600 font-mono">{priorStats.totalDebit.toLocaleString('ar-EG')} ج.م</span>
+                    </div>
+                    <div className="p-2 rounded bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">إجمالي الدائن</span>
+                      <span className="font-bold text-rose-600 font-mono">{priorStats.totalCredit.toLocaleString('ar-EG')} ج.م</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
             <button
@@ -1508,7 +1892,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
                     <span>تحذير رقابي حرج: نسبة الفرق تجاوزت 1% من إجمالي الأصول!</span>
                   </div>
                   <p className="text-[11px] leading-relaxed">
-                    نسبة فرق عدم الاتزان تبلغ <strong>{(diffRatio * 100).toFixed(2)}%</strong> من إجمالي الأصول ({totalAssetsApprox.toLocaleString('ar-EG')} ج.م). هذا الفرق يتجاوز الحدود المعيارية ويؤثر جوهرياً على عدالة القوائم.
+                    نسبة فرق عدم الاتزان تبلغ <strong>{(diffRatio * 100).toFixed(2)}%</strong> من إجمالي الأصول ({totalAssets.toLocaleString('ar-EG')} ج.م). هذا الفرق يتجاوز الحدود المعيارية ويؤثر جوهرياً على عدالة القوائم.
                   </p>
                   <label className="flex items-start gap-2.5 text-xs font-bold text-rose-900 dark:text-rose-100 cursor-pointer pt-1 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg border border-rose-300 dark:border-rose-800">
                     <input
@@ -1564,8 +1948,15 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             </p>
           </div>
 
+          {saveError && (
+            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+              <span>{saveError}</span>
+            </div>
+          )}
+
           {/* Financial Statements Summary Dashboard */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
               <span className="text-[11px] text-blue-700 dark:text-blue-300 font-bold">إجمالي الإيرادات:</span>
               <p className="text-lg font-extrabold text-blue-900 dark:text-blue-100 font-mono mt-1">
@@ -1585,6 +1976,30 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
               <p className="text-lg font-extrabold text-emerald-900 dark:text-emerald-100 font-mono mt-1">
                 {financialSummary.totalAssets.toLocaleString('ar-EG')} ج.م
               </p>
+            </div>
+
+            <div className="bg-sky-50 dark:bg-sky-950/20 p-4 rounded-xl border border-sky-200 dark:border-sky-800">
+              <span className="text-[11px] text-sky-700 dark:text-sky-300 font-bold">قائمة التدفقات النقدية:</span>
+              {financialSummary.cashFlow?.hasComparativeData ? (
+                <div className="mt-1">
+                  <p className="text-lg font-extrabold text-sky-900 dark:text-sky-100 font-mono">
+                    {financialSummary.cashFlow.netChangeInCash > 0 ? '+' : ''}
+                    {financialSummary.cashFlow.netChangeInCash?.toLocaleString('ar-EG')} ج.م
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    صافي التغير في النقدية
+                  </p>
+                  {Math.abs(financialSummary.cashFlow.reconciliationDifference) > 0.01 && (
+                    <p className="text-[10px] text-rose-600 font-bold mt-0.5">
+                      فرق تسوية: {financialSummary.cashFlow.reconciliationDifference.toLocaleString('ar-EG')} ج.م
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-2">
+                  لا توجد بيانات سنة مقارنة
+                </p>
+              )}
             </div>
           </div>
 

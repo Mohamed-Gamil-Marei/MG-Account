@@ -42,6 +42,7 @@ export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   defaultTaxRate: 14,
   defaultWhtEnabled: true,
   defaultWhtRate: 1,
+  sendClientDataToGemini: false,
 };
 
 export const DEFAULT_CLIENT_FOLDERS: ClientDocumentFolder[] = [
