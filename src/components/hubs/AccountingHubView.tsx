@@ -150,7 +150,7 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
       <ClientSelector state={state} />
 
       {/* Clear Direct Navigation Buttons Deck (بدون أي شريط جر أو سحب جانبي - أزرار واضحة مباشرة) */}
-      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm space-y-2.5">
+      <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-slate-900"></span>

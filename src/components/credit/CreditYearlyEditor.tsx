@@ -107,7 +107,7 @@ export const CreditYearlyEditor: React.FC<CreditYearlyEditorProps> = ({
     longLoansRatio: 15,
   };
 
-  const currentDataSource = current.dataSource || 'ACTUAL';
+  const currentDataSource = current.dataSource ?? 'SIMULATION';
 
   const handleToggleDataSource = () => {
     if (currentDataSource === 'SIMULATION') {

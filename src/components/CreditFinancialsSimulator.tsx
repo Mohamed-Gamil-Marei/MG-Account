@@ -140,7 +140,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
   const [yearsData, setYearsData] = useState<Record<number, FiscalYearData>>({
     2026: {
       year: 2026,
-      dataSource: 'ACTUAL',
+      dataSource: 'SIMULATION',
       sales: 23540850,
       cogs: 14124510,
       grossProfit: 9416340,
@@ -178,7 +178,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     },
     2025: {
       year: 2025,
-      dataSource: 'ACTUAL',
+      dataSource: 'SIMULATION',
       sales: 38133805,
       cogs: 22880000,
       grossProfit: 15253805,
@@ -215,7 +215,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
     },
     2024: {
       year: 2024,
-      dataSource: 'ACTUAL',
+      dataSource: 'SIMULATION',
       sales: 9845663,
       cogs: 7011525,
       grossProfit: 2834138,
@@ -856,6 +856,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       setYearsData({
         2026: {
           year: 2026,
+          dataSource: 'SIMULATION',
           sales: 23540850,
           cogs: 14124510,
           grossProfit: 9416340,
@@ -893,6 +894,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         },
         2025: {
           year: 2025,
+          dataSource: 'SIMULATION',
           sales: 38133805,
           cogs: 22880000,
           grossProfit: 15253805,
@@ -929,6 +931,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
         },
         2024: {
           year: 2024,
+          dataSource: 'SIMULATION',
           sales: 9845663,
           cogs: 7011525,
           grossProfit: 2834138,
@@ -1742,8 +1745,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       <UnifiedScreenCard
         id="credit-financials-screen-card"
         title="ملف الائتمان البنكي والمحاكي المالي المتكامل"
-        badgeText={yearsData[selectedYear]?.dataSource === 'SIMULATION' ? 'محاكاة تحليلية' : 'قوائم فعلية'}
-        badgeVariant={yearsData[selectedYear]?.dataSource === 'SIMULATION' ? 'amber' : 'emerald'}
+        badgeText={yearsData[selectedYear]?.dataSource !== 'ACTUAL' ? 'محاكاة تحليلية' : 'قوائم فعلية'}
+        badgeVariant={yearsData[selectedYear]?.dataSource !== 'ACTUAL' ? 'amber' : 'emerald'}
         actionsSlot={
           <div className="flex items-center gap-2">
             <CompanyHeaderSelector
@@ -2153,7 +2156,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       {/* ACTIVE TAB CONTENT WRAPPED IN PRINTABLE CONTAINER */}
       <div id="credit-financials-container" data-printable="true" className="space-y-6">
         {/* شريط التحذير الشرطي في أي طباعة إذا كانت بيانات السنة محاكاة */}
-        {yearsData[selectedYear]?.dataSource === 'SIMULATION' && (
+        {yearsData[selectedYear]?.dataSource !== 'ACTUAL' && (
           <div className="w-full text-center py-1.5 px-3 bg-amber-50 print:bg-slate-100 border border-amber-300 print:border-slate-500 text-amber-950 print:text-black rounded-xl font-black text-xs sm:text-sm tracking-wide">
             ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
           </div>

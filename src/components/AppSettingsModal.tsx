@@ -137,21 +137,35 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const [defaultWhtEnabled, setDefaultWhtEnabled] = useState<boolean>(officeProfile.defaultWhtEnabled !== false);
   const [defaultWhtRate, setDefaultWhtRate] = useState<number>(officeProfile.defaultWhtRate ?? 1);
 
+  const currentUser = db.getCurrentUser();
+  const isAdmin = currentUser?.role === 'ADMIN';
+
   // Gemini AI Consent State (مطفأ افتراضياً: حظر إرسال اسم العميل وأرقامه للذكاء الاصطناعي)
   const [sendClientDataToGemini, setSendClientDataToGemini] = useState<boolean>(
     officeProfile.sendClientDataToGemini === true
   );
+  const [prevGeminiConsent, setPrevGeminiConsent] = useState<boolean>(
+    officeProfile.sendClientDataToGemini === true
+  );
+  const [geminiError, setGeminiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
+      setGeminiError(null);
       fetchWithAuth('/api/settings/gemini-consent')
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error('فشل جلب إعدادات Gemini من السيرفر');
+          return res.json();
+        })
         .then((data) => {
           if (data.success && typeof data.sendClientDataToGemini === 'boolean') {
             setSendClientDataToGemini(data.sendClientDataToGemini);
+            setPrevGeminiConsent(data.sendClientDataToGemini);
           }
         })
-        .catch(() => {});
+        .catch((err) => {
+          setGeminiError('تعذر جلب إعدادات السيرفر');
+        });
     }
   }, [isOpen]);
 
@@ -179,8 +193,26 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setGeminiError(null);
+
+    try {
+      const res = await fetchWithAuth('/api/settings/gemini-consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendClientDataToGemini }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || data.message || 'فشل حفظ إعداد Gemini على السيرفر');
+      }
+      setPrevGeminiConsent(sendClientDataToGemini);
+    } catch (err: any) {
+      setSendClientDataToGemini(prevGeminiConsent);
+      setGeminiError(err.message || 'فشل حفظ إعداد Gemini على السيرفر');
+      return;
+    }
 
     const customFirebaseConfig: CustomFirebaseConfig = {
       projectId: fbProjectId.trim(),
@@ -222,12 +254,6 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       defaultWhtRate: Number(defaultWhtRate) || 0,
       sendClientDataToGemini,
     });
-
-    fetchWithAuth('/api/settings/gemini-consent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sendClientDataToGemini }),
-    }).catch(() => {});
 
     setSavedSuccess(true);
     setTimeout(() => {
@@ -495,13 +521,28 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
                         مطفأ افتراضيًا لحماية سرية العميل. عند التعطيل لن يتم إرسال اسم العميل ولا الأرقام المالية لأي خدمة ذكاء اصطناعي وتظهر رسالة "الميزة معطلة".
                       </p>
+                      {!isAdmin && (
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold mt-1">
+                          يغيّره مدير النظام فقط
+                        </p>
+                      )}
+                      {geminiError && (
+                        <p className="text-[11px] text-red-600 dark:text-red-400 font-bold mt-1">
+                          ⚠️ {geminiError}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <label className={`relative inline-flex items-center ${isAdmin ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'} shrink-0`}>
                     <input
                       type="checkbox"
+                      disabled={!isAdmin}
                       checked={sendClientDataToGemini}
-                      onChange={(e) => setSendClientDataToGemini(e.target.checked)}
+                      onChange={(e) => {
+                        if (!isAdmin) return;
+                        setGeminiError(null);
+                        setSendClientDataToGemini(e.target.checked);
+                      }}
                       className="sr-only peer"
                     />
                     <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>

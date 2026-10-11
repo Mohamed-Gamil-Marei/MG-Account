@@ -190,7 +190,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   const [topViewMode, setTopViewMode] = useState<'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER'>(() => {
     try {
       const saved = localStorage.getItem('financial_statements_top_mode');
-      if (saved === 'STATEMENTS_FROM_BOOKS' || saved === 'FILE_REVIEW' || saved === 'QUICK_BANK_DOSSIER') {
+      if (saved === 'STATEMENTS_FROM_BOOKS' || saved === 'FILE_REVIEW') {
         return saved;
       }
     } catch {
@@ -201,10 +201,12 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
   const handleTopModeChange = (mode: 'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER') => {
     setTopViewMode(mode);
-    try {
-      localStorage.setItem('financial_statements_top_mode', mode);
-    } catch {
-      // ignore
+    if (mode === 'STATEMENTS_FROM_BOOKS' || mode === 'FILE_REVIEW') {
+      try {
+        localStorage.setItem('financial_statements_top_mode', mode);
+      } catch {
+        // ignore
+      }
     }
     if (mode === 'QUICK_BANK_DOSSIER' && onNavigateToCreditSimulator) {
       onNavigateToCreditSimulator();
@@ -989,15 +991,15 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
   return (
     <div className="space-y-4">
-      {/* 3 Top Modes Bar: ثلاثة أزرار كبيرة متساوية، الوضع النشط بلون واحد */}
-      <div className="no-print print:hidden grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+      {/* 3 Top Modes Bar: ثلاثة أزرار متساوية، بدون ظلال */}
+      <div className="no-print print:hidden grid grid-cols-3 gap-2 mb-3">
         <button
           type="button"
           onClick={() => handleTopModeChange('STATEMENTS_FROM_BOOKS')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
             topViewMode === 'STATEMENTS_FROM_BOOKS'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+              ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
           }`}
         >
           <Scale className="w-4 h-4 shrink-0" />
@@ -1007,10 +1009,10 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         <button
           type="button"
           onClick={() => handleTopModeChange('FILE_REVIEW')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
             topViewMode === 'FILE_REVIEW'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+              ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
           }`}
         >
           <ShieldCheck className="w-4 h-4 shrink-0" />
@@ -1020,10 +1022,10 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         <button
           type="button"
           onClick={() => handleTopModeChange('QUICK_BANK_DOSSIER')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
             topViewMode === 'QUICK_BANK_DOSSIER'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+              ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
           }`}
         >
           <Building2 className="w-4 h-4 shrink-0" />
@@ -1079,7 +1081,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   className={
                     !computedBalance.isBalanced
                       ? 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold opacity-60 cursor-not-allowed'
-                      : 'border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-100'
+                      : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold hover:bg-slate-100'
                   }
                 />
 
@@ -1106,7 +1108,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   size="sm"
                   onClick={handleSyncWithTrialBalance}
                   disabled={isSyncingTrialBalance}
-                  className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer active:scale-95 border-emerald-600"
+                  className="bg-slate-800 hover:bg-slate-700 text-white font-bold cursor-pointer border-slate-700"
                 />
 
                 {/* قائمة "المزيد ⋯": تضم الأوامر الأُخرى */}
@@ -1197,74 +1199,64 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
             }
           >
-        <div className="space-y-3.5">
+        <div className="space-y-3">
 
-          {/* Trial Balance Dynamic Synchronization Success Notice */}
+          {/* Trial Balance Dynamic Synchronization Success Notice - Single Line */}
           {syncSuccessNotice && (
-            <div className="p-3 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 rounded-xl shadow-sm flex items-center justify-between text-teal-950 dark:text-teal-200 font-bold text-xs animate-in fade-in duration-200 no-print print:hidden">
+            <div className="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-between text-slate-700 dark:text-slate-300 text-xs no-print print:hidden">
               <div className="flex items-center gap-2 flex-wrap">
-                <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>{syncSuccessNotice}</span>
                 {lastSyncTime && (
-                  <span className="text-[10px] bg-teal-200/60 dark:bg-teal-800 text-teal-900 dark:text-teal-100 px-2 py-0.5 rounded-full font-mono">
+                  <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono">
                     آخر تحديث: {lastSyncTime}
                   </span>
                 )}
               </div>
               <button
                 onClick={() => setSyncSuccessNotice(null)}
-                className="text-teal-700 hover:text-teal-950 font-bold px-2 py-0.5 cursor-pointer"
+                className="text-slate-500 hover:text-slate-800 font-bold px-1.5 py-0.5 cursor-pointer"
               >
                 ✕
               </button>
             </div>
           )}
 
-          {/* AutoArchive Success Notice */}
+          {/* AutoArchive Success Notice - Single Line */}
           {archivedSuccessNotice && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl shadow-sm flex items-center justify-between text-emerald-900 font-bold text-xs animate-in fade-in duration-200 no-print print:hidden">
+            <div className="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-between text-slate-700 dark:text-slate-300 text-xs no-print print:hidden">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{archivedSuccessNotice}</span>
               </div>
               <button
                 onClick={() => setArchivedSuccessNotice(null)}
-                className="text-emerald-700 hover:text-emerald-950 font-bold px-2 py-0.5 cursor-pointer"
+                className="text-slate-500 hover:text-slate-800 font-bold px-1.5 py-0.5 cursor-pointer"
               >
                 ✕
               </button>
             </div>
           )}
 
-          {/* Flexible Financial Period & Date Range Selection Bar (EAS 1 / EAS 30 / IAS 34) */}
-          <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700/80 p-3 sm:p-4 shadow-xs space-y-3 no-print print:hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-700/60">
+          {/* Flexible Financial Period Bar */}
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2.5 rounded-lg space-y-2 no-print print:hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 rounded-lg text-emerald-700 dark:text-emerald-400">
-                  <CalendarDays className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                    <span>فترة القوائم المالية المحددة</span>
-                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                      من وإلى
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    مرونة كاملة لإعداد القوائم الربع سنوية، النصفية، الدورية والسنوية (EAS 30)
-                  </div>
+                <CalendarDays className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                <div className="text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <span className="font-bold">فترة القوائم المالية المحددة</span>
+                  {periodDurationText && <span className="text-[10px] text-slate-500 font-mono">({periodDurationText})</span>}
                 </div>
               </div>
 
               {/* Quick Period Presets */}
               <div className="flex items-center gap-1 flex-wrap text-xs">
-                <span className="text-[11px] text-slate-400 font-bold ml-1">فترات قياسية:</span>
                 {[
                   { id: 'FULL_YEAR', label: 'سنة كاملة' },
-                  { id: 'Q1', label: 'الربع الأول (Q1)' },
-                  { id: 'H1', label: 'النصف الأول (H1)' },
-                  { id: '9M', label: '9 أشهر (Q3)' },
-                  { id: 'Q4', label: 'الربع الرابع (Q4)' },
+                  { id: 'Q1', label: 'Q1' },
+                  { id: 'H1', label: 'H1' },
+                  { id: '9M', label: '9M' },
+                  { id: 'Q4', label: 'Q4' },
                 ].map((p) => {
                   const isSelected = periodPreset === p.id;
                   return (
@@ -1272,10 +1264,10 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                       key={p.id}
                       type="button"
                       onClick={() => applyPreset(p.id as any)}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded text-xs transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 font-bold'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
                       }`}
                     >
                       {p.label}
@@ -1286,69 +1278,48 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </div>
 
             {/* Inputs & Period Details */}
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                {/* Start Date */}
-                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">من تاريخ:</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] text-slate-500">من:</span>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => handleStartDateChange(e.target.value)}
-                    className="bg-transparent font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer text-xs"
+                    className="bg-transparent font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer text-xs"
                   />
                 </div>
-
-                {/* Arrow */}
-                <span className="text-slate-400 font-bold text-xs">←</span>
-
-                {/* End Date */}
-                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">إلى تاريخ:</span>
+                <span className="text-slate-400 text-xs">←</span>
+                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] text-slate-500">إلى:</span>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => handleEndDateChange(e.target.value)}
-                    className="bg-transparent font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer text-xs"
+                    className="bg-transparent font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer text-xs"
                   />
                 </div>
-
-                {/* Duration & Period Chip */}
-                {periodDurationText && (
-                  <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold">
-                    <Clock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                    <span>{periodDurationText}</span>
-                  </span>
-                )}
               </div>
 
-              {/* Entries count badge & Reset */}
-              <div className="flex items-center gap-2.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  القيود المشمولة بالفترة: <strong className="font-mono text-slate-900 dark:text-slate-100">{periodEntries.length}</strong> قيد
-                </span>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                <span>القيود المشمولة: <strong className="font-mono text-slate-800 dark:text-slate-200">{periodEntries.length}</strong></span>
                 {!isFullYear && (
                   <button
                     type="button"
                     onClick={() => applyPreset('FULL_YEAR')}
-                    className="text-[11px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold cursor-pointer flex items-center gap-1"
+                    className="text-slate-700 dark:text-slate-300 hover:underline cursor-pointer"
                   >
-                    <span>استعادة السنة كاملة</span>
+                    (استعادة السنة كاملة)
                   </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Streamlined Multi-Currency & Language Ribbon */}
-          <div className="bg-slate-50/80 dark:bg-slate-800/50 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs no-print print:hidden">
+          {/* Multi-Currency & Language Ribbon */}
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs no-print print:hidden">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
-                <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>العملة:</span>
-              </div>
-
-              {/* Compact Currency Dropdown / Quick Buttons */}
+              <span className="text-slate-600 dark:text-slate-400">العملة:</span>
               <div className="flex items-center gap-1">
                 {(['EGP', 'USD', 'EUR', 'SAR'] as CurrencyCode[]).map((code) => {
                   const info = currencyService.getCurrencyInfo(code);
@@ -1358,14 +1329,13 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                       key={code}
                       type="button"
                       onClick={() => setReportingCurrency(code)}
-                      className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                      className={`px-2 py-0.5 rounded text-xs font-medium cursor-pointer border ${
                         isSelected
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      <span>{info.flag}</span>
-                      <span>{code}</span>
+                      <span>{info.flag}</span> <span>{code}</span>
                     </button>
                   );
                 })}
@@ -1373,7 +1343,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                 <select
                   value={reportingCurrency}
                   onChange={(e) => setReportingCurrency(e.target.value as CurrencyCode)}
-                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                  className="px-2 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
                 >
                   <option value="" disabled>باقي العملات...</option>
                   {SUPPORTED_CURRENCIES.map((c) => (
@@ -1385,22 +1355,19 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
 
               {reportingCurrency !== 'EGP' && (
-                <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                <span className="text-[11px] font-mono text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">
                   1 {reportingCurrency} = {reportingExchangeRate.toFixed(2)} ج.م
                 </span>
               )}
             </div>
 
-            {/* Language Toggle & Period Lock Pill */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-0.5 bg-white dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 bg-white dark:bg-slate-800 p-0.5 rounded border border-slate-200 dark:border-slate-700 text-xs">
                 <button
                   type="button"
                   onClick={() => setStatementLanguage('ar')}
-                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                    statementLanguage === 'ar'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                    statementLanguage === 'ar' ? 'bg-slate-800 text-white' : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   عربي
@@ -1408,10 +1375,8 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                 <button
                   type="button"
                   onClick={() => setStatementLanguage('en')}
-                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                    statementLanguage === 'en'
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                    statementLanguage === 'en' ? 'bg-slate-800 text-white' : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   English
@@ -1419,9 +1384,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
 
               {isPeriodLocked && (
-                <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold">
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 border border-amber-300 text-amber-900 dark:text-amber-200 text-xs">
                   <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>السنة مقفلة</span>
+                  <span>مقفلة</span>
                 </span>
               )}
             </div>
@@ -1499,7 +1464,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               <div className="text-[11px] font-bold text-slate-500">
                 {statementLanguage === 'en' ? 'Audited Financial Statements' : 'القوائم المالية المدققة'}
               </div>
-              <div className="text-sm font-black text-emerald-900">
+              <div className="text-sm font-bold text-slate-900">
                 {statementLanguage === 'en' ? periodHeaderEn : periodHeaderAr}
               </div>
               <div className="text-[10px] text-slate-500 font-bold">
@@ -1510,11 +1475,45 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                       : `القيم بـ ${currencyInfo.nameAr} (${reportingCurrency} ${currencyInfo.symbol})`)}
               </div>
               {reportingCurrency !== 'EGP' && currencyDisplayMode !== 'ORIGINAL' && (
-                <div className="text-[9px] text-blue-700 font-mono mt-0.5">
-                  1 {reportingCurrency} = {reportingExchangeRate.toFixed(2)} EGP (EAS 13 / IAS 21)
+                <div className="text-[9px] text-slate-700 font-mono mt-0.5">
+                  1 {reportingCurrency} = {reportingExchangeRate.toFixed(2)} EGP
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Key Indicators Summary - Single Small Row */}
+        <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between text-xs text-slate-700 dark:text-slate-300 no-print">
+          <div>
+            <span>إجمالي الأصول: </span>
+            <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+              {formatEgyptianCurrency(computedBalance.totalAssets)}
+            </span>
+          </div>
+          <div>
+            <span>الخصوم والملكية: </span>
+            <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+              {formatEgyptianCurrency(computedBalance.totalEquityAndLiabilities)}
+            </span>
+          </div>
+          <div>
+            <span>صافي الربح: </span>
+            <span className={`font-mono font-bold ${computedIncome.netProfitAfterTax < 0 ? 'text-red-600' : 'text-slate-900 dark:text-slate-100'}`}>
+              {formatEgyptianCurrency(computedIncome.netProfitAfterTax)}
+            </span>
+          </div>
+          <div>
+            <span>الإيرادات: </span>
+            <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+              {formatEgyptianCurrency(computedIncome.revenues)}
+            </span>
+          </div>
+          <div>
+            <span>الميزانية: </span>
+            <span className={`font-bold ${computedBalance.isBalanced ? 'text-slate-900 dark:text-slate-100' : 'text-red-600'}`}>
+              {computedBalance.isBalanced ? 'متزنة ✓' : `غير متزنة (${formatEgyptianCurrency(Math.abs(computedBalance.balanceDifference || 0))})`}
+            </span>
           </div>
         </div>
 
@@ -1556,25 +1555,25 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </h2>
             </div>
 
-            <div className="border border-slate-300 rounded-xl overflow-hidden divide-y divide-slate-200 shadow-xs">
+            <div className="border border-slate-300 rounded-lg overflow-hidden divide-y divide-slate-200">
               {/* Revenues */}
-              <div className="p-3.5 bg-slate-50 flex items-center justify-between font-bold text-slate-900 text-sm">
+              <div className="p-2.5 bg-slate-50 flex items-center justify-between font-bold text-slate-900">
                 <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.REVENUES.en : FINANCIAL_TERMS.REVENUES.ar}:</span>
                 {isEditMode ? (
                   <input
                     type="text"
                     value={overrides['is_revenues'] !== undefined ? overrides['is_revenues'] : baseIncomeData.revenuesTotal}
                     onChange={(e) => setVal('is_revenues', e.target.value)}
-                    className="w-40 text-left px-2.5 py-1 bg-white border border-blue-300 rounded font-mono font-bold text-blue-950 text-xs"
+                    className="w-36 text-left px-2 py-0.5 bg-white border border-slate-300 rounded font-mono text-xs"
                   />
                 ) : (
-                  <span className="font-mono font-black text-emerald-950">{formatEgyptianCurrency(computedIncome.revenues)}</span>
+                  <span className="font-mono font-bold text-slate-900">{formatEgyptianCurrency(computedIncome.revenues)}</span>
                 )}
               </div>
 
               {/* COGS */}
-              <div className="p-3.5 flex items-center justify-between text-slate-700">
-                <span className="text-red-900 font-bold">
+              <div className="p-2.5 flex items-center justify-between text-slate-700">
+                <span>
                   {statementLanguage === 'en' ? `Less: ${FINANCIAL_TERMS.COST_OF_GOODS_SOLD.en}` : `(يخصم): ${FINANCIAL_TERMS.COST_OF_GOODS_SOLD.ar}`}:
                 </span>
                 {isEditMode ? (
@@ -1582,25 +1581,25 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                     type="text"
                     value={overrides['is_cogs'] !== undefined ? overrides['is_cogs'] : baseIncomeData.costOfGoodsSold}
                     onChange={(e) => setVal('is_cogs', e.target.value)}
-                    className="w-40 text-left px-2.5 py-1 bg-red-50 border border-red-300 rounded font-mono font-bold text-red-900 text-xs"
+                    className="w-36 text-left px-2 py-0.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs"
                   />
                 ) : (
-                  <span className="font-mono text-red-700">({formatEgyptianCurrency(computedIncome.cogs)})</span>
+                  <span className="font-mono">({formatEgyptianCurrency(computedIncome.cogs)})</span>
                 )}
               </div>
 
               {/* Gross Profit */}
-              <div className="p-3.5 bg-emerald-50/70 flex justify-between items-center font-black text-emerald-950 text-sm">
+              <div className="p-2.5 bg-slate-100 flex justify-between items-center font-bold text-slate-900">
                 <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.GROSS_PROFIT.en : FINANCIAL_TERMS.GROSS_PROFIT.ar}:</span>
-                <span className="font-mono font-black">{formatEgyptianCurrency(computedIncome.grossProfit, true)}</span>
+                <span className="font-mono font-bold">{formatEgyptianCurrency(computedIncome.grossProfit, true)}</span>
               </div>
 
               {/* Operating Expenses */}
-              <div className="p-3.5 space-y-2.5">
+              <div className="p-2.5 space-y-2">
                 <div className="font-bold text-slate-800">
                   {statementLanguage === 'en' ? 'Less: Operating, Selling & Administrative Expenses:' : '(يخصم): المصروفات التشغيلية والبيعية والإدارية:'}
                 </div>
-                <div className="pr-4 space-y-2 text-slate-600">
+                <div className="pr-4 space-y-1.5 text-slate-600">
                   <div className="flex items-center justify-between">
                     <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.SELLING_AND_MARKETING_EXPENSES.en : FINANCIAL_TERMS.SELLING_AND_MARKETING_EXPENSES.ar}:</span>
                     {isEditMode ? (
@@ -1644,7 +1643,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   </div>
 
                   {getSectionCustomItems('IS_EXPENSES').map((item) => (
-                    <div key={item.id} className="flex items-center justify-between text-blue-900 font-bold bg-blue-50/50 p-1.5 rounded">
+                    <div key={item.id} className="flex items-center justify-between text-slate-800 font-medium">
                       <span>• {item.name}:</span>
                       <span className="font-mono">({formatEgyptianCurrency(item.amount)})</span>
                     </div>
@@ -1653,20 +1652,20 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
 
               {/* Operating Profit */}
-              <div className="p-3.5 bg-blue-50/70 flex justify-between items-center font-bold text-blue-950">
+              <div className="p-2.5 bg-slate-100 flex justify-between items-center font-bold text-slate-900">
                 <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.OPERATING_PROFIT.en : FINANCIAL_TERMS.OPERATING_PROFIT.ar}:</span>
-                <span className="font-mono font-black">{formatEgyptianCurrency(computedIncome.operatingProfit, true)}</span>
+                <span className="font-mono font-bold">{formatEgyptianCurrency(computedIncome.operatingProfit, true)}</span>
               </div>
 
               {/* Finance Costs */}
-              <div className="p-3.5 flex items-center justify-between text-slate-700">
+              <div className="p-2.5 flex items-center justify-between text-slate-700">
                 <span>{statementLanguage === 'en' ? `Less: ${FINANCIAL_TERMS.FINANCING_COSTS.en}` : `(يخصم): ${FINANCIAL_TERMS.FINANCING_COSTS.ar}`}:</span>
                 {isEditMode ? (
                   <input
                     type="text"
                     value={overrides['is_financeCosts'] !== undefined ? overrides['is_financeCosts'] : baseIncomeData.financeCosts}
                     onChange={(e) => setVal('is_financeCosts', e.target.value)}
-                    className="w-36 text-left px-2 py-0.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs text-red-900"
+                    className="w-36 text-left px-2 py-0.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs text-red-700"
                   />
                 ) : (
                   <span className="font-mono text-red-700">({formatEgyptianCurrency(computedIncome.financeCosts)})</span>
@@ -1674,7 +1673,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
 
               {/* Other Incomes */}
-              <div className="p-3.5 flex items-center justify-between text-slate-700">
+              <div className="p-2.5 flex items-center justify-between text-slate-700">
                 <span>{statementLanguage === 'en' ? `Add: ${FINANCIAL_TERMS.FINANCING_INCOME.en}` : `يضاف: ${FINANCIAL_TERMS.FINANCING_INCOME.ar}`}:</span>
                 {isEditMode ? (
                   <input
@@ -1689,39 +1688,41 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               </div>
 
               {/* EBT */}
-              <div className="p-3.5 flex justify-between items-center font-bold text-slate-900">
+              <div className="p-2.5 flex justify-between items-center font-bold text-slate-900">
                 <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.PROFIT_BEFORE_INCOME_TAX.en : FINANCIAL_TERMS.PROFIT_BEFORE_INCOME_TAX.ar}:</span>
-                <span className="font-mono font-black">{formatEgyptianCurrency(computedIncome.profitBeforeTax, true)}</span>
+                <span className="font-mono font-bold">{formatEgyptianCurrency(computedIncome.profitBeforeTax, true)}</span>
               </div>
 
               {/* Tax Expense */}
-              <div className="p-3.5 flex items-center justify-between text-red-800 font-semibold bg-red-50/40">
+              <div className="p-2.5 flex items-center justify-between text-slate-700 font-semibold">
                 <span>{statementLanguage === 'en' ? `Less: ${FINANCIAL_TERMS.INCOME_TAX_EXPENSE.en}` : `(يخصم): ${FINANCIAL_TERMS.INCOME_TAX_EXPENSE.ar}`}:</span>
                 {isEditMode ? (
                   <input
                     type="text"
                     value={overrides['is_taxExpense'] !== undefined ? overrides['is_taxExpense'] : baseIncomeData.taxExpense}
                     onChange={(e) => setVal('is_taxExpense', e.target.value)}
-                    className="w-36 text-left px-2 py-0.5 bg-white border border-red-300 rounded font-mono text-xs text-red-900"
+                    className="w-36 text-left px-2 py-0.5 bg-white border border-slate-300 rounded font-mono text-xs text-red-700"
                   />
                 ) : (
-                  <span className="font-mono">({formatEgyptianCurrency(computedIncome.taxExpense)})</span>
+                  <span className="font-mono text-red-700">({formatEgyptianCurrency(computedIncome.taxExpense)})</span>
                 )}
               </div>
 
               {/* Net Profit After Tax */}
-              <div className="p-4 bg-emerald-900 text-white flex justify-between items-center font-black text-base">
+              <div className="p-2.5 bg-slate-100 border-t border-b border-slate-300 flex justify-between items-center font-bold text-xs text-slate-900">
                 <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.NET_PROFIT_FOR_PERIOD.en : FINANCIAL_TERMS.NET_PROFIT_FOR_PERIOD.ar}:</span>
-                <span className="font-mono text-emerald-300">{formatEgyptianCurrency(computedIncome.netProfitAfterTax, true)}</span>
+                <span className={`font-mono font-bold ${computedIncome.netProfitAfterTax < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                  {formatEgyptianCurrency(computedIncome.netProfitAfterTax, true)}
+                </span>
               </div>
             </div>
 
             {/* Bilingual Tafqeet */}
-            <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold leading-relaxed">
-              <span className="text-slate-500 font-bold">
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-xs leading-relaxed">
+              <span className="text-slate-500 font-normal">
                 {statementLanguage === 'en' ? 'Net Profit / Loss in Words:' : 'التفقيط الرسمي للأرباح:'}{' '}
               </span>
-              <span className="font-bold text-emerald-950">
+              <span className="font-bold text-slate-900">
                 {statementLanguage === 'en'
                   ? numberToEnglishWords(
                       currencyDisplayMode === 'ORIGINAL' || reportingCurrency === 'EGP'
@@ -1743,9 +1744,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
         {/* 3. CASH FLOW */}
         {statementTab === 'CASH_FLOW' && (
-          <div className="space-y-6 text-xs max-w-3xl mx-auto">
+          <div className="space-y-4 text-xs max-w-3xl mx-auto">
             <div className="text-center">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 underline underline-offset-4">
+              <h2 className="text-base font-bold text-slate-900 underline underline-offset-4">
                 {statementLanguage === 'en'
                   ? `STATEMENT OF CASH FLOWS ${periodHeaderEn.toUpperCase()}`
                   : `قائمة التدفقات النقدية ${periodHeaderAr}`}
@@ -1753,34 +1754,28 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </div>
 
             {!computedCashFlow.hasComparativeData ? (
-              <div className="p-8 text-center bg-slate-50 border border-slate-300 rounded-2xl space-y-3 shadow-sm">
-                <div className="w-12 h-12 mx-auto rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
-                  <Wallet className="w-6 h-6" />
-                </div>
-                <h3 className="text-base font-bold text-slate-800">لا توجد بيانات سنة مقارنة</h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  تتطلب قائمة التدفقات النقدية توفر أرقام المركز المالي للسنة المالية المقارنة لحساب التغيرات النقدية في الأنشطة التشغيلية والاستثمارية والتمويلية.
-                </p>
+              <div className="p-3 text-center bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
+                <span>لا توجد بيانات سنة مقارنة لحساب التغيرات النقدية في الأنشطة التشغيلية والاستثمارية والتمويلية.</span>
               </div>
             ) : (
               <>
                 {computedCashFlow.reconciliationDifference > 0.01 && (
-                  <div className="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-xl text-rose-800 text-xs flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-2 font-bold">
-                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-center justify-between font-normal">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
                       <span>فرق مطابقة التدفقات النقدية مع التغير بالنقدية:</span>
                     </div>
-                    <span className="font-mono font-bold text-rose-700 dir-ltr">
+                    <span className="font-mono font-bold text-red-700 dir-ltr">
                       {formatEgyptianCurrency(computedCashFlow.reconciliationDifference)} ج.م
                     </span>
                   </div>
                 )}
 
-                <div className="border border-slate-300 rounded-2xl overflow-hidden divide-y divide-slate-200">
-                  <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
+                <div className="border border-slate-300 rounded-lg overflow-hidden divide-y divide-slate-200">
+                  <div className="p-2.5 bg-slate-100 font-bold text-slate-900">
                     {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_OPERATING_ACTIVITIES.en : 'أولاً: التدفقات النقدية من الأنشطة التشغيلية (Operating Activities)'}
                   </div>
-                  <div className="p-3.5 space-y-2 text-slate-700 pr-4">
+                  <div className="p-2.5 space-y-1.5 text-slate-700 pr-4">
                     <div className="flex items-center justify-between font-bold">
                       <span>{statementLanguage === 'en' ? 'Net profit before income tax:' : 'صافي الربح المحاسبي قبل الضريبة:'}</span>
                       <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.netProfit || 0, true)}</span>
@@ -1842,15 +1837,15 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                       )}
                     </div>
                   </div>
-                  <div className="p-3 bg-emerald-50 flex justify-between items-center font-bold text-emerald-900">
+                  <div className="p-2 bg-slate-50 flex justify-between items-center font-bold text-slate-900">
                     <span>{statementLanguage === 'en' ? 'Net cash generated from operating activities:' : 'صافي التدفق النقدي من الأنشطة التشغيلية:'}</span>
-                    <span className="font-mono font-black">{formatEgyptianCurrency(computedCashFlow.netOperatingCash || 0, true)}</span>
+                    <span className="font-mono font-bold">{formatEgyptianCurrency(computedCashFlow.netOperatingCash || 0, true)}</span>
                   </div>
 
-                  <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
+                  <div className="p-2.5 bg-slate-100 font-bold text-slate-900">
                     {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_INVESTING_ACTIVITIES.en : 'ثانياً: التدفقات النقدية من الأنشطة الاستثمارية (Investing Activities)'}
                   </div>
-                  <div className="p-3.5 flex items-center justify-between text-slate-700 pr-4">
+                  <div className="p-2.5 flex items-center justify-between text-slate-700 pr-4">
                     <span>{statementLanguage === 'en' ? 'Payments for purchase of property, plant & equipment:' : 'مدفوعات لشراء أصول ثابتة ومعدات:'}</span>
                     {isEditMode ? (
                       <input
@@ -1863,15 +1858,15 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                       <span className="font-mono text-red-700">({formatEgyptianCurrency(Math.abs(computedCashFlow.purchaseAssets || 0))})</span>
                     )}
                   </div>
-                  <div className="p-3 bg-slate-50 flex justify-between items-center font-bold text-slate-900">
+                  <div className="p-2 bg-slate-50 flex justify-between items-center font-bold text-slate-900">
                     <span>{statementLanguage === 'en' ? 'Net cash used in investing activities:' : 'صافي التدفق النقدي المستخدم في الأنشطة الاستثمارية:'}</span>
                     <span className="font-mono font-bold">{formatEgyptianCurrency(computedCashFlow.netInvestingCash || 0, true)}</span>
                   </div>
 
-                  <div className="p-3.5 bg-slate-100 font-black text-slate-900 text-sm">
+                  <div className="p-2.5 bg-slate-100 font-bold text-slate-900">
                     {statementLanguage === 'en' ? FINANCIAL_TERMS.CF_FINANCING_ACTIVITIES.en : 'ثالثاً: التدفقات النقدية من الأنشطة التمويلية (Financing Activities)'}
                   </div>
-                  <div className="p-3.5 flex items-center justify-between text-slate-700 pr-4">
+                  <div className="p-2.5 flex items-center justify-between text-slate-700 pr-4">
                     <span>{statementLanguage === 'en' ? 'Net movements in borrowings & dividends:' : 'صافي حركة القروض والتمويل وتوزيعات الأرباح:'}</span>
                     {isEditMode ? (
                       <input
@@ -1885,11 +1880,11 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                     )}
                   </div>
 
-                  <div className="p-4 bg-slate-900 text-white flex justify-between items-center font-black text-sm">
+                  <div className="p-2.5 bg-slate-100 border-t border-slate-300 flex justify-between items-center font-bold text-slate-900">
                     <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.NET_CHANGE_IN_CASH.en : 'صافي الزيادة (النقص) في النقدية وما في حكمها خلال العام'}:</span>
-                    <span className="font-mono text-emerald-400">{formatEgyptianCurrency(computedCashFlow.netChangeInCash || 0, true)}</span>
+                    <span className="font-mono text-slate-900">{formatEgyptianCurrency(computedCashFlow.netChangeInCash || 0, true)}</span>
                   </div>
-                  <div className="p-3.5 bg-slate-100 flex justify-between items-center font-bold text-slate-900">
+                  <div className="p-2.5 bg-slate-50 flex justify-between items-center font-bold text-slate-900">
                     <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.CASH_AT_BEGINNING_OF_YEAR.en : 'رصيد النقدية في أول العام'}:</span>
                     {isEditMode ? (
                       <input
@@ -1902,9 +1897,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                       <span className="font-mono">{formatEgyptianCurrency(computedCashFlow.beginningCash || 0)}</span>
                     )}
                   </div>
-                  <div className="p-4 bg-emerald-900 text-white flex justify-between items-center font-black text-base">
+                  <div className="p-2.5 bg-slate-200 flex justify-between items-center font-bold text-slate-900">
                     <span>{statementLanguage === 'en' ? FINANCIAL_TERMS.CASH_AT_END_OF_YEAR.en : 'رصيد النقدية في نهاية العام (كما بالمركز المالي)'}:</span>
-                    <span className="font-mono text-emerald-300">{formatEgyptianCurrency(computedCashFlow.endingCash || 0)}</span>
+                    <span className="font-mono text-slate-900">{formatEgyptianCurrency(computedCashFlow.endingCash || 0)}</span>
                   </div>
                 </div>
               </>
@@ -1914,9 +1909,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
         {/* 4. NOTES */}
         {statementTab === 'NOTES' && (
-          <div className="space-y-5 text-xs text-slate-800 leading-relaxed max-w-3xl mx-auto">
+          <div className="space-y-4 text-xs text-slate-800 leading-relaxed max-w-3xl mx-auto">
             <div className="text-center pb-2 border-b border-slate-200">
-              <h2 className="text-base font-black text-slate-900">
+              <h2 className="text-base font-bold text-slate-900">
                 {statementLanguage === 'en'
                   ? `NOTES TO THE FINANCIAL STATEMENTS ${periodHeaderEn.toUpperCase()}`
                   : `الإيضاحات المتممة للقوائم المالية ${periodHeaderAr}`}
@@ -1924,18 +1919,18 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
             </div>
 
             <div className="space-y-3">
-              <h3 className="font-bold text-sm text-emerald-900">1. الكيان القانوني ونشاط المنشأة:</h3>
+              <h3 className="font-bold text-xs text-slate-900">1. الكيان القانوني ونشاط المنشأة:</h3>
               <p className="pr-3 text-slate-700">
                 تأسست شركة {displayCompanyName} كشركة مساهمة مصرية (ش.م.م) خاضعة لأحكام القانون رقم 159 لسنة 1981 ولائحته التنفيذية وتعديلاته وقانون الاستثمار رقم 72 لسنة 2017، وغرضها تصنيع وتوزيع وتوريد المعدات واللوحات الكهروميكانيكية والتجارية.
               </p>
 
-              <h3 className="font-bold text-sm text-emerald-900">2. أسس إعداد القوائم المالية والامتثال:</h3>
+              <h3 className="font-bold text-xs text-slate-900">2. أسس إعداد القوائم المالية والامتثال:</h3>
               <p className="pr-3 text-slate-700">
                 أعدت القوائم المالية المرفقة طبقاً لمعايير المحاسبة المصرية (EAS) وفي ضوء القوانين والقرارات الوزارية المصرية ذات الصلة. تم إعداد القوائم على أساس مبدأ الاستحقاق ومفهوم المنشأة المستمرة (Going Concern).
               </p>
 
-              <h3 className="font-bold text-sm text-emerald-900">3. أهم السياسات المحاسبية المطبقة:</h3>
-              <ul className="list-disc pr-6 space-y-1.5 text-slate-700">
+              <h3 className="font-bold text-xs text-slate-900">3. أهم السياسات المحاسبية المطبقة:</h3>
+              <ul className="list-disc pr-6 space-y-1 text-slate-700">
                 <li><strong>الأصول الثابتة وإهلاكها:</strong> تثبت الأصول الثابتة بالتكلفة التاريخية مخصوماً منها مجمع الإهلاك وخسائر الاضمحلال، وتهلك بطريقة القسط الثابت بنسب (مباني 5%، آلات ومعدات 10%، سيارات ونقل 20%، أجهزة حاسب 25%).</li>
                 <li><strong>المخزون السلعي:</strong> يقيم المخزون بالتكلفة أو صافي القيمة البيعية أيهما أقل، وتحدد التكلفة وفقاً لطريقة المتوسط المرجح.</li>
                 <li><strong>الاعتراف بالإيراد:</strong> يتم الاعتراف بالإيراد وفقاً لمعيار المحاسبة المصري رقم (48) "الإيراد من العقود مع العملاء" عند انتقال السيطرة على السلع والخدمات.</li>

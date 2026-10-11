@@ -2358,7 +2358,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
   // Check if any year in print scope is simulated
   const isAnyYearSimulatedInPrint = React.useMemo(() => {
     const targetYears = customYearsList && customYearsList.length > 0 ? customYearsList : (yearsList || [selectedYear]);
-    return targetYears.some((y) => yearsData[y]?.dataSource === 'SIMULATION');
+    return targetYears.some((y) => yearsData[y]?.dataSource !== 'ACTUAL');
   }, [yearsData, yearsList, customYearsList, selectedYear]);
 
   return (

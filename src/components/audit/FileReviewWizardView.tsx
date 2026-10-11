@@ -490,64 +490,6 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     }
   };
 
-  // Smart Auto-detection of Column Headers
-  const autoDetectColumns = (matrix: any[][]) => {
-    if (!matrix || matrix.length === 0) return;
-
-    let bestHeaderIdx = 0;
-    for (let r = 0; r < Math.min(matrix.length, 10); r++) {
-      const rowStr = matrix[r].map((cell) => String(cell).toLowerCase()).join(' ');
-      if (
-        rowStr.includes('كود') ||
-        rowStr.includes('اسم') ||
-        rowStr.includes('مدين') ||
-        rowStr.includes('دائن') ||
-        rowStr.includes('code') ||
-        rowStr.includes('account') ||
-        rowStr.includes('debit') ||
-        rowStr.includes('credit')
-      ) {
-        bestHeaderIdx = r;
-        break;
-      }
-    }
-    setHeaderRowIdx(bestHeaderIdx);
-
-    const headerRow = matrix[bestHeaderIdx] || [];
-    let detectedCode = -1;
-    let detectedName = -1;
-    let detectedDebit = -1;
-    let detectedCredit = -1;
-    let detectedOpDebit = -1;
-    let detectedOpCredit = -1;
-
-    headerRow.forEach((cell: any, idx: number) => {
-      const val = String(cell).trim().toLowerCase();
-      if (val.includes('كود') || val === 'code' || val.includes('رقم الحساب')) {
-        if (detectedCode === -1) detectedCode = idx;
-      }
-      if (val.includes('اسم') || val.includes('حساب') || val.includes('account') || val.includes('name')) {
-        if (detectedName === -1 && !val.includes('كود')) detectedName = idx;
-      }
-      if (val.includes('افتتاحي') && val.includes('مدين')) {
-        detectedOpDebit = idx;
-      } else if (val.includes('افتتاحي') && val.includes('دائن')) {
-        detectedOpCredit = idx;
-      } else if (val.includes('مدين') || val.includes('debit')) {
-        if (detectedDebit === -1) detectedDebit = idx;
-      } else if (val.includes('دائن') || val.includes('credit')) {
-        if (detectedCredit === -1) detectedCredit = idx;
-      }
-    });
-
-    setCodeCol(detectedCode !== -1 ? detectedCode : 0);
-    setNameCol(detectedName !== -1 ? detectedName : 1);
-    setDebitCol(detectedDebit !== -1 ? detectedDebit : 2);
-    setCreditCol(detectedCredit !== -1 ? detectedCredit : 3);
-    setOpeningDebitCol(detectedOpDebit);
-    setOpeningCreditCol(detectedOpCredit);
-  };
-
   // Step 2 -> Step 3: Parse Accounts and Run Initial COA Match
   const processInitialCOAMapping = () => {
     if (codeCol < 0 || nameCol < 0 || debitCol < 0 || creditCol < 0) {

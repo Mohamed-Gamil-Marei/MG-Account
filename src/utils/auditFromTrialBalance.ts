@@ -122,16 +122,26 @@ export function buildAuditFromTrialBalance(
   let priorBalanceData: BalanceSheetData | null = null;
   if (priorRows && priorRows.length > 0) {
     try {
+      const unmappedCount = priorRows.filter(
+        (r) => r.matchType === 'UNMAPPED' || !r.mappedCode || String(r.mappedCode).trim() === ''
+      ).length;
+      if (unmappedCount > 0) {
+        warnings.push(`تم استبعاد ${unmappedCount} حساب غير مربوط من ميزان السنة السابقة عند حساب التدفقات المقارنة`);
+      }
+
+      const validPriorRows = priorRows.filter(
+        (r) => r.matchType !== 'UNMAPPED' && Boolean(r.mappedCode && String(r.mappedCode).trim() !== '')
+      );
+
       const priorEvalAccounts: Account[] = [...accounts];
-      const validPriorRows = priorRows.filter((r) => Boolean(r.mappedCode || r.originalCode));
 
       validPriorRows.forEach((row) => {
-        const code = String(row.mappedCode || row.originalCode || '');
+        const code = String(row.mappedCode);
         if (code && !priorEvalAccounts.some((a) => a.code === code)) {
           priorEvalAccounts.push({
             id: `acc-audit-prior-${code}`,
             code,
-            name: row.mappedName || row.originalName || code,
+            name: row.mappedName || code,
             category: code.startsWith('1') ? 'ASSETS' :
                       code.startsWith('2') ? 'LIABILITIES' :
                       code.startsWith('3') ? 'EQUITY' :
@@ -146,10 +156,10 @@ export function buildAuditFromTrialBalance(
       });
 
       const priorLines: JournalEntryLine[] = validPriorRows.map((row, index) => {
-        const code = String(row.mappedCode || row.originalCode || '');
+        const code = String(row.mappedCode);
         const existingAcc = accounts.find((a) => a.code === code);
         const accId = existingAcc ? existingAcc.id : `acc-audit-prior-${code}`;
-        const accName = existingAcc ? existingAcc.name : (row.mappedName || row.originalName || code);
+        const accName = existingAcc ? existingAcc.name : (row.mappedName || code);
         return {
           id: `line-prior-${index}-${Date.now()}`,
           accountId: accId,

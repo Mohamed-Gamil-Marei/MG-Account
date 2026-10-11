@@ -939,7 +939,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       <div className="space-y-4">
         {/* Automatic 3-Day Portal Password Expiration Reminder Alert */}
         {expiringCredentials.length > 0 && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 rounded-xl px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="font-bold">تنبيه انتهاء كلمات مرور البوابات:</span>
@@ -951,7 +951,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
             <button
               type="button"
               onClick={() => setIsExportAuthModalOpen(true)}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-amber-100 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-lg font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-amber-100 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
             >
               <KeyRound className="w-3.5 h-3.5" />
               <span>كشف البوابات</span>
@@ -960,7 +960,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         )}
 
         {/* Bulk Excel Operations Compact Toolbar */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-2xs">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="w-4 h-4 text-slate-500" />
             <span className="font-bold text-slate-700 dark:text-slate-200">استيراد وتصدير العملاء (Excel):</span>
@@ -969,7 +969,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
             <button
               type="button"
               onClick={() => ClientExcelEngine.downloadClientTemplate()}
-              className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               title="تحميل قالب إكسيل رسمي فارغ"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
@@ -979,7 +979,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
               type="button"
               id="btn-open-bulk-excel-import"
               onClick={() => setIsBulkExcelModalOpen(true)}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>استيراد عملاء جملة من Excel</span>
@@ -987,46 +987,27 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
           </div>
         </div>
 
-        {/* KPI Compact Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4">
-          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-              <span className="text-slate-500 text-xs font-medium block">إجمالي الشركات</span>
-              <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
-                {totalClientsCount}
-              </span>
-            </div>
+        {/* KPI Single-Row Summary Ticker */}
+        <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3 text-xs mb-3 font-medium">
+          <div className="flex items-center gap-1.5">
             <Building className="w-4 h-4 text-slate-500" />
+            <span className="text-slate-600 dark:text-slate-400">إجمالي الشركات:</span>
+            <strong className="text-slate-900 dark:text-white font-mono">{totalClientsCount}</strong>
           </div>
-
-          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-              <span className="text-slate-500 text-xs font-medium block">إجراءات جارية</span>
-              <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
-                {activeProceduresCount}
-              </span>
-            </div>
+          <div className="flex items-center gap-1.5">
             <Clock className="w-4 h-4 text-slate-500" />
+            <span className="text-slate-600 dark:text-slate-400">إجراءات جارية:</span>
+            <strong className="text-slate-900 dark:text-white font-mono">{activeProceduresCount}</strong>
           </div>
-
-          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-              <span className="text-slate-500 text-xs font-medium block">إجراءات مكتملة</span>
-              <span className="text-sm font-bold text-emerald-700 font-mono mt-0.5 block">
-                {completedProceduresCount}
-              </span>
-            </div>
+          <div className="flex items-center gap-1.5">
             <CheckCircle className="w-4 h-4 text-emerald-600" />
+            <span className="text-slate-600 dark:text-slate-400">إجراءات مكتملة:</span>
+            <strong className="text-emerald-700 dark:text-emerald-400 font-mono">{completedProceduresCount}</strong>
           </div>
-
-          <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-              <span className="text-slate-500 text-xs font-medium block">سندات الخزنة</span>
-              <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
-                {state.treasuryTransactions.filter((t) => t.clientId).length}
-              </span>
-            </div>
+          <div className="flex items-center gap-1.5">
             <Wallet className="w-4 h-4 text-slate-500" />
+            <span className="text-slate-600 dark:text-slate-400">سندات الخزنة:</span>
+            <strong className="text-slate-900 dark:text-white font-mono">{state.treasuryTransactions.filter((t) => t.clientId).length}</strong>
           </div>
         </div>
 
@@ -1043,8 +1024,8 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
             return (
               <div
                 key={client.id}
-                className={`bg-white dark:bg-slate-900 rounded-xl border p-2.5 sm:p-3 space-y-2 hover:border-emerald-500/60 dark:hover:border-emerald-500/50 hover:shadow-md transition-all flex flex-col justify-between ${
-                  isActive ? 'border-purple-500/70 bg-purple-50/20 dark:bg-purple-950/20 shadow-xs' : 'border-slate-200/80 dark:border-slate-800 shadow-2xs'
+                className={`bg-white dark:bg-slate-900 rounded-lg border p-2.5 sm:p-3 space-y-2 hover:border-emerald-500/60 dark:hover:border-emerald-500/50 transition-all flex flex-col justify-between ${
+                  isActive ? 'border-purple-500/70 bg-purple-50/20 dark:bg-purple-950/20' : 'border-slate-200/80 dark:border-slate-800'
                 }`}
               >
                 <div className="space-y-1.5">
@@ -1068,7 +1049,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                         {client.relationshipType === 'TEMPORARY' ? 'مؤقت' : 'دائم'}
                       </span>
                       {isActive && (
-                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-purple-600 text-white shadow-2xs">
+                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-purple-600 text-white">
                           ★ نشط
                         </span>
                       )}
@@ -1076,7 +1057,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                         {client.clientCode}
                       </span>
                     </div>
-                    <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-800 dark:text-emerald-300 shrink-0">
+                    <div className="w-6 h-6 rounded bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-800 dark:text-emerald-300 shrink-0">
                       <Building className="w-3.5 h-3.5" />
                     </div>
                   </div>
@@ -1086,7 +1067,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                   </h3>
 
                   {/* Company Info Condensed Single Grid */}
-                  <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded border border-slate-100 dark:border-slate-800">
                     <div className="truncate">
                       <span className="text-slate-400 text-[9px] block">سجل تجاري:</span>
                       <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{client.commercialRegistrationNo || '—'}</span>
@@ -1098,7 +1079,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                   </div>
 
                   {/* Micro Summary Stats */}
-                  <div className="flex items-center justify-between gap-1 text-[10px] px-1.5 py-1 bg-slate-100/70 dark:bg-slate-800/40 rounded-md">
+                  <div className="flex items-center justify-between gap-1 text-[10px] px-1.5 py-1 bg-slate-100/70 dark:bg-slate-800/40 rounded">
                     <span className="text-blue-700 dark:text-blue-300 font-semibold truncate">
                       الإجراءات: <strong>{procedures.length}</strong> ({activeProcs.length} جاري)
                     </span>
@@ -1116,7 +1097,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       setSelectedClient(client);
                       setActiveTab('PROCEDURES');
                     }}
-                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
                   >
                     <span>فتح الملف</span>
                     <ChevronRight className="w-3 h-3" />
@@ -1230,7 +1211,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       {/* Selected Client Dossier Modal */}
       {liveSelectedClient && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-5xl w-full p-6 shadow-xl border border-slate-200/80 dark:border-slate-800 text-xs my-4 max-h-[92vh] flex flex-col">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-5xl w-full p-6 border border-slate-200/80 dark:border-slate-800 text-xs my-4 max-h-[92vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3">
@@ -1261,9 +1242,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       db.setActiveClient(liveSelectedClient.id);
                     }
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black shadow-xs cursor-pointer transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
                     state.activeClientContext?.clientId === liveSelectedClient.id
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-400'
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 ring-1 ring-indigo-400'
                       : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300'
                   }`}
                   title="تعيين هذا العميل كعميل نشط في مركز الدورة المحاسبية وكافة المراكز"
@@ -1281,7 +1262,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     setTokenDossierTargetClient(liveSelectedClient);
                     setIsTokenDossierModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-xl text-xs font-black shadow-sm cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors"
                   title="طباعة بطاقة المنشأة الشاملة وحافظة الباسوردات مع ليبل ميدالية التوكن A4"
                 >
                   <Tag className="w-3.5 h-3.5" />
@@ -1293,7 +1274,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     setDocShareTargetClient(liveSelectedClient);
                     setIsDocShareModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors"
                   title="إرسال إشعار أو مستند مالي للعميل عبر نموذج جاهز (WhatsApp API)"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -1302,7 +1283,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
 
                 <button
                   onClick={() => handleSendDirectWhatsApp(liveSelectedClient)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
                   title="إرسال ملخص الحساب والإجراءات مباشرة عبر واتساب"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -1314,7 +1295,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     setCodeTargetClient(liveSelectedClient);
                     setIsCodeSenderModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-bold cursor-pointer"
                   title="إرسال كود تحقق أو اعتماد عبر WhatsApp"
                 >
                   <KeyRound className="w-3.5 h-3.5 text-teal-600" />
@@ -1326,7 +1307,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     setDocShareTargetClient(liveSelectedClient);
                     setIsDocShareModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold cursor-pointer"
                   title="إرسال ملف مأرشف أو كشف حساب أو أي ملف عبر WhatsApp"
                 >
                   <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
@@ -1338,7 +1319,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     setNotifyTargetProcedure(null);
                     setIsNotifyModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold cursor-pointer"
                   title="إرسال إشعار / رسالة للعميل (واتساب - بريد)"
                 >
                   <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
@@ -1346,7 +1327,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                 </button>
                 <button
                   onClick={() => handleRequestEditClient(liveSelectedClient)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold cursor-pointer"
                   title="تعديل بيانات الشركة والملف الضريبي والشركاء"
                 >
                   <Edit2 className="w-3.5 h-3.5 text-amber-700" />
@@ -1354,7 +1335,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                 </button>
                 <button
                   onClick={() => handleDeleteClient(liveSelectedClient)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-lg text-xs font-bold cursor-pointer"
                   title="حذف هذا العميل نهائياً من الأرشيف"
                 >
                   <Trash2 className="w-3.5 h-3.5 text-rose-700" />
@@ -1362,14 +1343,14 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                 </button>
                 <button
                   onClick={() => setIsAddProcedureModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>إضافة إجراء / عملية</span>
                 </button>
                 <button
                   onClick={() => setSelectedClient(null)}
-                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-sm cursor-pointer"
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-sm cursor-pointer"
                 >
                   ✕
                 </button>
@@ -1502,7 +1483,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                           return (
                             <div
                               key={proc.id}
-                              className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3 hover:border-slate-300 transition-all"
+                              className="bg-white rounded-xl p-3.5 border border-slate-200 space-y-3 hover:border-slate-300 transition-all"
                             >
                               {/* Header row */}
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1532,7 +1513,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                                 <div className="flex items-center gap-1.5 self-end sm:self-auto">
                                   <button
                                     onClick={() => handleSendDirectWhatsApp(liveSelectedClient, proc)}
-                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
                                     title="إرسال تفاصيل ومستجدات الإجراء للعميل فوراً عبر واتساب"
                                   >
                                     <Send className="w-3.5 h-3.5" />
@@ -1725,7 +1706,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     <button
                       type="button"
                       onClick={() => handleRequestEditClient(liveSelectedClient)}
-                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
                     >
                       <KeyRound className="w-3.5 h-3.5" />
                       <span>تحديث كلمات المرور</span>
@@ -1797,7 +1778,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                           );
                         } else if (diffDays <= 3) {
                           expiryBadge = (
-                            <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black animate-pulse">
+                            <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black">
                               ينتهي خلال {diffDays} {diffDays === 1 ? 'يوم' : 'أيام'}!
                             </span>
                           );
@@ -1813,7 +1794,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                       return (
                         <div
                           key={portal.key}
-                          className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between"
+                          className="bg-white rounded-xl p-3.5 border border-slate-200 space-y-3 flex flex-col justify-between"
                         >
                           <div className="space-y-2">
                             <div className="flex items-start justify-between gap-2">
@@ -1952,34 +1933,26 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
               {/* TAB 2: TREASURY & FEE STATEMENT */}
               {activeTab === 'TREASURY' && clientSummary && (
                 <div className="space-y-4">
-                  {/* Financial Summary KPI */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                      <span className="text-slate-500 block">إجمالي أتعاب العمليات</span>
-                      <span className="text-lg font-bold text-slate-900 mt-1 block">
-                        {formatEgyptianCurrency(clientSummary.totalAgreedFees)}
-                      </span>
+                  {/* Financial Summary KPI Ticker Row */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500">إجمالي أتعاب العمليات:</span>
+                      <strong className="text-slate-900 font-mono">{formatEgyptianCurrency(clientSummary.totalAgreedFees)}</strong>
                     </div>
 
-                    <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200">
-                      <span className="text-emerald-700 block">الأتعاب المحصلة فعلياً</span>
-                      <span className="text-lg font-bold text-emerald-800 mt-1 block">
-                        {formatEgyptianCurrency(clientSummary.totalCollectedFees)}
-                      </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-emerald-700">الأتعاب المحصلة فعلياً:</span>
+                      <strong className="text-emerald-800 font-mono">{formatEgyptianCurrency(clientSummary.totalCollectedFees)}</strong>
                     </div>
 
-                    <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200">
-                      <span className="text-amber-700 block">رسوم حكومية مسددة</span>
-                      <span className="text-lg font-bold text-amber-800 mt-1 block">
-                        {formatEgyptianCurrency(clientSummary.totalGovFeesPaid)}
-                      </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-amber-700">رسوم حكومية مسددة:</span>
+                      <strong className="text-amber-800 font-mono">{formatEgyptianCurrency(clientSummary.totalGovFeesPaid)}</strong>
                     </div>
 
-                    <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200">
-                      <span className="text-rose-700 block">صافي المتبقي على العميل</span>
-                      <span className="text-lg font-bold text-rose-800 mt-1 block">
-                        {formatEgyptianCurrency(clientSummary.remainingFeesDue)}
-                      </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-rose-700">صافي المتبقي على العميل:</span>
+                      <strong className="text-rose-800 font-mono">{formatEgyptianCurrency(clientSummary.remainingFeesDue)}</strong>
                     </div>
                   </div>
 
@@ -2230,7 +2203,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       {/* Add New Procedure Modal with Treasury Integration */}
       {isAddProcedureModalOpen && liveSelectedClient && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs my-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-xl w-full p-6 border border-slate-200 text-xs my-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <Layers className="w-5 h-5 text-emerald-700" />
@@ -2480,7 +2453,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       {/* Quick Treasury Modal (Receive Fee or Pay Gov Expense) */}
       {isQuickTreasuryModalOpen && liveSelectedClient && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-xs">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border border-slate-200 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <Wallet className={`w-5 h-5 ${quickTreasuryType === 'FEE' ? 'text-emerald-700' : 'text-rose-700'}`} />
@@ -2577,7 +2550,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       {/* Add / Edit Client Modal */}
       {isAddClientModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 text-xs my-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 border border-slate-200 text-xs my-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-emerald-700" />

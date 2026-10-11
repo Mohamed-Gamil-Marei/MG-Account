@@ -1910,40 +1910,26 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
         }
       >
         <div id="journal-entries-table-container" className="space-y-4">
-          {/* Micro-KPIs Ticker Bar */}
-          <MicroKpisTickerBar
-            items={[
-              {
-                id: 'kpi-count',
-                label: 'إجمالي القيود',
-                value: `${filteredEntries.length}`,
-                subValue: `${totalFilteredPostedCount} مرحل`,
-                icon: Receipt,
-                variant: 'blue',
-              },
-              {
-                id: 'kpi-total-debit',
-                label: 'إجمالي الحركة المدينة',
-                value: formatEgyptianCurrency(totalFilteredDebit),
-                icon: Coins,
-                variant: 'emerald',
-              },
-              {
-                id: 'kpi-unbalanced',
-                label: 'حالة التوازن',
-                value: unbalancedEntries.length === 0 ? 'متزن 100%' : `${unbalancedEntries.length} غير متزن`,
-                icon: unbalancedEntries.length === 0 ? CheckCircle2 : AlertTriangle,
-                variant: unbalancedEntries.length === 0 ? 'emerald' : 'rose',
-              },
-              {
-                id: 'kpi-drafts',
-                label: 'المسودات غير المرحلة',
-                value: `${filteredEntries.length - totalFilteredPostedCount}`,
-                icon: FileText,
-                variant: 'amber',
-              },
-            ]}
-          />
+          {/* Totals & KPIs Summary - Single Small Row */}
+          <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between text-xs text-slate-700 dark:text-slate-300 font-normal">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span>إجمالي القيود: <strong className="font-normal text-slate-900 dark:text-slate-100">{filteredEntries.length} ({totalFilteredPostedCount} مرحل)</strong></span>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span>مدين: <strong className="font-normal text-slate-900 dark:text-slate-100">{formatEgyptianCurrency(totalFilteredDebit)}</strong></span>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span>دائن: <strong className="font-normal text-slate-900 dark:text-slate-100">{formatEgyptianCurrency(totalFilteredDebit)}</strong></span>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span>
+                الفرق:{' '}
+                <strong className={`font-normal ${unbalancedEntries.length > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-900 dark:text-slate-100'}`}>
+                  {unbalancedEntries.length === 0 ? '0.00 ج.م' : `${unbalancedEntries.length} غير متزن`}
+                </strong>
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              <span>المسودات: {filteredEntries.length - totalFilteredPostedCount}</span>
+            </div>
+          </div>
 
           {/* Draft Recovery Alert Banner when main table is visible */}
           {hasUnsavedDraft && !isNewEntryModalOpen && (
@@ -2348,42 +2334,42 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
 
               {/* Journal Lines Table - High Density */}
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-[11px] accounting-table">
+                <table className="w-full text-right text-[11px] border-collapse">
                   <thead>
-                    <tr className="bg-slate-50/90 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200/80 dark:border-slate-800 text-[10px]">
-                      <th className="py-1 px-2.5 sticky right-0 bg-slate-50 dark:bg-slate-800 z-10">كود الحساب</th>
-                      <th className="py-1 px-2.5">اسم الحساب</th>
+                    <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-normal border-b border-slate-200 dark:border-slate-700 text-[10px] sticky top-0 z-20">
+                      <th className="py-1 px-2.5 sticky right-0 bg-slate-100 dark:bg-slate-800 z-20 font-normal">كود الحساب</th>
+                      <th className="py-1 px-2.5 font-normal">اسم الحساب</th>
                       {entry.currency && entry.currency !== 'EGP' && (
                         <>
-                          <th className="py-1 px-2.5 text-left text-blue-700 dark:text-blue-400">مدين ({entry.currency})</th>
-                          <th className="py-1 px-2.5 text-left text-amber-700 dark:text-amber-400">دائن ({entry.currency})</th>
+                          <th className="py-1 px-2.5 text-left font-normal">مدين ({entry.currency})</th>
+                          <th className="py-1 px-2.5 text-left font-normal">دائن ({entry.currency})</th>
                         </>
                       )}
-                      <th className="py-1 px-2.5 text-left">مدين (ج.م)</th>
-                      <th className="py-1 px-2.5 text-left">دائن (ج.م)</th>
-                      <th className="py-1 px-2.5">شرح الطرف</th>
+                      <th className="py-1 px-2.5 text-left font-normal">مدين (ج.م)</th>
+                      <th className="py-1 px-2.5 text-left font-normal">دائن (ج.م)</th>
+                      <th className="py-1 px-2.5 font-normal">شرح الطرف</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {entry.lines.map((line, idx) => (
-                      <tr key={line.id || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors">
-                        <td className="py-1 px-2.5 font-mono text-slate-600 dark:text-slate-300 text-[10.5px] sticky right-0 bg-white dark:bg-slate-900 z-10">{line.accountCode}</td>
-                        <td className="py-1 px-2.5 font-medium text-slate-900 dark:text-slate-100">{line.accountName}</td>
+                      <tr key={line.id || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-1 px-2.5 font-mono text-slate-700 dark:text-slate-300 text-[10.5px] sticky right-0 bg-white dark:bg-slate-900 z-10">{line.accountCode}</td>
+                        <td className="py-1 px-2.5 font-normal text-slate-900 dark:text-slate-100">{line.accountName}</td>
                         {entry.currency && entry.currency !== 'EGP' && (
                           <>
-                            <td className="py-1 px-2.5 font-mono font-semibold text-left text-blue-700 dark:text-blue-400">
+                            <td className="py-1 px-2.5 font-mono text-left text-slate-800 dark:text-slate-200">
                               {line.foreignDebit && line.foreignDebit > 0 ? Number(line.foreignDebit).toLocaleString() : '-'}
                             </td>
-                            <td className="py-1 px-2.5 font-mono font-semibold text-left text-amber-700 dark:text-amber-400">
+                            <td className="py-1 px-2.5 font-mono text-left text-slate-800 dark:text-slate-200">
                               {line.foreignCredit && line.foreignCredit > 0 ? Number(line.foreignCredit).toLocaleString() : '-'}
                             </td>
                           </>
                         )}
-                        <td className="py-1 px-2.5 font-mono font-bold text-left text-blue-800 dark:text-blue-400">
-                          {line.debit > 0 ? formatEgyptianCurrency(line.debit) : '-'}
+                        <td className={`py-1 px-2.5 font-mono text-left ${line.debit < 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-900 dark:text-slate-100'}`}>
+                          {line.debit !== 0 ? formatEgyptianCurrency(line.debit) : '-'}
                         </td>
-                        <td className="py-1 px-2.5 font-mono font-bold text-left text-amber-800 dark:text-amber-400">
-                          {line.credit > 0 ? formatEgyptianCurrency(line.credit) : '-'}
+                        <td className={`py-1 px-2.5 font-mono text-left ${line.credit < 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-900 dark:text-slate-100'}`}>
+                          {line.credit !== 0 ? formatEgyptianCurrency(line.credit) : '-'}
                         </td>
                         <td className="py-1 px-2.5 text-slate-500 dark:text-slate-400 text-[10px]">{line.description || '-'}</td>
                       </tr>
@@ -3293,7 +3279,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                           type="button"
                           onClick={handleOpenClientReportModalForNewEntry}
                           disabled={!isBalanced}
-                          className="px-4 py-2 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl font-bold shadow-md shadow-emerald-950/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                           title="ربط القيد مباشرة بملف العميل وتوثيقه كتقرير رسمي في أرشيف المستندات"
                         >
                           <FolderArchive className="w-4 h-4 text-emerald-300" />
