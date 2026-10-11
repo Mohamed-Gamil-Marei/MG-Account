@@ -422,7 +422,7 @@ export const SmartCreditSuite: React.FC<SmartCreditSuiteProps> = ({
               type="button"
               onClick={handleApplyEngineeredPlan}
               disabled={isApplying}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/60 cursor-pointer transition-all active:scale-95 shrink-0"
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 shrink-0"
             >
               <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
               <span>{isApplying ? 'جاري الضبط والموازنة...' : 'تطبيق الأرقام المتزنة على القوائم فوراً'}</span>

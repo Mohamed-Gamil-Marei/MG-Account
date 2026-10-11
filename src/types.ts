@@ -141,6 +141,51 @@ export type ProcedureStatus =
   | 'COMPLETED'            // تم الإنجاز والاعتماد
   | 'CANCELLED';           // ملغي / معلق
 
+export type DeadlineType =
+  | 'INCOME_TAX'
+  | 'VAT'
+  | 'WHT'
+  | 'PAYROLL_TAX'
+  | 'SOCIAL_INSURANCE'
+  | 'COMMERCIAL_REGISTER'
+  | 'OTHER';
+
+export type DeadlineStatus = 'PENDING' | 'FILED' | 'LATE';
+
+export interface ClientDeadline {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  type: DeadlineType;
+  title: string;
+  dueDate: string; // ISO YYYY-MM-DD
+  status: DeadlineStatus;
+  filedAt?: string;
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type OpenItemKind = 'DOCUMENT' | 'QUESTION' | 'ADJUSTMENT';
+export type OpenItemStatus = 'OPEN' | 'RECEIVED' | 'CLOSED';
+
+export interface OpenItem {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  fiscalYear?: number | string;
+  kind: OpenItemKind;
+  text: string;
+  requestedAt: string; // ISO YYYY-MM-DD
+  dueDate?: string;
+  status: OpenItemStatus;
+  closedAt?: string;
+  closedBy?: string;
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type ProcedureCategory =
   | 'TAX_AUDIT'            // فحص ضريبي
   | 'TAX_DECLARATION'      // إقرارات ضريبية

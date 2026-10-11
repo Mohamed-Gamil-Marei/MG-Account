@@ -113,7 +113,7 @@ export const CreditExcelBridgeModal: React.FC<CreditExcelBridgeModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 text-slate-100 font-sans select-none animate-in fade-in duration-150">
-      <div className="bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-slate-900 border border-slate-750 rounded-2xl shadow-md max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
           <div className="flex items-center gap-2.5">

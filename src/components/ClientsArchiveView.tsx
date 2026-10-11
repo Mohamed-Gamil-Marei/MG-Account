@@ -43,6 +43,8 @@ import {
   Tag,
   Scissors,
   Factory,
+  CheckSquare,
+  HelpCircle,
 } from 'lucide-react';
 import {
   ClientArchiveRecord,
@@ -76,6 +78,9 @@ import { SmartProcedureFeeEstimatorModal } from './SmartProcedureFeeEstimatorMod
 import { CompanyDossierAndTokenLabelModal } from './archive/CompanyDossierAndTokenLabelModal';
 import { ClientExcelImportModal } from './archive/ClientExcelImportModal';
 import { ClientExcelEngine } from '../utils/clientExcelEngine';
+import { ClosingChecklistPanel } from './archive/ClosingChecklistPanel';
+import { ClientDeadlinesPanel } from './archive/ClientDeadlinesPanel';
+import { ClientOpenItemsPanel } from './archive/ClientOpenItemsPanel';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
@@ -86,7 +91,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [selectedClient, setSelectedClient] = useState<ClientArchiveRecord | null>(null);
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PORTALS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS' | 'COMMUNICATION_LOG'>('PROCEDURES');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PORTALS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS' | 'COMMUNICATION_LOG' | 'CLOSING_CHECKLIST' | 'DEADLINES' | 'OPEN_ITEMS'>('PROCEDURES');
   const [procedureFilterStatus, setProcedureFilterStatus] = useState<string>('ALL');
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [revealedPasswordsMap, setRevealedPasswordsMap] = useState<Record<string, string>>({});
@@ -1394,6 +1399,21 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     label: 'سجل التواصل والرقابة المهنية (واتساب)',
                     icon: <MessageSquare className="w-4 h-4" />,
                   },
+                  {
+                    id: 'CLOSING_CHECKLIST',
+                    label: 'قائمة الإقفال المالي',
+                    icon: <CheckSquare className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'DEADLINES',
+                    label: `مواعيد الإقرارات (${(state.clientDeadlines || []).filter((d) => d.clientId === liveSelectedClient.id).length})`,
+                    icon: <Calendar className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'OPEN_ITEMS',
+                    label: `البنود المفتوحة (${(state.openItems || []).filter((i) => i.clientId === liveSelectedClient.id && i.status === 'OPEN').length})`,
+                    icon: <HelpCircle className="w-4 h-4" />,
+                  },
                 ]}
               />
             </div>
@@ -2183,6 +2203,32 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     setDocShareTargetClient(liveSelectedClient);
                     setIsDocShareModalOpen(true);
                   }}
+                />
+              )}
+
+              {/* TAB 6: CLOSING CHECKLIST */}
+              {activeTab === 'CLOSING_CHECKLIST' && (
+                <ClosingChecklistPanel
+                  clientId={liveSelectedClient.id}
+                  clientName={liveSelectedClient.name}
+                  initialYear={2026}
+                />
+              )}
+
+              {/* TAB 7: DEADLINES */}
+              {activeTab === 'DEADLINES' && (
+                <ClientDeadlinesPanel
+                  state={state}
+                  selectedClientId={liveSelectedClient.id}
+                />
+              )}
+
+              {/* TAB 8: OPEN ITEMS */}
+              {activeTab === 'OPEN_ITEMS' && (
+                <ClientOpenItemsPanel
+                  state={state}
+                  selectedClientId={liveSelectedClient.id}
+                  fiscalYear={2026}
                 />
               )}
             </div>

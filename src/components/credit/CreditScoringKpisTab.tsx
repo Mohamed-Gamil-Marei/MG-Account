@@ -1617,7 +1617,7 @@ export const CreditScoringKpisTab: React.FC<CreditScoringKpisTabProps> = ({
       {/* Modal: Add Custom Credit Ratio */}
       {isAddRatioModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-md space-y-4 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
                 <Plus className="w-4 h-4 text-indigo-700" />
@@ -1716,7 +1716,7 @@ export const CreditScoringKpisTab: React.FC<CreditScoringKpisTabProps> = ({
       {/* Modal: Add Stress Testing Scenario */}
       {isAddScenarioModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-md space-y-4 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-blue-700" />

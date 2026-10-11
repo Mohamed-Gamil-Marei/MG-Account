@@ -410,7 +410,7 @@ export const PracticeManagementHubView: React.FC<PracticeManagementHubViewProps>
       {/* Official Print Dossier Modal */}
       {isPrintDossierOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-4xl p-6 shadow-2xl relative text-slate-900 text-right my-8">
+          <div className="bg-white rounded-2xl w-full max-w-4xl p-6 shadow-md relative text-slate-900 text-right my-8">
             <button
               onClick={() => setIsPrintDossierOpen(false)}
               className="absolute top-4 left-4 p-2 text-slate-400 hover:text-slate-900 rounded-full hover:bg-slate-100 cursor-pointer"

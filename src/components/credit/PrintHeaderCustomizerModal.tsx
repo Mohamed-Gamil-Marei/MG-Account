@@ -158,7 +158,7 @@ export const PrintHeaderCustomizerModal: React.FC<PrintHeaderCustomizerModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 sm:p-5 overflow-y-auto backdrop-blur-xs font-sans">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-300 w-full max-w-5xl overflow-hidden my-auto flex flex-col max-h-[92vh]">
+      <div className="bg-white rounded-3xl shadow-md border border-slate-300 w-full max-w-5xl overflow-hidden my-auto flex flex-col max-h-[92vh]">
         {/* Top Header */}
         <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-3">
@@ -651,7 +651,7 @@ export const PrintHeaderCustomizerModal: React.FC<PrintHeaderCustomizerModalProp
         <div className="bg-slate-100 p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
             {saveSuccessMessage && (
-              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-300 animate-pulse">
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-300">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>{saveSuccessMessage}</span>
               </div>

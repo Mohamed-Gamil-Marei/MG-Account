@@ -2381,7 +2381,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
               {/* Document Sheet Screen Identifier - Floating above paper */}
               <div className="no-print w-full max-w-[210mm] flex items-center justify-between px-3 py-1.5 mb-2 bg-slate-900/90 backdrop-blur-md text-white rounded-lg shadow-sm text-xs font-mono select-none">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span className="font-bold">
                     ورقة معتمدة {displayPageNum} من {displayTotal}
                     {shouldResequence && filteredPages.length !== totalPagesCount && (

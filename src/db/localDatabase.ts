@@ -1,4 +1,6 @@
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
+import { ClosingStep, createDefaultChecklist } from '../utils/closingChecklist';
+import { ClientDeadline, OpenItem } from '../types';
 import {
   Account,
   AccountCategory,
@@ -85,6 +87,9 @@ const STORAGE_KEYS = {
   FEE_ESTIMATES: 'egy_acc_fee_estimates_v1',
   CUSTOMS_SHIPMENTS: 'egy_acc_customs_shipments_v1',
   FINANCIAL_ACTIVITY_LOGS: 'egy_acc_financial_activity_logs_v1',
+  CLOSING_CHECKLISTS: 'egy_acc_closing_checklists_v1',
+  CLIENT_DEADLINES: 'egy_acc_client_deadlines_v1',
+  OPEN_ITEMS: 'egy_acc_open_items_v1',
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
@@ -121,6 +126,9 @@ export interface DatabaseState {
   exchangeRates: DailyExchangeRateRecord[];
   fiscalPeriodLocks: FiscalPeriodLock[];
   customsShipments: CustomsShipment[];
+  closingChecklists?: Record<string, ClosingStep[]>;
+  clientDeadlines?: ClientDeadline[];
+  openItems?: OpenItem[];
   financialActivityLogs?: FinancialActivityLog[];
   activeClientContext?: ActiveClientContext;
   clientArchives?: ClientArchiveRecord[];
@@ -359,6 +367,9 @@ export class LocalDatabase {
       const feeEstimatesJson = localStorage.getItem(STORAGE_KEYS.FEE_ESTIMATES);
       const customsJson = localStorage.getItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS);
       const financialLogsJson = localStorage.getItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS);
+      const closingChecklistsJson = localStorage.getItem(STORAGE_KEYS.CLOSING_CHECKLISTS);
+      const clientDeadlinesJson = localStorage.getItem(STORAGE_KEYS.CLIENT_DEADLINES);
+      const openItemsJson = localStorage.getItem(STORAGE_KEYS.OPEN_ITEMS);
 
       // Check if full purge to clean slate was enforced
       const PURGE_SYSTEM_FLAG = 'cpa_integrated_purged_clean_v6';
@@ -589,6 +600,9 @@ export class LocalDatabase {
             details: 'تهيئة منظومة المحاسب القانوني المتكامل',
           },
         ],
+        closingChecklists: closingChecklistsJson ? JSON.parse(closingChecklistsJson) : {},
+        clientDeadlines: clientDeadlinesJson ? JSON.parse(clientDeadlinesJson) : [],
+        openItems: openItemsJson ? JSON.parse(openItemsJson) : [],
       };
     } catch (e) {
       console.error('Error loading database state:', e);
@@ -682,6 +696,15 @@ export class LocalDatabase {
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.AUDIT_LOGS)) {
         localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CLOSING_CHECKLISTS)) {
+        localStorage.setItem(STORAGE_KEYS.CLOSING_CHECKLISTS, JSON.stringify(this.state.closingChecklists || {}));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.CLIENT_DEADLINES)) {
+        localStorage.setItem(STORAGE_KEYS.CLIENT_DEADLINES, JSON.stringify(this.state.clientDeadlines || []));
+      }
+      if (this.dirtyKeys.has(STORAGE_KEYS.OPEN_ITEMS)) {
+        localStorage.setItem(STORAGE_KEYS.OPEN_ITEMS, JSON.stringify(this.state.openItems || []));
       }
       if (this.dirtyKeys.has(STORAGE_KEYS.SYSTEM_USERS)) {
         localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(this.state.users));
@@ -1196,6 +1219,180 @@ export class LocalDatabase {
     this.logAudit('UPDATE', `إلغاء تحديد العميل النشط (عرض شامل لكافة السجلات)`);
     this.saveState('ACTIVE_CLIENT_CONTEXT');
     return cleared;
+  }
+
+  // --- Closing Checklist (قائمة الإقفال لكل عميل وسنة مالية) ---
+  public getChecklist(clientId: string, fiscalYear: number | string): ClosingStep[] {
+    const key = `${clientId}_${fiscalYear}`;
+    if (this.state.closingChecklists && Array.isArray(this.state.closingChecklists[key]) && this.state.closingChecklists[key].length > 0) {
+      return this.state.closingChecklists[key];
+    }
+    return createDefaultChecklist();
+  }
+
+  public saveChecklist(clientId: string, fiscalYear: number | string, steps: ClosingStep[]): ClosingStep[] {
+    const key = `${clientId}_${fiscalYear}`;
+    if (!this.state.closingChecklists) {
+      this.state.closingChecklists = {};
+    }
+    this.state.closingChecklists[key] = steps;
+    this.saveState('CLOSING_CHECKLISTS' as any);
+
+    const client = this.state.clients.find((c) => c.id === clientId);
+    const clientName = client ? client.name : clientId;
+    const currentUser = this.getCurrentUser();
+    const userName = currentUser ? currentUser.name : 'محاسب عام';
+
+    this.logAudit(
+      'UPDATE',
+      `تحديث قائمة الإقفال للعميل: [${clientName}] - السنة المالية: [${fiscalYear}] بواسطة: (${userName})`
+    );
+
+    return steps;
+  }
+
+  // --- Client Deadlines Methods (مواعيد الإقرارات والتكليفات لكل عميل) ---
+  public getClientDeadlines(clientId?: string): ClientDeadline[] {
+    const list = this.state.clientDeadlines || [];
+    if (!clientId) return list;
+    return list.filter((d) => d.clientId === clientId);
+  }
+
+  public addClientDeadline(payload: Omit<ClientDeadline, 'id' | 'createdAt' | 'updatedAt'>): ClientDeadline {
+    if (!this.state.clientDeadlines) {
+      this.state.clientDeadlines = [];
+    }
+    const newDeadline: ClientDeadline = {
+      ...payload,
+      id: `DL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.state.clientDeadlines.push(newDeadline);
+    this.saveState('CLIENT_DEADLINES' as any);
+    this.logAudit('CREATE', `إضافة موعد إقرار/التزام: ${payload.title} (عميل: ${payload.clientId})`);
+    return newDeadline;
+  }
+
+  public addMultipleClientDeadlines(payloads: Omit<ClientDeadline, 'id' | 'createdAt' | 'updatedAt'>[]): ClientDeadline[] {
+    if (!this.state.clientDeadlines) {
+      this.state.clientDeadlines = [];
+    }
+    const created: ClientDeadline[] = [];
+    const now = new Date().toISOString();
+
+    for (const p of payloads) {
+      const item: ClientDeadline = {
+        ...p,
+        id: `DL-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.state.clientDeadlines.push(item);
+      created.push(item);
+    }
+
+    this.saveState('CLIENT_DEADLINES' as any);
+    this.logAudit('CREATE', `إضافة عدد ${created.length} مواعيد تكرار شهري للمستندات الإقرارية`);
+    return created;
+  }
+
+  public updateClientDeadline(id: string, updates: Partial<ClientDeadline>): ClientDeadline | null {
+    if (!this.state.clientDeadlines) return null;
+    const index = this.state.clientDeadlines.findIndex((d) => d.id === id);
+    if (index === -1) return null;
+
+    const existing = this.state.clientDeadlines[index];
+    const updated: ClientDeadline = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (updates.status === 'FILED' && !updated.filedAt) {
+      updated.filedAt = new Date().toISOString().split('T')[0];
+    }
+
+    this.state.clientDeadlines[index] = updated;
+    this.saveState('CLIENT_DEADLINES' as any);
+    this.logAudit('UPDATE', `تعديل موعد إقرار: ${updated.title}`);
+    return updated;
+  }
+
+  public deleteClientDeadline(id: string): boolean {
+    if (!this.state.clientDeadlines) return false;
+    const index = this.state.clientDeadlines.findIndex((d) => d.id === id);
+    if (index === -1) return false;
+
+    const title = this.state.clientDeadlines[index].title;
+    this.state.clientDeadlines.splice(index, 1);
+    this.saveState('CLIENT_DEADLINES' as any);
+    this.logAudit('DELETE', `حذف موعد إقرار: ${title}`);
+    return true;
+  }
+
+  // --- Open Items Methods (البنود المفتوحة والمستندات المعلقة لكل عميل) ---
+  public getOpenItems(clientId?: string, fiscalYear?: number | string): OpenItem[] {
+    let list = this.state.openItems || [];
+    if (clientId) {
+      list = list.filter((i) => i.clientId === clientId);
+    }
+    if (fiscalYear) {
+      list = list.filter((i) => !i.fiscalYear || String(i.fiscalYear) === String(fiscalYear));
+    }
+    return list;
+  }
+
+  public addOpenItem(payload: Omit<OpenItem, 'id' | 'createdAt' | 'updatedAt'>): OpenItem {
+    if (!this.state.openItems) {
+      this.state.openItems = [];
+    }
+    const newItem: OpenItem = {
+      ...payload,
+      id: `OI-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.state.openItems.push(newItem);
+    this.saveState('OPEN_ITEMS' as any);
+    this.logAudit('CREATE', `إضافة بند مفتوح جديد: [${newItem.kind}] ${newItem.text.substring(0, 30)} (عميل: ${payload.clientId})`);
+    return newItem;
+  }
+
+  public updateOpenItem(id: string, updates: Partial<OpenItem>): OpenItem | null {
+    if (!this.state.openItems) return null;
+    const index = this.state.openItems.findIndex((i) => i.id === id);
+    if (index === -1) return null;
+
+    const existing = this.state.openItems[index];
+    const currentUser = this.getCurrentUser();
+    const updated: OpenItem = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (updates.status === 'CLOSED' && !updated.closedAt) {
+      updated.closedAt = new Date().toISOString().split('T')[0];
+      if (currentUser) updated.closedBy = currentUser.name;
+    }
+
+    this.state.openItems[index] = updated;
+    this.saveState('OPEN_ITEMS' as any);
+    this.logAudit('UPDATE', `تحديث حالة البند المفتوح: ${updated.text.substring(0, 30)} -> [${updated.status}]`);
+    return updated;
+  }
+
+  public deleteOpenItem(id: string): boolean {
+    if (!this.state.openItems) return false;
+    const index = this.state.openItems.findIndex((i) => i.id === id);
+    if (index === -1) return false;
+
+    const text = this.state.openItems[index].text;
+    this.state.openItems.splice(index, 1);
+    this.saveState('OPEN_ITEMS' as any);
+    this.logAudit('DELETE', `حذف بند مفتوح: ${text.substring(0, 30)}`);
+    return true;
   }
 
   public updateActiveClientFiscalYear(year: number) {

@@ -43,6 +43,14 @@ import {
   round2,
 } from '../../utils/accountingCalculations';
 import { buildAuditFromTrialBalance } from '../../utils/auditFromTrialBalance';
+import {
+  computeVariance,
+  VarianceAnalysisResult,
+} from '../../utils/trialBalanceVariance';
+import {
+  checkOpeningBalances,
+  OpeningBalanceCheckResult,
+} from '../../utils/openingBalanceCheck';
 
 interface FileReviewWizardViewProps {
   state: DatabaseState;
@@ -383,6 +391,39 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     isBalanced: boolean;
   } | null>(null);
   const priorFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Variance Analysis State (Requirement 10)
+  const [variancePctThreshold, setVariancePctThreshold] = useState<number>(30);
+  const [varianceMinAmount, setVarianceMinAmount] = useState<number>(10000);
+  const [varianceJustifications, setVarianceJustifications] = useState<Record<string, string>>({});
+
+  const varianceAnalysis = useMemo<VarianceAnalysisResult | null>(() => {
+    if (!priorMappedRows || priorMappedRows.length === 0) return null;
+    return computeVariance(mappedRows, priorMappedRows, {
+      pctThreshold: variancePctThreshold,
+      minAmount: varianceMinAmount,
+    });
+  }, [mappedRows, priorMappedRows, variancePctThreshold, varianceMinAmount]);
+
+  const handleJustificationChange = (mappedCode: string, text: string) => {
+    setVarianceJustifications((prev) => ({
+      ...prev,
+      [mappedCode]: text,
+    }));
+  };
+
+  // Opening Balance Rollforward Check State & Logic
+  const hasOpeningColumns = useMemo(
+    () => openingDebitCol >= 0 || openingCreditCol >= 0 || mappedRows.some((r) => (r.openingDebit || 0) !== 0 || (r.openingCredit || 0) !== 0),
+    [openingDebitCol, openingCreditCol, mappedRows]
+  );
+
+  const openingBalanceCheckResult = useMemo<OpeningBalanceCheckResult | null>(() => {
+    if (!priorMappedRows || priorMappedRows.length === 0 || !hasOpeningColumns) {
+      return null;
+    }
+    return checkOpeningBalances(priorMappedRows, mappedRows, hasOpeningColumns);
+  }, [priorMappedRows, mappedRows, hasOpeningColumns]);
 
   const activeClient = useMemo(() => {
     return state.clients.find((c) => c.id === selectedClientId) || state.clients[0];
@@ -1162,6 +1203,92 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     XLSX.writeFile(wb, `Auditor_Changes_Log_${activeClient?.name}_${selectedFiscalYear}.xlsx`);
   };
 
+  const handleExportVarianceExcel = () => {
+    if (!varianceAnalysis) return;
+    const exportData = varianceAnalysis.flaggedAccounts.map((acc) => ({
+      'كود الحساب': acc.mappedCode,
+      'اسم الحساب': acc.mappedName,
+      [`رصيد سنة ${selectedFiscalYear}`]: acc.currentBalance,
+      [`رصيد سنة ${selectedFiscalYear - 1}`]: acc.priorBalance,
+      'الفرق (ج.م)': acc.difference,
+      'نسبة التغير (%)': acc.percentage === null ? 'حساب جديد' : `${acc.percentage}%`,
+      'التبرير المعتمد': varianceJustifications[acc.mappedCode]?.trim() || '—',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'الفروق الجوهرية');
+    XLSX.writeFile(wb, `Variance_Analysis_${activeClient?.name}_${selectedFiscalYear}.xlsx`);
+  };
+
+  const handlePrintAuditReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const office = officeProfile;
+    const rowsHtml = varianceAnalysis?.flaggedAccounts.map((acc) => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ccc; font-family: monospace;">${acc.mappedCode}</td>
+        <td style="padding: 8px; border: 1px solid #ccc;">${acc.mappedName}</td>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace;">${acc.currentBalance.toLocaleString('ar-EG')}</td>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace;">${acc.priorBalance.toLocaleString('ar-EG')}</td>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace; font-weight: bold;">${acc.difference.toLocaleString('ar-EG')}</td>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${acc.percentage === null ? 'جديد' : acc.percentage + '%'}</td>
+        <td style="padding: 8px; border: 1px solid #ccc;">${varianceJustifications[acc.mappedCode]?.trim() || '—'}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" style="padding: 8px; text-align: center;">لا توجد فروق جوهرية متجاوزة</td></tr>';
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>تقرير المراجعة والفروق الجوهرية - ${activeClient?.name}</title>
+          <style>
+            body { font-family: 'Cairo', system-ui, sans-serif; padding: 20px; direction: rtl; text-align: right; }
+            h1, h2, h3 { color: #1e293b; margin-bottom: 8px; }
+            .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+            th { background: #f1f5f9; padding: 8px; border: 1px solid #ccc; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2>${office?.name || 'مكتب المراجعة المعتمد'}</h2>
+            <h3>تقرير المراجعة وتحليل الفروق الجوهرية</h3>
+            <p><strong>العميل:</strong> ${activeClient?.name || '—'} | <strong>السنة المالية:</strong> ${selectedFiscalYear}</p>
+          </div>
+
+          <h3>قسم الفروق الجوهرية وتبريرها (تحليل فروق الميزان)</h3>
+          <p style="font-size: 12px; color: #64748b;">حدود المادية: نسبة الانحراف ${variancePctThreshold}% | الحد الأدنى ${varianceMinAmount.toLocaleString('ar-EG')} ج.م</p>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>الكود</th>
+                <th>اسم الحساب</th>
+                <th>رصيد ${selectedFiscalYear}</th>
+                <th>رصيد ${selectedFiscalYear - 1}</th>
+                <th>الفرق (ج.م)</th>
+                <th>النسبة</th>
+                <th>التبرير المعتمد</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Official Header */}
@@ -1835,6 +1962,181 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
             </div>
           )}
 
+          {/* Opening Balance Rollforward Check (Requirement 1 - Opening Balance Check) */}
+          {!priorMappedRows || priorMappedRows.length === 0 || !hasOpeningColumns ? (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-500 flex items-center gap-2">
+              <Info className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>لا يمكن فحص الأرصدة الافتتاحية: لا يوجد عمود افتتاحي / ميزان سابق</span>
+            </div>
+          ) : openingBalanceCheckResult?.isMatched ? (
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-semibold text-emerald-900 dark:text-emerald-200 flex items-center gap-2.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>فحص مطابقة الأرصدة الافتتاحية: متطابقة تماماً مع أرصدة آخر المدة للسنة السابقة (تم استبعاد الإيرادات والمصروفات وتدقيق أثر النتائج مرحلياً).</span>
+            </div>
+          ) : openingBalanceCheckResult ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800/60 pb-2.5">
+                <h4 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2 text-sm">
+                  <AlertTriangle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
+                  <span>عدم مطابقة الأرصدة الافتتاحية (Opening Balance Rollforward Discrepancies)</span>
+                </h4>
+                <span className="font-mono font-bold text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-700 shrink-0">
+                  إجمالي الفروق: {openingBalanceCheckResult.totalDifference.toLocaleString('ar-EG')} ج.م
+                </span>
+              </div>
+              <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+                تم رصد اختلاف بين رصيد آخر المدة للسنة السابقة ورصيد أول المدة للسنة الحالية بالحسابات التالية. يرجى مراجعة تدوير الأرصدة:
+              </p>
+              <div className="overflow-x-auto border border-amber-200 dark:border-amber-800 rounded-lg bg-white dark:bg-slate-900">
+                <table className="w-full text-xs text-right">
+                  <thead className="bg-amber-100/60 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 font-bold border-b border-amber-200 dark:border-amber-800">
+                    <tr>
+                      <th className="p-2.5">الكود</th>
+                      <th className="p-2.5">اسم الحساب</th>
+                      <th className="p-2.5">رصيد آخر المدة (السابقة)</th>
+                      <th className="p-2.5">رصيد أول المدة (الحالية)</th>
+                      <th className="p-2.5">الفرق (ج.م)</th>
+                      <th className="p-2.5">ملاحظات التحقق</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-100 dark:divide-slate-800">
+                    {openingBalanceCheckResult.discrepancies.map((disc) => (
+                      <tr key={disc.mappedCode} className="hover:bg-amber-50/50 dark:hover:bg-slate-800/50">
+                        <td className="p-2.5 font-mono font-bold text-slate-800 dark:text-slate-200">{disc.mappedCode}</td>
+                        <td className="p-2.5 font-medium">{disc.mappedName}</td>
+                        <td className="p-2.5 font-mono text-slate-600 dark:text-slate-400">{disc.priorEndingBalance.toLocaleString('ar-EG')}</td>
+                        <td className="p-2.5 font-mono text-slate-800 dark:text-slate-200">{disc.currentOpeningBalance.toLocaleString('ar-EG')}</td>
+                        <td className="p-2.5 font-mono font-bold text-rose-600">{disc.difference.toLocaleString('ar-EG')}</td>
+                        <td className="p-2.5 text-slate-500 text-[11px]">{disc.note || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Variance Analysis Table (Requirement 10) - Rendered only if prior trial balance was uploaded */}
+          {varianceAnalysis && (
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-purple-600" />
+                    <span>تحليل فروق الميزان (Variance Analysis) المقارن</span>
+                    <span className="text-xs bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-300 font-mono px-2 py-0.5 rounded-full">
+                      {varianceAnalysis.flaggedAccounts.length} فروق جوهرية
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    مقارنة ميزان السنة الحالية بالسابقة المرفوعة وتحديد الحسابات ذات الانحراف الجوهري.
+                  </p>
+                </div>
+
+                {/* Threshold Controls */}
+                <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs shrink-0">
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-slate-600 dark:text-slate-400 font-semibold">حد النسبة (%):</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={variancePctThreshold}
+                      onChange={(e) => setVariancePctThreshold(Math.max(0, Number(e.target.value)))}
+                      className="w-16 px-2 py-1 border border-slate-300 dark:border-slate-700 rounded text-center font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                  </label>
+                  <span className="text-slate-300 dark:text-slate-700">|</span>
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-slate-600 dark:text-slate-400 font-semibold">الحد الأدنى (ج.م):</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={varianceMinAmount}
+                      onChange={(e) => setVarianceMinAmount(Math.max(0, Number(e.target.value)))}
+                      className="w-24 px-2 py-1 border border-slate-300 dark:border-slate-700 rounded text-center font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Summary badges for New and Disappeared accounts */}
+              {(varianceAnalysis.newAccounts.length > 0 || varianceAnalysis.disappearedAccounts.length > 0) && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {varianceAnalysis.newAccounts.length > 0 && (
+                    <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded border border-blue-200 dark:border-blue-800 font-medium">
+                      حسابات جديدة بالسنة الحالية: ({varianceAnalysis.newAccounts.length})
+                    </span>
+                  )}
+                  {varianceAnalysis.disappearedAccounts.length > 0 && (
+                    <span className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded border border-amber-200 dark:border-amber-800 font-medium">
+                      حسابات اختفت عن السنة السابقة: ({varianceAnalysis.disappearedAccounts.length})
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Material Variances Table */}
+              {varianceAnalysis.flaggedAccounts.length === 0 ? (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                  ✓ لا توجد فروق جوهرية تتجاوز نسبة {variancePctThreshold}% ومبلغ {varianceMinAmount.toLocaleString('ar-EG')} ج.م.
+                </p>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900">
+                  <table className="w-full text-xs text-right">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                      <tr>
+                        <th className="p-2.5">الكود</th>
+                        <th className="p-2.5">اسم الحساب</th>
+                        <th className="p-2.5">رصيد الحالية ({selectedFiscalYear})</th>
+                        <th className="p-2.5">رصيد السابقة ({selectedFiscalYear - 1})</th>
+                        <th className="p-2.5">الفرق (ج.م)</th>
+                        <th className="p-2.5">نسبة التغير</th>
+                        <th className="p-2.5 w-1/3">مبررات الفرق (إدخال يدوي من المحاسب)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {varianceAnalysis.flaggedAccounts.map((acc) => (
+                        <tr key={acc.mappedCode} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="p-2.5 font-mono font-bold text-slate-800 dark:text-slate-200">{acc.mappedCode}</td>
+                          <td className="p-2.5 font-medium">{acc.mappedName}</td>
+                          <td className="p-2.5 font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {acc.currentBalance.toLocaleString('ar-EG')}
+                          </td>
+                          <td className="p-2.5 font-mono text-slate-600 dark:text-slate-400">
+                            {acc.priorBalance.toLocaleString('ar-EG')}
+                          </td>
+                          <td className={`p-2.5 font-mono font-bold ${acc.difference < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {acc.difference > 0 ? '+' : ''}{acc.difference.toLocaleString('ar-EG')}
+                          </td>
+                          <td className="p-2.5 font-mono font-semibold">
+                            {acc.percentage === null ? (
+                              <span className="text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">حساب جديد</span>
+                            ) : (
+                              <span className={acc.percentage < 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                                {acc.percentage > 0 ? '+' : ''}{acc.percentage}%
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={varianceJustifications[acc.mappedCode] || ''}
+                              onChange={(e) => handleJustificationChange(acc.mappedCode, e.target.value)}
+                              placeholder="أدخل مبرر التغير الجوهري هنا..."
+                              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Generation Error Message Banner (Item 3d) */}
           {generationError && (
             <div className="p-4 bg-rose-100 dark:bg-rose-950/80 border-2 border-rose-500 rounded-xl flex items-start gap-3">
@@ -1895,7 +2197,7 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
       {/* Confirmation Modal for Partner Account Balancing (Item 3e) */}
       {showPartnerBalanceModal && staticCheck && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-md">
             <div className="flex justify-between items-center pb-3 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Scale className="w-5 h-5 text-amber-500" />
@@ -2153,6 +2455,19 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
 
           {reviewReport && (
             <div className="space-y-6">
+              {/* Opening Balance Check Warning (Requirement 3) */}
+              {openingBalanceCheckResult && !openingBalanceCheckResult.isMatched && (
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-xs space-y-1">
+                  <h4 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>تحذير رقابي: عدم مطابقة الأرصدة الافتتاحية للسنة الحالية مع أرصدة آخر المدة للسنة السابقة</span>
+                  </h4>
+                  <p className="text-amber-800 dark:text-amber-300 text-[11px]">
+                    إجمالي فروق الأرصدة الافتتاحية غير المتطابقة يبلغ {openingBalanceCheckResult.totalDifference.toLocaleString('ar-EG')} ج.م عبر {openingBalanceCheckResult.discrepancies.length} حساب(ات).
+                  </p>
+                </div>
+              )}
+
               {/* Audit Observations */}
               <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-2">
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">ملاحظات وتحليلات المراجعة:</h4>
@@ -2186,6 +2501,54 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
                   {reviewReport.draftDisclosures}
                 </p>
               </div>
+
+              {/* Section: Material Variances & Justifications (Requirement 10) */}
+              {varianceAnalysis && (
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                    <span>قسم الفروق الجوهرية وتبريرها (تحليل فروق الميزان):</span>
+                    <span className="text-[11px] font-normal text-slate-500">
+                      (الحدود المعيارية: {variancePctThreshold}% | {varianceMinAmount.toLocaleString('ar-EG')} ج.م)
+                    </span>
+                  </h4>
+                  {varianceAnalysis.flaggedAccounts.length === 0 ? (
+                    <p className="text-xs text-slate-500">لا توجد فروق جوهرية متجاوزة للحدود.</p>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900">
+                      <table className="w-full text-xs text-right">
+                        <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                          <tr>
+                            <th className="p-2">الكود</th>
+                            <th className="p-2">الحساب</th>
+                            <th className="p-2">الحالية ({selectedFiscalYear})</th>
+                            <th className="p-2">السابقة ({selectedFiscalYear - 1})</th>
+                            <th className="p-2">الفرق (ج.م)</th>
+                            <th className="p-2">النسبة</th>
+                            <th className="p-2">التبرير المعتمد</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                          {varianceAnalysis.flaggedAccounts.map((acc) => (
+                            <tr key={acc.mappedCode}>
+                              <td className="p-2 font-mono font-bold">{acc.mappedCode}</td>
+                              <td className="p-2 font-medium">{acc.mappedName}</td>
+                              <td className="p-2 font-mono">{acc.currentBalance.toLocaleString('ar-EG')}</td>
+                              <td className="p-2 font-mono">{acc.priorBalance.toLocaleString('ar-EG')}</td>
+                              <td className="p-2 font-mono font-bold">{acc.difference.toLocaleString('ar-EG')}</td>
+                              <td className="p-2 font-mono">
+                                {acc.percentage === null ? 'جديد' : `${acc.percentage}%`}
+                              </td>
+                              <td className="p-2 font-medium text-slate-800 dark:text-slate-200">
+                                {varianceJustifications[acc.mappedCode]?.trim() || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -2248,6 +2611,34 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
               </div>
               <p className="text-[11px] text-slate-500">تحميل سجل يحتوي على جميع تصحيحات الأكواد التي أجراها المحاسب.</p>
             </button>
+
+            {varianceAnalysis && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleExportVarianceExcel}
+                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-emerald-50/50 hover:bg-emerald-100/50 dark:bg-emerald-950/20 text-right space-y-1 transition-all"
+                >
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>تصدير جدول الفروق الجوهرية وتبريرها (Excel)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">تحميل قائمة الحسابات المتجاوزة للحدود وتبريرات المحاسب.</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintAuditReport}
+                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-amber-50/50 hover:bg-amber-100/50 dark:bg-amber-950/20 text-right space-y-1 transition-all"
+                >
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                    <Printer className="w-4 h-4 text-amber-600" />
+                    <span>طباعة تقرير المراجعة وتحليل الفروق</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">طباعة التقرير الرسمي الشامل للفروق الجوهرية بالتبريرات المحفوظة.</p>
+                </button>
+              </>
+            )}
           </div>
 
           <div className="flex justify-between pt-4 border-t border-slate-200 dark:border-slate-800">

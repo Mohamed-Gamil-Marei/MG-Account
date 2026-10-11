@@ -733,7 +733,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${
                   allYearsBalanced
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                 }`}
               >
                 {allYearsBalanced ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
@@ -764,7 +764,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                         متزن تماماً ✓
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold animate-pulse">
+                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
                         يوجد فرق في الميزان!
                       </span>
                     )}
@@ -1902,7 +1902,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
       {/* Partner Current Account Auto-Balancing Confirmation Modal */}
       {pendingBalanceYear !== null && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full shadow-md border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1968,7 +1968,7 @@ export const CreditFinancialStatementsTab: React.FC<CreditFinancialStatementsTab
                 <div className="p-3.5 bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-500 rounded-xl space-y-2 text-rose-950 dark:text-rose-200">
                   <div className="flex items-start gap-2.5">
                     <div className="p-1 bg-rose-600 text-white rounded shrink-0 mt-0.5">
-                      <AlertTriangle className="w-4 h-4 animate-pulse" />
+                      <AlertTriangle className="w-4 h-4" />
                     </div>
                     <div>
                       <p className="font-black text-xs text-rose-700 dark:text-rose-300">

@@ -2403,7 +2403,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             <div
               className={`bg-white dark:bg-slate-900 w-full ${
                 isModalFullscreen ? 'h-full max-w-none rounded-none' : 'h-full max-h-[98vh] max-w-[1750px] rounded-2xl md:rounded-3xl'
-              } print:h-auto print:max-w-none print:w-full print:rounded-none border border-slate-200 dark:border-slate-800 print:border-none shadow-2xl print:shadow-none flex flex-col md:flex-row overflow-hidden transition-all`}
+              } print:h-auto print:max-w-none print:w-full print:rounded-none border border-slate-200 dark:border-slate-800 print:border-none shadow-md print:shadow-none flex flex-col md:flex-row overflow-hidden transition-all`}
             >
               {/* SIDEBAR: Print Controls & Settings (لوحة أوامر وخيارات الطباعة الجانبية) */}
               <aside className="w-full md:w-[350px] lg:w-[380px] shrink-0 h-auto md:h-full max-h-[45vh] md:max-h-none min-h-0 bg-slate-50/95 dark:bg-slate-900/95 border-b md:border-b-0 md:border-l border-slate-200 dark:border-slate-800 flex flex-col no-print z-20">
@@ -3254,7 +3254,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
                     {/* Dynamic Active Page Title Badge */}
                     <div className="hidden sm:flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 px-3 py-1 rounded-xl border border-blue-200 dark:border-blue-800 text-xs font-bold truncate max-w-xs md:max-w-md">
-                      <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400" />
                       <span className="truncate">
                         {selectedPageMetas[activePreviewPage - 1]?.title || allPageMetas.find((p) => p.pageNumber === activePreviewPage)?.title || 'المعاينة الحية A4'}
                       </span>
@@ -3373,7 +3373,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       {/* CLIENT PROFILE MODAL */}
       {isClientModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full border border-slate-200 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full border border-slate-200 shadow-md space-y-5 animate-in fade-in zoom-in duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2.5 bg-blue-50 text-blue-700 rounded-xl">

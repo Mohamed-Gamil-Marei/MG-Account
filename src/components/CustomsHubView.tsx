@@ -268,7 +268,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
     <div id="customs-hub-printable-container" className="flex flex-col h-full bg-slate-950 text-slate-100 overflow-y-auto">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-400 font-bold text-sm animate-bounce">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-md flex items-center gap-3 border border-emerald-400 font-bold text-sm">
           <CheckCircle2 className="w-5 h-5 shrink-0" />
           <span>{toastMessage}</span>
         </div>
@@ -1176,7 +1176,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
       {/* MODAL 1: EDIT / CREATE SHIPMENT MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/85 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-right">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-md overflow-hidden text-right">
             {/* Modal Header */}
             <div className="bg-slate-900 border-b border-slate-800 p-4 sm:p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -1512,7 +1512,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
                   showToast(`تم حفظ الشحنة الجمركية [${payload.shipmentCode}] بنجاح`);
                   setIsEditModalOpen(false);
                 }}
-                className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
               >
                 حفظ بيانات الشحنة
               </button>
@@ -1524,7 +1524,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
       {/* MODAL 2: TREASURY PAYMENT MODAL */}
       {isTreasuryModalOpen && activeShipmentForAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/85 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-right">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-md overflow-hidden text-right">
             <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
                 <Wallet className="w-5 h-5" />
@@ -1622,7 +1622,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
       {/* MODAL 3: ARCHIVE MODAL */}
       {isArchiveModalOpen && activeShipmentForAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/85 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-right">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-md overflow-hidden text-right">
             <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between">
               <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
                 <Archive className="w-5 h-5" />
@@ -1698,7 +1698,7 @@ export const CustomsHubView: React.FC<CustomsHubViewProps> = ({ state, onNavigat
       {/* MODAL 4: PRINT CUSTOMS DOSSIER */}
       {isPrintModalOpen && selectedShipment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/85 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-right">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-md overflow-hidden text-right">
             <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
                 <Printer className="w-5 h-5" />

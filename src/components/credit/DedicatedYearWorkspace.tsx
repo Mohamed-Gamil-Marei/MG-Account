@@ -325,87 +325,69 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* Financial Health Indicators for the Active Year */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 text-right">
+        {/* Financial Health Indicators for the Active Year - Compact Row */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-2 mt-4 bg-slate-800 rounded-xl text-xs text-slate-200 text-right border border-slate-700">
           {/* Revenue */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5">
-            <div className="text-[11px] text-slate-400 font-bold mb-1">إيرادات النشاط والمبيعات</div>
-            <div className="text-base sm:text-lg font-black font-mono text-blue-300">
+          <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/60 rounded border border-slate-700/50">
+            <span className="text-slate-400 font-medium">الإيرادات:</span>
+            <span className="font-semibold text-slate-100 font-mono">
               {formatEgyptianCurrency(cd.sales || 0)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            </span>
+            <span className="text-[10px] text-slate-400 border-r border-slate-700 pr-2 mr-1">
               مجمل الربح: {formatEgyptianCurrency(cd.grossProfit || 0)}
-            </div>
+            </span>
           </div>
 
           {/* Net Profit After Tax */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5">
-            <div className="text-[11px] text-slate-400 font-bold mb-1 flex items-center justify-between">
-              <span>صافي ربح العام بعد الضريبة</span>
-              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono">
-                قائمة الدخل
-              </span>
-            </div>
-            <div
-              className={`text-base sm:text-lg font-black font-mono ${
-                cd.netProfit < 0 ? 'text-rose-400' : 'text-emerald-400'
-              }`}
-            >
+          <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/60 rounded border border-slate-700/50">
+            <span className="text-slate-400 font-medium">صافي الربح:</span>
+            <span className={`font-semibold font-mono ${cd.netProfit < 0 ? 'text-rose-400 font-bold' : 'text-slate-100'}`}>
               {formatEgyptianCurrency(cd.netProfit || 0, true)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
-              هامش صافي الربح: {((cd.netProfit / (cd.sales || 1)) * 100).toFixed(1)}%
-            </div>
+            </span>
+            <span className="text-[10px] text-slate-400 border-r border-slate-700 pr-2 mr-1">
+              هامش: {((cd.netProfit / (cd.sales || 1)) * 100).toFixed(1)}%
+            </span>
           </div>
 
           {/* Total Assets */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5">
-            <div className="text-[11px] text-slate-400 font-bold mb-1">إجمالي الأصول (الميزانية)</div>
-            <div className="text-base sm:text-lg font-black font-mono text-purple-300">
+          <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/60 rounded border border-slate-700/50">
+            <span className="text-slate-400 font-medium">إجمالي الأصول:</span>
+            <span className="font-semibold text-slate-100 font-mono">
               {formatEgyptianCurrency(cd.totalAssets || 0)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            </span>
+            <span className="text-[10px] text-slate-400 border-r border-slate-700 pr-2 mr-1">
               متداولة: {formatEgyptianCurrency(cd.totalCurrentAssets || 0)}
-            </div>
+            </span>
           </div>
 
           {/* Partner Current Account & Balance State */}
-          <div
-            className={`rounded-2xl p-3.5 border transition-all ${
-              isBalanced
-                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-                : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
-            }`}
-          >
-            <div className="text-[11px] font-bold mb-1 flex items-center justify-between">
-              <span>جاري الشركاء (اتزان الميزان)</span>
-              {isBalanced ? (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-black">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>متزن 100%</span>
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-[10px] text-amber-400 font-black">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>فرق {formatEgyptianCurrency(Math.abs(balanceDiff))}</span>
-                </span>
-              )}
-            </div>
-            <div className="text-base sm:text-lg font-black font-mono text-white">
+          <div className={`flex items-center gap-2 px-2 py-1 rounded border ${
+            isBalanced ? 'bg-slate-900/60 border-slate-700/50' : 'bg-rose-950/30 border-rose-800/50 text-rose-200'
+          }`}>
+            <span className="text-slate-400 font-medium">جاري الشركاء:</span>
+            <span className="font-semibold text-slate-100 font-mono">
               {formatEgyptianCurrency(cd.legalReserve || 0, true)}
-            </div>
-            <div className="text-[10px] text-slate-300 mt-1 flex items-center justify-between">
-              <span>رصيد موازن لحقوق الملكية</span>
-              {onAutoBalanceYear && !isBalanced && (
-                <button
-                  type="button"
-                  onClick={() => onAutoBalanceYear(activeYear)}
-                  className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded text-[10px] font-black cursor-pointer shadow-xs"
-                >
-                  موازنة فورية
-                </button>
-              )}
-            </div>
+            </span>
+            {isBalanced ? (
+              <span className="flex items-center gap-1 text-[10px] text-slate-300 border-r border-slate-700 pr-2 mr-1">
+                <CheckCircle2 className="w-3 h-3 text-slate-400" />
+                <span>متزن</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-rose-400 font-bold border-r border-slate-700 pr-2 mr-1">
+                <AlertTriangle className="w-3 h-3" />
+                <span>فرق {formatEgyptianCurrency(Math.abs(balanceDiff))}</span>
+                {onAutoBalanceYear && (
+                  <button
+                    type="button"
+                    onClick={() => onAutoBalanceYear(activeYear)}
+                    className="px-1.5 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded text-[10px] font-medium cursor-pointer mr-1"
+                  >
+                    موازنة
+                  </button>
+                )}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -500,7 +482,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       {/* 3. SECTION 1: INCOME STATEMENT */}
       {(activeSection === 'ALL_IN_ONE' || activeSection === 'INCOME') && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-blue-900 via-slate-900 to-indigo-950 text-white flex items-center justify-between">
+          <div className="p-4 bg-slate-800 text-white flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-300">
                 <TrendingUp className="w-5 h-5" />
@@ -886,7 +868,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       {/* 5. SECTION 3: CASH FLOW STATEMENT FOR ACTIVE YEAR */}
       {(activeSection === 'ALL_IN_ONE' || activeSection === 'CASH_FLOW') && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 text-white flex items-center justify-between">
+          <div className="p-4 bg-slate-800 text-white flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 bg-emerald-500/20 rounded-lg text-emerald-300">
                 <DollarSign className="w-5 h-5" />
@@ -980,7 +962,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
       {/* 6. SECTION 4: PROFIT DISTRIBUTION MEMO FOR ACTIVE YEAR */}
       {(activeSection === 'ALL_IN_ONE' || activeSection === 'PROFIT_DIST') && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950 text-white flex items-center justify-between">
+          <div className="p-4 bg-slate-800 text-white flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 bg-amber-500/20 rounded-lg text-amber-300">
                 <Award className="w-5 h-5" />

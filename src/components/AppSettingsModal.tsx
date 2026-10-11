@@ -197,22 +197,26 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     e.preventDefault();
     setGeminiError(null);
 
-    try {
-      const res = await fetchWithAuth('/api/settings/gemini-consent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sendClientDataToGemini }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.success === false) {
-        throw new Error(data.error || data.message || 'فشل حفظ إعداد Gemini على السيرفر');
+    if (isAdmin && sendClientDataToGemini !== prevGeminiConsent) {
+      try {
+        const res = await fetchWithAuth('/api/settings/gemini-consent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sendClientDataToGemini }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error(data.error || data.message || 'فشل حفظ إعداد Gemini على السيرفر');
+        }
+        setPrevGeminiConsent(sendClientDataToGemini);
+      } catch (err: any) {
+        setSendClientDataToGemini(prevGeminiConsent);
+        setGeminiError(err.message || 'فشل حفظ إعداد Gemini على السيرفر');
+        return;
       }
-      setPrevGeminiConsent(sendClientDataToGemini);
-    } catch (err: any) {
-      setSendClientDataToGemini(prevGeminiConsent);
-      setGeminiError(err.message || 'فشل حفظ إعداد Gemini على السيرفر');
-      return;
     }
+
+    const effectiveGeminiConsent = isAdmin ? sendClientDataToGemini : prevGeminiConsent;
 
     const customFirebaseConfig: CustomFirebaseConfig = {
       projectId: fbProjectId.trim(),
@@ -252,7 +256,7 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
       defaultTaxRate: Number(defaultTaxRate) || 0,
       defaultWhtEnabled,
       defaultWhtRate: Number(defaultWhtRate) || 0,
-      sendClientDataToGemini,
+      sendClientDataToGemini: effectiveGeminiConsent,
     });
 
     setSavedSuccess(true);

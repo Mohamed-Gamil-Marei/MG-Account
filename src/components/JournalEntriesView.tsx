@@ -74,7 +74,6 @@ import { JournalErrorsAuditModal } from './audit/JournalErrorsAuditModal';
 import { SmartParsedEntryResult } from '../services/journalSuggestionEngine';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { QuickRowActionDropdown } from './common/QuickRowActionDropdown';
-import { MicroKpisTickerBar } from './common/MicroKpisTickerBar';
 import { CollapsibleSection } from './common/CollapsibleSection';
 import { SlideOverDrawer } from './common/SlideOverDrawer';
 import { useDensity } from './common/CompactDensityContext';
@@ -1772,6 +1771,10 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
     return filteredEntries.reduce((sum, e) => sum + (e.totalDebit || 0), 0);
   }, [filteredEntries]);
 
+  const totalFilteredCredit = useMemo(() => {
+    return filteredEntries.reduce((sum, e) => sum + (e.totalCredit || 0), 0);
+  }, [filteredEntries]);
+
   const totalFilteredPostedCount = useMemo(() => {
     return filteredEntries.filter((e) => e.isPosted).length;
   }, [filteredEntries]);
@@ -1917,13 +1920,21 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
               <span className="text-slate-300 dark:text-slate-700">|</span>
               <span>مدين: <strong className="font-normal text-slate-900 dark:text-slate-100">{formatEgyptianCurrency(totalFilteredDebit)}</strong></span>
               <span className="text-slate-300 dark:text-slate-700">|</span>
-              <span>دائن: <strong className="font-normal text-slate-900 dark:text-slate-100">{formatEgyptianCurrency(totalFilteredDebit)}</strong></span>
+              <span>دائن: <strong className="font-normal text-slate-900 dark:text-slate-100">{formatEgyptianCurrency(totalFilteredCredit)}</strong></span>
               <span className="text-slate-300 dark:text-slate-700">|</span>
               <span>
                 الفرق:{' '}
-                <strong className={`font-normal ${unbalancedEntries.length > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-900 dark:text-slate-100'}`}>
-                  {unbalancedEntries.length === 0 ? '0.00 ج.م' : `${unbalancedEntries.length} غير متزن`}
-                </strong>
+                {(() => {
+                  const diff = Number(Math.abs(totalFilteredDebit - totalFilteredCredit).toFixed(2));
+                  if (diff <= 0.01) {
+                    return <strong className="font-normal text-slate-900 dark:text-slate-100">0.00 ج.م</strong>;
+                  }
+                  return (
+                    <strong className="font-semibold text-red-600 dark:text-red-400">
+                      {formatEgyptianCurrency(diff)} ({unbalancedEntries.length} غير متزن)
+                    </strong>
+                  );
+                })()}
               </span>
             </div>
             <div className="text-[11px] text-slate-500">

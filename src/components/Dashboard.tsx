@@ -27,7 +27,9 @@ import {
   CheckCircle2,
   Smartphone,
   Upload,
+  Calendar,
 } from 'lucide-react';
+import { getDeadlineStatus, formatDeadlineTypeLabel } from '../utils/deadlines';
 import { UnifiedScreenCard } from './common/UnifiedScreenCard';
 import { ActionMenu, ActionMenuItem } from './common/ActionMenu';
 import { ClientSelector } from './common/ClientSelector';
@@ -86,6 +88,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const currentFiscalYear = state.activeClientContext?.selectedFiscalYear || fiscalYear || 2026;
   const activeClientId = state.activeClientContext?.clientId;
   const activeClient = state.clients.find((c) => c.id === activeClientId);
+
+  // Critical Week Deadlines Calculation (Requirement 3)
+  const weekDeadlines = useMemo(() => {
+    const allDeadlines = state.clientDeadlines || [];
+    return allDeadlines
+      .map((d) => {
+        const calcStatus = getDeadlineStatus(d);
+        const clientObj = state.clients.find((c) => c.id === d.clientId);
+        return {
+          ...d,
+          clientName: clientObj ? clientObj.name : d.clientName || d.clientId,
+          calcStatus,
+        };
+      })
+      .filter((d) => d.calcStatus === 'OVERDUE' || d.calcStatus === 'DUE_SOON')
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  }, [state.clientDeadlines, state.clients]);
 
   // Filter journal entries by active client context and fiscal year
   const filteredEntries = useMemo(() => {
@@ -678,6 +697,66 @@ export const Dashboard: React.FC<DashboardProps> = ({
     <div className="space-y-4">
       {/* Central Screen Client & Fiscal Year Context Banner */}
       <ClientSelector state={state} />
+
+      {/* Week / Critical Deadlines Compact Section (Requirement 3) */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+          <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+            <span>مواعيد الأسبوع والمواعيد الحرجة ({weekDeadlines.length})</span>
+          </h3>
+          <button
+            type="button"
+            onClick={() => navigate('CLIENTS_ARCHIVE')}
+            className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            عرض أرشيف العملاء والمواعيد ←
+          </button>
+        </div>
+
+        {weekDeadlines.length === 0 ? (
+          <p className="text-xs text-slate-500 py-1">
+            ✓ لا توجد مواعيد إقرارات متأخرة أو مستحقة خلال الـ 7 أيام القادمة.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+            {weekDeadlines.map((item) => (
+              <div
+                key={item.id}
+                className="py-1.5 flex items-center justify-between gap-3 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-1 rounded transition-colors"
+              >
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <span
+                    className={`font-mono text-[11px] font-bold shrink-0 ${
+                      item.calcStatus === 'OVERDUE' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {item.dueDate}
+                  </span>
+                  <span className="font-semibold shrink-0 text-slate-900 dark:text-white">
+                    [{item.clientName}]
+                  </span>
+                  <span className="truncate text-slate-600 dark:text-slate-400">
+                    {formatDeadlineTypeLabel(item.type)} - {item.title}
+                  </span>
+                </div>
+
+                <div className="shrink-0 font-medium">
+                  {item.calcStatus === 'OVERDUE' ? (
+                    <span className="text-rose-600 dark:text-rose-400 font-bold text-[11px]">
+                      متأخر
+                    </span>
+                  ) : (
+                    <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px]">
+                      مستحق خلال أسبوع
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Last successful backup info banner */}
       <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
