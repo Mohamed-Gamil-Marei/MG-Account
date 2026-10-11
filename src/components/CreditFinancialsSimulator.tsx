@@ -1763,20 +1763,20 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
             <button
               type="button"
               onClick={() => setIsExcelBridgeModalOpen(true)}
-              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
               title="تنزيل نموذج إكسيل أو استيراد ملف"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-200" />
               <span className="hidden sm:inline">جسر الإكسيل (تنزيل / استيراد)</span>
             </button>
 
             <button
               type="button"
               onClick={() => setIsHeaderModalOpen(true)}
-              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-900 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
               title="تخصيص ترويسة ومقرات وهواتف المكتب وبيانات المنشأة"
             >
-              <Sliders className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
+              <Sliders className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
               <span className="hidden sm:inline">ترويسة المكتب والطباعة</span>
             </button>
 
@@ -1792,10 +1792,10 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 }));
                 setIsPrintModalOpen(true);
               }}
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
               title="طباعة وتوثيق الملف"
             >
-              <Printer className="w-3.5 h-3.5 text-emerald-400 dark:text-blue-200" />
+              <Printer className="w-3.5 h-3.5 text-slate-300" />
               <span className="hidden sm:inline">طباعة وتوثيق الملف</span>
             </button>
 
@@ -2143,10 +2143,10 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                 setPrintScope('CURRENT_VIEW' as any);
                 setIsPrintModalOpen(true);
               }}
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
               title="طباعة الشاشة الحالية"
             >
-              <Printer className="w-3.5 h-3.5 text-emerald-400 dark:text-blue-200" />
+              <Printer className="w-3.5 h-3.5 text-slate-300" />
               <span className="hidden sm:inline">طباعة سريعة</span>
             </button>
           </div>
@@ -2157,8 +2157,8 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
       <div id="credit-financials-container" data-printable="true" className="space-y-6">
         {/* شريط التحذير الشرطي في أي طباعة إذا كانت بيانات السنة محاكاة */}
         {yearsData[selectedYear]?.dataSource !== 'ACTUAL' && (
-          <div className="w-full text-center py-1.5 px-3 bg-amber-50 print:bg-slate-100 border border-amber-300 print:border-slate-500 text-amber-950 print:text-black rounded-xl font-black text-xs sm:text-sm tracking-wide">
-            ⚠️ محاكاة تحليلية — ليست قوائم معتمدة ولا تُقدَّم للجهات الخارجية
+          <div className="text-xs text-amber-600 dark:text-amber-400 font-medium px-1">
+            ملاحظة: البيانات الحالية تعتمد على محاكاة تحليلية (غير معتمدة للجهات الخارجية).
           </div>
         )}
 

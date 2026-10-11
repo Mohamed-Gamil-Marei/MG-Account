@@ -33,6 +33,9 @@ export const SYNC_COLLECTIONS = {
   CERTIFICATES: 'certificates',
   AUDIT_LOGS: 'auditLogs',
   WORKSPACES: 'workspaces',
+  CLOSING_CHECKLISTS: 'closingChecklists',
+  CLIENT_DEADLINES: 'clientDeadlines',
+  OPEN_ITEMS: 'openItems',
 } as const;
 
 export const getDeviceId = (): string => {
@@ -52,7 +55,7 @@ class CloudSyncManager {
     deviceId: getDeviceId(),
     activeUsersCount: 1,
     syncError: null,
-    partitionedCollectionsCount: 8,
+    partitionedCollectionsCount: 11,
   };
 
   private listeners: ((status: SyncStatus) => void)[] = [];
@@ -182,6 +185,69 @@ class CloudSyncManager {
       );
       this.unsubscribers.push(unsubTax);
 
+      // 5. Closing Checklists listener
+      const unsubChecklists = onSnapshot(
+        collection(firestoreDb, SYNC_COLLECTIONS.CLOSING_CHECKLISTS),
+        (snapshot) => {
+          if (snapshot.metadata.hasPendingWrites || this.isApplyingRemoteUpdate) return;
+          const remoteChecklists: Record<string, any> = {};
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.key && data.steps) {
+              remoteChecklists[data.key] = data.steps;
+            }
+          });
+          if (Object.keys(remoteChecklists).length > 0) {
+            this.isApplyingRemoteUpdate = true;
+            onRemoteStateUpdate({ closingChecklists: remoteChecklists });
+            this.isApplyingRemoteUpdate = false;
+            this.updateSyncTimestamp();
+          }
+        },
+        (err) => console.warn('[Sync closingChecklists notice]:', err.message)
+      );
+      this.unsubscribers.push(unsubChecklists);
+
+      // 6. Client Deadlines listener
+      const unsubDeadlines = onSnapshot(
+        collection(firestoreDb, SYNC_COLLECTIONS.CLIENT_DEADLINES),
+        (snapshot) => {
+          if (snapshot.metadata.hasPendingWrites || this.isApplyingRemoteUpdate) return;
+          const remoteDeadlines: any[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteDeadlines.push({ ...docSnap.data(), id: docSnap.id });
+          });
+          if (remoteDeadlines.length > 0) {
+            this.isApplyingRemoteUpdate = true;
+            onRemoteStateUpdate({ clientDeadlines: remoteDeadlines });
+            this.isApplyingRemoteUpdate = false;
+            this.updateSyncTimestamp();
+          }
+        },
+        (err) => console.warn('[Sync clientDeadlines notice]:', err.message)
+      );
+      this.unsubscribers.push(unsubDeadlines);
+
+      // 7. Open Items listener
+      const unsubOpenItems = onSnapshot(
+        collection(firestoreDb, SYNC_COLLECTIONS.OPEN_ITEMS),
+        (snapshot) => {
+          if (snapshot.metadata.hasPendingWrites || this.isApplyingRemoteUpdate) return;
+          const remoteItems: any[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteItems.push({ ...docSnap.data(), id: docSnap.id });
+          });
+          if (remoteItems.length > 0) {
+            this.isApplyingRemoteUpdate = true;
+            onRemoteStateUpdate({ openItems: remoteItems });
+            this.isApplyingRemoteUpdate = false;
+            this.updateSyncTimestamp();
+          }
+        },
+        (err) => console.warn('[Sync openItems notice]:', err.message)
+      );
+      this.unsubscribers.push(unsubOpenItems);
+
     } catch (err: any) {
       console.warn('Failed to attach partitioned Firestore sync listeners:', err);
     }
@@ -278,6 +344,48 @@ class CloudSyncManager {
           ...decl,
           clientId: declClientId,
           fiscalYear: declFiscalYear,
+          updatedAt: new Date().toISOString(),
+          updatedByDeviceId: this.syncStatus.deviceId,
+        }, { merge: true });
+        opCount++;
+        if (opCount >= 450) break;
+      }
+
+      // 5. Partitioned Closing Checklists Collection
+      if (state.closingChecklists) {
+        for (const [key, steps] of Object.entries(state.closingChecklists)) {
+          if (!key) continue;
+          const ref = doc(firestoreDb, SYNC_COLLECTIONS.CLOSING_CHECKLISTS, key);
+          batch.set(ref, {
+            key,
+            steps,
+            updatedAt: new Date().toISOString(),
+            updatedByDeviceId: this.syncStatus.deviceId,
+          }, { merge: true });
+          opCount++;
+          if (opCount >= 450) break;
+        }
+      }
+
+      // 6. Partitioned Client Deadlines Collection
+      for (const deadline of (state.clientDeadlines || []).slice(0, 100)) {
+        if (!deadline.id) continue;
+        const ref = doc(firestoreDb, SYNC_COLLECTIONS.CLIENT_DEADLINES, deadline.id);
+        batch.set(ref, {
+          ...deadline,
+          updatedAt: new Date().toISOString(),
+          updatedByDeviceId: this.syncStatus.deviceId,
+        }, { merge: true });
+        opCount++;
+        if (opCount >= 450) break;
+      }
+
+      // 7. Partitioned Open Items Collection
+      for (const item of (state.openItems || []).slice(0, 100)) {
+        if (!item.id) continue;
+        const ref = doc(firestoreDb, SYNC_COLLECTIONS.OPEN_ITEMS, item.id);
+        batch.set(ref, {
+          ...item,
           updatedAt: new Date().toISOString(),
           updatedByDeviceId: this.syncStatus.deviceId,
         }, { merge: true });

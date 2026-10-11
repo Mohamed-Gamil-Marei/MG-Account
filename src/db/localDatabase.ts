@@ -37,6 +37,9 @@ import {
   FeeQuotationEstimate,
   CustomsShipment,
   FinancialActivityLog,
+  ApprovedStatementsSnapshot,
+  ClientFeeAgreement,
+  ClientFeeCollection,
 } from '../types';
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
@@ -90,6 +93,9 @@ const STORAGE_KEYS = {
   CLOSING_CHECKLISTS: 'egy_acc_closing_checklists_v1',
   CLIENT_DEADLINES: 'egy_acc_client_deadlines_v1',
   OPEN_ITEMS: 'egy_acc_open_items_v1',
+  APPROVED_STATEMENTS: 'egy_acc_approved_statements_v1',
+  FEE_AGREEMENTS: 'egy_acc_fee_agreements_v1',
+  FEE_COLLECTIONS: 'egy_acc_fee_collections_v1',
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
@@ -129,6 +135,9 @@ export interface DatabaseState {
   closingChecklists?: Record<string, ClosingStep[]>;
   clientDeadlines?: ClientDeadline[];
   openItems?: OpenItem[];
+  approvedStatements?: ApprovedStatementsSnapshot[];
+  feeAgreements?: ClientFeeAgreement[];
+  feeCollections?: ClientFeeCollection[];
   financialActivityLogs?: FinancialActivityLog[];
   activeClientContext?: ActiveClientContext;
   clientArchives?: ClientArchiveRecord[];
@@ -370,6 +379,9 @@ export class LocalDatabase {
       const closingChecklistsJson = localStorage.getItem(STORAGE_KEYS.CLOSING_CHECKLISTS);
       const clientDeadlinesJson = localStorage.getItem(STORAGE_KEYS.CLIENT_DEADLINES);
       const openItemsJson = localStorage.getItem(STORAGE_KEYS.OPEN_ITEMS);
+      const approvedStatementsJson = localStorage.getItem(STORAGE_KEYS.APPROVED_STATEMENTS);
+      const feeAgreementsJson = localStorage.getItem(STORAGE_KEYS.FEE_AGREEMENTS);
+      const feeCollectionsJson = localStorage.getItem(STORAGE_KEYS.FEE_COLLECTIONS);
 
       // Check if full purge to clean slate was enforced
       const PURGE_SYSTEM_FLAG = 'cpa_integrated_purged_clean_v6';
@@ -404,6 +416,12 @@ export class LocalDatabase {
           fixedAssets: [],
           feeEstimates: [],
           customsShipments: [],
+          closingChecklists: {},
+          clientDeadlines: [],
+          openItems: [],
+          approvedStatements: [],
+          feeAgreements: [],
+          feeCollections: [],
           officeProfile: cleanProfile,
           users: [...SAMPLE_SYSTEM_USERS], // Master admin only (admin / admin)
           currentUserId: 'user-admin',
@@ -620,6 +638,9 @@ export class LocalDatabase {
         fixedAssets: [],
         feeEstimates: [],
         customsShipments: [],
+        closingChecklists: {},
+        clientDeadlines: [],
+        openItems: [],
         officeProfile: DEFAULT_OFFICE_PROFILE,
         users: [...SAMPLE_SYSTEM_USERS],
         currentUserId: 'user-admin',
@@ -1163,6 +1184,21 @@ export class LocalDatabase {
       } else {
         this.clearActiveClient();
       }
+    }
+
+    // Clean up associated closing checklists, deadlines, and open items
+    if (this.state.closingChecklists) {
+      for (const k of Object.keys(this.state.closingChecklists)) {
+        if (k.startsWith(`${id}_`)) {
+          delete this.state.closingChecklists[k];
+        }
+      }
+    }
+    if (this.state.clientDeadlines) {
+      this.state.clientDeadlines = this.state.clientDeadlines.filter((d) => d.clientId !== id);
+    }
+    if (this.state.openItems) {
+      this.state.openItems = this.state.openItems.filter((i) => i.clientId !== id);
     }
     
     this.logAudit('DELETE', `حذف ملف العميل: ${cl.name}`);
@@ -2349,6 +2385,9 @@ export class LocalDatabase {
       fixedAssets: [],
       feeEstimates: [],
       customsShipments: [],
+      closingChecklists: {},
+      clientDeadlines: [],
+      openItems: [],
       users: [...SAMPLE_SYSTEM_USERS], // Master admin only
       currentUserId: 'user-admin',
       preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
@@ -2378,6 +2417,107 @@ export class LocalDatabase {
       success: true,
       message: 'تم تفريغ ومسح كافة بيانات وسجلات المنظومة بنجاح والبدء بملف محاسبي نظيف تماماً! حساب الأدمن هو الحساب الوحيد الفعّال حالياً.',
     };
+  }
+
+  // --- Approved Statements & Client Fees Methods ---
+  public getApprovedStatements(): ApprovedStatementsSnapshot[] {
+    return this.state.approvedStatements || [];
+  }
+
+  public getApprovedStatementsForClient(clientId: string, fiscalYear?: number): ApprovedStatementsSnapshot[] {
+    const list = this.state.approvedStatements || [];
+    return list.filter(s => s.clientId === clientId && (fiscalYear === undefined || s.fiscalYear === fiscalYear));
+  }
+
+  public addApprovedStatement(data: Omit<ApprovedStatementsSnapshot, 'id' | 'versionNo' | 'approvedAt'>): ApprovedStatementsSnapshot {
+    if (!this.state.approvedStatements) {
+      this.state.approvedStatements = [];
+    }
+    const existingForClientYear = this.state.approvedStatements.filter(
+      s => s.clientId === data.clientId && s.fiscalYear === data.fiscalYear
+    );
+    const maxVersion = existingForClientYear.reduce((max, s) => Math.max(max, s.versionNo || 0), 0);
+    const newVersionNo = maxVersion + 1;
+
+    const newSnapshot: ApprovedStatementsSnapshot = {
+      ...data,
+      id: `appr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      versionNo: newVersionNo,
+      approvedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+    };
+
+    this.state.approvedStatements.unshift(newSnapshot);
+    this.saveState();
+
+    this.logAudit({
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      user: this.getCurrentUser()?.name || 'محاسب',
+      action: 'CREATE',
+      details: `اعتماد وأرشفة نسخة قوائم مالية رقم ${newVersionNo} للعميل ${data.clientId} عن سنة ${data.fiscalYear}`,
+    });
+
+    return newSnapshot;
+  }
+
+  public deleteApprovedStatement(id: string, isManager: boolean, reason: string): boolean {
+    if (!isManager) {
+      console.warn('Unauthorized deletion attempt of approved statement');
+      return false;
+    }
+    if (!this.state.approvedStatements) return false;
+    const initialLen = this.state.approvedStatements.length;
+    const target = this.state.approvedStatements.find(s => s.id === id);
+    this.state.approvedStatements = this.state.approvedStatements.filter(s => s.id !== id);
+
+    if (this.state.approvedStatements.length < initialLen) {
+      this.saveState();
+      this.logAudit({
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        user: this.getCurrentUser()?.name || 'مدير النظام',
+        action: 'DELETE',
+        details: `حذف نسخة معتمدة ${id} بواسطة مدير النظام. السبب: ${reason || 'غير محدد'}`,
+        previousValue: target,
+      });
+      return true;
+    }
+    return false;
+  }
+
+  public getFeeAgreements(): ClientFeeAgreement[] {
+    return this.state.feeAgreements || [];
+  }
+
+  public saveFeeAgreement(agreement: ClientFeeAgreement): void {
+    if (!this.state.feeAgreements) this.state.feeAgreements = [];
+    const idx = this.state.feeAgreements.findIndex(a => a.id === agreement.id);
+    if (idx >= 0) {
+      this.state.feeAgreements[idx] = agreement;
+    } else {
+      this.state.feeAgreements.unshift(agreement);
+    }
+    this.saveState();
+  }
+
+  public deleteFeeAgreement(id: string): void {
+    if (!this.state.feeAgreements) return;
+    this.state.feeAgreements = this.state.feeAgreements.filter(a => a.id !== id);
+    this.saveState();
+  }
+
+  public getFeeCollections(): ClientFeeCollection[] {
+    return this.state.feeCollections || [];
+  }
+
+  public addFeeCollection(collection: ClientFeeCollection): void {
+    if (!this.state.feeCollections) this.state.feeCollections = [];
+    this.state.feeCollections.unshift(collection);
+    this.saveState();
+  }
+
+  public deleteFeeCollection(id: string): void {
+    if (!this.state.feeCollections) return;
+    this.state.feeCollections = this.state.feeCollections.filter(c => c.id !== id);
+    this.saveState();
   }
 
   // --- Full Backup JSON Export & Import ---
@@ -2434,6 +2574,11 @@ export class LocalDatabase {
           fixedAssets: dataToImport.fixedAssets || SAMPLE_FIXED_ASSETS,
           feeEstimates: dataToImport.feeEstimates || SAMPLE_FEE_ESTIMATES,
           customsShipments: dataToImport.customsShipments || SAMPLE_CUSTOMS_SHIPMENTS,
+          closingChecklists: (dataToImport.closingChecklists && typeof dataToImport.closingChecklists === 'object' && !Array.isArray(dataToImport.closingChecklists))
+            ? dataToImport.closingChecklists
+            : {},
+          clientDeadlines: Array.isArray(dataToImport.clientDeadlines) ? dataToImport.clientDeadlines : [],
+          openItems: Array.isArray(dataToImport.openItems) ? dataToImport.openItems : [],
           officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
           users: dataToImport.users || SAMPLE_SYSTEM_USERS,
           currentUserId: dataToImport.currentUserId || 'user-admin',

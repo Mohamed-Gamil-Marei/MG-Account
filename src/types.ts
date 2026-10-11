@@ -1739,5 +1739,45 @@ export interface ExcelAuditDatasetSummary {
   firmName: string;
 }
 
+export interface ApprovedStatementsSnapshot {
+  id: string;
+  clientId: string;
+  fiscalYear: number;
+  versionNo: number;
+  approvedBy: string;
+  approvedAt: string;
+  source: 'LEDGER' | 'FILE_REVIEW';
+  trialBalanceRows: { code: string; name: string; debit: number; credit: number }[];
+  incomeStatement: any;
+  balanceSheet: any;
+  cashFlow: any;
+  note?: string;
+  checklistStatus: { ok: boolean; missing: string[] };
+}
+
+export interface ClientFeeAgreement {
+  id: string;
+  clientId: string;
+  fiscalYear: number;
+  description: string;
+  amount: number;
+  vatRate?: number;
+  dueDate?: string;
+  status: 'ACTIVE' | 'CANCELLED';
+}
+
+export interface ClientFeeCollection {
+  id: string;
+  agreementId: string;
+  clientId: string;
+  amount: number;
+  receivedAt: string;
+  method: 'CASH' | 'BANK' | 'CHEQUE';
+  reference?: string;
+  note?: string;
+}
+
+
+
 
 

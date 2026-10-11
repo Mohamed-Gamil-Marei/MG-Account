@@ -43,6 +43,8 @@ import {
   round2,
 } from '../../utils/accountingCalculations';
 import { buildAuditFromTrialBalance } from '../../utils/auditFromTrialBalance';
+import { NOTES_TEMPLATES } from '../../data/notesTemplates';
+import { renderNote } from '../../utils/renderNote';
 import {
   computeVariance,
   VarianceAnalysisResult,
@@ -51,6 +53,7 @@ import {
   checkOpeningBalances,
   OpeningBalanceCheckResult,
 } from '../../utils/openingBalanceCheck';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 interface FileReviewWizardViewProps {
   state: DatabaseState;
@@ -372,6 +375,8 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
   // Step 6: Gemini Report
   const [reviewReport, setReviewReport] = useState<GeminiReviewReportData | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
+  const [isDraftTemplateDefault, setIsDraftTemplateDefault] = useState<boolean>(false);
+  const [showTemplateModal, setShowTemplateModal] = useState<boolean>(false);
 
   // Step 7: Export & Finish
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1225,24 +1230,40 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const office = officeProfile;
-    const rowsHtml = varianceAnalysis?.flaggedAccounts.map((acc) => `
-      <tr>
-        <td style="padding: 8px; border: 1px solid #ccc; font-family: monospace;">${acc.mappedCode}</td>
-        <td style="padding: 8px; border: 1px solid #ccc;">${acc.mappedName}</td>
-        <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace;">${acc.currentBalance.toLocaleString('ar-EG')}</td>
-        <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace;">${acc.priorBalance.toLocaleString('ar-EG')}</td>
-        <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace; font-weight: bold;">${acc.difference.toLocaleString('ar-EG')}</td>
-        <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${acc.percentage === null ? 'جديد' : acc.percentage + '%'}</td>
-        <td style="padding: 8px; border: 1px solid #ccc;">${varianceJustifications[acc.mappedCode]?.trim() || '—'}</td>
-      </tr>
-    `).join('') || '<tr><td colspan="7" style="padding: 8px; text-align: center;">لا توجد فروق جوهرية متجاوزة</td></tr>';
+    const firmName = officeProfile?.firmName || officeProfile?.name || 'مكتب المراجعة المعتمد';
+    const escapedFirmName = escapeHtml(firmName);
+    const escapedClientName = escapeHtml(activeClient?.name || '—');
+    const escapedFiscalYear = escapeHtml(selectedFiscalYear);
+    const escapedPctThreshold = escapeHtml(variancePctThreshold);
+    const escapedMinAmount = escapeHtml(varianceMinAmount.toLocaleString('ar-EG'));
+
+    const rowsHtml = varianceAnalysis?.flaggedAccounts.map((acc) => {
+      const code = escapeHtml(acc.mappedCode);
+      const name = escapeHtml(acc.mappedName);
+      const curr = escapeHtml(acc.currentBalance.toLocaleString('ar-EG'));
+      const pri = escapeHtml(acc.priorBalance.toLocaleString('ar-EG'));
+      const diff = escapeHtml(acc.difference.toLocaleString('ar-EG'));
+      const pct = escapeHtml(acc.percentage === null ? 'جديد' : acc.percentage + '%');
+      const justification = escapeHtml(varianceJustifications[acc.mappedCode]?.trim() || '—');
+
+      return `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ccc; font-family: monospace;">${code}</td>
+          <td style="padding: 8px; border: 1px solid #ccc;">${name}</td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace;">${curr}</td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace;">${pri}</td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align: left; font-family: monospace; font-weight: bold;">${diff}</td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${pct}</td>
+          <td style="padding: 8px; border: 1px solid #ccc;">${justification}</td>
+        </tr>
+      `;
+    }).join('') || '<tr><td colspan="7" style="padding: 8px; text-align: center;">لا توجد فروق جوهرية متجاوزة</td></tr>';
 
     const htmlContent = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
         <head>
-          <title>تقرير المراجعة والفروق الجوهرية - ${activeClient?.name}</title>
+          <title>تقرير المراجعة والفروق الجوهرية - ${escapedClientName}</title>
           <style>
             body { font-family: 'Cairo', system-ui, sans-serif; padding: 20px; direction: rtl; text-align: right; }
             h1, h2, h3 { color: #1e293b; margin-bottom: 8px; }
@@ -1253,21 +1274,21 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
         </head>
         <body>
           <div class="header">
-            <h2>${office?.name || 'مكتب المراجعة المعتمد'}</h2>
+            <h2>${escapedFirmName}</h2>
             <h3>تقرير المراجعة وتحليل الفروق الجوهرية</h3>
-            <p><strong>العميل:</strong> ${activeClient?.name || '—'} | <strong>السنة المالية:</strong> ${selectedFiscalYear}</p>
+            <p><strong>العميل:</strong> ${escapedClientName} | <strong>السنة المالية:</strong> ${escapedFiscalYear}</p>
           </div>
 
           <h3>قسم الفروق الجوهرية وتبريرها (تحليل فروق الميزان)</h3>
-          <p style="font-size: 12px; color: #64748b;">حدود المادية: نسبة الانحراف ${variancePctThreshold}% | الحد الأدنى ${varianceMinAmount.toLocaleString('ar-EG')} ج.م</p>
+          <p style="font-size: 12px; color: #64748b;">حدود المادية: نسبة الانحراف ${escapedPctThreshold}% | الحد الأدنى ${escapedMinAmount} ج.م</p>
           
           <table>
             <thead>
               <tr>
                 <th>الكود</th>
                 <th>اسم الحساب</th>
-                <th>رصيد ${selectedFiscalYear}</th>
-                <th>رصيد ${selectedFiscalYear - 1}</th>
+                <th>رصيد ${escapedFiscalYear}</th>
+                <th>رصيد ${escapeHtml(Number(selectedFiscalYear) - 1)}</th>
                 <th>الفرق (ج.م)</th>
                 <th>النسبة</th>
                 <th>التبرير المعتمد</th>
@@ -2495,11 +2516,78 @@ export const FileReviewWizardView: React.FC<FileReviewWizardViewProps> = ({
               </div>
 
               {/* Draft Disclosures */}
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-2">
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">صياغة الإيضاحات المتممة المبدئية:</h4>
-                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap font-mono">
-                  {reviewReport.draftDisclosures}
-                </p>
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">صياغة الإيضاحات المتممة المبدئية:</h4>
+                    {isDraftTemplateDefault && (
+                      <span className="print:hidden text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-normal">
+                        (نص قياسي)
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplateModal(true)}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>إضافة إيضاح من قالب</span>
+                  </button>
+                </div>
+
+                <textarea
+                  value={reviewReport.draftDisclosures}
+                  onChange={(e) => {
+                    setReviewReport({ ...reviewReport, draftDisclosures: e.target.value });
+                    setIsDraftTemplateDefault(false);
+                  }}
+                  rows={4}
+                  className="w-full text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-mono p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500"
+                  placeholder="الإيضاحات المتممة (قابلة للتعديل بالكامل)..."
+                />
+
+                {/* Template Selection Modal inside Report view */}
+                {showTemplateModal && (
+                  <div className="p-3 bg-blue-50/90 dark:bg-slate-900 border border-blue-200 dark:border-slate-800 rounded-xl space-y-3 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-blue-950 dark:text-blue-200">اختر قالباً للإيضاح المتمم (بدون أرقام مالية):</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowTemplateModal(false)}
+                        className="text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {NOTES_TEMPLATES.map((tmpl) => (
+                        <button
+                          key={tmpl.id}
+                          type="button"
+                          onClick={() => {
+                            const companyName = reviewReport.clientName || 'الشركة';
+                            const fiscalYear = reviewReport.fiscalYear || 2026;
+                            const { renderedText } = renderNote(tmpl.body, {
+                              اسم_الشركة: companyName,
+                              السنة: fiscalYear,
+                              تاريخ_القوائم: `${fiscalYear}-12-31`,
+                            });
+                            const currentDraft = reviewReport.draftDisclosures || '';
+                            const updatedDraft = currentDraft ? `${currentDraft}\n\n[${tmpl.title}]:\n${renderedText}` : `[${tmpl.title}]:\n${renderedText}`;
+                            setReviewReport({ ...reviewReport, draftDisclosures: updatedDraft });
+                            setIsDraftTemplateDefault(true);
+                            setShowTemplateModal(false);
+                          }}
+                          className="p-2.5 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-blue-500 transition-colors cursor-pointer space-y-1"
+                        >
+                          <div className="font-bold text-xs text-slate-900 dark:text-slate-100">{tmpl.title}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">{tmpl.body}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Section: Material Variances & Justifications (Requirement 10) */}

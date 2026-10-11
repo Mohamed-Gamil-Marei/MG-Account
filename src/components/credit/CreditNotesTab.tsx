@@ -26,6 +26,8 @@ import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 import { ActionMenu } from '../common/ActionMenu';
 import * as XLSX from 'xlsx';
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
+import { NOTES_TEMPLATES } from '../../data/notesTemplates';
+import { renderNote } from '../../utils/renderNote';
 
 export interface NoteBreakdownRow {
   id: string;
@@ -42,6 +44,7 @@ export interface SupplementaryNoteItem {
   linkedScheduleType?: 'FIXED_ASSETS' | 'ADMIN_EXPENSES' | 'CUSTOM_TABLE' | 'NONE';
   customBreakdownRows?: NoteBreakdownRow[];
   isCustom?: boolean;
+  isTemplateDefault?: boolean;
 }
 
 interface CreditNotesTabProps {
@@ -333,6 +336,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
   const [editScheduleType, setEditScheduleType] = useState<SupplementaryNoteItem['linkedScheduleType']>('NONE');
 
   const [isAddingNewNote, setIsAddingNewNote] = useState(false);
+  const [isAddingFromTemplate, setIsAddingFromTemplate] = useState(false);
   const [newNoteNumber, setNewNoteNumber] = useState<number>(activeNotes.length + 1);
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteCategory, setNewNoteCategory] = useState('إفصاحات عامة');
@@ -371,6 +375,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
           category: editCategory.trim() || n.category,
           content: editContent,
           linkedScheduleType: editScheduleType,
+          isTemplateDefault: false,
         };
       }
       return n;
@@ -608,6 +613,12 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                 onClick: () => setIsAddingNewNote(true),
               },
               {
+                id: 'add-note-from-template',
+                label: 'إضافة إيضاح من قالب',
+                icon: Sparkles,
+                onClick: () => setIsAddingFromTemplate(true),
+              },
+              {
                 id: 'export-notes-excel',
                 label: 'تصدير الإيضاحات (Excel)',
                 icon: Download,
@@ -628,6 +639,67 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
           />
         </div>
       </div>
+
+      {/* Add From Template Modal */}
+      {isAddingFromTemplate && (
+        <div className="bg-blue-50/85 border border-blue-200 rounded-2xl p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-blue-950 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-blue-700" />
+              اختيار إيضاح من قوالب النصوص الجاهزة (بدون أرقام مالية)
+            </h3>
+            <button
+              type="button"
+              onClick={() => setIsAddingFromTemplate(false)}
+              className="text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
+            >
+              إلغاء
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {NOTES_TEMPLATES.map((tmpl) => (
+              <div
+                key={tmpl.id}
+                className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2 hover:border-blue-400 transition-colors flex flex-col justify-between"
+              >
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900">{tmpl.title}</h4>
+                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{tmpl.body}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const companyName = 'شركة العميل';
+                    const fiscalYear = yearsList[yearsList.length - 1] || 2026;
+                    const statementDate = periodEndDate || '2026-12-31';
+                    const { renderedText } = renderNote(tmpl.body, {
+                      اسم_الشركة: companyName,
+                      السنة: fiscalYear,
+                      تاريخ_القوائم: statementDate,
+                    });
+                    const newNote: SupplementaryNoteItem = {
+                      id: `note_${Date.now()}`,
+                      noteNumber: activeNotes.length + 1,
+                      title: tmpl.title,
+                      category: 'إيضاحات متممة',
+                      content: `<p>${renderedText}</p>`,
+                      linkedScheduleType: 'NONE',
+                      isCustom: true,
+                      isTemplateDefault: true,
+                    };
+                    handleUpdate([...activeNotes, newNote]);
+                    setIsAddingFromTemplate(false);
+                  }}
+                  className="mt-2 w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>إضافة هذا الإيضاح (قابل للتعديل بالكامل)</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add New Note Modal */}
       {isAddingNewNote && (
@@ -746,8 +818,13 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
                       className="text-sm font-black border border-blue-300 rounded-lg px-2 py-1 bg-white outline-none w-full sm:w-80"
                     />
                   ) : (
-                    <h3 className="text-sm font-black text-slate-900">
-                      إيضاح ({note.noteNumber}) : {note.title}
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <span>إيضاح ({note.noteNumber}) : {note.title}</span>
+                      {note.isTemplateDefault && (
+                        <span className="print:hidden text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-normal">
+                          (نص قياسي)
+                        </span>
+                      )}
                     </h3>
                   )}
                 </div>
