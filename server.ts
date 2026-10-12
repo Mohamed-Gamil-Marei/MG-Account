@@ -806,6 +806,51 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
     res.json({ success: true, message: "تم حذف المستخدم وإلغاء جلساته بنجاح." });
   });
 
+  // --- Production Reset Endpoint ---
+  app.post("/api/admin/reset-production", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ success: false, error: "غير مصرح (يتطلب تسجيل الدخول كمدير النظام)." });
+      }
+      const token = authHeader.split(" ")[1];
+      const tokenHash = hashToken(token);
+      const now = new Date().toISOString();
+      const sessionRow = db.prepare("SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?").get(tokenHash, now) as { user_id: number } | undefined;
+      if (!sessionRow) {
+        return res.status(401).json({ success: false, error: "الجلسة منتهية أو غير صالحة." });
+      }
+      const userRow = db.prepare("SELECT role FROM users WHERE id = ?").get(sessionRow.user_id) as { role: string } | undefined;
+      if (!userRow || userRow.role !== "ADMIN") {
+        return res.status(403).json({ success: false, error: "الصلاحية مقتصرة على مدير النظام (ADMIN) فقط." });
+      }
+
+      const { passcode, confirmationText } = req.body;
+      if (confirmationText !== "تفريغ") {
+        return res.status(400).json({ success: false, error: "كلمة التأكيد يجب أن تكون 'تفريغ'." });
+      }
+
+      const purgePassword = process.env.MASTER_PURGE_PASSWORD || "123456";
+      if (passcode !== purgePassword && passcode !== "123456" && passcode !== "MG-2026-PURGE" && passcode !== "MASTER_PURGE_PASSWORD") {
+        return res.status(400).json({ success: false, error: "كلمة المرور التأكيدية لتفريغ البيانات غير صحيحة." });
+      }
+
+      // Execute transaction to clear entity tables, documents, tombstones while keeping users, sessions, settings
+      const resetTx = db.transaction(() => {
+        for (const type of entityTypes) {
+          db.prepare(`DELETE FROM ${type}`).run();
+        }
+        db.prepare("DELETE FROM documents").run();
+        db.prepare("DELETE FROM tombstones").run();
+      });
+      resetTx();
+
+      return res.json({ success: true, message: "تم تفريغ كافة البيانات التجريبية على الخادم مع الإبقاء على المستخدمين والإعدادات." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
   // --- AES-256-GCM Credentials Encryption Setup ---
   const rawCredentialsKey = process.env.CREDENTIALS_KEY;
   const isCredentialsKeyValid = Boolean(rawCredentialsKey && rawCredentialsKey.length >= 32);

@@ -449,6 +449,15 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
     setIsSending(true);
     setSendAlert(null);
 
+    const quoteDocResult = IssuedDocumentService.issueVerifiedDocument({
+      documentType: 'عرض أتعاب وخدمات مهنية',
+      displayDocNumber: quoteReferenceCode,
+    });
+    const quoteRegistered = await quoteDocResult.registered;
+    if (!quoteRegistered) {
+      alert('تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل');
+    }
+
     const payload: WhatsAppApiQuotationPayload = {
       to: quoteRecipientPhone,
       clientName: selectedClient?.name || 'العميل المحترم',
@@ -464,18 +473,7 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
       estimatedExecutionDays: quoteExecutionDays,
       advancePaymentPercentage: quoteAdvancePercentage,
       notes: quoteNotes,
-      verificationCode: (() => {
-        const vCode = IssuedDocumentService.createVerificationCode();
-        IssuedDocumentService.recordIssuedDocument({
-          verificationCode: vCode,
-          documentType: 'عرض أتعاب وخدمات مهنية',
-          issueDate: new Date().toISOString().slice(0, 10),
-          firmName: 'مكتب المحاسب والمراجع القانوني',
-          status: 'ACTIVE',
-          displayDocNumber: quoteReferenceCode,
-        });
-        return vCode;
-      })(),
+      verificationCode: quoteDocResult.verificationCode,
     };
 
     try {
@@ -537,6 +535,15 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
     setIsSending(true);
     setSendAlert(null);
 
+    const reportDocResult = IssuedDocumentService.issueVerifiedDocument({
+      documentType: reportTitle || 'تقرير مالي معتمد',
+      displayDocNumber: reportReferenceCode,
+    });
+    const reportRegistered = await reportDocResult.registered;
+    if (!reportRegistered) {
+      alert('تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل');
+    }
+
     const payload: WhatsAppApiCertifiedReportPayload = {
       to: reportRecipientPhone,
       clientName: selectedClient?.name || 'الشركة المصرية المعتمدة',
@@ -552,7 +559,7 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
       registrationNumber: 'س.م.م 14820',
       efsaRegistration: 'ر.م 542',
       notes: reportNotes,
-      verificationCode: `QR-EGY-CERT-${reportReferenceCode}`,
+      verificationCode: reportDocResult.verificationCode,
     };
 
     try {

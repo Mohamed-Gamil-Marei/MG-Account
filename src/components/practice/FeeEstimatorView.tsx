@@ -397,6 +397,16 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
     validUntilDate.setDate(validUntilDate.getDate() + 30);
     const validUntil = validUntilDate.toISOString().split('T')[0];
 
+    const docResult = IssuedDocumentService.issueVerifiedDocument({
+      documentType: 'مقترح أتعاب مهنية',
+      displayDocNumber: quoteNum,
+    });
+    docResult.registered.then(isRegistered => {
+      if (!isRegistered) {
+        alert('تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل');
+      }
+    });
+
     return {
       id: `quo-${Date.now()}`,
       quotationNumber: quoteNum,
@@ -437,18 +447,7 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
       paymentTerms: calculations.calculatedMilestones,
       executionDurationDays: executionDays,
       notes,
-      verificationCode: (() => {
-        const vCode = IssuedDocumentService.createVerificationCode();
-        IssuedDocumentService.recordIssuedDocument({
-          verificationCode: vCode,
-          documentType: 'مقترح أتعاب مهنية',
-          issueDate: new Date().toISOString().slice(0, 10),
-          firmName: 'مكتب المحاسب والمراجع القانوني',
-          status: 'ACTIVE',
-          displayDocNumber: quoteNum,
-        });
-        return vCode;
-      })(),
+      verificationCode: docResult.verificationCode,
       status: 'DRAFT',
       createdAt: new Date().toISOString(),
     };

@@ -1,13 +1,8 @@
 import DOMPurify from 'dompurify';
-import { JSDOM } from 'jsdom';
-
-// Create isolated DOMPurify instance with window from jsdom for hook safety
-const windowObj = typeof window !== 'undefined' ? window : new JSDOM('').window;
-const purify = DOMPurify(windowObj as any);
 
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return '';
-  return purify.sanitize(html, {
+  return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
       'p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li',
       'h1', 'h2', 'h3', 'h4', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
@@ -20,7 +15,7 @@ export function sanitizeHtml(html: string | null | undefined): string {
 
 export function sanitizeSvg(svg: string | null | undefined): string {
   if (!svg) return '';
-  return purify.sanitize(svg, {
+  return DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
     FORBID_TAGS: ['script', 'foreignObject'],
     FORBID_ATTR: [
@@ -33,9 +28,7 @@ export function sanitizeSvg(svg: string | null | undefined): string {
 export function sanitizePrintHtml(html: string | null | undefined): string {
   if (!html) return '';
 
-  const localPurify = DOMPurify(windowObj as any);
-
-  localPurify.addHook('uponSanitizeAttribute', (node: any, data: any) => {
+  DOMPurify.addHook('uponSanitizeAttribute', (node: any, data: any) => {
     if (data.attrName === 'src' && node.nodeName && node.nodeName.toLowerCase() === 'img') {
       const srcVal = data.attrValue.trim().toLowerCase();
       const isAllowedBase64 = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(srcVal);
@@ -45,27 +38,28 @@ export function sanitizePrintHtml(html: string | null | undefined): string {
     }
   });
 
-  const sanitized = localPurify.sanitize(html, {
-    ALLOWED_TAGS: [
-      'p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li',
-      'h1', 'h2', 'h3', 'h4', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
-      'caption', 'colgroup', 'col', 'hr', 'small', 'sub', 'sup', 'section', 'header', 'footer',
-      'span', 'div', 'img',
-      'svg', 'g', 'rect', 'path', 'circle', 'line', 'polyline', 'polygon', 'text', 'tspan', 'defs', 'linearGradient', 'stop', 'clipPath'
-    ],
-    ALLOWED_ATTR: [
-      'style', 'dir', 'class', 'colspan', 'rowspan', 'width', 'height',
-      'viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y', 'cx', 'cy', 'r', 'points', 'transform', 'alt', 'src',
-      'text-anchor', 'font-size', 'font-family', 'font-weight', 'shape-rendering', 'fill-rule', 'fill-opacity', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin', 'opacity'
-    ],
-    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'],
-    FORBID_ATTR: [
-      'onload', 'onerror', 'onclick', 'onmouseover', 'onmouseout',
-      'onfocus', 'onblur', 'onchange', 'onsubmit', 'onkeydown', 'onkeypress', 'onkeyup'
-    ],
-    ALLOW_DATA_ATTR: false,
-  });
-
-  localPurify.removeHook('uponSanitizeAttribute');
-  return sanitized;
+  try {
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li',
+        'h1', 'h2', 'h3', 'h4', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+        'caption', 'colgroup', 'col', 'hr', 'small', 'sub', 'sup', 'section', 'header', 'footer',
+        'span', 'div', 'img',
+        'svg', 'g', 'rect', 'path', 'circle', 'line', 'polyline', 'polygon', 'text', 'tspan', 'defs', 'linearGradient', 'stop', 'clipPath'
+      ],
+      ALLOWED_ATTR: [
+        'style', 'dir', 'class', 'colspan', 'rowspan', 'width', 'height',
+        'viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y', 'cx', 'cy', 'r', 'points', 'transform', 'alt', 'src',
+        'text-anchor', 'font-size', 'font-family', 'font-weight', 'shape-rendering', 'fill-rule', 'fill-opacity', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin', 'opacity'
+      ],
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'],
+      FORBID_ATTR: [
+        'onload', 'onerror', 'onclick', 'onmouseover', 'onmouseout',
+        'onfocus', 'onblur', 'onchange', 'onsubmit', 'onkeydown', 'onkeypress', 'onkeyup'
+      ],
+      ALLOW_DATA_ATTR: false,
+    });
+  } finally {
+    DOMPurify.removeHook('uponSanitizeAttribute');
+  }
 }

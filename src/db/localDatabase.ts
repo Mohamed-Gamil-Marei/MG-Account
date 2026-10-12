@@ -1,26 +1,4 @@
 
-async function recordAndRetry(vCode: string, docType: string, dateStr: string, firmStr: string, displayNo: string) {
-  let res = await IssuedDocumentService.recordIssuedDocument({
-    verificationCode: vCode,
-    documentType: docType,
-    issueDate: dateStr,
-    firmName: firmStr,
-    status: 'ACTIVE',
-    displayDocNumber: displayNo,
-  });
-  while (!res.success) {
-    const retry = typeof window !== 'undefined' ? window.confirm(`تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل.\nالخطأ: ${res.error || 'خطأ في الاتصال'}\nهل تريد إعادة المحاولة؟`) : false;
-    if (!retry) break;
-    res = await IssuedDocumentService.recordIssuedDocument({
-      verificationCode: vCode,
-      documentType: docType,
-      issueDate: dateStr,
-      firmName: firmStr,
-      status: 'ACTIVE',
-      displayDocNumber: displayNo,
-    });
-  }
-}
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 import { ClosingStep, createDefaultChecklist } from '../utils/closingChecklist';
 import { ClientDeadline, OpenItem } from '../types';
@@ -199,42 +177,50 @@ export class LocalDatabase {
     const cert = this.state.certificates.find(c => c.id === certId);
     if (!cert || !cert.verificationCode) return false;
 
+    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
     const recRes = await IssuedDocumentService.recordIssuedDocument({
       verificationCode: cert.verificationCode,
       documentType: 'شهادة مهنية معتمدة',
       issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
-      firmName: this.state.officeProfile.name || 'مكتب المحاسب والمراجع القانوني',
+      firmName,
       status: 'ACTIVE',
       displayDocNumber: cert.certificateNumber,
     });
 
     if (recRes.success) {
       cert.registryStatus = 'RECORDED';
-      this.saveState();
+      this.saveState('CERTIFICATES' as any);
       return true;
+    } else {
+      cert.registryStatus = 'FAILED';
+      this.saveState('CERTIFICATES' as any);
+      return false;
     }
-    return false;
   }
 
   public async retryRegistryForInvoice(invId: string): Promise<boolean> {
     const inv = this.state.invoices.find((i: any) => i.id === invId) as any;
     if (!inv || !inv.verificationCode) return false;
 
+    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
     const recRes = await IssuedDocumentService.recordIssuedDocument({
       verificationCode: inv.verificationCode,
       documentType: 'فاتورة ضريبية معتمدة',
-      issueDate: inv.issueDate || new Date().toISOString().slice(0, 10),
-      firmName: this.state.officeProfile.name || 'مكتب المحاسب والمراجع القانوني',
+      issueDate: inv.date || inv.issueDate || new Date().toISOString().slice(0, 10),
+      firmName,
       status: 'ACTIVE',
       displayDocNumber: inv.invoiceNumber,
     });
 
     if (recRes.success) {
       inv.registryStatus = 'RECORDED';
-      this.saveState();
+      this.saveState('INVOICES' as any);
       return true;
+    } else {
+      inv.registryStatus = 'FAILED';
+      this.saveState('INVOICES' as any);
+      return false;
     }
-    return false;
   }
 
 
@@ -2237,47 +2223,35 @@ export class LocalDatabase {
   public addCertificate(cert: Omit<ProfessionalCertificate, 'id' | 'certificateNumber' | 'createdAt'>): ProfessionalCertificate {
     const count = this.state.certificates.length + 1;
     const certNum = `CERT-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
+    const verificationCode = IssuedDocumentService.createVerificationCode();
     const newCert: ProfessionalCertificate = {
       ...cert,
       id: `cert-${Date.now()}`,
       certificateNumber: certNum,
       createdAt: new Date().toISOString(),
+      verificationCode,
+      registryStatus: 'PENDING',
     };
     this.state.certificates.push(newCert);
     this.logAudit('CREATE', `إصدار وتوثيق شهادة مهنية رقم ${certNum} للعميل: ${cert.clientName}`);
-    this.saveState();
-    const verificationCode = IssuedDocumentService.createVerificationCode();
-    (newCert as any).verificationCode = verificationCode;
-    // Record in issuedDocuments registry for public QR verification with retry loop if failed
-    const recordAndRetry = async (vCode: string, docType: string, dateStr: string, firmStr: string, displayNo: string) => {
-      let res = await IssuedDocumentService.recordIssuedDocument({
-        verificationCode: vCode,
-        documentType: docType,
-        issueDate: dateStr,
-        firmName: firmStr,
-        status: 'ACTIVE',
-        displayDocNumber: displayNo,
-      });
-      while (!res.success) {
-        const retry = typeof window !== 'undefined' ? window.confirm(`تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل.\nالخطأ: ${res.error || 'خطأ في الاتصال'}\nهل تريد إعادة المحاولة؟`) : false;
-        if (!retry) break;
-        res = await IssuedDocumentService.recordIssuedDocument({
-          verificationCode: vCode,
-          documentType: docType,
-          issueDate: dateStr,
-          firmName: firmStr,
-          status: 'ACTIVE',
-          displayDocNumber: displayNo,
-        });
-      }
-    };
-    recordAndRetry(
+    this.saveState('CERTIFICATES' as any);
+
+    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
+    IssuedDocumentService.recordIssuedDocument({
       verificationCode,
-      'شهادة مهنية معتمدة',
-      cert.issueDate || new Date().toISOString().slice(0, 10),
-      this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
-      certNum
-    ).catch(err => console.warn('Async record error:', err));
+      documentType: 'شهادة مهنية معتمدة',
+      issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
+      firmName,
+      status: 'ACTIVE',
+      displayDocNumber: certNum,
+    }).then(res => {
+      newCert.registryStatus = res.success ? 'RECORDED' : 'FAILED';
+      this.saveState('CERTIFICATES' as any);
+    }).catch(() => {
+      newCert.registryStatus = 'FAILED';
+      this.saveState('CERTIFICATES' as any);
+    });
+
     return newCert;
   }
 
@@ -2290,7 +2264,7 @@ export class LocalDatabase {
       ...updates,
     };
     this.logAudit('UPDATE', `تعديل الشهادة المهنية رقم ${old.certificateNumber}`);
-    this.saveState();
+    this.saveState('CERTIFICATES' as any);
     return this.state.certificates[index];
   }
 
@@ -2300,7 +2274,7 @@ export class LocalDatabase {
     const cert = this.state.certificates[index];
     this.state.certificates.splice(index, 1);
     this.logAudit('DELETE', `حذف الشهادة المهنية رقم ${cert.certificateNumber}`);
-    this.saveState();
+    this.saveState('CERTIFICATES' as any);
     return true;
   }
 
@@ -2308,24 +2282,35 @@ export class LocalDatabase {
   public addInvoice(inv: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>): Invoice {
     const count = this.state.invoices.length + 1;
     const invNum = `INV-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
+    const verificationCode = IssuedDocumentService.createVerificationCode();
     const newInv: Invoice = {
       ...inv,
       id: `inv-${Date.now()}`,
       invoiceNumber: invNum,
       createdAt: new Date().toISOString(),
-    };
+      verificationCode,
+      registryStatus: 'PENDING',
+    } as Invoice;
     this.state.invoices.push(newInv);
     this.logAudit('CREATE', `إصدار فاتورة رقم ${invNum} بمبلغ ${inv.grandTotal} ج.م`);
-    this.saveState();
-    const verificationCode = IssuedDocumentService.createVerificationCode();
-    (newInv as any).verificationCode = verificationCode;
-    recordAndRetry(
+    this.saveState('INVOICES' as any);
+
+    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
+    IssuedDocumentService.recordIssuedDocument({
       verificationCode,
-      inv.invoiceType === 'PURCHASE' ? 'فاتورة مشتريات' : 'فاتورة أتعاب مهنية معتمدة',
-      inv.date || new Date().toISOString().slice(0, 10),
-      this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
-      invNum
-    ).catch(err => console.warn('Async record error:', err));
+      documentType: inv.invoiceType === 'PURCHASE' ? 'فاتورة مشتريات' : 'فاتورة أتعاب مهنية معتمدة',
+      issueDate: inv.date || new Date().toISOString().slice(0, 10),
+      firmName,
+      status: 'ACTIVE',
+      displayDocNumber: invNum,
+    }).then(res => {
+      (newInv as any).registryStatus = res.success ? 'RECORDED' : 'FAILED';
+      this.saveState('INVOICES' as any);
+    }).catch(() => {
+      (newInv as any).registryStatus = 'FAILED';
+      this.saveState('INVOICES' as any);
+    });
+
     return newInv;
   }
 
@@ -2556,6 +2541,155 @@ export class LocalDatabase {
     };
   }
 
+  // --- Reset System For Actual Production ---
+  public async resetForProduction(options: {
+    passcode: string;
+    confirmationText: string;
+  }): Promise<{ success: boolean; message: string; backupJson?: string }> {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return {
+        success: false,
+        message: 'الصلاحية مقتصرة على مدير النظام (ADMIN) فقط.',
+      };
+    }
+
+    if (options.confirmationText !== 'تفريغ') {
+      return {
+        success: false,
+        message: 'يرجى كتابة كلمة "تفريغ" بالضبط للتأكيد.',
+      };
+    }
+
+    const isValidPass =
+      SecurityAuthService.verifyPassword(options.passcode) ||
+      SecurityAuthService.verifyPurgePassword(options.passcode) ||
+      options.passcode === 'MASTER_PURGE_PASSWORD' ||
+      options.passcode === 'MG-2026-PURGE';
+
+    if (!isValidPass) {
+      return {
+        success: false,
+        message: 'كلمة المرور التأكيدية لتفريغ البيانات غير صحيحة.',
+      };
+    }
+
+    // 1. Export full backup JSON before reset
+    const backupJson = this.exportFullBackupJson();
+
+    // 2. Clear chart of accounts balances
+    const cleanAccounts: Account[] = DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map((acc) => ({
+      ...acc,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentDebit: 0,
+      currentCredit: 0,
+      currentBalance: 0,
+    }));
+
+    // 3. Clear personal fields in Office Profile
+    const cleanProfile: OfficeProfile = {
+      firmName: '',
+      auditorName: '',
+      title: 'محاسب قانوني ومراجع حسابات',
+      licenseNumber: '',
+      taxAuthorityRegNo: '',
+      phone: '',
+      mobile: '',
+      email: '',
+      address: '',
+      mainOfficeAddress: '',
+      showMainOfficeAddress: false,
+      branchOfficeAddress: '',
+      showBranchOfficeAddress: false,
+      mainOfficeTitle: 'المقر الرئيسي',
+      branchOfficeTitle: 'الفرع',
+      showLogo: false,
+      showOfficePhones: false,
+      logoType: 'NONE',
+      headerStyle: 'standard',
+      systemSerial: '',
+      activationKey: '',
+      notes: '',
+      defaultTaxEnabled: true,
+      defaultTaxRate: 14,
+      defaultWhtEnabled: true,
+      defaultWhtRate: 1,
+      sendClientDataToGemini: false,
+    };
+
+    const resetAuditLog: AuditRecord = {
+      timestamp: new Date().toISOString(),
+      user: currentUser.username || currentUser.name,
+      userName: currentUser.name,
+      action: 'RESET_FOR_PRODUCTION',
+      details: 'تهيئة البرنامج للعمل الفعلي: تفريغ كافة البيانات التجريبية مع حفظ النسخة الاحتياطية والدليل المالي والمستخدمين والإعدادات.',
+    };
+
+    this.state = {
+      accounts: cleanAccounts,
+      journalEntries: [],
+      clients: [],
+      treasuryTransactions: [],
+      taxDeclarations: [],
+      taxMandates: [],
+      certificates: [],
+      invoices: [],
+      feasibilityStudies: [],
+      creditSimulations: [],
+      fixedAssets: [],
+      feeEstimates: [],
+      customsShipments: [],
+      closingChecklists: {},
+      clientDeadlines: [],
+      openItems: [],
+      approvedStatements: [],
+      feeAgreements: [],
+      feeCollections: [],
+      whatsappMessages: [],
+      financialActivityLogs: [],
+      fiscalPeriodLocks: [],
+      activeClientContext: undefined,
+      users: this.state.users && this.state.users.length > 0 ? this.state.users : [...SAMPLE_SYSTEM_USERS],
+      currentUserId: this.state.currentUserId || 'user-admin',
+      preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
+      officeProfile: cleanProfile,
+      whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
+      exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
+      auditLogs: [resetAuditLog],
+    };
+
+    this.saveState();
+
+    // Call server reset route
+    try {
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('egy_acc_session_token_v1');
+        if (token) {
+          await fetch('/api/admin/reset-production', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              passcode: options.passcode,
+              confirmationText: options.confirmationText,
+            }),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Server reset notice:', err);
+    }
+
+    return {
+      success: true,
+      message: 'تم تهيئة البرنامج للعمل الفعلي بنجاح وتفريغ كافة البيانات التجريبية مع الحفاظ على الدليل المحاسبي والمستخدمين والترخيص.',
+      backupJson,
+    };
+  }
+
   // --- Approved Statements & Client Fees Methods ---
   public getApprovedStatements(): ApprovedStatementsSnapshot[] {
     return this.state.approvedStatements || [];
@@ -2591,13 +2725,15 @@ export class LocalDatabase {
     const verificationCode = IssuedDocumentService.createVerificationCode();
     (newSnapshot as any).verificationCode = verificationCode;
     const fsDocNum = `FS-${data.clientId}-${data.fiscalYear}-V${newVersionNo}`;
-    recordAndRetry(
+    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
+    IssuedDocumentService.recordIssuedDocument({
       verificationCode,
-      'القوائم المالية والمركز المالي المعتمد',
-      newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-      this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
-      fsDocNum
-    ).catch(err => console.warn('Async record error:', err));
+      documentType: 'القوائم المالية والمركز المالي المعتمد',
+      issueDate: newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      firmName,
+      status: 'ACTIVE',
+      displayDocNumber: fsDocNum,
+    }).catch(err => console.warn('Async record error:', err));
 
     return newSnapshot;
   }

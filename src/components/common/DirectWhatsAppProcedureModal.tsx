@@ -1,4 +1,3 @@
-import { IssuedDocumentService } from '../../services/issuedDocumentService';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Send,
@@ -95,7 +94,7 @@ export const DirectWhatsAppProcedureModal: React.FC<DirectWhatsAppModalProps> = 
   );
   const [customNotes, setCustomNotes] = useState<string>(initialContext?.customNotes || '');
   const [verificationCode, setVerificationCode] = useState<string>(
-    initialContext?.verificationCode || `MG-${Math.floor(Math.random() * 90000 + 10000)}`
+    initialContext?.verificationCode || ''
   );
 
   // Editable Message Body
@@ -616,7 +615,7 @@ export const DirectWhatsAppProcedureModal: React.FC<DirectWhatsAppModalProps> = 
                   { label: '+ المبلغ', token: `*${amount > 0 ? formatEgyptianCurrency(amount) : ''}*` },
                   { label: '+ التفقيط', token: `فقط ${numberToArabicWords(amount)} لا غير` },
                   { label: '+ رقم المرجع', token: `#${referenceCode}` },
-                  { label: '+ كود QR', token: `MG-${referenceCode}` },
+                  { label: '+ كود المرجع', token: verificationCode ? `#${verificationCode}` : `#${referenceCode}` },
                 ].map((chip, idx) => (
                   <button
                     key={idx}

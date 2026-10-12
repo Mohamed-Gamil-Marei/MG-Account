@@ -2,6 +2,8 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { generateVerificationCode } from '../utils/verificationCode';
 
+import { db as localDb } from '../db/localDatabase';
+
 /**
  * Public document record stored in Firestore `issuedDocuments/{verificationCode}`.
  * Strict privacy: NO clientName, NO amount, NO clientId.
@@ -34,6 +36,32 @@ export class IssuedDocumentService {
    */
   public static createVerificationCode(): string {
     return generateVerificationCode(24);
+  }
+
+  /**
+   * Unified helper to generate verification code and record document in Firestore registry.
+   * Reads firmName from db.getState().officeProfile (firmName then name).
+   */
+  public static issueVerifiedDocument(params: {
+    documentType: string;
+    displayDocNumber: string;
+    issueDate?: string;
+  }): { verificationCode: string; registered: Promise<boolean> } {
+    const verificationCode = IssuedDocumentService.createVerificationCode();
+    const officeProfile = localDb.getState()?.officeProfile;
+    const firmName = officeProfile?.firmName?.trim() || officeProfile?.name?.trim() || '—';
+    const issueDate = params.issueDate || new Date().toISOString().slice(0, 10);
+
+    const registered = IssuedDocumentService.recordIssuedDocument({
+      verificationCode,
+      documentType: params.documentType,
+      issueDate,
+      firmName,
+      status: 'ACTIVE',
+      displayDocNumber: params.displayDocNumber,
+    }).then(res => res.success).catch(() => false);
+
+    return { verificationCode, registered };
   }
 
   /**

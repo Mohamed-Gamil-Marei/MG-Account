@@ -408,6 +408,14 @@ export const WhatsAppDocumentShareModal: React.FC<WhatsAppDocumentShareModalProp
     try {
       let res;
       if (shareType === 'QUOTATION') {
+        const docResult = IssuedDocumentService.issueVerifiedDocument({
+          documentType: documentTitle || 'عرض أتعاب وخدمات مهنية',
+          displayDocNumber: documentRefCode,
+        });
+        const isRegistered = await docResult.registered;
+        if (!isRegistered) {
+          alert('تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل');
+        }
         res = await WhatsAppApiService.sendQuotation({
           to: phoneNumber,
           clientName: activeClient?.name || 'العميل',
@@ -421,18 +429,7 @@ export const WhatsAppDocumentShareModal: React.FC<WhatsAppDocumentShareModalProp
           validityDays: 15,
           estimatedExecutionDays: 7,
           notes: customNotes,
-          verificationCode: (() => {
-            const vCode = IssuedDocumentService.createVerificationCode();
-            IssuedDocumentService.recordIssuedDocument({
-              verificationCode: vCode,
-              documentType: documentTitle || 'مستند مهني معتمد',
-              issueDate: new Date().toISOString().slice(0, 10),
-              firmName: 'مكتب المحاسب والمراجع القانوني',
-              status: 'ACTIVE',
-              displayDocNumber: documentRefCode,
-            });
-            return vCode;
-          })(),
+          verificationCode: docResult.verificationCode,
         });
       } else {
         res = await WhatsAppApiService.sendMessage(phoneNumber, messageData.text, {
