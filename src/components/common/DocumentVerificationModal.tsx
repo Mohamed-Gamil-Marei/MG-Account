@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { IssuedDocumentService, IssuedDocumentRecord } from '../../services/issuedDocumentService';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -48,6 +49,46 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
   const [copied, setCopied] = useState(false);
   const [copiedSeal, setCopiedSeal] = useState(false);
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
+  const [firestoreRecord, setFirestoreRecord] = useState<IssuedDocumentRecord | null>(null);
+  const [isVerifyingFirestore, setIsVerifyingFirestore] = useState<boolean>(true);
+  const [verifyStatus, setVerifyStatus] = useState<'LOADING' | 'NOT_FOUND' | 'ACTIVE' | 'CANCELLED'>('LOADING');
+
+  useEffect(() => {
+    let isMounted = true;
+    const verifyDocInFirestore = async () => {
+      setIsVerifyingFirestore(true);
+      const docNum = data.docNumber?.trim();
+      if (!docNum) {
+        if (isMounted) {
+          setVerifyStatus('NOT_FOUND');
+          setIsVerifyingFirestore(false);
+        }
+        return;
+      }
+
+      // Check Firestore by document number or recordId
+      let record = await IssuedDocumentService.getIssuedDocument(docNum);
+      if (!record && data.recordId && data.recordId !== docNum) {
+        record = await IssuedDocumentService.getIssuedDocument(data.recordId.trim());
+      }
+
+      if (isMounted) {
+        if (record) {
+          setFirestoreRecord(record);
+          setVerifyStatus(record.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE');
+        } else {
+          setFirestoreRecord(null);
+          setVerifyStatus('NOT_FOUND');
+        }
+        setIsVerifyingFirestore(false);
+      }
+    };
+
+    verifyDocInFirestore();
+    return () => {
+      isMounted = false;
+    };
+  }, [data.docNumber, data.recordId]);
 
   const isEn = modalLang === 'en';
 
@@ -177,10 +218,27 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-300" />
-                    {isEn ? 'Certified & 100% Verified' : 'وثيقة معتمدة ومطابقة 100%'}
-                  </span>
+                  {isVerifyingFirestore ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-400/20 text-blue-200 border border-blue-300/30 flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></span>
+                      {isEn ? 'Verifying with Registry...' : 'جاري التحقق من سجل المستندات...'}
+                    </span>
+                  ) : verifyStatus === 'NOT_FOUND' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-500/20 text-rose-200 border border-rose-400/30 flex items-center gap-1">
+                      <X className="w-3 h-3 text-rose-300" />
+                      {isEn ? 'Document Not Found in Registry' : 'مستند غير موجود في السجل الرسمي'}
+                    </span>
+                  ) : verifyStatus === 'CANCELLED' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-300" />
+                      {isEn ? 'Document Revoked / Cancelled' : 'مستند ملغي رسمياً'}
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                      {isEn ? 'Document Valid & Active' : 'مستند معتمد وساري'}
+                    </span>
+                  )}
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400/20 text-amber-200 border border-amber-300/30 flex items-center gap-1">
                     <Lock className="w-3 h-3 text-amber-300" />
                     {isEn ? 'Encrypted View (Read-Only)' : 'عرض محمي مشفر (Read-Only)'}
@@ -267,7 +325,42 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
         </div>
 
         {/* Modal Main Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-100 dark:bg-slate-950">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-100 dark:bg-slate-950 space-y-4">
+          {!isVerifyingFirestore && verifyStatus === 'NOT_FOUND' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-300 dark:border-rose-900 text-rose-900 dark:text-rose-200 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm sm:text-base font-black">
+                  {isEn ? 'Document Not Found' : 'مستند غير موجود'}
+                </h3>
+                <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+                  {isEn
+                    ? 'No official record was found in the Firestore registry for document number ' + (data.docNumber || '—') + '. This document cannot be verified based on link parameters.'
+                    : 'لم يتم العثور على أي قيد معتمد في قاعدة بيانات المستندات المصدرة لكود المستند (' + (data.docNumber || '—') + '). هذا المستند غير مسجل أو لم يصدر رسمياً من المكتب.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isVerifyingFirestore && verifyStatus === 'CANCELLED' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border-2 border-amber-300 dark:border-amber-900 text-amber-900 dark:text-amber-200 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm sm:text-base font-black">
+                  {isEn ? 'Document Cancelled / Revoked' : 'مستند ملغي رسمياً'}
+                </h3>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  {isEn
+                    ? 'This document was officially marked as cancelled or revoked in the registry.'
+                    : 'تم إلغاء صلاحية هذا المستند رسمياً في سجل المستندات المصدرة للمكتب.'}
+                </p>
+              </div>
+            </div>
+          )}
           {activeTab === 'encrypted_pdf' ? (
             /* ================= Tab 1: Encrypted Read-Only PDF Document View ================= */
             <div className="space-y-4">

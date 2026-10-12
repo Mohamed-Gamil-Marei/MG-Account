@@ -64,6 +64,7 @@ import {
   SAMPLE_FEE_ESTIMATES,
 } from '../data/sampleData';
 import { SAMPLE_CUSTOMS_SHIPMENTS } from '../data/sampleCustomsData';
+import { IssuedDocumentService } from '../services/issuedDocumentService';
 
 const STORAGE_KEYS = {
   ACCOUNTS: 'egy_acc_accounts_v1',
@@ -2175,6 +2176,20 @@ export class LocalDatabase {
     this.state.certificates.push(newCert);
     this.logAudit('CREATE', `إصدار وتوثيق شهادة مهنية رقم ${certNum} للعميل: ${cert.clientName}`);
     this.saveState();
+    // Record in issuedDocuments registry for public QR verification
+    try {
+      IssuedDocumentService.recordIssuedDocument({
+        documentNumber: certNum,
+        documentType: 'شهادة مهنية معتمدة',
+        issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
+        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+        status: 'ACTIVE',
+        clientName: cert.clientName,
+        amount: cert.certifiedAmount,
+      });
+    } catch (e) {
+      console.warn('Failed to register issued cert:', e);
+    }
     return newCert;
   }
 
@@ -2214,6 +2229,20 @@ export class LocalDatabase {
     this.state.invoices.push(newInv);
     this.logAudit('CREATE', `إصدار فاتورة رقم ${invNum} بمبلغ ${inv.grandTotal} ج.م`);
     this.saveState();
+    // Record in issuedDocuments registry for public QR verification
+    try {
+      IssuedDocumentService.recordIssuedDocument({
+        documentNumber: invNum,
+        documentType: inv.invoiceType === 'PURCHASE' ? 'فاتورة مشتريات' : 'فاتورة أتعاب مهنية معتمدة',
+        issueDate: inv.date || new Date().toISOString().slice(0, 10),
+        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+        status: 'ACTIVE',
+        clientName: inv.partnerName,
+        amount: inv.grandTotal,
+      });
+    } catch (e) {
+      console.warn('Failed to register issued invoice:', e);
+    }
     return newInv;
   }
 
@@ -2475,6 +2504,34 @@ export class LocalDatabase {
     this.saveState('APPROVED_STATEMENTS' as any);
 
     this.logAudit('CREATE', `اعتماد وأرشفة نسخة قوائم مالية رقم ${newVersionNo} للعميل ${data.clientId} عن سنة ${data.fiscalYear}`);
+
+    // Record in issuedDocuments registry for public QR verification
+    try {
+      const clientObj = this.state.clients?.find(c => c.id === data.clientId);
+      const fsDocNum = `FS-${data.clientId}-${data.fiscalYear}-V${newVersionNo}`;
+      IssuedDocumentService.recordIssuedDocument({
+        documentNumber: fsDocNum,
+        documentType: 'القوائم المالية والمركز المالي المعتمد',
+        issueDate: newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+        status: 'ACTIVE',
+        clientName: clientObj?.name || 'العميل',
+        clientId: data.clientId,
+        fiscalYear: data.fiscalYear,
+      });
+      IssuedDocumentService.recordIssuedDocument({
+        documentNumber: `FS-${data.clientId}-${data.fiscalYear}`,
+        documentType: 'القوائم المالية والمركز المالي المعتمد',
+        issueDate: newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+        status: 'ACTIVE',
+        clientName: clientObj?.name || 'العميل',
+        clientId: data.clientId,
+        fiscalYear: data.fiscalYear,
+      });
+    } catch (e) {
+      console.warn('Failed to register issued financial statement:', e);
+    }
 
     return newSnapshot;
   }

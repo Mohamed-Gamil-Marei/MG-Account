@@ -93,6 +93,9 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
   const [docType, setDocType] = useState<ClientDocument['documentType']>('TAX_RETURN');
   const [docTag, setDocTag] = useState('');
   const [docNotes, setDocNotes] = useState('');
+  const [docFiscalYear, setDocFiscalYear] = useState<number>(new Date().getFullYear());
+  const [docGoogleDriveLink, setDocGoogleDriveLink] = useState('');
+  const [docStatus, setDocStatus] = useState<'REQUIRED' | 'RECEIVED' | 'MISSING'>('RECEIVED');
   const [selectedFileName, setSelectedFileName] = useState('');
   const [selectedFileSize, setSelectedFileSize] = useState('');
   const [selectedFileDataUrl, setSelectedFileDataUrl] = useState('');
@@ -298,10 +301,13 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
       category: docCategory,
       documentType: docType,
       fileDataUrl: selectedFileDataUrl || '#',
-      fileName: selectedFileName || `${docTitle.trim()}.pdf`,
-      fileSize: selectedFileSize || '1.5 MB',
+      fileName: selectedFileName || (docGoogleDriveLink ? 'Google Drive Link' : `${docTitle.trim()}.pdf`),
+      fileSize: selectedFileSize || (docGoogleDriveLink ? 'Cloud Link' : '—'),
       tag: docTag.trim() || undefined,
       notes: docNotes.trim() || undefined,
+      fiscalYear: Number(docFiscalYear) || new Date().getFullYear(),
+      googleDriveLink: docGoogleDriveLink.trim() || undefined,
+      documentStatus: docStatus,
     });
 
     // Reset
@@ -313,6 +319,9 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
     setSelectedFileDataUrl('');
     setDocTag('');
     setDocNotes('');
+    setDocFiscalYear(new Date().getFullYear());
+    setDocGoogleDriveLink('');
+    setDocStatus('RECEIVED');
     setIsUploadDocModalOpen(false);
   };
 
@@ -725,6 +734,31 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                           </button>
                         )}
 
+                        {doc.fiscalYear && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold font-mono border border-blue-200">
+                            سنة {doc.fiscalYear}
+                          </span>
+                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          doc.documentStatus === 'REQUIRED'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : doc.documentStatus === 'MISSING'
+                            ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                            : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        }`}>
+                          {doc.documentStatus === 'REQUIRED' ? 'مطلوب' : doc.documentStatus === 'MISSING' ? 'ناقص' : 'وصل'}
+                        </span>
+                        {doc.googleDriveLink && (
+                          <a
+                            href={doc.googleDriveLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 hover:text-indigo-900 font-bold underline flex items-center gap-1 border border-indigo-200"
+                            title="فتح رابط Google Drive"
+                          >
+                            <span>Google Drive ↗</span>
+                          </a>
+                        )}
                         {doc.tag && !isAutoArchived && (
                           <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold border border-slate-200">
                             {doc.tag}
@@ -1093,7 +1127,7 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
               <div className="flex items-center gap-2">
                 <Upload className="w-5 h-5 text-emerald-700" />
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">أرشفة ورفع مستند جديد لملف العميل</h4>
+                  <h4 className="text-sm font-bold text-slate-900">إضافة مستند جديد لملف العميل (أو رابط Google Drive)</h4>
                   <span className="text-slate-500 text-[11px]">{client.name}</span>
                 </div>
               </div>
@@ -1106,10 +1140,27 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
             </div>
 
             <form onSubmit={handleUploadSubmit} className="space-y-3.5 mt-4">
-              {/* File Drop / Select Area */}
+              {/* Google Drive Link & File Upload (No file upload required) */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <label className="block text-slate-800 font-bold mb-1">
+                  رابط المستند على Google Drive (اختياري - بدون الحاجة لرفع الملف):
+                </label>
+                <input
+                  type="url"
+                  value={docGoogleDriveLink}
+                  onChange={(e) => setDocGoogleDriveLink(e.target.value)}
+                  placeholder="https://drive.google.com/file/d/..."
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs focus:border-indigo-600 outline-none"
+                />
+                <div className="text-[10px] text-slate-500">
+                  يمكنك حفظ رابط ملف Google Drive مباشرة دون رفع أي ملف، أو اختيار ملف محلي اختياري أدناه.
+                </div>
+              </div>
+
+              {/* Optional Local File Selection */}
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="p-6 border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/40 rounded-2xl text-center cursor-pointer transition-all"
+                className="p-2.5 border border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50/50 rounded-xl text-center cursor-pointer transition-all"
               >
                 <input
                   type="file"
@@ -1118,17 +1169,10 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                   className="hidden"
                   accept=".pdf,.doc,.docx,.xlsx,.xls,.png,.jpg,.jpeg"
                 />
-                <Upload className="w-8 h-8 text-emerald-700 mx-auto mb-2" />
                 {selectedFileName ? (
-                  <div>
-                    <span className="font-bold text-slate-900 block text-xs">{selectedFileName}</span>
-                    <span className="text-[10px] text-slate-500 font-mono">الحجم: {selectedFileSize}</span>
-                  </div>
+                  <span className="font-bold text-slate-900 block text-xs">الملف المختار: {selectedFileName} ({selectedFileSize})</span>
                 ) : (
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs">اسحب الملف هنا أو انقر للاختيار</span>
-                    <span className="text-[10px] text-slate-500">يدعم مستندات PDF، جداول Excel، والصور الممسوحة ضوئياً</span>
-                  </div>
+                  <span className="text-[11px] text-slate-500">اختيار ملف محلي (اختياري)</span>
                 )}
               </div>
 
@@ -1142,6 +1186,31 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
                   placeholder="مثال: القوائم المالية 2025 معتمدة، إشعار سداد القيمة المضافة..."
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:bg-white focus:border-emerald-600"
                 />
+              </div>
+
+              {/* السنة المالية وحالة المستند */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-slate-800 font-bold mb-1">السنة المالية *</label>
+                  <input
+                    type="number"
+                    value={docFiscalYear}
+                    onChange={(e) => setDocFiscalYear(Number(e.target.value) || new Date().getFullYear())}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono text-slate-900 outline-none shadow-2xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-800 font-bold mb-1">حالة المستند *</label>
+                  <select
+                    value={docStatus}
+                    onChange={(e) => setDocStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none shadow-2xs"
+                  >
+                    <option value="RECEIVED">✓ وصل (مستلم ومحفوظ)</option>
+                    <option value="REQUIRED">⏳ مطلوب (بانتظار استلامه من العميل)</option>
+                    <option value="MISSING">⚠ ناقص (مستند معلق أو غير مكتمل)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Category & Document Type */}
