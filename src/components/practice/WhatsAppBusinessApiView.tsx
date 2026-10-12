@@ -1,3 +1,4 @@
+import { IssuedDocumentService } from '../../services/issuedDocumentService';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Send,
@@ -463,7 +464,18 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
       estimatedExecutionDays: quoteExecutionDays,
       advancePaymentPercentage: quoteAdvancePercentage,
       notes: quoteNotes,
-      verificationCode: `VER-QUO-${quoteReferenceCode.replace(/[^0-9]/g, '')}`,
+      verificationCode: (() => {
+        const vCode = IssuedDocumentService.createVerificationCode();
+        IssuedDocumentService.recordIssuedDocument({
+          verificationCode: vCode,
+          documentType: 'عرض أتعاب وخدمات مهنية',
+          issueDate: new Date().toISOString().slice(0, 10),
+          firmName: 'مكتب المحاسب والمراجع القانوني',
+          status: 'ACTIVE',
+          displayDocNumber: quoteReferenceCode,
+        });
+        return vCode;
+      })(),
     };
 
     try {
@@ -1591,7 +1603,7 @@ export const WhatsAppBusinessApiView: React.FC<WhatsAppBusinessApiViewProps> = (
                   <br />
                   ⏳ الصلاحية: {quoteValidityDays} يوماً
                   <br />
-                  🔒 كود التحقق الرقمي: VER-QUO-{quoteReferenceCode.replace(/[^0-9]/g, '')}
+                  🔒 مرجع العرض الرسمي: {quoteReferenceCode}
                 </p>
 
                 <div className="text-[10px] text-slate-400 pt-1 border-t border-emerald-900/60 flex items-center justify-between">

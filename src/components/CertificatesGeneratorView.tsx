@@ -2229,6 +2229,26 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
               </div>
 
               {/* Verification Center (Barcode Code 128 / QR / Official Rubber Seal) */}
+              {selectedCertForView?.registryStatus === 'FAILED' && (
+                <div className="p-3 mb-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-300 rounded-xl flex items-center justify-between gap-4 text-xs text-rose-900 dark:text-rose-200">
+                  <span>⚠️ تعذر تسجيل الشهادة في سجل التحقق الإلكتروني.</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const success = await db.retryRegistryForCertificate(selectedCertForView.id);
+                      if (success) {
+                        alert('تم إعادة تسجيل الشهادة في سجل التحقق بنجاح.');
+                        setSelectedCertForView({ ...selectedCertForView, registryStatus: 'RECORDED' });
+                      } else {
+                        alert('فشلت محاولة إعادة التسجيل. يرجى التحقق من الاتصال.');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs transition-all cursor-pointer"
+                  >
+                    إعادة تسجيل في سجل التحقق
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap justify-center">
                 {/* Linear Barcode Code 128 (Option 2) or Dual Display */}
                 {(verificationBarcodeType === 'BARCODE_128' || verificationBarcodeType === 'DUAL') && (

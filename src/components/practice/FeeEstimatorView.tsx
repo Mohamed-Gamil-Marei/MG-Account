@@ -1,3 +1,4 @@
+import { IssuedDocumentService } from '../../services/issuedDocumentService';
 import React, { useState, useMemo } from 'react';
 import {
   Calculator,
@@ -436,7 +437,18 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
       paymentTerms: calculations.calculatedMilestones,
       executionDurationDays: executionDays,
       notes,
-      verificationCode: `VER-${quoteNum}`,
+      verificationCode: (() => {
+        const vCode = IssuedDocumentService.createVerificationCode();
+        IssuedDocumentService.recordIssuedDocument({
+          verificationCode: vCode,
+          documentType: 'مقترح أتعاب مهنية',
+          issueDate: new Date().toISOString().slice(0, 10),
+          firmName: 'مكتب المحاسب والمراجع القانوني',
+          status: 'ACTIVE',
+          displayDocNumber: quoteNum,
+        });
+        return vCode;
+      })(),
       status: 'DRAFT',
       createdAt: new Date().toISOString(),
     };

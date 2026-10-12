@@ -1,3 +1,4 @@
+import { IssuedDocumentService } from '../../services/issuedDocumentService';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Send,
@@ -420,7 +421,18 @@ export const WhatsAppDocumentShareModal: React.FC<WhatsAppDocumentShareModalProp
           validityDays: 15,
           estimatedExecutionDays: 7,
           notes: customNotes,
-          verificationCode: `VER-${documentRefCode}`,
+          verificationCode: (() => {
+            const vCode = IssuedDocumentService.createVerificationCode();
+            IssuedDocumentService.recordIssuedDocument({
+              verificationCode: vCode,
+              documentType: documentTitle || 'مستند مهني معتمد',
+              issueDate: new Date().toISOString().slice(0, 10),
+              firmName: 'مكتب المحاسب والمراجع القانوني',
+              status: 'ACTIVE',
+              displayDocNumber: documentRefCode,
+            });
+            return vCode;
+          })(),
         });
       } else {
         res = await WhatsAppApiService.sendMessage(phoneNumber, messageData.text, {

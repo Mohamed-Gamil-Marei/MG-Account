@@ -12,6 +12,17 @@ function verifyWebhookSignature(rawBody: Buffer, signature: string, appSecret: s
   return crypto.timingSafeEqual(sigBuf, expBuf);
 }
 
+
+  it('7. يتحقق من صحة التوقيع باستخدام البايتس الخام بدقة (يدعم العربية والمسافات)', () => {
+    const rawBody = Buffer.from(JSON.stringify({ text: 'تحديث الحسابات والعملاء 123' }), 'utf8');
+    const appSecret = 'secret_key_arabic_999';
+    const validSig = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
+    expect(verifyWebhookSignature(rawBody, validSig, appSecret)).toBe(true);
+
+    const tamperedBody = Buffer.from(JSON.stringify({ text: 'تحديث الحسابات والعملاء 999' }), 'utf8');
+    expect(verifyWebhookSignature(tamperedBody, validSig, appSecret)).toBe(false);
+  });
+
 describe('Security & Access Control Tests', () => {
   const secretaryUser = { id: 1, name: 'Semia', role: 'SECRETARY' };
   const pendingUser = { id: 2, name: 'Pending User', role: 'PENDING' };

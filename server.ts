@@ -60,7 +60,7 @@ const GEMINI_MODEL_NAME = "gemini-2.5-flash";
   app.set("trust proxy", 1);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  app.use(express.json({ limit: "50mb" }));
+  app.use(express.json({ limit: "50mb", verify: (req: any, _res, buf) => { if (req.originalUrl && req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf; } }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(cookieParser());
 
@@ -2225,7 +2225,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 10. Meta Webhook Receiver (POST)
-  app.post("/api/whatsapp/webhook", express.json({ limit: "10mb", verify: (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; } }), async (req, res) => {
+  app.post("/api/whatsapp/webhook", async (req, res) => {
     try {
       const signature = req.headers["x-hub-signature-256"] as string;
       const appSecret = process.env.WHATSAPP_APP_SECRET;
@@ -2238,7 +2238,10 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         if (!signature) {
           return res.status(401).json({ success: false, error: "توقيع Webhook مفقود." });
         }
-        const rawBuf = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
+        const rawBuf = (req as any).rawBody;
+        if (!rawBuf) {
+          return res.status(401).json({ success: false, error: "لم يتم التقاط البايتس الخام للطلب (rawBody missing)." });
+        }
         const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBuf).digest("hex");
         const sigBuf = Buffer.from(signature);
         const expBuf = Buffer.from(expected);

@@ -67,3 +67,12 @@ describe('sanitizePrintHtml utility', () => {
     expect(result).not.toContain('<script');
   });
 });
+
+describe('sanitizePrintHtml text-anchor test for Code128 barcode', () => {
+  it('retains text-anchor and font-size attributes after sanitization', () => {
+    const svgMarkup = '<svg><text x="10" y="20" text-anchor="middle" font-size="12">123456</text></svg>';
+    const sanitized = sanitizePrintHtml(svgMarkup);
+    expect(sanitized).toContain('text-anchor="middle"');
+    expect(sanitized).toContain('font-size="12"');
+  });
+});

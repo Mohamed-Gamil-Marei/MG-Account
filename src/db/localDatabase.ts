@@ -195,6 +195,53 @@ function sanitizeClientsForLocalStorage(clients: ClientArchiveRecord[]): ClientA
 }
 
 export class LocalDatabase {
+  public async retryRegistryForCertificate(certId: string): Promise<boolean> {
+    const cert = this.state.certificates.find(c => c.id === certId);
+    if (!cert || !cert.verificationCode) return false;
+
+    const recRes = await IssuedDocumentService.recordIssuedDocument({
+      verificationCode: cert.verificationCode,
+      documentType: 'شهادة مهنية معتمدة',
+      issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
+      firmName: this.state.officeProfile.name || 'مكتب المحاسب والمراجع القانوني',
+      status: 'ACTIVE',
+      displayDocNumber: cert.certificateNumber,
+    });
+
+    if (recRes.success) {
+      cert.registryStatus = 'RECORDED';
+      this.saveState();
+      return true;
+    }
+    return false;
+  }
+
+  public async retryRegistryForInvoice(invId: string): Promise<boolean> {
+    const inv = this.state.invoices.find((i: any) => i.id === invId) as any;
+    if (!inv || !inv.verificationCode) return false;
+
+    const recRes = await IssuedDocumentService.recordIssuedDocument({
+      verificationCode: inv.verificationCode,
+      documentType: 'فاتورة ضريبية معتمدة',
+      issueDate: inv.issueDate || new Date().toISOString().slice(0, 10),
+      firmName: this.state.officeProfile.name || 'مكتب المحاسب والمراجع القانوني',
+      status: 'ACTIVE',
+      displayDocNumber: inv.invoiceNumber,
+    });
+
+    if (recRes.success) {
+      inv.registryStatus = 'RECORDED';
+      this.saveState();
+      return true;
+    }
+    return false;
+  }
+
+
+  public exportDatabaseJson(): string {
+    return JSON.stringify(this.state);
+  }
+
   private state: DatabaseState;
   private listeners: (() => void)[] = [];
 
@@ -2212,7 +2259,7 @@ export class LocalDatabase {
         displayDocNumber: displayNo,
       });
       while (!res.success) {
-        const retry = window.confirm(`تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل.\nالخطأ: ${res.error || 'خطأ في الاتصال'}\nهل تريد إعادة المحاولة؟`);
+        const retry = typeof window !== 'undefined' ? window.confirm(`تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل.\nالخطأ: ${res.error || 'خطأ في الاتصال'}\nهل تريد إعادة المحاولة؟`) : false;
         if (!retry) break;
         res = await IssuedDocumentService.recordIssuedDocument({
           verificationCode: vCode,
