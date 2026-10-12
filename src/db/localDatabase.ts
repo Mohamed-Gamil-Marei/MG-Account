@@ -1183,17 +1183,15 @@ export class LocalDatabase {
     return this.state.clients[index];
   }
 
-  public deleteClient(id: string): boolean {
+  public deleteClient(id: string, options?: { confirmedHasApproved?: boolean }): boolean {
     const index = this.state.clients.findIndex((c) => c.id === id);
     if (index === -1) return false;
     const cl = this.state.clients[index];
 
     const hasApproved = (this.state.approvedStatements || []).some(s => s.clientId === id);
-    if (hasApproved) {
-      const confirmed = typeof window !== 'undefined'
-        ? window.confirm(`تنبيه: هذا العميل (${cl.name}) لديه نسخ قوائم مالية معتمدة ومؤرشفة. هل تريد المتابعة وحذف العميل وبياناته؟`)
-        : true;
-      if (!confirmed) return false;
+    if (hasApproved && !options?.confirmedHasApproved) {
+      console.warn(`Cannot delete client ${cl.name} (${id}) because they have approved statements and confirmedHasApproved is not true.`);
+      return false;
     }
 
     this.state.clients.splice(index, 1);

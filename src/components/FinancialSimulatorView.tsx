@@ -1,3 +1,4 @@
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 import React, { useState, useMemo } from 'react';
 import {
   Sliders,

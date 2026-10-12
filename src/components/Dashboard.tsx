@@ -41,6 +41,7 @@ import {
   generateBalanceSheet,
 } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
+import { computeFeeSummary } from '../utils/clientFees';
 
 export type KpiCategory = 'ALL' | 'FINANCIAL' | 'LIQUIDITY' | 'TAX' | 'OPERATIONS';
 
@@ -89,7 +90,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const activeClientId = state.activeClientContext?.clientId;
   const activeClient = state.clients.find((c) => c.id === activeClientId);
 
-  // Critical Week Deadlines Calculation (Requirement 3)
+  // Requirement 4: Overdue fees summary for Dashboard
+  const overdueClientsList = useMemo(() => {
+    const agreements = state.feeAgreements || [];
+    const collections = state.feeCollections || [];
+    if (agreements.length === 0) return [];
+    const feeSummaries = computeFeeSummary(agreements, collections);
+    const clientsMap = new Map((state.clients || []).map((c) => [c.id, c.name]));
+
+    const overdueList: { clientId: string; clientName: string; remaining: number; daysOverdue: number }[] = [];
+    for (const [clientId, item] of Object.entries(feeSummaries)) {
+      if (item.remaining > 0 && item.daysOverdue > 0) {
+        overdueList.push({
+          clientId,
+          clientName: clientsMap.get(clientId) || 'عميل غير مسجل',
+          remaining: item.remaining,
+          daysOverdue: item.daysOverdue,
+        });
+      }
+    }
+    return overdueList.sort((a, b) => b.daysOverdue - a.daysOverdue);
+  }, [state.feeAgreements, state.feeCollections, state.clients]);
+
+    // Critical Week Deadlines Calculation (Requirement 3)
   const weekDeadlines = useMemo(() => {
     const allDeadlines = state.clientDeadlines || [];
     return allDeadlines
@@ -757,6 +780,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Requirement 4: سطر صغير "أتعاب متأخرة" بقائمة العملاء المتأخرين (اسم + المتبقي) */}
+      {overdueClientsList.length > 0 && (
+        <div className="bg-rose-50 dark:bg-rose-950/40 p-2.5 px-4 rounded-xl border border-rose-200 dark:border-rose-900 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+              <span>⚠</span>
+              <span>أتعاب متأخرة:</span>
+            </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              {overdueClientsList.map((c) => (
+                <span key={c.clientId} className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-rose-300 dark:border-rose-800 text-[11px]">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{c.clientName}:</span>
+                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
+                    {formatEgyptianCurrency(c.remaining)}
+                  </span>
+                  <span className="text-[10px] text-rose-500 font-mono">({c.daysOverdue} يوم)</span>
+                </span>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('CLIENTS_ARCHIVE')}
+            className="text-[11px] font-bold text-rose-700 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
+          >
+            متابعة الأتعاب والتحصيل ←
+          </button>
+        </div>
+      )}
 
       {/* Last successful backup info banner */}
       <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">

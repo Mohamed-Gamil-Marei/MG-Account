@@ -1,3 +1,4 @@
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import {
   FileText,
@@ -895,7 +896,7 @@ export const CreditNotesTab: React.FC<CreditNotesTabProps> = ({
               ) : (
                 <div
                   className="text-xs text-slate-700 leading-relaxed font-sans prose prose-slate max-w-none text-right"
-                  dangerouslySetInnerHTML={{ __html: note.content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.content) }}
                 />
               )}
 

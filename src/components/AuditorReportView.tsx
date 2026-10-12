@@ -1,3 +1,4 @@
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import {
   FileCheck2,

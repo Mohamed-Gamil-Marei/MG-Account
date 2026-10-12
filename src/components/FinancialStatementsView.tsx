@@ -69,6 +69,9 @@ import { AutoArchiverService } from '../services/AutoArchiver';
 import { SmartCpaTemplateView } from './financial/SmartCpaTemplateView';
 import { DocumentVerificationModal } from './common/DocumentVerificationModal';
 import { PrintPreviewModal } from './common/PrintPreviewModal';
+import { FinalizationWarningModal } from './common/FinalizationWarningModal';
+import { canFinalize } from '../utils/closingChecklist';
+import { compareApprovedSnapshots } from '../utils/approvedStatements';
 import { FinancialActivityLogView } from './financial/FinancialActivityLogView';
 import { exportFinancialStatementsToExcelWithLetterhead } from '../utils/certifiedDocumentExporter';
 import { FileReviewWizardView } from './audit/FileReviewWizardView';
@@ -230,6 +233,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   const [isPrintYearsModalOpen, setIsPrintYearsModalOpen] = useState(false);
   const [isQrPreviewModalOpen, setIsQrPreviewModalOpen] = useState(false);
   const [isPrintPreviewModalOpen, setIsPrintPreviewModalOpen] = useState(false);
+  const [isFinalizationWarningOpen, setIsFinalizationWarningOpen] = useState(false);
+  const [isDraftPrint, setIsDraftPrint] = useState(false);
+  const [isApprovingStatement, setIsApprovingStatement] = useState(false);
 
   // Period management handlers
   const handleFiscalYearChange = (newYear: number) => {
@@ -726,7 +732,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     };
   }, [overrides, customLines, baseBalanceData, computedIncome.netProfitAfterTax, priorNetProfit]);
 
-  const suspectedDiscrepancy = useMemo(() => {
+
+
+    const suspectedDiscrepancy = useMemo(() => {
     if (computedBalance.isBalanced) return null;
     return findSuspectedDiscrepancyCause(
       cumulativeCalculatedAccounts,
@@ -802,6 +810,40 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       reconciliationDifference,
     };
   }, [overrides, customLines, computedIncome, baseCashFlowData]);
+
+  // Requirement 5: Compare current calculated numbers with latest approved statement
+  const latestApprovedStatement = useMemo(() => {
+    if (!activeClient?.id) return null;
+    const list = db.getApprovedStatementsForClient(activeClient.id, fiscalYear);
+    if (!list || list.length === 0) return null;
+    return list.slice().sort((a, b) => (b.versionNo || 0) - (a.versionNo || 0))[0];
+  }, [activeClient?.id, fiscalYear, state.approvedStatements]);
+
+  const diffFromApproved = useMemo(() => {
+    if (!latestApprovedStatement || !activeClient?.id) return null;
+    const currentVirtualSnap = {
+      id: 'current-virtual',
+      clientId: activeClient.id,
+      fiscalYear,
+      versionNo: 0,
+      approvedBy: '',
+      approvedAt: '',
+      source: 'LEDGER' as const,
+      trialBalanceRows: cumulativeCalculatedAccounts.map((a: any) => ({
+        code: a.code,
+        name: a.name,
+        debit: a.endingBalanceDebit || 0,
+        credit: a.endingBalanceCredit || 0,
+      })),
+      incomeStatement: computedIncome,
+      balanceSheet: computedBalance,
+      cashFlow: computedCashFlow,
+      checklistStatus: { ok: true, missing: [] },
+    };
+    const diffs = compareApprovedSnapshots(latestApprovedStatement, currentVirtualSnap);
+    const hasDiff = diffs.some((d) => d.status !== 'EQUAL');
+    return hasDiff ? { hasDiff: true, versionNo: latestApprovedStatement.versionNo } : null;
+  }, [latestApprovedStatement, activeClient?.id, fiscalYear, cumulativeCalculatedAccounts, computedIncome, computedBalance, computedCashFlow]);
 
   // Synchronization states for dynamic Trial Balance Link
   const [isSyncingTrialBalance, setIsSyncingTrialBalance] = useState(false);
@@ -912,7 +954,59 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     }
   };
 
-  const handleAutoArchiveFinancials = () => {
+  const handleApproveAndArchiveStatement = () => {
+    const targetClientId = activeClient?.id;
+    if (!targetClientId) {
+      alert('يرجى اختيار عميل محدد من القائمة العلوية قبل اعتماد وأرشفة القوائم المالية.');
+      return;
+    }
+    const currentList = db.getChecklist(targetClientId, fiscalYear);
+    const checkRes = canFinalize(currentList);
+    if (!checkRes.ok) {
+      const confirmProceed = window.confirm(
+        `تنبيه رقابي: قائمة الإقفال المالي غير مكتملة (${checkRes.missing.length} خطوات ناقصة أو معلقة).\n` +
+        `الخطوات الناقصة:\n- ` + checkRes.missing.slice(0, 4).join('\n- ') +
+        (checkRes.missing.length > 4 ? `\n... وغيرها` : '') +
+        `\n\nهل تؤكد صراحة رغبتك في اعتماد وأرشفة هذه النسخة رغم النواقص؟`
+      );
+      if (!confirmProceed) return;
+    }
+
+    setIsApprovingStatement(true);
+    try {
+      const snap = db.addApprovedStatement({
+        clientId: targetClientId,
+        fiscalYear,
+        approvedBy: profile.auditorName || db.getCurrentUser()?.name || 'المحاسب القانوني',
+        source: 'LEDGER',
+        trialBalanceRows: cumulativeCalculatedAccounts.map((a: any) => ({
+          code: a.code,
+          name: a.name,
+          debit: a.endingBalanceDebit || 0,
+          credit: a.endingBalanceCredit || 0,
+        })),
+        incomeStatement: computedIncome,
+        balanceSheet: computedBalance,
+        cashFlow: computedCashFlow,
+        note: `اعتماد وأرشفة رسمية للقوائم المالية لسنة ${fiscalYear}`,
+        checklistStatus: {
+          ok: checkRes.ok,
+          missing: checkRes.missing,
+        },
+      });
+
+      setArchivedSuccessNotice(
+        `✓ تم اعتماد وأرشفة القوائم المالية بنجاح (الإصدار رقم ${snap.versionNo}) وتوثيقها في أرشيف العميل!`
+      );
+      setTimeout(() => setArchivedSuccessNotice(null), 8000);
+    } catch (e: any) {
+      alert('حدث خطأ أثناء الاعتماد والأرشفة: ' + (e?.message || 'خطأ غير معروف'));
+    } finally {
+      setIsApprovingStatement(false);
+    }
+  };
+
+    const handleAutoArchiveFinancials = () => {
     setIsArchiving(true);
     try {
       const activeClientId = activeClient?.id || state.clients[0]?.id;
@@ -1076,6 +1170,15 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   disabled={!computedBalance.isBalanced}
                   onClick={() => {
                     if (!computedBalance.isBalanced) return;
+                    if (activeClient?.id) {
+                      const list = db.getChecklist(activeClient.id, fiscalYear);
+                      const checkRes = canFinalize(list);
+                      if (!checkRes.ok) {
+                        setIsFinalizationWarningOpen(true);
+                        return;
+                      }
+                    }
+                    setIsDraftPrint(false);
                     setIsPrintPreviewModalOpen(true);
                   }}
                   className={
@@ -1109,6 +1212,20 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                   onClick={handleSyncWithTrialBalance}
                   disabled={isSyncingTrialBalance}
                   className="bg-slate-800 hover:bg-slate-700 text-white font-bold cursor-pointer border-slate-700"
+                />
+                {/* Zarr 4: اعتماد وأرشفة (Approve & Archive) */}
+                <ActionButton
+                  label={isApprovingStatement ? 'جاري الاعتماد...' : 'اعتماد وأرشفة'}
+                  icon={ShieldCheck}
+                  variant="outline"
+                  size="sm"
+                  disabled={!computedBalance.isBalanced || isApprovingStatement}
+                  onClick={handleApproveAndArchiveStatement}
+                  className={
+                    !computedBalance.isBalanced
+                      ? 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold opacity-60 cursor-not-allowed'
+                      : 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                  }
                 />
 
                 {/* قائمة "المزيد ⋯": تضم الأوامر الأُخرى */}
@@ -1202,6 +1319,19 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         <div className="space-y-3">
 
           {/* Trial Balance Dynamic Synchronization Success Notice - Single Line */}
+          {diffFromApproved && (
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-lg flex items-center justify-between text-amber-900 dark:text-amber-200 text-xs no-print print:hidden">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="font-bold">
+                  القوائم الحالية تختلف عن النسخة المعتمدة رقم {diffFromApproved.versionNo}
+                </span>
+              </div>
+              <span className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
+                (تم تعديل قيود أو أرصدة بعد تاريخ الاعتماد)
+              </span>
+            </div>
+          )}
           {syncSuccessNotice && (
             <div className="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-between text-slate-700 dark:text-slate-300 text-xs no-print print:hidden">
               <div className="flex items-center gap-2 flex-wrap">
@@ -2058,15 +2188,35 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
         />
       )}
 
+      {/* Finalization Warning Modal */}
+      {activeClient?.id && (
+        <FinalizationWarningModal
+          isOpen={isFinalizationWarningOpen}
+          clientId={activeClient.id}
+          clientName={displayCompanyName}
+          fiscalYear={fiscalYear}
+          onClose={() => setIsFinalizationWarningOpen(false)}
+          onProceedDraftPrint={() => {
+            setIsFinalizationWarningOpen(false);
+            setIsDraftPrint(true);
+            setIsPrintPreviewModalOpen(true);
+          }}
+        />
+      )}
+
       {/* Direct Interactive Print Preview Modal for Selected Financial Statements */}
       <PrintPreviewModal
         isOpen={isPrintPreviewModalOpen}
-        onClose={() => setIsPrintPreviewModalOpen(false)}
+        onClose={() => {
+          setIsPrintPreviewModalOpen(false);
+          setIsDraftPrint(false);
+        }}
         recordId={currentStatementRecordId}
         title={`القوائم المالية والحسابات الختامية - ${displayCompanyName} - ${fiscalYear}`}
         targetElementId="financial-statements-container"
         initialPageSize="A4"
         initialOrientation="portrait"
+        isDraft={isDraftPrint}
       />
         </>
       )}

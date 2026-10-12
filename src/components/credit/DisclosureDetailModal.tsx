@@ -1,3 +1,4 @@
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -215,7 +216,7 @@ export const DisclosureDetailModal: React.FC<DisclosureDetailModalProps> = ({
             ) : (
               <div
                 className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 leading-relaxed text-slate-800 dark:text-slate-200 prose dark:prose-invert max-w-none text-xs"
-                dangerouslySetInnerHTML={{ __html: content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
               />
             )}
           </div>

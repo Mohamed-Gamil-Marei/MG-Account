@@ -1,3 +1,4 @@
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import {
   Building,
@@ -1125,7 +1126,7 @@ export const DedicatedYearWorkspace: React.FC<DedicatedYearWorkspaceProps> = ({
                   {/* Note Content */}
                   <div
                     className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans prose prose-slate max-w-none text-right"
-                    dangerouslySetInnerHTML={{ __html: note.content }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.content) }}
                   />
 
                   {/* Fixed Assets Note Schedule for this year */}

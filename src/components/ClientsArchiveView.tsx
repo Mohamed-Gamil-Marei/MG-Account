@@ -45,6 +45,10 @@ import {
   Factory,
   CheckSquare,
   HelpCircle,
+  FileCheck2,
+  Coins,
+  Scale,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   ClientArchiveRecord,
@@ -81,6 +85,9 @@ import { ClientExcelEngine } from '../utils/clientExcelEngine';
 import { ClosingChecklistPanel } from './archive/ClosingChecklistPanel';
 import { ClientDeadlinesPanel } from './archive/ClientDeadlinesPanel';
 import { ClientOpenItemsPanel } from './archive/ClientOpenItemsPanel';
+import { compareApprovedSnapshots, SnapshotDiffItem } from '../utils/approvedStatements';
+import { computeFeeSummary } from '../utils/clientFees';
+import { ApprovedStatementsSnapshot, ClientFeeAgreement, ClientFeeCollection } from '../types';
 
 interface ClientsArchiveViewProps {
   state: DatabaseState;
@@ -91,7 +98,43 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [selectedClient, setSelectedClient] = useState<ClientArchiveRecord | null>(null);
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PORTALS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS' | 'COMMUNICATION_LOG' | 'CLOSING_CHECKLIST' | 'DEADLINES' | 'OPEN_ITEMS'>('PROCEDURES');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PORTALS' | 'PROCEDURES' | 'TREASURY' | 'DOCUMENTS' | 'COMMUNICATION_LOG' | 'CLOSING_CHECKLIST' | 'DEADLINES' | 'OPEN_ITEMS' | 'APPROVED_STATEMENTS' | 'FEES'>('PROCEDURES');
+  // State for Approved Statements Comparison
+  const [comparingSnapAId, setComparingSnapAId] = useState<string>('');
+  const [comparingSnapBId, setComparingSnapBId] = useState<string>('');
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
+
+  // State for Fees management
+  const [feeAgreementForm, setFeeAgreementForm] = useState<{
+    id?: string;
+    fiscalYear: number;
+    description: string;
+    amount: number;
+    dueDate: string;
+  }>({
+    fiscalYear: 2026,
+    description: '',
+    amount: 0,
+    dueDate: new Date().toISOString().slice(0, 10),
+  });
+  const [isAddingFeeAgreement, setIsAddingFeeAgreement] = useState(false);
+
+  const [feeCollectionForm, setFeeCollectionForm] = useState<{
+    agreementId: string;
+    amount: number;
+    receivedAt: string;
+    method: 'CASH' | 'BANK' | 'CHEQUE';
+    reference: string;
+    note: string;
+  }>({
+    agreementId: '',
+    amount: 0,
+    receivedAt: new Date().toISOString().slice(0, 10),
+    method: 'BANK',
+    reference: '',
+    note: '',
+  });
+  const [collectingForAgreementId, setCollectingForAgreementId] = useState<string | null>(null);
   const [procedureFilterStatus, setProcedureFilterStatus] = useState<string>('ALL');
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [revealedPasswordsMap, setRevealedPasswordsMap] = useState<Record<string, string>>({});
@@ -369,14 +412,32 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   };
 
   const handleDeleteClient = (client: ClientArchiveRecord) => {
-    if (
-      window.confirm(
-        `هل أنت متأكد من حذف ملف العميل "${client.name}" (${client.clientCode}) وجميع معاملاته ومستنداته وسجلاته من الأرشيف نهائياً؟`
-      )
-    ) {
-      db.deleteClient(client.id);
-      if (selectedClient?.id === client.id) {
-        setSelectedClient(null);
+    const hasApproved = db.getApprovedStatementsForClient(client.id).length > 0;
+    if (hasApproved) {
+      if (
+        window.confirm(
+          `تنبيه: هذا العميل (${client.name}) لديه نسخ قوائم مالية معتمدة ومؤرشفة. هل تريد المتابعة وحذف العميل وبياناته؟`
+        )
+      ) {
+        const success = db.deleteClient(client.id, { confirmedHasApproved: true });
+        if (success) {
+          if (selectedClient?.id === client.id) {
+            setSelectedClient(null);
+          }
+        }
+      }
+    } else {
+      if (
+        window.confirm(
+          `هل أنت متأكد من حذف ملف العميل "${client.name}" (${client.clientCode}) وجميع معاملاته ومستنداته وسجلاته من الأرشيف نهائياً؟`
+        )
+      ) {
+        const success = db.deleteClient(client.id);
+        if (success) {
+          if (selectedClient?.id === client.id) {
+            setSelectedClient(null);
+          }
+        }
       }
     }
   };
@@ -1414,6 +1475,16 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                     label: `البنود المفتوحة (${(state.openItems || []).filter((i) => i.clientId === liveSelectedClient.id && i.status === 'OPEN').length})`,
                     icon: <HelpCircle className="w-4 h-4" />,
                   },
+                  {
+                    id: 'APPROVED_STATEMENTS',
+                    label: `النسخ المعتمدة (${(state.approvedStatements || []).filter((s) => s.clientId === liveSelectedClient.id).length})`,
+                    icon: <FileCheck2 className="w-4 h-4" />,
+                  },
+                  {
+                    id: 'FEES',
+                    label: `الأتعاب والتحصيل`,
+                    icon: <Coins className="w-4 h-4" />,
+                  },
                 ]}
               />
             </div>
@@ -2231,6 +2302,615 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                   fiscalYear={2026}
                 />
               )}
+
+              {/* TAB 9: APPROVED STATEMENTS (النسخ المعتمدة) */}
+              {activeTab === 'APPROVED_STATEMENTS' && (() => {
+                const clientApproved = (state.approvedStatements || []).filter(
+                  (s) => s.clientId === liveSelectedClient.id
+                ).sort((a, b) => (b.versionNo || 0) - (a.versionNo || 0));
+
+                const snapA = clientApproved.find((s) => s.id === comparingSnapAId);
+                const snapB = clientApproved.find((s) => s.id === comparingSnapBId);
+                const comparisonDiffs: SnapshotDiffItem[] = (snapA && snapB) ? compareApprovedSnapshots(snapA, snapB) : [];
+
+                return (
+                  <div className="space-y-4">
+                    {/* Header Bar */}
+                    <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <FileCheck2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>النسخ المعتمدة المؤرشفة للعميل ({clientApproved.length})</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          سجل النسخ المعتمدة بالتاريخ والمعتمِد ورقم الإصدار، مع إمكانية المقارنة المحاسبية الفورية بين نسختين.
+                        </p>
+                      </div>
+
+                      {/* Compare Trigger Button */}
+                      {clientApproved.length >= 2 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!comparingSnapAId) setComparingSnapAId(clientApproved[1]?.id || clientApproved[0]?.id);
+                              if (!comparingSnapBId) setComparingSnapBId(clientApproved[0]?.id);
+                              setIsCompareModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <ArrowLeftRight className="w-3.5 h-3.5" />
+                            <span>مقارنة نسختين معتمدتين</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Table of Approved Statements */}
+                    {clientApproved.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 bg-white dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                        <FileText className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                        <p className="font-medium text-xs">لا توجد نسخ معتمدة ومؤرشفة لهذا العميل حتى الآن.</p>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          يمكنك اعتماد النسخ من شاشة القوائم المالية عبر زر "اعتماد وأرشفة".
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xs">
+                        <table className="w-full text-right text-xs">
+                          <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                            <tr>
+                              <th className="py-2.5 px-3 font-bold">الإصدار</th>
+                              <th className="py-2.5 px-3 font-bold">السنة المالية</th>
+                              <th className="py-2.5 px-3 font-bold">تاريخ الاعتماد</th>
+                              <th className="py-2.5 px-3 font-bold">المعتَمِد</th>
+                              <th className="py-2.5 px-3 font-bold">المصدر</th>
+                              <th className="py-2.5 px-3 font-bold">حالة قائمة الإقفال</th>
+                              <th className="py-2.5 px-3 font-bold text-center">إجراءات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {clientApproved.map((snap) => (
+                              <tr key={snap.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="py-2.5 px-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                                  إصدار #{snap.versionNo}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                  {snap.fiscalYear}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
+                                  {snap.approvedAt}
+                                </td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                                  {snap.approvedBy}
+                                </td>
+                                <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-400">
+                                  {snap.source === 'LEDGER' ? 'دفاتر الأستاذ العام' : 'مراجعة ملف'}
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  {snap.checklistStatus?.ok ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+                                      <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                      <span>مكتملة</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300 font-semibold" title={snap.checklistStatus?.missing?.join('، ')}>
+                                      <AlertCircle className="w-3 h-3 text-amber-600" />
+                                      <span>غير مكتملة ({snap.checklistStatus?.missing?.length || 0})</span>
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextA = snap.id;
+                                      const nextB = clientApproved.find((s) => s.id !== snap.id)?.id || snap.id;
+                                      setComparingSnapAId(nextB);
+                                      setComparingSnapBId(nextA);
+                                      setIsCompareModalOpen(true);
+                                    }}
+                                    disabled={clientApproved.length < 2}
+                                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-semibold text-[11px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    مقارنة
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Comparison Modal Dialog */}
+                    {isCompareModalOpen && (
+                      <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col text-right">
+                          {/* Modal Header */}
+                          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                              <ArrowLeftRight className="w-4 h-4 text-indigo-600 shrink-0" />
+                              <span>مقارنة نسختين معتمدتين (الفروق المحاسبية)</span>
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => setIsCompareModalOpen(false)}
+                              className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {/* Version Selectors Bar */}
+                          <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-700 dark:text-slate-300">النسخة الأساسية (أ):</span>
+                              <select
+                                value={comparingSnapAId}
+                                onChange={(e) => setComparingSnapAId(e.target.value)}
+                                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-bold"
+                              >
+                                {clientApproved.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    إصدار #{s.versionNo} ({s.approvedAt.slice(0, 10)}) - {s.fiscalYear}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <span className="text-slate-400 font-bold">مقارنة مع ⟵</span>
+
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-700 dark:text-slate-300">النسخة المقارنة (ب):</span>
+                              <select
+                                value={comparingSnapBId}
+                                onChange={(e) => setComparingSnapBId(e.target.value)}
+                                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-bold"
+                              >
+                                {clientApproved.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    إصدار #{s.versionNo} ({s.approvedAt.slice(0, 10)}) - {s.fiscalYear}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Diffs Table */}
+                          <div className="flex-1 overflow-y-auto p-4">
+                            {comparingSnapAId === comparingSnapBId ? (
+                              <p className="text-center text-xs text-slate-500 py-8">
+                                تم اختيار نفس النسخة للمقارنة. يرجى اختيار نسختين مختلفتين لعرض الفروق.
+                              </p>
+                            ) : comparisonDiffs.length === 0 ? (
+                              <p className="text-center text-xs text-slate-500 py-8">
+                                لا توجد حسابات أو بنود للمقارنة في النسختين المختارتين.
+                              </p>
+                            ) : (
+                              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden text-xs">
+                                <table className="w-full text-right">
+                                  <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                                    <tr>
+                                      <th className="py-2 px-3 font-bold">كود الحساب</th>
+                                      <th className="py-2 px-3 font-bold">اسم الحساب</th>
+                                      <th className="py-2 px-3 font-bold text-left">قيمة (أ)</th>
+                                      <th className="py-2 px-3 font-bold text-left">قيمة (ب)</th>
+                                      <th className="py-2 px-3 font-bold text-left">الفارق (ب - أ)</th>
+                                      <th className="py-2 px-3 font-bold text-center">الحالة</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {comparisonDiffs.map((diff) => (
+                                      <tr
+                                        key={diff.code}
+                                        className={
+                                          diff.status === 'CHANGED'
+                                            ? 'bg-amber-50/40 dark:bg-amber-950/20'
+                                            : diff.status !== 'EQUAL'
+                                            ? 'bg-blue-50/30 dark:bg-blue-950/20'
+                                            : ''
+                                        }
+                                      >
+                                        <td className="py-2 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
+                                          {diff.code}
+                                        </td>
+                                        <td className="py-2 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                                          {diff.name}
+                                        </td>
+                                        <td className="py-2 px-3 font-mono text-left text-slate-700 dark:text-slate-300">
+                                          {diff.status === 'ONLY_IN_B' ? '—' : formatEgyptianCurrency(diff.valueA)}
+                                        </td>
+                                        <td className="py-2 px-3 font-mono text-left text-slate-700 dark:text-slate-300">
+                                          {diff.status === 'ONLY_IN_A' ? '—' : formatEgyptianCurrency(diff.valueB)}
+                                        </td>
+                                        <td className={`py-2 px-3 font-mono text-left font-bold ${
+                                          diff.diff > 0 ? 'text-emerald-600' : diff.diff < 0 ? 'text-rose-600' : 'text-slate-500'
+                                        }`}>
+                                          {diff.diff === 0 ? '0.00' : (diff.diff > 0 ? `+${formatEgyptianCurrency(diff.diff)}` : formatEgyptianCurrency(diff.diff))}
+                                        </td>
+                                        <td className="py-2 px-3 text-center">
+                                          {diff.status === 'EQUAL' && (
+                                            <span className="text-[10px] text-slate-400">متطابق</span>
+                                          )}
+                                          {diff.status === 'CHANGED' && (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                                              تغيّر
+                                            </span>
+                                          )}
+                                          {diff.status === 'ONLY_IN_A' && (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                                              في (أ) فقط
+                                            </span>
+                                          )}
+                                          {diff.status === 'ONLY_IN_B' && (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 dark:bg-blue-900 dark:text-blue-100">
+                                              في (ب) فقط
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Modal Footer */}
+                          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setIsCompareModalOpen(false)}
+                              className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                              إغلاق
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* TAB 10: FEES (الأتعاب والتحصيل) */}
+              {activeTab === 'FEES' && (() => {
+                const agreements = (state.feeAgreements || []).filter(
+                  (a) => a.clientId === liveSelectedClient.id
+                );
+                const collections = (state.feeCollections || []).filter(
+                  (c) => c.clientId === liveSelectedClient.id
+                );
+                const summaries = computeFeeSummary(state.feeAgreements || [], state.feeCollections || []);
+                const clientSummary = summaries[liveSelectedClient.id] || {
+                  clientId: liveSelectedClient.id,
+                  totalDue: 0,
+                  totalCollected: 0,
+                  remaining: 0,
+                  daysOverdue: 0,
+                  agreementsCount: 0,
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {/* Compact Fee Summary (مستحق / محصّل / متبقي / أيام التأخير) */}
+                    <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-6 flex-wrap">
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">المستحق:</span>
+                          <strong className="font-mono font-bold text-slate-900 dark:text-white">
+                            {formatEgyptianCurrency(clientSummary.totalDue)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">المحصّل:</span>
+                          <strong className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                            {formatEgyptianCurrency(clientSummary.totalCollected)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">المتبقي:</span>
+                          <strong className={`font-mono font-bold ${
+                            clientSummary.remaining > 0 ? (clientSummary.daysOverdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white') : 'text-emerald-600'
+                          }`}>
+                            {formatEgyptianCurrency(clientSummary.remaining)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">أيام التأخير:</span>
+                          <strong className={`font-mono font-bold ${
+                            clientSummary.daysOverdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'
+                          }`}>
+                            {clientSummary.daysOverdue > 0 ? `${clientSummary.daysOverdue} يوم متأخر` : 'لا يوجد تأخير'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingFeeAgreement(true)}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>إضافة اتفاقية أتعاب جديدة</span>
+                      </button>
+                    </div>
+
+                    {/* Add Fee Agreement Form */}
+                    {isAddingFeeAgreement && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!feeAgreementForm.description || feeAgreementForm.amount <= 0) {
+                            alert('يرجى كتابة بيان الاتفاقية وتحديد قيمة صحيحة للأتعاب');
+                            return;
+                          }
+                          const newAg: ClientFeeAgreement = {
+                            id: feeAgreementForm.id || `fee-agr-${Date.now()}`,
+                            clientId: liveSelectedClient.id,
+                            fiscalYear: Number(feeAgreementForm.fiscalYear) || 2026,
+                            description: feeAgreementForm.description.trim(),
+                            amount: Number(feeAgreementForm.amount) || 0,
+                            dueDate: feeAgreementForm.dueDate || undefined,
+                            status: 'ACTIVE',
+                          };
+                          db.saveFeeAgreement(newAg);
+                          setIsAddingFeeAgreement(false);
+                          setFeeAgreementForm({
+                            fiscalYear: 2026,
+                            description: '',
+                            amount: 0,
+                            dueDate: new Date().toISOString().slice(0, 10),
+                          });
+                        }}
+                        className="p-3.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl space-y-3 text-xs"
+                      >
+                        <div className="font-bold text-slate-800 dark:text-slate-200">
+                          {feeAgreementForm.id ? 'تعديل اتفاقية الأتعاب' : 'تسجيل اتفاقية أتعاب جديدة:'}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+                          <div>
+                            <label className="block text-slate-600 dark:text-slate-400 mb-1">السنة المالية</label>
+                            <input
+                              type="number"
+                              value={feeAgreementForm.fiscalYear}
+                              onChange={(e) => setFeeAgreementForm({ ...feeAgreementForm, fiscalYear: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-mono font-bold"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="block text-slate-600 dark:text-slate-400 mb-1">البيان / موضوع الاتفاقية *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="مثال: أتعاب المراجعة واعتماد القوائم المالية السنوية"
+                              value={feeAgreementForm.description}
+                              onChange={(e) => setFeeAgreementForm({ ...feeAgreementForm, description: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-600 dark:text-slate-400 mb-1">القيمة المتفق عليها (ج.م) *</label>
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              value={feeAgreementForm.amount || ''}
+                              onChange={(e) => setFeeAgreementForm({ ...feeAgreementForm, amount: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-mono font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-600 dark:text-slate-400 mb-1">تاريخ الاستحقاق</label>
+                            <input
+                              type="date"
+                              value={feeAgreementForm.dueDate}
+                              onChange={(e) => setFeeAgreementForm({ ...feeAgreementForm, dueDate: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingFeeAgreement(false)}
+                            className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg font-bold cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold cursor-pointer"
+                          >
+                            حفظ الاتفاقية
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Single-line Collection Quick Form */}
+                    {collectingForAgreementId && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (feeCollectionForm.amount <= 0) {
+                            alert('يرجى تحديد مبلغ صحيح للتحصيل');
+                            return;
+                          }
+                          const col: ClientFeeCollection = {
+                            id: `fee-col-${Date.now()}`,
+                            agreementId: collectingForAgreementId,
+                            clientId: liveSelectedClient.id,
+                            amount: Number(feeCollectionForm.amount),
+                            receivedAt: feeCollectionForm.receivedAt || new Date().toISOString().slice(0, 10),
+                            method: feeCollectionForm.method,
+                            reference: feeCollectionForm.reference || undefined,
+                            note: feeCollectionForm.note || undefined,
+                          };
+                          db.addFeeCollection(col);
+                          setCollectingForAgreementId(null);
+                          setFeeCollectionForm({
+                            agreementId: '',
+                            amount: 0,
+                            receivedAt: new Date().toISOString().slice(0, 10),
+                            method: 'BANK',
+                            reference: '',
+                            note: '',
+                          });
+                        }}
+                        className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl space-y-2 text-xs"
+                      >
+                        <div className="font-bold text-emerald-900 dark:text-emerald-200">
+                          تسجيل تحصيل سريع للاتفاقية:
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            placeholder="المبلغ المحصل"
+                            value={feeCollectionForm.amount || ''}
+                            onChange={(e) => setFeeCollectionForm({ ...feeCollectionForm, amount: Number(e.target.value) })}
+                            className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg font-mono font-bold w-32"
+                          />
+                          <input
+                            type="date"
+                            value={feeCollectionForm.receivedAt}
+                            onChange={(e) => setFeeCollectionForm({ ...feeCollectionForm, receivedAt: e.target.value })}
+                            className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg font-mono"
+                          />
+                          <select
+                            value={feeCollectionForm.method}
+                            onChange={(e) => setFeeCollectionForm({ ...feeCollectionForm, method: e.target.value as any })}
+                            className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg"
+                          >
+                            <option value="BANK">تحويل بنكي</option>
+                            <option value="CASH">نقداً / خزنة</option>
+                            <option value="CHEQUE">شيك بنكي</option>
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="مرجع / إيصال (اختياري)"
+                            value={feeCollectionForm.reference}
+                            onChange={(e) => setFeeCollectionForm({ ...feeCollectionForm, reference: e.target.value })}
+                            className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg flex-1 min-w-[120px]"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold cursor-pointer"
+                          >
+                            تأكيد التحصيل
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCollectingForAgreementId(null)}
+                            className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-bold cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Agreements Table */}
+                    {agreements.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 bg-white dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                        <Coins className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                        <p className="font-medium text-xs">لا توجد اتفاقيات أتعاب مسجلة لهذا العميل حتى الآن.</p>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xs">
+                        <table className="w-full text-right text-xs">
+                          <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                            <tr>
+                              <th className="py-2.5 px-3 font-bold">السنة</th>
+                              <th className="py-2.5 px-3 font-bold">البيان / موضوع الاتفاقية</th>
+                              <th className="py-2.5 px-3 font-bold text-left">المتفق عليه</th>
+                              <th className="py-2.5 px-3 font-bold text-left">المحصّل</th>
+                              <th className="py-2.5 px-3 font-bold text-left">المتبقي</th>
+                              <th className="py-2.5 px-3 font-bold">تاريخ الاستحقاق</th>
+                              <th className="py-2.5 px-3 font-bold text-center">إجراءات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {agreements.map((ag) => {
+                              const agCols = collections.filter((c) => c.agreementId === ag.id);
+                              const colTotal = agCols.reduce((sum, c) => sum + c.amount, 0);
+                              const rem = Math.max(0, ag.amount - colTotal);
+                              const isOverdue = rem > 0 && ag.dueDate && new Date(ag.dueDate).getTime() < new Date().setHours(0, 0, 0, 0);
+
+                              return (
+                                <tr key={ag.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                  <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                    {ag.fiscalYear}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                                    {ag.description}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono text-left font-bold text-slate-900 dark:text-white">
+                                    {formatEgyptianCurrency(ag.amount)}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono text-left font-semibold text-emerald-700 dark:text-emerald-400">
+                                    {formatEgyptianCurrency(colTotal)}
+                                  </td>
+                                  <td className={`py-2.5 px-3 font-mono text-left font-bold ${
+                                    rem > 0 ? (isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white') : 'text-emerald-600'
+                                  }`}>
+                                    {formatEgyptianCurrency(rem)}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
+                                    {ag.dueDate ? (
+                                      <span className={isOverdue ? 'text-rose-600 dark:text-rose-400 font-bold' : ''}>
+                                        {ag.dueDate} {isOverdue && '(متأخر)'}
+                                      </span>
+                                    ) : '—'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      {rem > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setCollectingForAgreementId(ag.id);
+                                            setFeeCollectionForm({
+                                              agreementId: ag.id,
+                                              amount: rem,
+                                              receivedAt: new Date().toISOString().slice(0, 10),
+                                              method: 'BANK',
+                                              reference: '',
+                                              note: '',
+                                            });
+                                          }}
+                                          className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 rounded font-semibold text-[11px] cursor-pointer"
+                                        >
+                                          تسجيل تحصيل
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (window.confirm(`هل أنت متأكد من حذف اتفاقية الأتعاب "${ag.description}"؟`)) {
+                                            db.deleteFeeAgreement(ag.id);
+                                          }
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                                        title="حذف الاتفاقية"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Modal Footer */}

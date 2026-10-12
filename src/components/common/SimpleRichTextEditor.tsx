@@ -21,6 +21,7 @@ import {
   Eye,
   Edit3,
 } from 'lucide-react';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 interface SimpleRichTextEditorProps {
   value: string;
@@ -46,7 +47,7 @@ export const SimpleRichTextEditor: React.FC<SimpleRichTextEditorProps> = ({
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       // Check if user is typing or if it's external update
       if (document.activeElement !== editorRef.current) {
-        editorRef.current.innerHTML = value || '';
+        editorRef.current.innerHTML = sanitizeHtml(value || '');
       }
     }
   }, [value]);
@@ -56,13 +57,13 @@ export const SimpleRichTextEditor: React.FC<SimpleRichTextEditorProps> = ({
     document.execCommand(command, false, value);
     if (editorRef.current) {
       editorRef.current.focus();
-      onChange(editorRef.current.innerHTML);
+      onChange(sanitizeHtml(editorRef.current.innerHTML));
     }
   };
 
   const handleInput = () => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      onChange(sanitizeHtml(editorRef.current.innerHTML));
     }
   };
 
@@ -264,7 +265,7 @@ export const SimpleRichTextEditor: React.FC<SimpleRichTextEditorProps> = ({
         <div
           className="p-4 bg-slate-50/50 text-slate-900 leading-relaxed font-sans prose prose-slate max-w-none text-right"
           style={{ minHeight }}
-          dangerouslySetInnerHTML={{ __html: value || '<p class="text-slate-400 italic">لا توجد تفاصيل مكتوبة بعد...</p>' }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(value || '<p class="text-slate-400 italic">لا توجد تفاصيل مكتوبة بعد...</p>') }}
         />
       ) : (
         <div

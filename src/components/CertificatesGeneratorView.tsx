@@ -53,6 +53,7 @@ import {
 } from '../utils/qrCodeGenerator';
 import { numberToArabicWords, cleanArabicTafqeet } from '../utils/numberToWordsArabic';
 import { PrintService } from '../services/PrintService';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 import {
   ProfessionalCertificate,
   CertificateBeneficiaryType,
@@ -2236,7 +2237,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   >
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: generateCode128Svg(certNumber, { height: 42, moduleWidth: 1.8, showText: true }),
+                        __html: sanitizeHtml(generateCode128Svg(certNumber, { height: 42, moduleWidth: 1.8, showText: true })),
                       }}
                     />
                     <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1 no-print">
@@ -2277,7 +2278,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     >
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: generateQrCodeSvg(qrText, 96),
+                          __html: sanitizeHtml(generateQrCodeSvg(qrText, 96)),
                         }}
                       />
                       <span className="block text-[8.5px] font-bold text-center text-emerald-900 mt-0.5 group-hover:underline">

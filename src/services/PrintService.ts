@@ -1,5 +1,6 @@
 import { db } from '../db/localDatabase';
 import { PrintSettings, ReportLayoutConfig, StandardReportType } from '../types';
+import { escapeHtml } from '../utils/escapeHtml';
 
 export const DEFAULT_REPORT_LAYOUTS: Record<StandardReportType, ReportLayoutConfig> = {
   TRIAL_BALANCE: {
@@ -113,6 +114,7 @@ export interface PrintElementOptions {
   recordId?: string; // المعرف الثابت الفريد للسجل الحالي لضمان عدم حدوث أي تداخل في البيانات
   documentId?: string;
   title?: string;
+  isDraft?: boolean; // علامة مسودة غير نهائية على كل صفحة
   orientation?: 'portrait' | 'landscape';
   pageSize?: 'A4' | 'A3' | 'Letter' | 'Thermal80mm';
   margins?: 'DEFAULT' | 'NARROW' | 'NONE';
@@ -451,6 +453,14 @@ export class PrintService {
       const profile = dbState.officeProfile;
       const clientCtx = dbState.activeClientContext;
 
+      const firmName = profile?.firmName?.trim() || '';
+      const auditorName = profile?.auditorName?.trim() || '';
+      const licenseNumber = profile?.licenseNumber?.trim() || '';
+      const taxRegNo = profile?.taxAuthorityRegNo?.trim() || '';
+      const phone = profile?.phone?.trim() || '';
+      const address = profile?.address?.trim() || '';
+      const isProfileIncomplete = !firmName || !auditorName;
+
       const headerDiv = document.createElement('div');
       headerDiv.className = 'injected-official-print-header';
       headerDiv.setAttribute('data-official-header', 'true');
@@ -458,21 +468,22 @@ export class PrintService {
       headerDiv.style.cssText = 'width: 100%; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2.5px solid #064e3b; display: flex; justify-content: space-between; align-items: flex-start; font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;';
       headerDiv.innerHTML = `
         <div style="text-align: right; line-height: 1.35;">
-          <div style="font-size: 13pt; font-weight: 900; color: #022c22;">${profile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات'}</div>
-          <div style="font-size: 10.5pt; font-weight: 800; color: #047857; margin-top: 1px;">المحاسب القانوني: ${profile?.auditorName || 'محمد جميل مرعي'}</div>
-          <div style="font-size: 8pt; font-weight: 600; color: #475569; margin-top: 1px;">سجل المحاسبين والمراجعين: ${profile?.licenseNumber || 'س.م.م 43122'} | بطاقة ضريبية: ${profile?.taxAuthorityRegNo || '654-987-321'}</div>
-          <div style="font-size: 7.5pt; color: #64748b;">هاتف: ${profile?.phone || '01003335360'} | ${profile?.address || 'جمهورية مصر العربية'}</div>
+          <div style="font-size: 13pt; font-weight: 900; color: #022c22;">${escapeHtml(firmName || '—')}</div>
+          <div style="font-size: 10.5pt; font-weight: 800; color: #047857; margin-top: 1px;">المحاسب القانوني: ${escapeHtml(auditorName || '—')}</div>
+          <div style="font-size: 8pt; font-weight: 600; color: #475569; margin-top: 1px;">سجل المحاسبين والمراجعين: ${escapeHtml(licenseNumber || '—')} | بطاقة ضريبية: ${escapeHtml(taxRegNo || '—')}</div>
+          <div style="font-size: 7.5pt; color: #64748b;">هاتف: ${escapeHtml(phone || '—')} | ${escapeHtml(address || '—')}</div>
+          ${isProfileIncomplete ? '<div style="font-size: 7.5pt; font-weight: 700; color: #dc2626; margin-top: 2px;">⚠ بيانات المكتب غير مكتملة</div>' : ''}
         </div>
         <div style="text-align: center; line-height: 1.35; padding: 0 10px;">
           <div style="display: inline-block; padding: 4px 12px; background: #f0fdf4; border: 1.5px solid #059669; border-radius: 8px; font-size: 11pt; font-weight: 900; color: #064e3b;">
-            ${documentTitle}
+            ${escapeHtml(documentTitle)}
           </div>
-          ${clientCtx?.clientName ? `<div style="font-size: 9pt; font-weight: 700; color: #1e293b; margin-top: 3px;">المنشأة: ${clientCtx.clientName}</div>` : ''}
-          <div style="font-size: 7.5pt; color: #64748b; margin-top: 2px;">السنة المالية: ${clientCtx?.selectedFiscalYear || 2026} • معايير المحاسبة المصرية (EAS)</div>
+          ${clientCtx?.clientName ? `<div style="font-size: 9pt; font-weight: 700; color: #1e293b; margin-top: 3px;">المنشأة: ${escapeHtml(clientCtx.clientName)}</div>` : ''}
+          <div style="font-size: 7.5pt; color: #64748b; margin-top: 2px;">السنة المالية: ${escapeHtml(clientCtx?.selectedFiscalYear || 2026)} • معايير المحاسبة المصرية (EAS)</div>
         </div>
         <div style="text-align: left; line-height: 1.35;">
-          <div style="font-size: 8pt; font-weight: 700; color: #0f172a;">تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-EG')}</div>
-          <div style="font-size: 7.5pt; color: #64748b; font-family: monospace;">كود السجل: ${options?.recordId ? `<strong>${options.recordId}</strong>` : `EAS-DOC-${Date.now().toString().slice(-6)}`}</div>
+          <div style="font-size: 8pt; font-weight: 700; color: #0f172a;">تاريخ الاستخراج: ${escapeHtml(new Date().toLocaleDateString('ar-EG'))}</div>
+          <div style="font-size: 7.5pt; color: #64748b; font-family: monospace;">كود السجل: ${options?.recordId ? `<strong>${escapeHtml(options.recordId)}</strong>` : `EAS-DOC-${Date.now().toString().slice(-6)}`}</div>
           <div style="font-size: 7.5pt; font-weight: 700; color: #059669; margin-top: 2px;">✓ مستند معتمد وموثق</div>
         </div>
       `;
@@ -483,6 +494,7 @@ export class PrintService {
     const hasExistingFooter = !!clone.querySelector('.official-stamp, .official-seal, .official-footer, [data-stamp="true"]');
     if (options?.showStamp !== false && !hasExistingFooter) {
       const profile = db.getState().officeProfile;
+      const auditorName = profile?.auditorName?.trim() || '—';
       const footerDiv = document.createElement('div');
       footerDiv.className = 'injected-official-print-footer avoid-page-break';
       footerDiv.setAttribute('data-stamp', 'true');
@@ -495,7 +507,7 @@ export class PrintService {
         </div>
         <div style="text-align: center;">
           <div style="font-size: 8.5pt; font-weight: 800; color: #0f172a;">المحاسب القانوني ومراقب الحسابات</div>
-          <div style="font-size: 9.5pt; font-weight: 900; color: #064e3b; margin-top: 1px;">${profile?.auditorName || 'محمد جميل مرعي'}</div>
+          <div style="font-size: 9.5pt; font-weight: 900; color: #064e3b; margin-top: 1px;">${escapeHtml(auditorName)}</div>
           <div style="margin-top: 3px; display: inline-block; border: 2px double #064e3b; border-radius: 9999px; padding: 2px 12px; font-size: 7.5pt; font-weight: 800; color: #064e3b;">
             اعتماد وخاتم مراقب الحسابات
           </div>
@@ -636,9 +648,31 @@ export class PrintService {
               break-after: avoid !important;
               margin-bottom: 0 !important;
             }
+            .draft-watermark-overlay {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              width: 100%;
+              height: 100%;
+              pointer-events: none;
+              z-index: 99999;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              opacity: 0.16;
+              transform: rotate(-30deg);
+              font-size: 56pt;
+              font-weight: 900;
+              color: #dc2626;
+              text-align: center;
+              user-select: none;
+            }
           </style>
         </head>
         <body>
+          ${options?.isDraft ? '<div class="draft-watermark-overlay">مسودة - غير نهائية</div>' : ''}
           <div class="print-document-wrapper" dir="rtl" data-record-id="${options?.recordId || ''}" style="width: 100%; max-width: 100%; margin: 0 auto; background: #fff; letter-spacing: normal;">
             ${clone.outerHTML}
           </div>

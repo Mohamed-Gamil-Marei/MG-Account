@@ -1,25 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ApprovedStatementsSnapshot } from '../types';
-
-function compareSnapshots(snapA: ApprovedStatementsSnapshot, snapB: ApprovedStatementsSnapshot) {
-  const diffs: Record<string, { valueA: number; valueB: number; diff: number }> = {};
-  const itemsA = snapA.incomeStatement?.items || [];
-  const itemsB = snapB.incomeStatement?.items || [];
-
-  const mapA = new Map(itemsA.map((i: any) => [i.key || i.name, i.amount || 0]));
-  const mapB = new Map(itemsB.map((i: any) => [i.key || i.name, i.amount || 0]));
-
-  const allKeys = new Set<string>([...mapA.keys(), ...mapB.keys()] as string[]);
-  for (const k of allKeys) {
-    const valA = (mapA.get(k) as number) || 0;
-    const valB = (mapB.get(k) as number) || 0;
-    diffs[k] = { valueA: valA, valueB: valB, diff: valB - valA };
-  }
-  return diffs;
-}
+import { compareApprovedSnapshots } from './approvedStatements';
 
 describe('Approved Statements & Version Comparison', () => {
-  it('preserves values and calculates version numbers and comparisons', () => {
+  it('preserves values and calculates version numbers and comparisons including items in only one snapshot and negative differences', () => {
     const snap1: ApprovedStatementsSnapshot = {
       id: 'appr-1',
       clientId: 'cli-1',
@@ -30,14 +14,11 @@ describe('Approved Statements & Version Comparison', () => {
       source: 'LEDGER',
       trialBalanceRows: [
         { code: '1110', name: 'النقدية بالخزينة', debit: 50000, credit: 0 },
+        { code: '1210', name: 'العملاء', debit: 20000, credit: 0 },
+        { code: '2110', name: 'الموردون', debit: 0, credit: 15000 },
       ],
-      incomeStatement: {
-        items: [
-          { key: 'rev', name: 'إيرادات النشاط', amount: 100000 },
-          { key: 'exp', name: 'مصروفات التشغيل', amount: 40000 },
-        ],
-      },
-      balanceSheet: { assets: 50000 },
+      incomeStatement: { items: [] },
+      balanceSheet: { assets: 70000 },
       cashFlow: { net: 30000 },
       checklistStatus: { ok: true, missing: [] },
     };
@@ -51,29 +32,49 @@ describe('Approved Statements & Version Comparison', () => {
       approvedAt: '2026-10-10 12:00:00',
       source: 'LEDGER',
       trialBalanceRows: [
-        { code: '1110', name: 'النقدية بالخزينة', debit: 60000, credit: 0 },
+        { code: '1110', name: 'النقدية بالخزينة', debit: 45000, credit: 0 }, // negative difference (-5000)
+        { code: '1310', name: 'المخزون', debit: 15000, credit: 0 }, // ONLY_IN_B
+        { code: '2110', name: 'الموردون', debit: 0, credit: 15000 }, // EQUAL
+        // 1210 is ONLY_IN_A
       ],
-      incomeStatement: {
-        items: [
-          { key: 'rev', name: 'إيرادات النشاط', amount: 120000 },
-          { key: 'exp', name: 'مصروفات التشغيل', amount: 45000 },
-        ],
-      },
+      incomeStatement: { items: [] },
       balanceSheet: { assets: 60000 },
-      cashFlow: { net: 40000 },
+      cashFlow: { net: 25000 },
       checklistStatus: { ok: true, missing: [] },
     };
 
     expect(snap2.versionNo).toBe(snap1.versionNo + 1);
-    expect(snap1.incomeStatement.items[0].amount).toBe(100000); // original preserved
 
-    const diffs = compareSnapshots(snap1, snap2);
-    expect(diffs['rev'].valueA).toBe(100000);
-    expect(diffs['rev'].valueB).toBe(120000);
-    expect(diffs['rev'].diff).toBe(20000);
+    const diffs = compareApprovedSnapshots(snap1, snap2);
 
-    expect(diffs['exp'].valueA).toBe(40000);
-    expect(diffs['exp'].valueB).toBe(45000);
-    expect(diffs['exp'].diff).toBe(5000);
+    // Negative difference
+    const cashDiff = diffs.find((d) => d.code === '1110');
+    expect(cashDiff).toBeDefined();
+    expect(cashDiff?.valueA).toBe(50000);
+    expect(cashDiff?.valueB).toBe(45000);
+    expect(cashDiff?.diff).toBe(-5000); // negative difference
+    expect(cashDiff?.status).toBe('CHANGED');
+
+    // Item in snapshot A but not in B
+    const debtorsDiff = diffs.find((d) => d.code === '1210');
+    expect(debtorsDiff).toBeDefined();
+    expect(debtorsDiff?.status).toBe('ONLY_IN_A');
+    expect(debtorsDiff?.valueA).toBe(20000);
+    expect(debtorsDiff?.valueB).toBe(0);
+    expect(debtorsDiff?.diff).toBe(-20000);
+
+    // Item in snapshot B but not in A
+    const inventoryDiff = diffs.find((d) => d.code === '1310');
+    expect(inventoryDiff).toBeDefined();
+    expect(inventoryDiff?.status).toBe('ONLY_IN_B');
+    expect(inventoryDiff?.valueA).toBe(0);
+    expect(inventoryDiff?.valueB).toBe(15000);
+    expect(inventoryDiff?.diff).toBe(15000);
+
+    // Unchanged item
+    const suppliersDiff = diffs.find((d) => d.code === '2110');
+    expect(suppliersDiff).toBeDefined();
+    expect(suppliersDiff?.status).toBe('EQUAL');
+    expect(suppliersDiff?.diff).toBe(0);
   });
 });

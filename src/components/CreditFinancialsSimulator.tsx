@@ -1992,30 +1992,31 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
           </div>
         </div>
 
-        {/* Compact Streamlined Year Selector Pills */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 pt-1">
+        {/* Compact Streamlined Year Selector Rows */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 pt-1 text-xs">
           {yearsList.map((yr) => {
             const isSelected = selectedYear === yr;
             const isBatchIncluded = batchSelectedYears.includes(yr);
             const data = computedData[yr] || {};
+            const isNetLoss = (data.netProfit || 0) < 0;
 
             return (
               <div
                 key={yr}
                 onClick={() => handleSelectYearAndSyncDates(yr)}
-                className={`p-2.5 rounded-xl border transition-all cursor-pointer relative text-xs flex flex-col justify-between ${
+                className={`p-2 rounded-lg border transition-colors cursor-pointer text-xs flex flex-col justify-between ${
                   isSelected
-                    ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-500/80 dark:border-blue-500/70 shadow-2xs'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    ? 'bg-slate-100 dark:bg-slate-800 border-slate-400 dark:border-slate-600'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                 }`}
               >
-                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-black text-xs text-slate-900 dark:text-white">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">
                       سنة {yr}
                     </span>
                     {isSelected && (
-                      <span className="px-1.5 py-0.5 bg-blue-600 text-white rounded text-[10px] font-bold">
+                      <span className="px-1.5 py-0.2 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded text-[10px] font-semibold">
                         النشطة
                       </span>
                     )}
@@ -2028,23 +2029,23 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                       handleToggleBatchYear(yr);
                     }}
                     title="تضمين في الطباعة المقارنة"
-                    className="p-0.5 text-slate-400 hover:text-blue-600 cursor-pointer transition-colors"
+                    className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
                   >
                     {isBatchIncluded ? (
-                      <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <CheckSquare className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
                     ) : (
-                      <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                      <Square className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600" />
                     )}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-1 font-mono text-[10px]">
-                  <div className="truncate text-slate-500 dark:text-slate-400">
-                    مبيعات: <span className="font-bold text-slate-800 dark:text-slate-200">{formatEgyptianCurrency(data.sales || 0)}</span>
-                  </div>
-                  <div className="truncate text-slate-500 dark:text-slate-400 text-left">
-                    صافي: <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatEgyptianCurrency(data.netProfit || 0)}</span>
-                  </div>
+                <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
+                  <span className="truncate text-slate-600 dark:text-slate-400">
+                    مبيعات: <strong className="font-semibold text-slate-800 dark:text-slate-200">{formatEgyptianCurrency(data.sales || 0)}</strong>
+                  </span>
+                  <span className="truncate text-left text-slate-600 dark:text-slate-400">
+                    صافي: <strong className={`font-semibold ${isNetLoss ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}`}>{formatEgyptianCurrency(data.netProfit || 0)}</strong>
+                  </span>
                 </div>
               </div>
             );
@@ -2155,10 +2156,10 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
 
       {/* ACTIVE TAB CONTENT WRAPPED IN PRINTABLE CONTAINER */}
       <div id="credit-financials-container" data-printable="true" className="space-y-6">
-        {/* شريط التحذير الشرطي في أي طباعة إذا كانت بيانات السنة محاكاة */}
+        {/* شريط التحذير الشرطي بسطر واحد صغير */}
         {yearsData[selectedYear]?.dataSource !== 'ACTUAL' && (
-          <div className="text-xs text-amber-600 dark:text-amber-400 font-medium px-1">
-            ملاحظة: البيانات الحالية تعتمد على محاكاة تحليلية (غير معتمدة للجهات الخارجية).
+          <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-md py-1 px-2.5 flex items-center justify-between">
+            <span>تنبيه: أرقام سنة {selectedYear} تعتمد على محاكاة تحليلية وتقديرية (غير معتمدة رسمياً).</span>
           </div>
         )}
 
@@ -2441,7 +2442,7 @@ export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps>
                   <button
                     type="button"
                     onClick={handlePrintDossier}
-                    className="w-full py-2.5 px-4 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transition-all"
+                    className="w-full py-2.5 px-4 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-xs hover:shadow-sm cursor-pointer transition-all"
                     title="طباعة الورق A4 الفوري (Ctrl+P)"
                   >
                     <Printer className="w-4 h-4" />

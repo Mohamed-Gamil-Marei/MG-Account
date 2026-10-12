@@ -24,6 +24,7 @@ import { PrintService, PrintElementOptions } from '../../services/PrintService';
 import { exportElementToPdf } from '../../utils/certifiedDocumentExporter';
 import { PrintHeaderCustomizerModal } from '../credit/PrintHeaderCustomizerModal';
 import { db } from '../../db/localDatabase';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 export interface PrintPreviewModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export interface PrintPreviewModalProps {
   customDocument?: any;
   initialPageSize?: 'A4' | 'A3' | 'Letter' | 'Thermal80mm';
   initialOrientation?: 'portrait' | 'landscape' | 'PORTRAIT' | 'LANDSCAPE';
+  isDraft?: boolean;
   children?: React.ReactNode;
 }
 
@@ -49,6 +51,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   customDocument,
   initialPageSize = 'A4',
   initialOrientation = 'portrait',
+  isDraft = false,
   children,
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(90);
@@ -226,6 +229,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         showLetterhead,
         showStamp,
         showQr,
+        isDraft,
         customDelayMs: 300,
         onAfterPrint: () => {
           setPrintSuccess(true);
@@ -608,15 +612,37 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               transition: 'transform 0.15s ease-out',
               width: orientation === 'portrait' ? '210mm' : '297mm',
               minHeight: orientation === 'portrait' ? '297mm' : '210mm',
+              position: 'relative',
             }}
-            className="a4-sheet-canvas bg-white text-slate-900 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-6 sm:p-10 border border-slate-300 text-right leading-relaxed transition-all"
+            className="a4-sheet-canvas bg-white text-slate-900 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-6 sm:p-10 border border-slate-300 text-right leading-relaxed transition-all overflow-hidden"
           >
+            {isDraft && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                  zIndex: 40,
+                  opacity: 0.16,
+                  transform: 'rotate(-30deg)',
+                  fontSize: '48pt',
+                  fontWeight: 900,
+                  color: '#dc2626',
+                  userSelect: 'none',
+                }}
+              >
+                مسودة - غير نهائية
+              </div>
+            )}
             {children ? (
               children
             ) : (
               <div
                 className="printable-canvas-preview text-slate-900 text-right leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: clonedHtml }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(clonedHtml) }}
               />
             )}
           </div>
