@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import {
@@ -274,9 +275,7 @@ export const FeasibilityStudyView: React.FC<FeasibilityStudyViewProps> = ({ stat
           <div
             data-qr-container="true"
             className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
-            dangerouslySetInnerHTML={{
-              __html: generateQrCodeSvg(`FEASIBILITY|FS-2026-088|${projectName}|${totalNPV.toFixed(2)}|${profile.auditorName}`, 96),
-            }}
+            dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateQrCodeSvg(`FEASIBILITY|FS-2026-088|${projectName}|${totalNPV.toFixed(2)}|${profile.auditorName}`, 96),) }}
           />
         </div>
       </div>

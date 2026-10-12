@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import {
   Printer,
@@ -211,7 +212,7 @@ export const PrintExportSettingsPanel: React.FC<PrintExportSettingsPanelProps> =
               <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
                 <div
                   className="bg-white p-1 rounded border border-slate-200 shadow-2xs"
-                  dangerouslySetInnerHTML={{ __html: sampleQrSvg }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(sampleQrSvg) }}
                 />
                 <div className="text-right">
                   <span className="text-[10px] font-bold text-slate-500 block">معاينة حية للمسح:</span>

@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   CreditCard,
@@ -1412,9 +1413,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                 <div
                   data-qr-container="true"
                   className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
-                  dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(selectedInvoice.qrPayload || `INV|${selectedInvoice.invoiceNumber}|${selectedInvoice.date}|${selectedInvoice.grandTotal}`, 100),
-                  }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateQrCodeSvg(selectedInvoice.qrPayload || `INV|${selectedInvoice.invoiceNumber}|${selectedInvoice.date}|${selectedInvoice.grandTotal}`, 100),) }}
                 />
               </div>
             </div>

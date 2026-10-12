@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import {
@@ -234,9 +235,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({ state, fis
                 title="انقر للمعاينة والتحقق الرقمي من صحة تقرير مراقب الحسابات"
               >
                 <div
-                  dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(qrPayload, 105),
-                  }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateQrCodeSvg(qrPayload, 105),) }}
                 />
               </div>
               <button

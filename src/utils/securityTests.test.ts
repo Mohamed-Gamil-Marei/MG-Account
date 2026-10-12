@@ -1,49 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'crypto';
-
-// Replicate or import checkEntityAccess logic for unit testing security rules
-function checkEntityAccess(user: any, entityType: string, action: 'READ' | 'WRITE' | 'DELETE'): boolean {
-  if (!user || user.role === 'PENDING') return false;
-
-  if (entityType === 'auditLogs') {
-    if (action === 'WRITE' || action === 'DELETE') return false;
-    if (action === 'READ') return !!user.canAccessAuditTrail || user.role === 'ADMIN';
-  }
-
-  if (entityType === 'treasury') {
-    if (!user.canAccessTreasury && user.role !== 'ADMIN') return false;
-  }
-
-  if (user.role === 'SECRETARY') {
-    if (action === 'READ') {
-      return ['clients', 'invoices', 'certificates'].includes(entityType);
-    }
-    if (action === 'WRITE') {
-      return entityType === 'invoices';
-    }
-    return false;
-  }
-
-  const adminOnlyWriteEntities = ['officeProfile', 'systemUsers', 'fiscalPeriodLocks', 'preferences'];
-  if (adminOnlyWriteEntities.includes(entityType) && action !== 'READ') {
-    return user.role === 'ADMIN';
-  }
-
-  const accountantAdminWriteEntities = ['accounts', 'taxDeclarations', 'taxAudits', 'fixedAssets', 'exchangeRates'];
-  if (accountantAdminWriteEntities.includes(entityType) && action !== 'READ') {
-    return user.role === 'ACCOUNTANT' || user.role === 'ADMIN';
-  }
-
-  if (entityType === 'journalEntries' && action === 'WRITE') {
-    return !!user.canPostEntries || user.role === 'ADMIN' || user.role === 'ACCOUNTANT';
-  }
-
-  if (action === 'DELETE') {
-    return !!user.canDeleteRecords || user.role === 'ADMIN' || user.role === 'ACCOUNTANT';
-  }
-
-  return true;
-}
+import { checkEntityAccess } from '../server/access';
 
 // Function to test HMAC verification logic
 function verifyWebhookSignature(rawBody: Buffer, signature: string, appSecret: string): boolean {

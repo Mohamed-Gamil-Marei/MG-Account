@@ -30,7 +30,7 @@ import {
   generateBalanceSheet,
 } from '../../utils/accountingCalculations';
 import { formatEgyptianCurrency, generateQrCodeSvg, buildFinancialStatementsQrText } from '../../utils/qrCodeGenerator';
-import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import { PrintService } from '../../services/PrintService';
 import { OfficeProfile } from '../../types';
 import { MgBrandBadge } from '../common/MgBrandBadge';
@@ -887,7 +887,7 @@ export const UnifiedFinancialReportExportModal: React.FC<UnifiedFinancialReportE
                       <div
                         className="bg-white p-1 rounded-lg border border-slate-300 shadow-2xs inline-block"
                         dangerouslySetInnerHTML={{
-                          __html: sanitizeHtml(generateQrCodeSvg(qrPayload, printSettings.qrSizePx || 95, {
+                          __html: sanitizeSvg(generateQrCodeSvg(qrPayload, printSettings.qrSizePx || 95, {
                             mode: printSettings.qrMode || 'OFFLINE_TEXT',
                           })),
                         }}

@@ -23,6 +23,11 @@ export interface PublicIssuedDocumentRecord {
   createdAt?: string;
 }
 
+export type GetIssuedDocumentResult =
+  | { status: 'FOUND'; record: PublicIssuedDocumentRecord }
+  | { status: 'NOT_FOUND' }
+  | { status: 'ERROR'; error: string };
+
 export class IssuedDocumentService {
   /**
    * Generates a 24-char cryptographic verification code
@@ -66,17 +71,21 @@ export class IssuedDocumentService {
   /**
    * Reads a public issued document record from Firestore collection 'issuedDocuments' by verificationCode
    */
-  public static async getIssuedDocument(verificationCode: string): Promise<PublicIssuedDocumentRecord | null> {
+  public static async getIssuedDocument(verificationCode: string): Promise<GetIssuedDocumentResult> {
     try {
-      const docRef = doc(db, 'issuedDocuments', verificationCode.trim());
+      const code = verificationCode ? verificationCode.trim() : '';
+      if (!code) {
+        return { status: 'NOT_FOUND' };
+      }
+      const docRef = doc(db, 'issuedDocuments', code);
       const snap = await getDoc(docRef);
       if (!snap.exists()) {
-        return null;
+        return { status: 'NOT_FOUND' };
       }
-      return snap.data() as PublicIssuedDocumentRecord;
-    } catch (err) {
+      return { status: 'FOUND', record: snap.data() as PublicIssuedDocumentRecord };
+    } catch (err: any) {
       console.warn(`[IssuedDocumentService] Failed to fetch issued document ${verificationCode}:`, err);
-      return null;
+      return { status: 'ERROR', error: err?.message || String(err) };
     }
   }
 }

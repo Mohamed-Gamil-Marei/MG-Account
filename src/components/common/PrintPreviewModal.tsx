@@ -24,7 +24,7 @@ import { PrintService, PrintElementOptions } from '../../services/PrintService';
 import { exportElementToPdf } from '../../utils/certifiedDocumentExporter';
 import { PrintHeaderCustomizerModal } from '../credit/PrintHeaderCustomizerModal';
 import { db } from '../../db/localDatabase';
-import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { sanitizePrintHtml } from '../../utils/sanitizeHtml';
 
 export interface PrintPreviewModalProps {
   isOpen: boolean;
@@ -642,7 +642,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             ) : (
               <div
                 className="printable-canvas-preview text-slate-900 text-right leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(clonedHtml) }}
+                dangerouslySetInnerHTML={{ __html: sanitizePrintHtml(clonedHtml) }}
               />
             )}
           </div>

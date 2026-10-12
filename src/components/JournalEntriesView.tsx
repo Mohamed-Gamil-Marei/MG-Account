@@ -43,7 +43,7 @@ import {
 import { JournalEntry, JournalEntryLine, Account, CurrencyCode, ClientArchiveRecord } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
 import { formatEgyptianCurrency, generateQrCodeSvg } from '../utils/qrCodeGenerator';
-import { sanitizeHtml } from '../utils/sanitizeHtml';
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import { SecurityAuthModal } from './SecurityAuthModal';
 import { SecurityAuthService } from '../services/securityAuth';
 import { formDraftStorage, useNetworkStatus } from '../utils/formDrafts';
@@ -3897,7 +3897,7 @@ export const JournalEntriesView: React.FC<JournalEntriesViewProps> = ({ state })
                 data-qr-container="true"
                 className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
                 dangerouslySetInnerHTML={{
-                  __html: sanitizeHtml(generateQrCodeSvg(
+                  __html: sanitizeSvg(generateQrCodeSvg(
                     selectedEntryForView.qrPayload ||
                       `JV|${selectedEntryForView.entryNumber}|${selectedEntryForView.date}|${selectedEntryForView.totalDebit}`,
                     80

@@ -528,6 +528,8 @@ export interface ProfessionalCertificate {
   id: string;
   certificateNumber: string; // e.g. "CERT-2026-089"
   certificateType: CertificateTemplateType;
+  verificationCode?: string;
+  registryStatus?: 'PENDING' | 'RECORDED' | 'FAILED';
   customCertificateHeading?: string; // عنوان مخصص للشهادة (بدل العنوان الافتراضي)
   beneficiaryType: CertificateBeneficiaryType; // نوع المستفيد (شخص طبيعي أو اعتباري)
   issueDate: string;

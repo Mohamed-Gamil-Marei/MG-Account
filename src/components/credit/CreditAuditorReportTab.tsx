@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import React, { useState } from 'react';
 import { FileCheck2, ShieldCheck, CheckCircle2, Award, Printer } from 'lucide-react';
 import { formatEgyptianCurrency, generateQrCodeSvg, buildAuditorReportQrText } from '../../utils/qrCodeGenerator';

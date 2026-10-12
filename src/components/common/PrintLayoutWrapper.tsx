@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import React, { useState, useEffect } from 'react';
 import {
   Printer,
@@ -226,9 +227,7 @@ export const PrintLayoutWrapper: React.FC<PrintLayoutWrapperProps> = ({
                 className="qr-verification qr-print-container flex flex-col items-center justify-center p-1.5 rounded-xl bg-white border border-slate-200 shrink-0"
               >
                 <div
-                  dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(verificationPayload, printSettings.qrSizePx || 88),
-                  }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateQrCodeSvg(verificationPayload, printSettings.qrSizePx || 88),) }}
                 />
                 <span className="text-[8.5px] font-mono font-bold text-slate-600 mt-0.5">وثيقة موثقة رقمياً</span>
               </div>

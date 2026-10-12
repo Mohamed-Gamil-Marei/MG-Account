@@ -1,3 +1,4 @@
+import { IssuedDocumentService } from '../services/issuedDocumentService';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Award,
@@ -53,7 +54,7 @@ import {
 } from '../utils/qrCodeGenerator';
 import { numberToArabicWords, cleanArabicTafqeet } from '../utils/numberToWordsArabic';
 import { PrintService } from '../services/PrintService';
-import { sanitizeHtml } from '../utils/sanitizeHtml';
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import {
   ProfessionalCertificate,
   CertificateBeneficiaryType,
@@ -477,7 +478,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
     : `CERT-${new Date().getFullYear()}-${String(certificates.length + 1).padStart(4, '0')}`;
 
   // Save Certificate to DB
-  const handleSaveCertificate = () => {
+  const handleSaveCertificate = async () => {
     const certPayloadData = {
       certificateType: certType,
       customCertificateHeading: customHeading.trim() || undefined,
@@ -543,10 +544,29 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
         alert(`تم حفظ وتحديث كافة بيانات الشهادة رقم (${updated.certificateNumber}) بنجاح.`);
       }
     } else {
-      const newCert = db.addCertificate(certPayloadData);
+      const newCert = await db.addCertificate(certPayloadData);
       setSelectedCertForView(newCert);
       setEditingCertId(newCert.id);
-      alert(`تم حفظ وتوثيق الشهادة رقم (${newCert.certificateNumber}) بنجاح في سجل الشهادات المهنية المعتمدة للمكتب.`);
+      if (newCert.registryStatus === 'FAILED') {
+        const retry = window.confirm(`تعذر تسجيل الشهادة في سجل التحقق الإلكتروني بـ Firestore.\nهل تريد إعادة المحاولة لتسجيل رمز QR؟`);
+        if (retry) {
+          const recRes = await IssuedDocumentService.recordIssuedDocument({
+            verificationCode: newCert.verificationCode!,
+            documentType: 'شهادة مهنية معتمدة',
+            issueDate: newCert.issueDate || new Date().toISOString().slice(0, 10),
+            firmName: profile.name || 'مكتب المحاسب والمراجع القانوني',
+            status: 'ACTIVE',
+            displayDocNumber: newCert.certificateNumber,
+          });
+          if (recRes.success) {
+            newCert.registryStatus = 'RECORDED';
+            db.updateCertificate(newCert.id, { registryStatus: 'RECORDED' });
+            alert('تم تسجيل الشهادة في سجل التحقق الإلكتروني بنجاح.');
+          }
+        }
+      } else {
+        alert(`تم حفظ وتوثيق الشهادة رقم (${newCert.certificateNumber}) بنجاح في سجل الشهادات المهنية المعتمدة للمكتب.`);
+      }
     }
   };
 
@@ -639,6 +659,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
   const activeCertificatePayload = useMemo(() => {
     return {
       id: selectedCertForView?.id || editingCertId || certNumber,
+      verificationCode: selectedCertForView?.verificationCode,
       certificateNumber: certNumber,
       customCertificateHeading: activeCustomHeading,
       beneficiaryType: activeBeneficiaryType,
@@ -2214,6 +2235,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   <div
                     onClick={() => {
                       const verificationPayload: VerificationPayloadData = {
+                        verificationCode: activeCertificatePayload.verificationCode || selectedCertForView?.verificationCode,
                         docType: activeCustomHeading,
                         docNumber: certNumber,
                         clientName: `${activeBeneficiaryTitle} ${activeBeneficiaryName}`.trim(),
@@ -2237,7 +2259,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                   >
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: sanitizeHtml(generateCode128Svg(certNumber, { height: 42, moduleWidth: 1.8, showText: true })),
+                        __html: sanitizeSvg(generateCode128Svg(certNumber, { height: 42, moduleWidth: 1.8, showText: true })),
                       }}
                     />
                     <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1 no-print">
@@ -2250,6 +2272,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                 {/* QR Code Verification if enabled */}
                 {(verificationBarcodeType === 'QR_CODE' || verificationBarcodeType === 'DUAL') && (() => {
                   const verificationPayload: VerificationPayloadData = {
+                    verificationCode: activeCertificatePayload.verificationCode || selectedCertForView?.verificationCode,
                     recordId: activeCertificatePayload.id,
                     clientId: selectedClientId || undefined,
                     docType: activeCustomHeading,
@@ -2278,7 +2301,7 @@ export const CertificatesGeneratorView: React.FC<CertificatesGeneratorViewProps>
                     >
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: sanitizeHtml(generateQrCodeSvg(qrText, 96)),
+                          __html: sanitizeSvg(generateQrCodeSvg(qrText, 96)),
                         }}
                       />
                       <span className="block text-[8.5px] font-bold text-center text-emerald-900 mt-0.5 group-hover:underline">

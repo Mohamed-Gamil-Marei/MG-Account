@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 import React, { useState, useMemo } from 'react';
 import {
@@ -1518,9 +1519,7 @@ export const FinancialSimulatorView: React.FC<FinancialSimulatorViewProps> = ({
                   title="الباركود الخطي المصرفي المعتمد (Code 128)"
                 >
                   <div
-                    dangerouslySetInnerHTML={{
-                      __html: generateCode128Svg(reportDocNumber, { height: 42, moduleWidth: 1.8, showText: true }),
-                    }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateCode128Svg(reportDocNumber, { height: 42, moduleWidth: 1.8, showText: true }),) }}
                   />
                   <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 mt-1 px-1 no-print">
                     <span>كود: {reportDocNumber}</span>

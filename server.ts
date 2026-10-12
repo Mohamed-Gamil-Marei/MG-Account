@@ -1,52 +1,6 @@
+import { checkEntityAccess } from "./src/server/access";
 
-function checkEntityAccess(user: any, entityType: string, action: 'READ' | 'WRITE' | 'DELETE'): boolean {
-  if (!user || user.role === 'PENDING') return false;
 
-  // 1. Audit logs: client cannot WRITE or DELETE auditLogs
-  if (entityType === 'auditLogs') {
-    if (action === 'WRITE' || action === 'DELETE') return false;
-    if (action === 'READ') return !!user.canAccessAuditTrail || user.role === 'ADMIN';
-  }
-
-  // 2. Treasury access
-  if (entityType === 'treasury') {
-    if (!user.canAccessTreasury && user.role !== 'ADMIN') return false;
-  }
-
-  // 3. Secretary limits
-  if (user.role === 'SECRETARY') {
-    if (action === 'READ') {
-      return ['clients', 'invoices', 'certificates'].includes(entityType);
-    }
-    if (action === 'WRITE') {
-      return entityType === 'invoices';
-    }
-    return false;
-  }
-
-  // 4. Admin-only write entities
-  const adminOnlyWriteEntities = ['officeProfile', 'systemUsers', 'fiscalPeriodLocks', 'preferences'];
-  if (adminOnlyWriteEntities.includes(entityType) && action !== 'READ') {
-    return user.role === 'ADMIN';
-  }
-
-  // 5. Accountant/Admin write entities
-  const accountantAdminWriteEntities = ['accounts', 'taxDeclarations', 'taxAudits', 'fixedAssets', 'exchangeRates'];
-  if (accountantAdminWriteEntities.includes(entityType) && action !== 'READ') {
-    return user.role === 'ACCOUNTANT' || user.role === 'ADMIN';
-  }
-
-  // Journal entries posting
-  if (entityType === 'journalEntries' && action === 'WRITE') {
-    return !!user.canPostEntries || user.role === 'ADMIN' || user.role === 'ACCOUNTANT';
-  }
-
-  if (action === 'DELETE') {
-    return !!user.canDeleteRecords || user.role === 'ADMIN' || user.role === 'ACCOUNTANT';
-  }
-
-  return true;
-}
 
 function isValidMagicBytes(filePath: string): boolean {
   try {
@@ -106,7 +60,7 @@ const GEMINI_MODEL_NAME = "gemini-2.5-flash";
   app.set("trust proxy", 1);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  app.use(express.json({ limit: "50mb", verify: (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; } }));
+  app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(cookieParser());
 
@@ -2271,7 +2225,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 10. Meta Webhook Receiver (POST)
-  app.post("/api/whatsapp/webhook", async (req, res) => {
+  app.post("/api/whatsapp/webhook", express.json({ limit: "10mb", verify: (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; } }), async (req, res) => {
     try {
       const signature = req.headers["x-hub-signature-256"] as string;
       const appSecret = process.env.WHATSAPP_APP_SECRET;
@@ -2619,6 +2573,16 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
+  }
+
+    if (process.env.NODE_ENV === "production") {
+    const userCountRow = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+    if (userCountRow.count === 0 && !process.env.SETUP_TOKEN) {
+      console.error("==========================================================================================");
+      console.error("FATAL SECURITY ERROR: In production mode, SETUP_TOKEN environment variable MUST be defined when the users database is uninitialized (0 users)!");
+      console.error("==========================================================================================");
+      process.exit(1);
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {

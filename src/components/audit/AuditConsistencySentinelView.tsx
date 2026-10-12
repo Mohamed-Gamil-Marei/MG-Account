@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import React, { useState, useMemo } from 'react';
 import {
   ShieldCheck,
@@ -175,7 +176,7 @@ export const AuditConsistencySentinelView: React.FC<AuditConsistencySentinelView
             <div className="flex items-center gap-3">
               <div
                 className="w-20 h-20 border border-slate-300 dark:border-slate-700 rounded-lg p-1 bg-white shadow-2xs shrink-0"
-                dangerouslySetInnerHTML={{ __html: qrSvg }}
+                dangerouslySetInnerHTML={{ __html: sanitizeSvg(qrSvg) }}
               />
               <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
                 <span className="font-bold text-slate-700 dark:text-slate-300 block">كود التحقق الرقمي المشفر:</span>

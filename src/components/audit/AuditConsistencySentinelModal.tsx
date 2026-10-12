@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import React, { useState, useMemo } from 'react';
 import {
   ShieldCheck,
@@ -179,7 +180,7 @@ export const AuditConsistencySentinelModal: React.FC<AuditConsistencySentinelMod
               <div className="flex items-center gap-3">
                 <div
                   className="w-20 h-20 border border-slate-300 rounded-lg p-1 bg-white shadow-2xs"
-                  dangerouslySetInnerHTML={{ __html: qrSvg }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(qrSvg) }}
                 />
                 <div className="text-[10px] text-slate-500 space-y-0.5">
                   <span className="font-bold block text-slate-700">الباركود المشفر للتحقق الفوري:</span>

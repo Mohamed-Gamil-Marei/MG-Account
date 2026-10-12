@@ -14,6 +14,7 @@ export { generateCode128Svg, encodeCode128B };
  */
 
 export interface VerificationPayloadData {
+  verificationCode?: string;
   recordId?: string;
   clientId?: string;
   docType?: string;

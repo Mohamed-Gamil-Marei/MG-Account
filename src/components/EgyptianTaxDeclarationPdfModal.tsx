@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Printer,
@@ -395,9 +396,7 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
                   <div className="text-left flex flex-col items-end space-y-0.5">
                     <div
                       data-qr-container="true"
-                      dangerouslySetInnerHTML={{
-                        __html: generateQrCodeSvg(qrPayload, printSettings.qrSizePx || 76),
-                      }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateQrCodeSvg(qrPayload, printSettings.qrSizePx || 76),) }}
                       className="qr-print-container border border-slate-300 p-0.5 rounded bg-white shadow-2xs"
                     />
                     <span className="font-mono text-[8.5px] text-slate-500 font-bold">

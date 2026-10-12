@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import React from 'react';
 import {
   formatEgyptianCurrency,
@@ -373,7 +374,7 @@ export const CreditBatchPrintDocument: React.FC<CreditBatchPrintDocumentProps> =
           <div
             data-qr-container="true"
             className="qr-print-container bg-white p-1 rounded border border-slate-300"
-            dangerouslySetInnerHTML={{ __html: qrSvg }}
+            dangerouslySetInnerHTML={{ __html: sanitizeSvg(qrSvg) }}
             title="مسح رمز التحقق الرقمي المعتمد"
           />
 

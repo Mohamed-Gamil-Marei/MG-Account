@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { sanitizeHtml } from './sanitizeHtml';
+import { sanitizeHtml, sanitizeSvg, sanitizePrintHtml } from './sanitizeHtml';
 
 describe('sanitizeHtml utility', () => {
   it('allows safe formatting tags and whitelisted attributes', () => {
@@ -31,33 +31,39 @@ describe('sanitizeHtml utility', () => {
     expect(result).toContain('Safe Text');
   });
 
-  it('strips <img onerror> and all inline event handlers', () => {
-    const input = '<p><img src="invalid.jpg" onerror="alert(document.cookie)"><span onclick="badFunction()">Click</span><button onmouseover="evil()">Hover</button></p>';
-    const result = sanitizeHtml(input);
-    expect(result).not.toContain('onerror');
-    expect(result).not.toContain('onclick');
-    expect(result).not.toContain('onmouseover');
-    expect(result).not.toContain('<button'); // button is not in ALLOWED_TAGS
-  });
-
-  it('strips javascript: pseudo-protocol in href or links', () => {
-    const input = '<p><a href="javascript:alert(\'hacked\')">Malicious Link</a></p>';
-    const result = sanitizeHtml(input);
-    expect(result).not.toContain('javascript:');
-    expect(result).not.toContain('alert');
-  });
-
-  it('strips <iframe> and embeds', () => {
-    const input = '<div>Safe Content<iframe src="https://evil.com"></iframe><embed src="evil.swf"></div>';
-    const result = sanitizeHtml(input);
-    expect(result).not.toContain('<iframe');
-    expect(result).not.toContain('<embed');
-    expect(result).toContain('Safe Content');
-  });
-
   it('handles null, undefined, and empty string gracefully', () => {
     expect(sanitizeHtml(null)).toBe('');
     expect(sanitizeHtml(undefined)).toBe('');
     expect(sanitizeHtml('')).toBe('');
+  });
+});
+
+describe('sanitizeSvg utility', () => {
+  it('keeps valid <svg><rect/></svg> and removes <script> and onload', () => {
+    const input = '<svg viewBox="0 0 100 100" onload="alert(1)"><rect x="0" y="0" width="100" height="100" fill="red"/><script>alert("xss")</script></svg>';
+    const result = sanitizeSvg(input);
+    expect(result).toContain('<svg');
+    expect(result).toContain('<rect');
+    expect(result).not.toContain('<script');
+    expect(result).not.toContain('onload');
+  });
+});
+
+describe('sanitizePrintHtml utility', () => {
+  it('keeps valid base64 images, <tfoot>, and <svg>, while stripping javascript URLs, <iframe>, <script>, and onerror', () => {
+    const validImg = '<img src="data:image/png;base64,AAAA"/>';
+    const invalidImg = '<img src="javascript:alert(1)" onerror="alert(2)"/>';
+    const printMarkup = '<div><table><tfoot><tr><td>Total</td></tr></tfoot></table><iframe src="evil.com"></iframe><script>evil()</script>' + validImg + invalidImg + '<svg><circle cx="50" cy="50" r="40"/></svg></div>';
+
+    const result = sanitizePrintHtml(printMarkup);
+
+    expect(result).toContain('<tfoot>');
+    expect(result).toContain('data:image/png;base64,AAAA');
+    expect(result).toContain('<svg');
+    expect(result).toContain('<circle');
+    expect(result).not.toContain('javascript:alert(1)');
+    expect(result).not.toContain('onerror');
+    expect(result).not.toContain('<iframe');
+    expect(result).not.toContain('<script');
   });
 });

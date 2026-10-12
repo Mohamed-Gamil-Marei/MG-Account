@@ -1,3 +1,4 @@
+import { sanitizeSvg } from '../utils/sanitizeHtml';
 import React, { useState, useMemo } from 'react';
 import {
   FileSpreadsheet,
@@ -2099,9 +2100,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
                 title="انقر للمعاينة والتحقق الرقمي من صحة القوائم المالية"
               >
                 <div
-                  dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(qrPayload, 105),
-                  }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(generateQrCodeSvg(qrPayload, 105),) }}
                 />
               </div>
               <button

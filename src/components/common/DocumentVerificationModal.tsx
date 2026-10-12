@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import { IssuedDocumentService, PublicIssuedDocumentRecord } from '../../services/issuedDocumentService';
 import {
   ShieldCheck,
@@ -51,44 +51,43 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
   const [firestoreRecord, setFirestoreRecord] = useState<PublicIssuedDocumentRecord | null>(null);
   const [isVerifyingFirestore, setIsVerifyingFirestore] = useState<boolean>(true);
-  const [verifyStatus, setVerifyStatus] = useState<'LOADING' | 'NOT_FOUND' | 'ACTIVE' | 'CANCELLED'>('LOADING');
+  const [verifyStatus, setVerifyStatus] = useState<'LOADING' | 'NO_CODE' | 'NOT_FOUND' | 'ERROR' | 'ACTIVE' | 'CANCELLED'>('LOADING');
 
   useEffect(() => {
     let isMounted = true;
     const verifyDocInFirestore = async () => {
       setIsVerifyingFirestore(true);
-      const docNum = data.docNumber?.trim();
-      if (!docNum) {
+      const code = data.verificationCode?.trim();
+      if (!code) {
         if (isMounted) {
-          setVerifyStatus('NOT_FOUND');
+          setVerifyStatus('NO_CODE');
+          setFirestoreRecord(null);
           setIsVerifyingFirestore(false);
         }
         return;
       }
 
-      // Check Firestore by document number or recordId
-      let record = await IssuedDocumentService.getIssuedDocument(docNum);
-      if (!record && data.recordId && data.recordId !== docNum) {
-        record = await IssuedDocumentService.getIssuedDocument(data.recordId.trim());
-      }
+      const res = await IssuedDocumentService.getIssuedDocument(code);
+      if (!isMounted) return;
 
-      if (isMounted) {
-        if (record) {
-          setFirestoreRecord(record);
-          setVerifyStatus(record.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE');
-        } else {
-          setFirestoreRecord(null);
-          setVerifyStatus('NOT_FOUND');
-        }
-        setIsVerifyingFirestore(false);
+      if (res.status === 'FOUND') {
+        setFirestoreRecord(res.record);
+        setVerifyStatus(res.record.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE');
+      } else if (res.status === 'ERROR') {
+        setFirestoreRecord(null);
+        setVerifyStatus('ERROR');
+      } else {
+        setFirestoreRecord(null);
+        setVerifyStatus('NOT_FOUND');
       }
+      setIsVerifyingFirestore(false);
     };
 
     verifyDocInFirestore();
     return () => {
       isMounted = false;
     };
-  }, [data.docNumber, data.recordId]);
+  }, [data.verificationCode]);
 
   const isEn = modalLang === 'en';
 
@@ -223,10 +222,20 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
                       <span className="w-2.5 h-2.5 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></span>
                       {isEn ? 'Verifying with Registry...' : 'جاري التحقق من سجل المستندات...'}
                     </span>
+                  ) : verifyStatus === 'NO_CODE' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-300" />
+                      {isEn ? 'Cannot Verify: Missing Verification Code' : 'لا يمكن التحقق: لا يوجد كود تحقق على هذا المستند'}
+                    </span>
+                  ) : verifyStatus === 'ERROR' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-500/20 text-rose-200 border border-rose-400/30 flex items-center gap-1">
+                      <X className="w-3 h-3 text-rose-300" />
+                      {isEn ? 'Failed to Connect to Registry' : 'تعذر الاتصال بالسجل'}
+                    </span>
                   ) : verifyStatus === 'NOT_FOUND' ? (
                     <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-500/20 text-rose-200 border border-rose-400/30 flex items-center gap-1">
                       <X className="w-3 h-3 text-rose-300" />
-                      {isEn ? 'Document Not Found in Registry' : 'مستند غير موجود في السجل الرسمي'}
+                      {isEn ? 'Document Not Found in Registry' : 'مستند غير مسجل بالسجل العام'}
                     </span>
                   ) : verifyStatus === 'CANCELLED' ? (
                     <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-1">
@@ -326,6 +335,42 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
 
         {/* Modal Main Body */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-100 dark:bg-slate-950 space-y-4">
+          {!isVerifyingFirestore && verifyStatus === 'NO_CODE' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border-2 border-amber-300 dark:border-amber-900 text-amber-900 dark:text-amber-200 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm sm:text-base font-black">
+                  {isEn ? 'Cannot Verify Document' : 'لا يمكن التحقق'}
+                </h3>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  {isEn
+                    ? 'Cannot verify: No verification code is attached to this document.'
+                    : 'لا يمكن التحقق: لا يوجد كود تحقق على هذا المستند.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isVerifyingFirestore && verifyStatus === 'ERROR' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-300 dark:border-rose-900 text-rose-900 dark:text-rose-200 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm sm:text-base font-black">
+                  {isEn ? 'Connection Error' : 'تعذر الاتصال بالسجل'}
+                </h3>
+                <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+                  {isEn
+                    ? 'Failed to connect to the document verification registry due to network error.'
+                    : 'تعذر الاتصال بالسجل العام للمستندات الصادرة بسبب خطأ في شبكة الاتصال.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {!isVerifyingFirestore && verifyStatus === 'NOT_FOUND' && (
             <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-300 dark:border-rose-900 text-rose-900 dark:text-rose-200 flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -333,12 +378,12 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
               </div>
               <div className="flex-1">
                 <h3 className="text-sm sm:text-base font-black">
-                  {isEn ? 'Document Not Found' : 'مستند غير موجود'}
+                  {isEn ? 'Document Not Found' : 'مستند غير مسجل'}
                 </h3>
                 <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
                   {isEn
-                    ? 'No official record was found in the Firestore registry for document number ' + (data.docNumber || '—') + '. This document cannot be verified based on link parameters.'
-                    : 'لم يتم العثور على أي قيد معتمد في قاعدة بيانات المستندات المصدرة لكود المستند (' + (data.docNumber || '—') + '). هذا المستند غير مسجل أو لم يصدر رسمياً من المكتب.'}
+                    ? 'No official record was found in the registry for this verification code.'
+                    : 'لم يتم العثور على أي قيد معتمد في السجل العام للمستندات لهذا الكود. المستند غير مسجل أو ملغى.'}
                 </p>
               </div>
             </div>
@@ -772,7 +817,7 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
                       data-qr-container="true"
                       className="qr-print-container p-1.5 bg-white border border-slate-300 rounded-xl shrink-0 shadow-xs"
                       dangerouslySetInnerHTML={{
-                        __html: sanitizeHtml(generateQrCodeSvg(verificationUrl || 'https://cpa-egypt.tax.gov.eg', 96)),
+                        __html: sanitizeSvg(generateQrCodeSvg(verificationUrl || 'https://cpa-egypt.tax.gov.eg', 96)),
                       }}
                     />
                   </div>
