@@ -43,7 +43,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
 }) => {
   const [activeDeckTab, setActiveDeckTab] = useState<'RADAR' | 'WAR_ROOM' | 'ZERO_ENTRY' | 'WHATSAPP_DISPATCHER'>('RADAR');
   const [selectedClientId, setSelectedClientId] = useState<string>(
-    state.activeClientContext?.clientId || state.clients[0]?.id || ''
+    state.activeClientContext?.clientId || (state.clients || [])[0]?.id || ''
   );
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -64,8 +64,8 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
   const [waTemplateType, setWaTemplateType] = useState<'TAX_POSITION' | 'SAP_RENEWAL' | 'AUDIT_ALERT' | 'FEE_CLAIM'>('TAX_POSITION');
   const [customWaNotes, setCustomWaNotes] = useState<string>('');
 
-  const targetClient = state.clients.find((c) => c.id === selectedClientId) || state.clients[0];
-  const targetWaClient = state.clients.find((c) => c.id === waTargetClientId) || targetClient;
+  const targetClient = (state.clients || []).find((c) => c.id === selectedClientId) || (state.clients || [])[0];
+  const targetWaClient = (state.clients || []).find((c) => c.id === waTargetClientId) || targetClient;
 
   // 1. RADAR INSIGHTS CALCULATION (Real-time Rule-Based Expert Engine)
   const radarAlerts = useMemo(() => {
@@ -83,7 +83,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
     }> = [];
 
     // Rule A: Check Unposted Journal Entries
-    const unposted = state.journalEntries.filter((e) => !e.isPosted);
+    const unposted = (state.journalEntries || []).filter((e) => !e.isPosted);
     if (unposted.length > 0) {
       list.push({
         id: 'unposted-journals',
@@ -99,7 +99,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
     }
 
     // Rule B: Cash Transaction Limit Check (Law 18 of 2019 on Non-Cash Payments)
-    const highCashEntries = state.journalEntries.filter((e) => {
+    const highCashEntries = (state.journalEntries || []).filter((e) => {
       const hasCash = e.lines?.some((l) => (l.accountId?.startsWith('111') || l.accountName?.includes('خزينة') || l.accountName?.includes('صندوق')));
       const hasHighAmount = e.lines?.some((l) => (l.debit || 0) > 10000 || (l.credit || 0) > 10000);
       return hasCash && hasHighAmount;
@@ -109,8 +109,8 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
       list.push({
         id: 'high-cash-risk',
         title: 'مخاطرة مدفوعات نقدية مخالفة للقانون 18 لسنة 2019',
-        clientName: state.clients[0]?.name || 'منشآت العملاء',
-        clientId: state.clients[0]?.id || '',
+        clientName: (state.clients || [])[0]?.name || 'منشآت العملاء',
+        clientId: (state.clients || [])[0]?.id || '',
         level: 'CRITICAL',
         description: `تم رصد ${highCashEntries.length} معاملة نقدية بالخزينة تجاوزت 10,000 ج.م، وهي معرضة للاستبعاد الضريبي طبقاً لقانون تنظيم وسائل الدفع غير النقدي.`,
         actionLabel: 'مراجعة المعاملات النقدية وتعديل التوجيه',
@@ -120,7 +120,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
     }
 
     // Rule C: Portal Passwords & SAP Delegation Check
-    state.clients.forEach((c) => {
+    (state.clients || []).forEach((c) => {
       const creds = c.portalCredentials;
       if (creds) {
         if (!creds.sapPortal?.username && !creds.etaGeneralTax?.username) {
@@ -140,7 +140,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
     });
 
     // Rule D: Urgent Tax Declarations
-    const pendingTaxes = state.taxDeclarations.filter(
+    const pendingTaxes = (state.taxDeclarations || []).filter(
       (t) => t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT'
     );
     if (pendingTaxes.length > 0) {
@@ -163,7 +163,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
   // 2. TAX WAR-ROOM SIMULATION
   const warRoomAnalysis = useMemo(() => {
     // Generate realistic tax inspection risk flags based on client & entries
-    const clientEntries = state.journalEntries.filter(
+    const clientEntries = (state.journalEntries || []).filter(
       (e) => !selectedClientId || !e.clientId || e.clientId === selectedClientId
     );
 
@@ -475,7 +475,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
                 onChange={(e) => setSelectedClientId(e.target.value)}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-lg px-2.5 py-1 font-bold"
               >
-                {state.clients.map((c) => (
+                {(state.clients || []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.taxCardNo || 'بطاقة ضريبية'})
                   </option>
@@ -639,9 +639,9 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
                 onChange={(e) => setWaTargetClientId(e.target.value)}
                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg p-2 font-bold"
               >
-                {state.clients.map((c) => (
+                {(state.clients || []).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} — ({c.phone || '01003335360'})
+                    {c.name} — ({c.phone || '—'})
                   </option>
                 ))}
               </select>

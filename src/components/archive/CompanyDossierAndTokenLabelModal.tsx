@@ -330,9 +330,9 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
     day: 'numeric',
   });
 
-  const officePhone = officeProfile.phone || '01003335360';
-  const auditorName = officeProfile.auditorName || 'محمد جميل مرعي';
-  const licenseNo = officeProfile.licenseNumber || 'س.م.م / 43122';
+  const officePhone = officeProfile?.phone || '01003335360';
+  const auditorName = officeProfile?.auditorName || 'محمد جميل مرعي';
+  const licenseNo = officeProfile?.licenseNumber || 'س.م.م / 43122';
 
   // Filter only active / enabled subjection obligations for printing
   const activeSubjections = subjectionItems.filter((item) => item.enabled);

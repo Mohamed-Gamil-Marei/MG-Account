@@ -117,25 +117,25 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
     notes: '',
   };
 
-  const [auditorName, setAuditorName] = useState<string>(officeProfile.auditorName || '');
-  const [titleName, setTitleName] = useState<string>(officeProfile.title || '');
-  const [firmName, setFirmName] = useState<string>(officeProfile.firmName || '');
-  const [licenseNumber, setLicenseNumber] = useState<string>(officeProfile.licenseNumber || '');
-  const [taxAuthorityRegNo, setTaxAuthorityRegNo] = useState<string>(officeProfile.taxAuthorityRegNo || '');
-  const [phone, setPhone] = useState<string>(officeProfile.phone || '');
-  const [email, setEmail] = useState<string>(officeProfile.email || '');
-  const [address, setAddress] = useState<string>(officeProfile.address || '');
-  const [mainOfficeAddress, setMainOfficeAddress] = useState<string>(officeProfile.mainOfficeAddress || 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية');
-  const [showMainOfficeAddress, setShowMainOfficeAddress] = useState<boolean>(officeProfile.showMainOfficeAddress !== false);
-  const [branchOfficeAddress, setBranchOfficeAddress] = useState<string>(officeProfile.branchOfficeAddress || 'المباركية مول - مدينة العاشر من رمضان - الشرقية');
-  const [showBranchOfficeAddress, setShowBranchOfficeAddress] = useState<boolean>(officeProfile.showBranchOfficeAddress !== false);
-  const [publicDomainUrl, setPublicDomainUrl] = useState<string>(officeProfile.publicDomainUrl || (typeof window !== 'undefined' ? window.location.origin : ''));
+  const [auditorName, setAuditorName] = useState<string>(officeProfile?.auditorName || '');
+  const [titleName, setTitleName] = useState<string>(officeProfile?.title || '');
+  const [firmName, setFirmName] = useState<string>(officeProfile?.firmName || '');
+  const [licenseNumber, setLicenseNumber] = useState<string>(officeProfile?.licenseNumber || '');
+  const [taxAuthorityRegNo, setTaxAuthorityRegNo] = useState<string>(officeProfile?.taxAuthorityRegNo || '');
+  const [phone, setPhone] = useState<string>(officeProfile?.phone || '');
+  const [email, setEmail] = useState<string>(officeProfile?.email || '');
+  const [address, setAddress] = useState<string>(officeProfile?.address || '');
+  const [mainOfficeAddress, setMainOfficeAddress] = useState<string>(officeProfile?.mainOfficeAddress || 'ميدان النافورة - الدور الرابع - مركز الحسينية - الشرقية');
+  const [showMainOfficeAddress, setShowMainOfficeAddress] = useState<boolean>(officeProfile?.showMainOfficeAddress !== false);
+  const [branchOfficeAddress, setBranchOfficeAddress] = useState<string>(officeProfile?.branchOfficeAddress || 'المباركية مول - مدينة العاشر من رمضان - الشرقية');
+  const [showBranchOfficeAddress, setShowBranchOfficeAddress] = useState<boolean>(officeProfile?.showBranchOfficeAddress !== false);
+  const [publicDomainUrl, setPublicDomainUrl] = useState<string>(officeProfile?.publicDomainUrl || (typeof window !== 'undefined' ? window.location.origin : ''));
 
   // Default Tax Settings State
-  const [defaultTaxEnabled, setDefaultTaxEnabled] = useState<boolean>(officeProfile.defaultTaxEnabled !== false);
-  const [defaultTaxRate, setDefaultTaxRate] = useState<number>(officeProfile.defaultTaxRate ?? 14);
-  const [defaultWhtEnabled, setDefaultWhtEnabled] = useState<boolean>(officeProfile.defaultWhtEnabled !== false);
-  const [defaultWhtRate, setDefaultWhtRate] = useState<number>(officeProfile.defaultWhtRate ?? 1);
+  const [defaultTaxEnabled, setDefaultTaxEnabled] = useState<boolean>(officeProfile?.defaultTaxEnabled !== false);
+  const [defaultTaxRate, setDefaultTaxRate] = useState<number>(officeProfile?.defaultTaxRate ?? 14);
+  const [defaultWhtEnabled, setDefaultWhtEnabled] = useState<boolean>(officeProfile?.defaultWhtEnabled !== false);
+  const [defaultWhtRate, setDefaultWhtRate] = useState<number>(officeProfile?.defaultWhtRate ?? 1);
 
   const currentUser = db.getCurrentUser();
   const isAdmin = currentUser?.role === 'ADMIN';

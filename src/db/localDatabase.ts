@@ -908,9 +908,20 @@ export class LocalDatabase {
   public getState(): DatabaseState {
     return {
       ...this.state,
-      clientArchives: this.state.clients,
-      activeClientId: this.state.activeClientContext?.clientId,
-      activeClientName: this.state.activeClientContext?.clientName,
+      officeProfile: this.state?.officeProfile || DEFAULT_OFFICE_PROFILE,
+      clients: this.state?.clients || [],
+      accounts: this.state?.accounts || [],
+      journalEntries: this.state?.journalEntries || [],
+      treasuryTransactions: this.state?.treasuryTransactions || [],
+      taxDeclarations: this.state?.taxDeclarations || [],
+      taxMandates: this.state?.taxMandates || [],
+      certificates: this.state?.certificates || [],
+      invoices: this.state?.invoices || [],
+      users: this.state?.users || [],
+      auditLogs: this.state?.auditLogs || [],
+      clientArchives: this.state?.clients || [],
+      activeClientId: this.state?.activeClientContext?.clientId,
+      activeClientName: this.state?.activeClientContext?.clientName,
     };
   }
 

@@ -304,7 +304,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     title: '',
     category: 'TAX_AUDIT' as ProcedureCategory,
     description: '',
-    assignedTo: state.officeProfile.auditorName || 'محمد جميل مرعي',
+    assignedTo: state.officeProfile?.auditorName || 'محمد جميل مرعي',
     status: 'IN_PROGRESS' as ProcedureStatus,
     priority: 'HIGH' as ClientProcedureTask['priority'],
     startDate: new Date().toISOString().slice(0, 10),
@@ -547,9 +547,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     if (!client) return;
     const phone = (client.phone || '').replace(/[^0-9]/g, '');
     const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
-    const auditorName = state.officeProfile.auditorName || 'محمد جميل مرعي';
-    const firmName = state.officeProfile.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
-    const officePhone = state.officeProfile.phone || '01003335360';
+    const auditorName = state.officeProfile?.auditorName || 'محمد جميل مرعي';
+    const firmName = state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+    const officePhone = state.officeProfile?.phone || '01003335360';
 
     let text = '';
     if (proc) {
@@ -597,9 +597,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     if (!client) return;
     const phone = (client.phone || '').replace(/[^0-9]/g, '');
     const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
-    const auditorName = state.officeProfile.auditorName || 'محمد جميل مرعي';
-    const firmName = state.officeProfile.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
-    const officePhone = state.officeProfile.phone || '01003335360';
+    const auditorName = state.officeProfile?.auditorName || 'محمد جميل مرعي';
+    const firmName = state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+    const officePhone = state.officeProfile?.phone || '01003335360';
 
     const text = `عناية السادة / *${client.name}*\nتحية طيبة وبعد،،\n\nنلفت انتباهكم الكريم إلى أن صلاحية كلمة المرور الخاصة بالمنظومة:\n🔐 *${portalName}*\n👤 اسم المستخدم / التسجيل: *${username || client.taxCardNo || '—'}*\n📅 تاريخ انتهاء الصلاحية: *${expiryDate || 'قريباً'}*\n\n⚠️ يرجى التكرم بتجديد كلمة المرور وتزويدنا بالبيانات المحدثة أو التنسيق مع فريق العمل بالمكتب لتفادي توقف إصدار الفواتير أو تعطل الإقرارات الضريبية.\n\nمع وافر الشكر والتقدير،،\n*${firmName}*\nالمحاسب القانوني: *${auditorName}*\nهاتف التواصل: ${officePhone}`;
 
@@ -758,7 +758,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       title: '',
       category: 'TAX_AUDIT',
       description: '',
-      assignedTo: state.officeProfile.auditorName || 'محمد جميل مرعي',
+      assignedTo: state.officeProfile?.auditorName || 'محمد جميل مرعي',
       status: 'IN_PROGRESS',
       priority: 'HIGH',
       startDate: new Date().toISOString().slice(0, 10),
@@ -804,7 +804,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
           clientName: liveSelectedClient.name,
           paymentMethod: quickTxMethod,
           description: quickTxNotes || `تحصيل أتعاب مهنية من العميل: ${liveSelectedClient.name}`,
-          recordedBy: state.officeProfile.auditorName || 'محمد جميل مرعي',
+          recordedBy: state.officeProfile?.auditorName || 'محمد جميل مرعي',
         });
       }
     } else {
@@ -829,7 +829,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
           clientName: liveSelectedClient.name,
           paymentMethod: quickTxMethod,
           description: quickTxNotes || `سداد رسوم ومصروفات حكومية لحساب العميل: ${liveSelectedClient.name}`,
-          recordedBy: state.officeProfile.auditorName || 'محمد جميل مرعي',
+          recordedBy: state.officeProfile?.auditorName || 'محمد جميل مرعي',
         });
       }
     }
@@ -3886,8 +3886,8 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         }}
         client={notifyTargetClient}
         procedure={notifyTargetProcedure}
-        officeName={state.officeProfile.officeName}
-        auditorName={state.officeProfile.auditorName}
+        officeName={state.officeProfile?.officeName || state.officeProfile?.firmName || 'مكتب المحاسب القانوني'}
+        auditorName={state.officeProfile?.auditorName || 'المحاسب القانوني'}
       />
 
       {/* WhatsApp Document Share & Invoice Claim Modal */}

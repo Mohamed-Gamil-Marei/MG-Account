@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { firebaseAuth, FirebaseUserProfile } from '../../services/firebaseAuthService';
+import { db as localDb } from '../../db/localDatabase';
 
 interface FirebaseAuthGateProps {
   onAuthenticated: (profile: FirebaseUserProfile) => void;
@@ -33,13 +34,16 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
     setError(null);
     setSuccessMsg(null);
 
-    if (!email || !password) {
-      setError('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
+    const normalizedEmail = email.trim();
+    const formattedEmail = normalizedEmail.includes('@') ? normalizedEmail : `${normalizedEmail}@system.local`;
+
+    if (!normalizedEmail || !password) {
+      setError('يرجى إدخال البريد الإلكتروني أو اسم المستخدم وكلمة المرور.');
       return;
     }
 
-    if (password.length < 6) {
-      setError('يجب ألا تقل كلمة المرور عن 6 أحرف/أرقام.');
+    if (isRegistering && password.length < 6) {
+      setError('يجب ألا تقل كلمة المرور للحساب الجديد عن 6 أحرف/أرقام.');
       return;
     }
 
@@ -51,7 +55,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           setIsLoading(false);
           return;
         }
-        const profile = await firebaseAuth.signUp(name.trim(), email.trim(), password);
+        const profile = await firebaseAuth.signUp(name.trim(), formattedEmail, password);
         setSuccessMsg('تم إنشاء الحساب بنجاح وهو الآن قيد الانتظار (PENDING) بانتظار تفعيل المدير.');
         setTimeout(() => {
           if (profile.role !== 'PENDING') {
@@ -59,9 +63,42 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           }
         }, 1500);
       } else {
-        const profile = await firebaseAuth.signIn(email, password);
-        setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
-        setTimeout(() => onAuthenticated(profile), 600);
+        // 1. Try local system database authentication (supports admin / admin, username, etc.)
+        const localRes = localDb.authenticateUser(normalizedEmail, password);
+        if (localRes.success && localRes.user) {
+          const profile: FirebaseUserProfile = {
+            uid: localRes.user.id,
+            email: localRes.user.email || `${localRes.user.username}@system.local`,
+            name: localRes.user.name,
+            role: localRes.user.role as any,
+            roleTitleArabic: localRes.user.roleTitleArabic || 'مدير النظام والشريك المسؤول',
+            canAccessTreasury: true,
+            canAccessAuditTrail: true,
+            canAccessCreditFiles: true,
+            canAccessTaxReports: true,
+            canManageUsers: true,
+            canPostEntries: true,
+            canEditPostedEntries: true,
+            canDeleteRecords: true,
+          };
+          setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
+          setTimeout(() => onAuthenticated(profile), 400);
+          return;
+        }
+
+        // 2. Try Firebase authentication if local check didn't match
+        try {
+          const profile = await firebaseAuth.signIn(formattedEmail, password);
+          setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
+          setTimeout(() => onAuthenticated(profile), 400);
+        } catch (firebaseErr: any) {
+          console.warn('Firebase login attempt failed:', firebaseErr);
+          if (localRes.message) {
+            setError(localRes.message);
+          } else {
+            setError('خطأ في اسم المستخدم أو كلمة المرور (بيانات تسجيل الدخول الافتراضية: admin / admin).');
+          }
+        }
       }
     } catch (err: any) {
       console.error('Auth Error:', err);
@@ -128,15 +165,15 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                البريد الإلكتروني:
+                البريد الإلكتروني / اسم المستخدم:
               </label>
               <div className="relative">
                 <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  placeholder="admin أو admin@system.local"
                   required
                   className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />

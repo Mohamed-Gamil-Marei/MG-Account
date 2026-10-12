@@ -626,7 +626,7 @@ export const PayrollInsuranceEngineView: React.FC<PayrollInsuranceEngineProps> =
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <span className="text-slate-500 block">اسم المنشأة:</span>
-                <span className="font-bold text-slate-900">{state.officeProfile.firmName}</span>
+                <span className="font-bold text-slate-900">{state.officeProfile?.firmName || 'مكتب المحاسب القانوني'}</span>
               </div>
               <div>
                 <span className="text-slate-500 block">الرقم التأميني للمنشأة:</span>

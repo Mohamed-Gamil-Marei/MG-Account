@@ -1005,7 +1005,7 @@ export default function App() {
 
                 <div className="hidden sm:block min-w-0">
                   <h1 className={`text-xs font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {!isRtl ? 'Auditor / ' : 'أ/ '}{state.officeProfile.auditorName}
+                    {!isRtl ? 'Auditor / ' : 'أ/ '}{state.officeProfile?.auditorName || 'المحاسب القانوني'}
                   </h1>
                   <span className="text-[9.5px] text-slate-400 block truncate font-medium">
                     محاسب قانوني وخبير ضرائب
@@ -1440,7 +1440,7 @@ export default function App() {
           <div className="flex items-center gap-2 sm:gap-3">
             <span>المستخدم: <strong className="text-slate-700 dark:text-slate-200">{currentUser.name}</strong></span>
             <span className="hidden sm:inline">•</span>
-            <span className="hidden md:inline">{state.officeProfile.firmName}</span>
+            <span className="hidden md:inline">{state.officeProfile?.firmName || 'مكتب المحاسب القانوني'}</span>
           </div>
         </footer>
       </div>

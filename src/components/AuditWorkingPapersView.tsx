@@ -547,10 +547,10 @@ export const AuditWorkingPapersView: React.FC<AuditWorkingPapersProps> = ({ stat
           <UserCheck className="w-5 h-5 text-emerald-600" />
           <div>
             <div className="font-bold text-slate-900">
-              اعتماد الشريك المسؤول ومراقب الحسابات: أ/ {state.officeProfile.auditorName}
+              اعتماد الشريك المسؤول ومراقب الحسابات: أ/ {state.officeProfile?.auditorName || 'المحاسب القانوني'}
             </div>
             <div className="text-slate-500 text-[11px]">
-              رقم القيد بسجل المحاسبين والمراجعين: {state.officeProfile.licenseNumber} • معايير المراجعة المصرية
+              رقم القيد بسجل المحاسبين والمراجعين: {state.officeProfile?.licenseNumber || '—'} • معايير المراجعة المصرية
             </div>
           </div>
         </div>

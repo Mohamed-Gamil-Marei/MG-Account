@@ -88,7 +88,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const currentFiscalYear = state.activeClientContext?.selectedFiscalYear || fiscalYear || 2026;
   const activeClientId = state.activeClientContext?.clientId;
-  const activeClient = state.clients.find((c) => c.id === activeClientId);
+  const activeClient = (state.clients || []).find((c) => c.id === activeClientId);
 
   // Requirement 4: Overdue fees summary for Dashboard
   const overdueClientsList = useMemo(() => {
@@ -118,7 +118,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return allDeadlines
       .map((d) => {
         const calcStatus = getDeadlineStatus(d);
-        const clientObj = state.clients.find((c) => c.id === d.clientId);
+        const clientObj = (state.clients || []).find((c) => c.id === d.clientId);
         return {
           ...d,
           clientName: clientObj ? clientObj.name : d.clientName || d.clientId,
@@ -131,7 +131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Filter journal entries by active client context and fiscal year
   const filteredEntries = useMemo(() => {
-    return state.journalEntries.filter((e) => {
+    return (state.journalEntries || []).filter((e) => {
       if (activeClientId && e.clientId && e.clientId !== activeClientId) {
         return false;
       }
@@ -144,7 +144,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // 1. Accounting Calculations based on filtered entries
   const calculatedAccounts = useMemo(() => {
-    return computeAccountBalances(state.accounts, filteredEntries);
+    return computeAccountBalances(state.accounts || [], filteredEntries);
   }, [state.accounts, filteredEntries]);
 
   const incomeData = useMemo(() => {
@@ -156,18 +156,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [calculatedAccounts, incomeData]);
 
   // Office treasury summary (filtered by client if applicable)
-  const treasuryIncome = state.treasuryTransactions
+  const treasuryIncome = (state.treasuryTransactions || [])
     .filter((t) => t.type === 'INCOME_FEES' && (!activeClientId || t.clientId === activeClientId))
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const treasuryExpense = state.treasuryTransactions
+  const treasuryExpense = (state.treasuryTransactions || [])
     .filter((t) => (t.type === 'EXPENSE_OFFICE' || t.type === 'PARTNER_DRAWINGS') && (!activeClientId || t.clientId === activeClientId))
     .reduce((sum, t) => sum + t.amount, 0);
 
   const treasuryNetBalance = treasuryIncome - treasuryExpense;
 
   // Tax alerts
-  const urgentTaxes = state.taxDeclarations.filter(
+  const urgentTaxes = (state.taxDeclarations || []).filter(
     (t) => (!activeClientId || t.clientId === activeClientId) && (t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT')
   );
 
@@ -187,7 +187,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     );
     const totalLiquid = Math.max(0, accountsCashSum + Math.max(0, treasuryNetBalance));
 
-    const taxDecsTotal = state.taxDeclarations
+    const taxDecsTotal = (state.taxDeclarations || [])
       .filter((t) => t.status !== 'PAID' && t.status !== 'APPROVED')
       .reduce((sum, t) => sum + (t.netVatDue || t.totalTaxDue || 0), 0);
 
@@ -538,7 +538,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {
         id: 'kpi-clients',
         title: 'الموكلين والشركات',
-        value: `${state.clients.length} عميل`,
+        value: `${(state.clients || []).length} عميل`,
         badge: 'سجل نشط',
         badgeVariant: 'blue',
         category: 'OPERATIONS',
@@ -558,7 +558,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {
         id: 'kpi-journals',
         title: 'قيود اليومية العامة',
-        value: `${state.journalEntries.length} قيد`,
+        value: `${(state.journalEntries || []).length} قيد`,
         badge: 'مرحلة بالكامل',
         badgeVariant: 'emerald',
         category: 'OPERATIONS',
@@ -590,7 +590,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {
         id: 'kpi-accounts',
         title: 'شجرة ودليل الحسابات',
-        value: `${state.accounts.length} حساب`,
+        value: `${(state.accounts || []).length} حساب`,
         badge: 'هرمي معتمد',
         badgeVariant: 'indigo',
         category: 'OPERATIONS',
@@ -639,9 +639,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
     taxCoverageRatio,
     isCriticalTaxCoverage,
     urgentTaxes.length,
-    state.clients.length,
-    state.journalEntries.length,
-    state.accounts.length,
+    (state.clients || []).length,
+    (state.journalEntries || []).length,
+    (state.accounts || []).length,
     navigate,
   ]);
 

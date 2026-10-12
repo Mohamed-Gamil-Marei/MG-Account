@@ -104,20 +104,20 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <h1 className="text-sm sm:text-base md:text-lg font-black tracking-tight text-white flex items-center gap-1">
-                <span>{isEn ? ((profile as any).firmNameEnglish || profile.firmName) : profile.firmName}</span>
-                <span className="text-emerald-400">/ {profile.auditorName}</span>
+                <span>{isEn ? ((profile as any)?.firmNameEnglish || profile?.firmName || 'مكتب المحاسب القانوني') : (profile?.firmName || 'مكتب المحاسب القانوني')}</span>
+                <span className="text-emerald-400">/ {profile?.auditorName || 'المحاسب القانوني'}</span>
               </h1>
               <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                {profile.licenseNumber}
+                {profile?.licenseNumber || '—'}
               </span>
               <span className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                 <Phone className="w-3 h-3 text-blue-300" />
-                {profile.phone || '01003335360'}
+                {profile?.phone || '01003335360'}
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-300 flex items-center gap-1.5 mt-0.5">
-              <span>{isEn ? 'Certified Public Accountant & Statutory Auditor' : profile.title}</span>
+              <span>{isEn ? 'Certified Public Accountant & Statutory Auditor' : (profile?.title || 'محاسب قانوني ومراجع حسابات')}</span>
               <span className="hidden sm:inline text-slate-500">•</span>
               <span className="hidden sm:inline text-slate-400 font-medium">
                 {t.standardsBadge}

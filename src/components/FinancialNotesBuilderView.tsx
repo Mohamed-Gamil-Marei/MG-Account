@@ -471,7 +471,7 @@ export const FinancialNotesBuilderView: React.FC<FinancialNotesBuilderProps> = (
               </span>
             </div>
             <span className="font-mono text-[11px] font-bold text-slate-500">
-              مكتب أ/ {state.officeProfile.auditorName}
+              مكتب أ/ {state.officeProfile?.auditorName || 'المحاسب القانوني'}
             </span>
           </div>
         </div>

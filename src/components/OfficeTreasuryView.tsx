@@ -125,7 +125,7 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
       clientName: selectedClient ? selectedClient.name : formData.clientName || undefined,
       procedureId: formData.procedureId || undefined,
       procedureTitle: formData.procedureTitle || undefined,
-      recordedBy: state.officeProfile.auditorName || 'محمد جميل مرعي',
+      recordedBy: state.officeProfile?.auditorName || 'محمد جميل مرعي',
     });
 
     // If linked to a procedure, update that procedure's collected fee / gov expense in state
@@ -396,8 +396,8 @@ export const OfficeTreasuryView: React.FC<OfficeTreasuryViewProps> = ({ state })
             {/* Printable Voucher Content */}
             <div id="office-treasury-voucher-print" className="space-y-4 my-4 p-5 bg-slate-50 border border-slate-300 rounded-xl">
               <div className="text-center border-b border-slate-200 pb-3">
-                <h4 className="font-bold text-sm text-slate-900">{state.officeProfile.name}</h4>
-                <p className="text-[11px] text-slate-600">محاسب قانوني ومراجع حسابات • {state.officeProfile.auditorName}</p>
+                <h4 className="font-bold text-sm text-slate-900">{state.officeProfile?.firmName || state.officeProfile?.name || 'مكتب المحاسب القانوني'}</h4>
+                <p className="text-[11px] text-slate-600">محاسب قانوني ومراجع حسابات • {state.officeProfile?.auditorName || 'المحاسب القانوني'}</p>
                 <div className="mt-2 inline-block px-4 py-1 rounded-full bg-slate-900 text-white font-bold text-xs">
                   {selectedTxForPrint.type === 'INCOME_FEES' ? 'سند قبض أتعاب مهنية' : 'سند صرف نقدي / بنكي'}
                 </div>

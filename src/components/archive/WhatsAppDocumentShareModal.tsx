@@ -288,9 +288,9 @@ export const WhatsAppDocumentShareModal: React.FC<WhatsAppDocumentShareModalProp
 
   if (!isOpen) return null;
 
-  const officeName = state.officeProfile.firmName || state.officeProfile.officeName || 'مكتب المحاسب القانوني ومراقب الحسابات';
-  const auditorName = state.officeProfile.auditorName || 'أ/ محمد جميل مرعي';
-  const officePhone = state.officeProfile.phone || '01003335360';
+  const officeName = state.officeProfile?.firmName || state.officeProfile?.officeName || 'مكتب المحاسب القانوني ومراقب الحسابات';
+  const auditorName = state.officeProfile?.auditorName || 'أ/ محمد جميل مرعي';
+  const officePhone = state.officeProfile?.phone || '01003335360';
 
   // Generate Message Content with Company Name & Amount (Simplified and expressive)
   const generateWhatsAppMessage = () => {
