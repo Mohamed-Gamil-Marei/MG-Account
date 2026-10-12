@@ -31,29 +31,12 @@ export class PostingEngineService {
     fallbackCategory: string,
     fallbackName: string
   ): { id: string; code: string; name: string } {
-    // 1. Try finding by preferred code
     for (const code of preferredCodes) {
       const acc = accounts.find((a) => a.code === code);
       if (acc) return { id: acc.id, code: acc.code, name: acc.name };
     }
-
-    // 2. Try partial code match (only if partial code matches exactly one account)
-    for (const code of preferredCodes) {
-      const matching = accounts.filter((a) => a.code.startsWith(code));
-      if (matching.length === 1) {
-        return { id: matching[0].id, code: matching[0].code, name: matching[0].name };
-      }
-    }
-
-    // 3. Try name matching
-    const nameMatch = accounts.find(
-      (a) => a.name.includes(fallbackName) || fallbackName.includes(a.name)
-    );
-    if (nameMatch) return { id: nameMatch.id, code: nameMatch.code, name: nameMatch.name };
-
-    // If account not found by code or name, throw clear error
     throw new Error(
-      `تعذر ترحيل القيد: الحساب [${fallbackName}] بكود (${preferredCodes.join(', ')}) غير موجود في دليل الحسابات المعتمد. يُرجى إنشاء الحساب أولاً.`
+      `تعذر ترحيل القيد: الحساب المطلوب بكود (${preferredCodes.join(', ')}) غير موجود في دليل الحسابات المعتمد.`
     );
   }
 
@@ -66,7 +49,7 @@ export class PostingEngineService {
     fiscalYear?: number
   ): Omit<JournalEntry, 'id' | 'serialNumber' | 'entryNumber' | 'createdAt' | 'updatedAt' | 'auditTrail'> {
     const lines: JournalEntryLine[] = [];
-    const entryFiscalYear = fiscalYear || new Date(invoice.date).getFullYear() || 2026;
+    const entryFiscalYear = fiscalYear || new Date(invoice.date).getFullYear();
 
     // Accounts resolution:
     // Receivable / Cash / Bank
