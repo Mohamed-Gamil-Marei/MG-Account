@@ -585,7 +585,9 @@ export interface ProfessionalCertificate {
   showTaxId?: boolean; // إظهار البطاقة الضريبية
   showCommercialReg?: boolean; // إظهار السجل التجاري
 
+  
   auditorNotes: string;
+  
   qrPayload: string;
   securityHash: string;
   printedCount: number;
@@ -1745,6 +1747,7 @@ export interface ApprovedStatementsSnapshot {
   fiscalYear: number;
   versionNo: number;
   approvedBy: string;
+  verificationCode?: string;
   approvedAt: string;
   source: 'LEDGER' | 'FILE_REVIEW';
   trialBalanceRows: { code: string; name: string; debit: number; credit: number }[];

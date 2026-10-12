@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
-import { IssuedDocumentService, IssuedDocumentRecord } from '../../services/issuedDocumentService';
+import { IssuedDocumentService, PublicIssuedDocumentRecord } from '../../services/issuedDocumentService';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -49,7 +49,7 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
   const [copied, setCopied] = useState(false);
   const [copiedSeal, setCopiedSeal] = useState(false);
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
-  const [firestoreRecord, setFirestoreRecord] = useState<IssuedDocumentRecord | null>(null);
+  const [firestoreRecord, setFirestoreRecord] = useState<PublicIssuedDocumentRecord | null>(null);
   const [isVerifyingFirestore, setIsVerifyingFirestore] = useState<boolean>(true);
   const [verifyStatus, setVerifyStatus] = useState<'LOADING' | 'NOT_FOUND' | 'ACTIVE' | 'CANCELLED'>('LOADING');
 

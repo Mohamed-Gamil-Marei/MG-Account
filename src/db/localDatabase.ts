@@ -1,3 +1,26 @@
+
+async function recordAndRetry(vCode: string, docType: string, dateStr: string, firmStr: string, displayNo: string) {
+  let res = await IssuedDocumentService.recordIssuedDocument({
+    verificationCode: vCode,
+    documentType: docType,
+    issueDate: dateStr,
+    firmName: firmStr,
+    status: 'ACTIVE',
+    displayDocNumber: displayNo,
+  });
+  while (!res.success) {
+    const retry = typeof window !== 'undefined' ? window.confirm(`تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل.\nالخطأ: ${res.error || 'خطأ في الاتصال'}\nهل تريد إعادة المحاولة؟`) : false;
+    if (!retry) break;
+    res = await IssuedDocumentService.recordIssuedDocument({
+      verificationCode: vCode,
+      documentType: docType,
+      issueDate: dateStr,
+      firmName: firmStr,
+      status: 'ACTIVE',
+      displayDocNumber: displayNo,
+    });
+  }
+}
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
 import { ClosingStep, createDefaultChecklist } from '../utils/closingChecklist';
 import { ClientDeadline, OpenItem } from '../types';
@@ -2176,20 +2199,38 @@ export class LocalDatabase {
     this.state.certificates.push(newCert);
     this.logAudit('CREATE', `إصدار وتوثيق شهادة مهنية رقم ${certNum} للعميل: ${cert.clientName}`);
     this.saveState();
-    // Record in issuedDocuments registry for public QR verification
-    try {
-      IssuedDocumentService.recordIssuedDocument({
-        documentNumber: certNum,
-        documentType: 'شهادة مهنية معتمدة',
-        issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
-        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+    const verificationCode = IssuedDocumentService.createVerificationCode();
+    (newCert as any).verificationCode = verificationCode;
+    // Record in issuedDocuments registry for public QR verification with retry loop if failed
+    const recordAndRetry = async (vCode: string, docType: string, dateStr: string, firmStr: string, displayNo: string) => {
+      let res = await IssuedDocumentService.recordIssuedDocument({
+        verificationCode: vCode,
+        documentType: docType,
+        issueDate: dateStr,
+        firmName: firmStr,
         status: 'ACTIVE',
-        clientName: cert.clientName,
-        amount: cert.certifiedAmount,
+        displayDocNumber: displayNo,
       });
-    } catch (e) {
-      console.warn('Failed to register issued cert:', e);
-    }
+      while (!res.success) {
+        const retry = window.confirm(`تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل.\nالخطأ: ${res.error || 'خطأ في الاتصال'}\nهل تريد إعادة المحاولة؟`);
+        if (!retry) break;
+        res = await IssuedDocumentService.recordIssuedDocument({
+          verificationCode: vCode,
+          documentType: docType,
+          issueDate: dateStr,
+          firmName: firmStr,
+          status: 'ACTIVE',
+          displayDocNumber: displayNo,
+        });
+      }
+    };
+    recordAndRetry(
+      verificationCode,
+      'شهادة مهنية معتمدة',
+      cert.issueDate || new Date().toISOString().slice(0, 10),
+      this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+      certNum
+    ).catch(err => console.warn('Async record error:', err));
     return newCert;
   }
 
@@ -2229,20 +2270,15 @@ export class LocalDatabase {
     this.state.invoices.push(newInv);
     this.logAudit('CREATE', `إصدار فاتورة رقم ${invNum} بمبلغ ${inv.grandTotal} ج.م`);
     this.saveState();
-    // Record in issuedDocuments registry for public QR verification
-    try {
-      IssuedDocumentService.recordIssuedDocument({
-        documentNumber: invNum,
-        documentType: inv.invoiceType === 'PURCHASE' ? 'فاتورة مشتريات' : 'فاتورة أتعاب مهنية معتمدة',
-        issueDate: inv.date || new Date().toISOString().slice(0, 10),
-        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
-        status: 'ACTIVE',
-        clientName: inv.partnerName,
-        amount: inv.grandTotal,
-      });
-    } catch (e) {
-      console.warn('Failed to register issued invoice:', e);
-    }
+    const verificationCode = IssuedDocumentService.createVerificationCode();
+    (newInv as any).verificationCode = verificationCode;
+    recordAndRetry(
+      verificationCode,
+      inv.invoiceType === 'PURCHASE' ? 'فاتورة مشتريات' : 'فاتورة أتعاب مهنية معتمدة',
+      inv.date || new Date().toISOString().slice(0, 10),
+      this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+      invNum
+    ).catch(err => console.warn('Async record error:', err));
     return newInv;
   }
 
@@ -2505,33 +2541,16 @@ export class LocalDatabase {
 
     this.logAudit('CREATE', `اعتماد وأرشفة نسخة قوائم مالية رقم ${newVersionNo} للعميل ${data.clientId} عن سنة ${data.fiscalYear}`);
 
-    // Record in issuedDocuments registry for public QR verification
-    try {
-      const clientObj = this.state.clients?.find(c => c.id === data.clientId);
-      const fsDocNum = `FS-${data.clientId}-${data.fiscalYear}-V${newVersionNo}`;
-      IssuedDocumentService.recordIssuedDocument({
-        documentNumber: fsDocNum,
-        documentType: 'القوائم المالية والمركز المالي المعتمد',
-        issueDate: newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
-        status: 'ACTIVE',
-        clientName: clientObj?.name || 'العميل',
-        clientId: data.clientId,
-        fiscalYear: data.fiscalYear,
-      });
-      IssuedDocumentService.recordIssuedDocument({
-        documentNumber: `FS-${data.clientId}-${data.fiscalYear}`,
-        documentType: 'القوائم المالية والمركز المالي المعتمد',
-        issueDate: newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-        firmName: this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
-        status: 'ACTIVE',
-        clientName: clientObj?.name || 'العميل',
-        clientId: data.clientId,
-        fiscalYear: data.fiscalYear,
-      });
-    } catch (e) {
-      console.warn('Failed to register issued financial statement:', e);
-    }
+    const verificationCode = IssuedDocumentService.createVerificationCode();
+    (newSnapshot as any).verificationCode = verificationCode;
+    const fsDocNum = `FS-${data.clientId}-${data.fiscalYear}-V${newVersionNo}`;
+    recordAndRetry(
+      verificationCode,
+      'القوائم المالية والمركز المالي المعتمد',
+      newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      this.state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات',
+      fsDocNum
+    ).catch(err => console.warn('Async record error:', err));
 
     return newSnapshot;
   }

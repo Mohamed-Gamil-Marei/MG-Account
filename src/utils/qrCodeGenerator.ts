@@ -96,7 +96,7 @@ export function formatPayloadAsVerificationUrl(raw: string): string {
  * Builds a direct verification URL with document ID only (Requirement 5.1: بدون أي بيانات مالية أو ضريبية في الرابط)
  */
 export function buildVerificationUrl(data: VerificationPayloadData, customBaseUrl?: string): string {
-  const docId = data.docNumber || data.recordId || `CERT-${Date.now().toString().slice(-6)}`;
+  const docId = (data as any).verificationCode || data.docNumber || data.recordId || `CERT-${Date.now().toString().slice(-6)}`;
   const origin = (customBaseUrl && customBaseUrl.trim()) ? customBaseUrl.trim().replace(/\/+$/, '') : getSystemVerificationBaseUrl();
   return `${origin}/#verify?id=${encodeURIComponent(docId)}`;
 }

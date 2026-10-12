@@ -37,6 +37,7 @@ import { ClientArchiveRecord, ClientDocument, ClientDocumentFolder, ClientDocume
 import { db } from '../db/localDatabase';
 import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal';
 import { AutoArchiverService, HeaderVerificationResult } from '../services/AutoArchiver';
+import { isValidGoogleDriveUrl } from '../utils/verificationCode';
 import { ArchivedSnapshotModal } from './archive/ArchivedSnapshotModal';
 import { FinalFinancialReportViewerModal } from './archive/FinalFinancialReportViewerModal';
 
@@ -285,7 +286,12 @@ export const ClientDocumentManager: React.FC<ClientDocumentManagerProps> = ({ cl
   };
 
   // Handle File Upload Submit
-  const handleUploadSubmit = (e: React.FormEvent) => {
+    const handleUploadSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (docGoogleDriveLink.trim() && !isValidGoogleDriveUrl(docGoogleDriveLink)) {
+      alert('خطأ: رابط Google Drive غير صالح. يجب أن يبدأ بـ https://drive.google.com/ أو https://docs.google.com/');
+      return;
+    }
     e.preventDefault();
     if (!docTitle.trim()) {
       alert('يرجى كتابة عنوان للمستند');
