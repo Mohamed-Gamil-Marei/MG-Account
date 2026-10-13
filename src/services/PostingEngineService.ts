@@ -182,7 +182,7 @@ export class PostingEngineService {
       const entryDraft = this.buildInvoiceJournalEntry(invoice, state.accounts);
       const diff = Math.abs(entryDraft.totalDebit - entryDraft.totalCredit);
 
-      if (diff > 0.05) {
+      if (diff > 0.005) {
         return {
           success: false,
           error: `القيد غير متوازن، الفرق بين المدين والدائن: ${diff.toFixed(2)} ج.م`,

@@ -54,8 +54,8 @@ class EtaMiddlewareService {
   constructor() {
     this.config = {
       environment: (process.env.ETA_ENVIRONMENT as 'PREPROD' | 'PROD') || 'PREPROD',
-      clientId: process.env.ETA_CLIENT_ID || '0a9b8c7d-e6f5-4a3b-8c1d-2e3f4a5b6c7d',
-      clientSecret: process.env.ETA_CLIENT_SECRET || 'secret_eta_preprod_live_key_987654321',
+      clientId: process.env.ETA_CLIENT_ID || '',
+      clientSecret: process.env.ETA_CLIENT_SECRET || '',
       posSerial: process.env.ETA_POS_SERIAL || 'POS-CAIRO-HQ-01',
       posOsVersion: 'Android-POS-v12.4',
       issuerTaxRegNo: process.env.ETA_ISSUER_TAX_ID || '100-200-300',
@@ -68,7 +68,7 @@ class EtaMiddlewareService {
       street: 'شارع عباس العقاد - عمارة الأطباء',
       buildingNumber: '42',
       postalCode: '11765',
-      tokenPin: process.env.ETA_TOKEN_PIN || '12345678',
+      tokenPin: process.env.ETA_TOKEN_PIN || process.env.PIN_TOKEN_ETA || '',
       tokenType: 'SIMULATED',
       tokenSubject: 'CN=MOHAMED GAMIL MAREI, OU=LEGAL AUDITING, O=EGYPT TRUST E-SEAL, C=EG',
       autoSubmitOnIssue: false,

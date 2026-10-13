@@ -61,6 +61,20 @@ function getAI(): GoogleGenAI | null {
 }
 
 async function startServer() {
+  if (process.env.NODE_ENV === 'production') {
+    const missingProdVars = [];
+    if (!process.env.PASSWORD_PURGE_MASTER || process.env.PASSWORD_PURGE_MASTER.length < 16) missingProdVars.push('PASSWORD_PURGE_MASTER (min 16 chars)');
+    if (!process.env.SETUP_TOKEN && !process.env.TOKEN_SETUP) missingProdVars.push('SETUP_TOKEN / TOKEN_SETUP');
+    if (!process.env.ETA_CLIENT_SECRET) missingProdVars.push('ETA_CLIENT_SECRET');
+    if (!process.env.PIN_TOKEN_ETA && !process.env.ETA_TOKEN_PIN) missingProdVars.push('PIN_TOKEN_ETA / ETA_TOKEN_PIN');
+    if (!process.env.CREDENTIALS_KEY || process.env.CREDENTIALS_KEY.length < 32) missingProdVars.push('CREDENTIALS_KEY (min 32 chars)');
+
+    if (missingProdVars.length > 0) {
+      console.error(`FATAL SECURITY ERROR: Missing or invalid required production environment variables: ${missingProdVars.join(', ')}`);
+      process.exit(1);
+    }
+  }
+
   const app = express();
 
   app.set("trust proxy", 1);
@@ -289,7 +303,7 @@ async function startServer() {
         }
       }
     } catch {
-      return true; // Fallback
+      return false;
     }
     return false;
   }
@@ -303,11 +317,7 @@ async function startServer() {
       // Verify client exists before creating any target folder on disk
       const clientExists = checkClientExists(clientId);
       if (!clientExists) {
-        const tempDir = path.join(documentsDir, "_temp");
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
-        return cb(null, tempDir);
+        return cb(new Error("العميل غير موجود أو جدول العملاء غير متوفر. تم رفض رفع المستند."), "");
       }
 
       const targetDir = path.join(documentsDir, clientId, year);
@@ -630,9 +640,16 @@ async function startServer() {
 
   app.post("/api/auth/setup-admin", loginRateLimiter, async (req, res) => {
     try {
-      if (process.env.SETUP_TOKEN) {
+      const envSetupToken = process.env.SETUP_TOKEN || process.env.TOKEN_SETUP;
+      if (envSetupToken) {
         const reqToken = req.body?.setupToken || req.headers['x-setup-token'];
-        if (!reqToken || reqToken !== process.env.SETUP_TOKEN) {
+        const reqBuf = Buffer.from(reqToken || '', 'utf8');
+        const expBuf = Buffer.from(envSetupToken, 'utf8');
+        let tokensMatch = reqBuf.length === expBuf.length;
+        if (tokensMatch) {
+          tokensMatch = crypto.timingSafeEqual(reqBuf, expBuf);
+        }
+        if (!reqToken || !tokensMatch) {
           return res.status(403).json({ success: false, error: "رمز إعداد النظام (SETUP_TOKEN) غير صحيح." });
         }
       }
@@ -834,11 +851,16 @@ async function startServer() {
       return res.status(400).json({ success: false, error: "بيانات المستخدم غير مكتملة أو كلمة المرور قصيرة (10 أحرف على الأقل)." });
     }
 
+    const validRoles = ['ADMIN', 'ACCOUNTANT', 'AUDITOR', 'SECRETARY', 'PENDING'];
+    const assignedRole = role || 'PENDING';
+    if (!validRoles.includes(assignedRole)) {
+      return res.status(400).json({ success: false, error: "دور المستخدم غير صالح. يجب أن يكون واحد من: ADMIN, ACCOUNTANT, AUDITOR, SECRETARY, PENDING." });
+    }
+
     try {
       const salt = await bcrypt.genSalt(10);
       const hash = await bcrypt.hash(password, salt);
       const createdAt = new Date().toISOString();
-      const assignedRole = role || 'PENDING';
 
       const p = permissions || {};
       const stmt = db.prepare(`
@@ -876,6 +898,15 @@ async function startServer() {
     const userId = req.params.id;
     const { role, permissions, password, name } = req.body;
 
+    const validRoles = ['ADMIN', 'ACCOUNTANT', 'AUDITOR', 'SECRETARY', 'PENDING'];
+    if (role !== undefined && !validRoles.includes(role)) {
+      return res.status(400).json({ success: false, error: "دور المستخدم غير صالح." });
+    }
+
+    if (password !== undefined && password !== null && password !== '' && password.length < 10) {
+      return res.status(400).json({ success: false, error: "كلمة المرور الجديدة يجب ألا تقل عن 10 أحرف." });
+    }
+
     try {
       const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
       if (!existing) {
@@ -901,7 +932,7 @@ async function startServer() {
         canAccessTaxReports: existing.can_access_tax_reports,
       };
 
-      if (password && password.length >= 6) {
+      if (password && password.length >= 10) {
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
         db.prepare(`
@@ -938,6 +969,11 @@ async function startServer() {
           p.canAccessTaxReports ? 1 : 0,
           userId
         );
+      }
+
+      // Invalidate all user sessions if password or role changed
+      if ((password && password.length >= 10) || updatedRole !== existing.role) {
+        db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
       }
 
       res.json({ success: true, message: "تم تحديث بيانات المستخدم بنجاح." });
@@ -994,14 +1030,33 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "كلمة التأكيد يجب أن تكون 'تفريغ'." });
       }
 
-      const purgePassword = process.env.MASTER_PURGE_PASSWORD || "123456";
-      if (passcode !== purgePassword && passcode !== "123456" && passcode !== "MG-2026-PURGE" && passcode !== "MASTER_PURGE_PASSWORD") {
+      const masterPass = process.env.PASSWORD_PURGE_MASTER;
+      if (!masterPass || masterPass.length < 16) {
+        return res.status(500).json({ success: false, error: "متغير البيئة PASSWORD_PURGE_MASTER غير معرف أو أقل من 16 حرفاً في الخادم." });
+      }
+
+      const userBuf = Buffer.from(passcode || '', 'utf8');
+      const masterBuf = Buffer.from(masterPass, 'utf8');
+      let isValid = userBuf.length === masterBuf.length;
+      if (isValid) {
+        isValid = crypto.timingSafeEqual(userBuf, masterBuf);
+      }
+      if (!isValid) {
         return res.status(400).json({ success: false, error: "كلمة المرور التأكيدية لتفريغ البيانات غير صحيحة." });
       }
 
-      // Execute transaction to clear entity tables, documents, tombstones while keeping users, sessions, settings
+      // Obligatory backup before any purge
+      try {
+        runDailyBackup();
+      } catch (backupErr) {
+        console.error("Obligatory reset backup failed:", backupErr);
+        return res.status(500).json({ success: false, error: "فشل إنشاء النسخة الاحتياطية الإجبارية قبل التفريغ." });
+      }
+
+      // Execute transaction to clear entity tables (excluding auditLogs), documents, tombstones while keeping users, sessions, settings
       const resetTx = db.transaction(() => {
-        for (const type of entityTypes) {
+        const tablesToPurge = entityTypes.filter(t => t !== 'auditLogs' && t !== 'audit_logs');
+        for (const type of tablesToPurge) {
           db.prepare(`DELETE FROM ${type}`).run();
         }
         db.prepare("DELETE FROM documents").run();
@@ -1009,7 +1064,7 @@ async function startServer() {
       });
       resetTx();
 
-      return res.json({ success: true, message: "تم تفريغ كافة البيانات التجريبية على الخادم مع الإبقاء على المستخدمين والإعدادات." });
+      return res.json({ success: true, message: "تم تفريغ كافة البيانات التجريبية على الخادم مع الإبقاء على المستخدمين والإعدادات وسجل التدقيق." });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || String(err) });
     }
@@ -1246,6 +1301,94 @@ async function startServer() {
     }
   });
 
+  function serverIsPeriodLocked(dateOrYear: string | number): boolean {
+    try {
+      const rows = db.prepare("SELECT data FROM fiscalPeriodLocks").all() as any[];
+      if (!rows || rows.length === 0) return false;
+      let year: number;
+      let month: string | null = null;
+      if (typeof dateOrYear === 'number') {
+        year = dateOrYear;
+      } else {
+        const parts = String(dateOrYear).split('-');
+        year = parseInt(parts[0], 10);
+        if (parts.length > 1) {
+          month = parts[1];
+        }
+      }
+      return rows.some((row) => {
+        try {
+          const lock = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+          if (!lock || !lock.isLocked) return false;
+          if (lock.fiscalYear !== year) return false;
+          if (lock.period === 'ANNUAL') return true;
+          if (month && (lock.period === month || lock.period === `M${month}`)) return true;
+          return false;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  function validateAndProcessJournalEntryOnServer(id: string, data: any, existingRow: any, user: any) {
+    const parsedData = typeof data === "string" ? JSON.parse(data) : data;
+    const lines = parsedData?.lines || [];
+
+    // 1. Balance verification (difference > 0.005)
+    const calculatedDebit = Math.round(lines.reduce((sum: number, l: any) => sum + Number(l.debit || 0), 0) * 1000) / 1000;
+    const calculatedCredit = Math.round(lines.reduce((sum: number, l: any) => sum + Number(l.credit || 0), 0) * 1000) / 1000;
+    const diff = Math.abs(calculatedDebit - calculatedCredit);
+
+    if (diff > 0.005) {
+      throw new Error(`القيد غير متزن: إجمالي المدين (${calculatedDebit.toFixed(2)}) لا يساوي إجمالي الدائن (${calculatedCredit.toFixed(2)}) بدقة 0.005 (الفارق: ${diff.toFixed(2)})`);
+    }
+
+    // 2. Period Lock check
+    const entryDate = parsedData.date || new Date().toISOString();
+    if (serverIsPeriodLocked(entryDate)) {
+      throw new Error("عذراً، الفترة المالية لهذا القيد مقفولة. ممنوع إضافة أو تعديل قيد في فترة مقفولة.");
+    }
+
+    // 3. canEditPostedEntries check
+    const existingData = existingRow && existingRow.data ? (typeof existingRow.data === "string" ? JSON.parse(existingRow.data) : existingRow.data) : null;
+    const wasPosted = existingData && (existingData.status === "POSTED" || existingData.isPosted === true);
+    if (existingRow && wasPosted) {
+      const canEditPosted = user && (user.canEditPostedEntries || user.role === 'ADMIN');
+      if (!canEditPosted) {
+        throw new Error("غير مصرح: لا تملك صلاحية (canEditPostedEntries) لتعديل أو إلغاء ترحيل قيد مرحّل.");
+      }
+    }
+
+    const isNowDraft = parsedData && (parsedData.status === "DRAFT" || parsedData.isPosted === false);
+    if (wasPosted && isNowDraft && serverIsPeriodLocked(entryDate)) {
+      throw new Error("عذراً، لا يمكن إلغاء ترحيل قيد في فترة مالية مقفولة.");
+    }
+
+    // 5. JV numbering on server based on entry's own year
+    if (!existingRow || !parsedData.serialNumber) {
+      const entryYear = new Date(entryDate).getFullYear() || new Date().getFullYear();
+      const allRows = db.prepare("SELECT data FROM journalEntries").all() as any[];
+      let maxNum = 0;
+      for (const r of allRows) {
+        try {
+          const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          const dYear = d.date ? new Date(d.date).getFullYear() : entryYear;
+          if (dYear === entryYear && (d.entryNumber || 0) > maxNum) {
+            maxNum = d.entryNumber;
+          }
+        } catch {}
+      }
+      const nextNum = maxNum + 1;
+      parsedData.entryNumber = nextNum;
+      parsedData.serialNumber = `JV-${entryYear}-${String(nextNum).padStart(4, '0')}`;
+    }
+
+    return JSON.stringify(parsedData);
+  }
+
   app.post("/api/data/:entityType", (req, res) => {
     try {
       const { entityType } = req.params;
@@ -1283,6 +1426,14 @@ async function startServer() {
         const parsedData = typeof data === "string" ? JSON.parse(data) : data;
         const processedData = processClientSaveData(parsedData, existingRow ? existingRow.data : null);
         data = processedData;
+      }
+
+      if (entityType === "journalEntries") {
+        try {
+          data = validateAndProcessJournalEntryOnServer(id, data, existingRow, user);
+        } catch (err: any) {
+          return res.status(400).json({ success: false, error: err.message });
+        }
       }
 
       const newVersion = existingRow ? existingRow.version + 1 : 1;
@@ -1436,6 +1587,19 @@ async function startServer() {
         return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الحذف لهذا النوع من البيانات." });
       }
 
+      if (entityType === "journalEntries") {
+        const existingRow = db.prepare("SELECT data FROM journalEntries WHERE id = ?").get(id) as any;
+        if (existingRow) {
+          try {
+            const entryData = typeof existingRow.data === "string" ? JSON.parse(existingRow.data) : existingRow.data;
+            const entryDate = entryData?.date || new Date().toISOString();
+            if (serverIsPeriodLocked(entryDate)) {
+              return res.status(403).json({ success: false, error: "عذراً، لا يمكن حذف قيد في فترة مالية مقفولة." });
+            }
+          } catch {}
+        }
+      }
+
       db.prepare(`DELETE FROM ${entityType} WHERE id = ?`).run(id);
       db.prepare("INSERT OR REPLACE INTO tombstones (entity_type, record_id, deleted_at) VALUES (?, ?, ?)").run(entityType, id, new Date().toISOString());
 
@@ -1463,28 +1627,34 @@ async function startServer() {
       }
 
       const allState = req.body;
-      let summary = { clientsCount: 0, journalEntriesCount: 0, accountsCount: 0 };
 
-      for (const [key, value] of Object.entries(allState)) {
-        if (!entityTypes.includes(key)) continue;
-        const records = Array.isArray(value) ? value : [value];
-        if (key === "clients") summary.clientsCount = records.length;
-        if (key === "journalEntries") summary.journalEntriesCount = records.length;
-        if (key === "accounts") summary.accountsCount = records.length;
+      const migrateTx = db.transaction((stateData: any) => {
+        let summary = { clientsCount: 0, journalEntriesCount: 0, accountsCount: 0 };
 
-        const insertStmt = db.prepare(`
-          INSERT INTO ${key} (id, data, updated_at, version, updated_by)
-          VALUES (?, ?, ?, 1, ?)
-          ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
-        `);
+        for (const [key, value] of Object.entries(stateData)) {
+          if (!entityTypes.includes(key)) continue;
+          const records = Array.isArray(value) ? value : [value];
+          if (key === "clients") summary.clientsCount = records.length;
+          if (key === "journalEntries") summary.journalEntriesCount = records.length;
+          if (key === "accounts") summary.accountsCount = records.length;
 
-        for (const rec of records) {
-          const recId = rec.id || (key === 'officeProfile' ? 'profile-main' : Math.random().toString(36).substring(2));
-          const dataStr = JSON.stringify(rec);
-          const now = new Date().toISOString();
-          insertStmt.run(recId, dataStr, now, user.name, dataStr, now, user.name);
+          const insertStmt = db.prepare(`
+            INSERT INTO ${key} (id, data, updated_at, version, updated_by)
+            VALUES (?, ?, ?, 1, ?)
+            ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
+          `);
+
+          for (const rec of records) {
+            const recId = rec.id || (key === 'officeProfile' ? 'profile-main' : Math.random().toString(36).substring(2));
+            const dataStr = JSON.stringify(rec);
+            const now = new Date().toISOString();
+            insertStmt.run(recId, dataStr, now, user.name, dataStr, now, user.name);
+          }
         }
-      }
+        return summary;
+      });
+
+      const summary = migrateTx(allState);
 
       res.json({ success: true, summary, message: "تم ترحيل البيانات إلى السيرفر بنجاح." });
     } catch (err: any) {
@@ -2190,8 +2360,14 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   // --- Egyptian Tax Authority (ETA) SDK Middleware API Endpoints ---
 
   // 1. Get/Refresh OAuth2 Access Token
-  app.post("/api/eta/token", async (req, res) => {
+  app.post("/api/eta/token", requireAuth, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || !['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: "صلاحية مقتصرة على مدير النظام والمحاسب فقط." });
+      }
+      recordServerAuditLog("ETA_TOKEN_REQUEST", "eta", "token", user.name || user.email, `طلب توكن مصلحة الضرائب بواسطة المستخدم (${user.name} - ${user.role})`);
+
       const forceRefresh = req.body?.forceRefresh === true;
       const tokenData = await etaMiddleware.getAccessToken(forceRefresh);
       res.json({ success: true, data: tokenData });
@@ -2201,12 +2377,18 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 2. Submit single invoice directly to ETA Gateway
-  app.post("/api/eta/documents/submit", async (req, res) => {
+  app.post("/api/eta/documents/submit", requireAuth, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || !['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: "صلاحية مقتصرة على مدير النظام والمحاسب فقط." });
+      }
       const { invoice } = req.body;
       if (!invoice || !invoice.invoiceNumber) {
         return res.status(400).json({ success: false, message: "بيانات الفاتورة غير مكتملة." });
       }
+      recordServerAuditLog("ETA_SUBMIT_INVOICE", "eta", invoice.invoiceNumber, user.name || user.email, `إرسال فاتورة مباشرة لمصلحة الضرائب رقم (${invoice.invoiceNumber}) بواسطة (${user.name})`);
+
       const result = await etaMiddleware.submitInvoiceDirect(invoice);
       res.json({ success: true, ...result });
     } catch (err: any) {
@@ -2216,12 +2398,18 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 3. Batch submit multiple invoices
-  app.post("/api/eta/documents/batch-submit", async (req, res) => {
+  app.post("/api/eta/documents/batch-submit", requireAuth, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || !['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: "صلاحية مقتصرة على مدير النظام والمحاسب فقط." });
+      }
       const { invoices } = req.body;
       if (!Array.isArray(invoices) || invoices.length === 0) {
         return res.status(400).json({ success: false, message: "قائمة الفواتير فارغة." });
       }
+      recordServerAuditLog("ETA_BATCH_SUBMIT", "eta", `batch-${invoices.length}`, user.name || user.email, `إرسال دفعة فواتير (${invoices.length} فواتير) لمصلحة الضرائب بواسطة (${user.name})`);
+
       const result = await etaMiddleware.submitBatchDirect(invoices);
       res.json({ success: true, ...result });
     } catch (err: any) {
@@ -2231,8 +2419,12 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 4. Query document status by UUID
-  app.get("/api/eta/documents/:uuid", async (req, res) => {
+  app.get("/api/eta/documents/:uuid", requireAuth, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || !['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: "صلاحية مقتصرة على مدير النظام والمحاسب فقط." });
+      }
       const { uuid } = req.params;
       const statusData = await etaMiddleware.getDocumentStatus(uuid);
       res.json({ success: true, data: statusData });
@@ -2242,8 +2434,14 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 5. ETA Gateway Connectivity & Diagnostics
-  app.get("/api/eta/diagnostics", async (_req, res) => {
+  app.get("/api/eta/diagnostics", requireAuth, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || !['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: "صلاحية مقتصرة على مدير النظام والمحاسب فقط." });
+      }
+      recordServerAuditLog("ETA_DIAGNOSTICS", "eta", "diagnostics", user.name || user.email, `تشخيص اتصال بوابة مصلحة الضرائب بواسطة (${user.name})`);
+
       const diagnostics = await etaMiddleware.runDiagnostics();
       res.json({ success: true, data: diagnostics });
     } catch (err: any) {
@@ -2650,7 +2848,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
           }
         }
       } catch {
-        clientExists = true; // Fallback safe check
+        clientExists = false;
       }
 
       if (!clientExists) {
@@ -2925,15 +3123,29 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       db.close();
 
       const currentDbPath = path.join(dataDir, "app.db");
+      const currentWalPath = path.join(dataDir, "app.db-wal");
+      const currentShmPath = path.join(dataDir, "app.db-shm");
+      const dbWalPathAlt = path.join(dataDir, "db.app-wal");
+      const dbShmPathAlt = path.join(dataDir, "db.app-shm");
+
+      [currentWalPath, currentShmPath, dbWalPathAlt, dbShmPathAlt].forEach(p => {
+        if (fs.existsSync(p)) {
+          try { fs.unlinkSync(p); } catch {}
+        }
+      });
+
       fs.copyFileSync(backupDbPath, currentDbPath);
 
-      // Restore documents if exist
+      // Restore documents: replace instead of merge
       const backupDocsPath = path.join(targetPath, "documents");
       const docsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, "documents");
+      if (fs.existsSync(docsDir)) {
+        try {
+          fs.rmSync(docsDir, { recursive: true, force: true });
+        } catch {}
+      }
       if (fs.existsSync(backupDocsPath)) {
-        if (!fs.existsSync(docsDir)) {
-          fs.mkdirSync(docsDir, { recursive: true });
-        }
+        fs.mkdirSync(docsDir, { recursive: true });
         fs.cpSync(backupDocsPath, docsDir, { recursive: true, force: true });
       }
 
