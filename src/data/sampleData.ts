@@ -1257,33 +1257,7 @@ export const SAMPLE_TAX_MANDATES: TaxMandateTask[] = [
   },
 ];
 
-export const DEFAULT_MASTER_ADMIN_USER: SystemUser = {
-  id: 'user-admin',
-  name: 'admin',
-  username: 'admin',
-  employeeCode: 'ADM-001',
-  email: 'admin@system.local',
-  role: 'ADMIN',
-  roleTitleArabic: 'مدير المنظومة الرئيسي (الأدمن)',
-  avatarInitials: 'AD',
-  pinCode: 'admin',
-  password: 'admin',
-  isActive: true,
-  canAccessTreasury: true,
-  canAccessAuditTrail: true,
-  canAccessCreditFiles: true,
-  canAccessTaxReports: true,
-  canManageUsers: true,
-  canPostEntries: true,
-  canEditPostedEntries: true,
-  canDeleteRecords: true,
-  canIssueInvoices: true,
-  canModifySettings: true,
-  restrictedTabs: [],
-  createdAt: '2026-01-01',
-};
-
-export const SAMPLE_SYSTEM_USERS: SystemUser[] = [DEFAULT_MASTER_ADMIN_USER];
+export const SAMPLE_SYSTEM_USERS: SystemUser[] = [];
 
 export const SAMPLE_FIXED_ASSETS: FixedAsset[] = [
   {

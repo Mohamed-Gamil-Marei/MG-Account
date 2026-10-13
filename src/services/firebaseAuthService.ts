@@ -25,6 +25,7 @@ export interface FirebaseUserProfile {
   canPostEntries?: boolean;
   canEditPostedEntries?: boolean;
   canDeleteRecords?: boolean;
+  isOffline?: boolean;
   createdAt?: any;
 }
 

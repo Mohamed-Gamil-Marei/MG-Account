@@ -20,6 +20,7 @@ import { db } from '../db/localDatabase';
 import { fetchWithAuth } from '../lib/apiClient';
 import { cloudSync, SyncStatus } from '../lib/cloudSync';
 import { SystemUser } from '../types';
+import { verifyOfflineAuthCache } from '../services/offlineAuthService';
 
 interface PinAuthModalProps {
   isOpen: boolean;
@@ -118,47 +119,24 @@ export const PinAuthModal: React.FC<PinAuthModalProps> = ({
       if (serverRes.ok && data.success && data.user) {
         setPin('');
         setError(null);
-        const localUser = db.getUsers().find((u) => u.email === data.user.email || u.id === data.user.id) || {
-          id: String(data.user.id || 'user-admin'),
-          name: data.user.name || 'admin',
-          username: data.user.name || 'admin',
-          email: data.user.email || 'admin@system.local',
-          role: data.user.role || 'ADMIN',
-          roleTitleArabic: 'المدير الرئيسي',
-        };
-        db.switchUser(localUser.id);
-        onSuccess(localUser as SystemUser);
+        const activeUser = db.getCurrentUser();
+        onSuccess(activeUser);
         return;
       }
     } catch {
-      // Server call offline/unavailable, fallback to local database auth
+      // Server unreachable, proceed to offline verification
     }
 
-    if (authMode === 'MANUAL') {
-      const res = db.authenticateUser(manualIdentifier, pin);
-      if (res.success && res.user) {
-        setPin('');
-        setError(null);
-        onSuccess(res.user);
-      } else {
-        setError(res.message || 'بيانات الدخول غير صحيحة');
-      }
-      return;
-    }
-
-    // SELECT mode
-    if (!selectedUser) {
-      setError('يرجى اختيار حساب المستخدم');
-      return;
-    }
-
-    const res = db.authenticateByPin(selectedUser.id, pin);
-    if (res.success && res.user) {
+    const offlineRes = await verifyOfflineAuthCache(emailOrId, pass);
+    if (offlineRes.success && offlineRes.profile) {
       setPin('');
       setError(null);
-      onSuccess(res.user);
+      const activeUser = db.getCurrentUser();
+      onSuccess(activeUser);
+      return;
     } else {
-      setError(res.message || 'الرمز السري غير صحيح');
+      setError(offlineRes.message || 'رمز القفل غير صحيح.');
+      return;
     }
   };
 

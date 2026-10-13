@@ -680,20 +680,19 @@ export const UserManagementModal: React.FC<{
                           <button
                             type="button"
                             onClick={() => {
-                              const autoPass = Math.floor(1000 + Math.random() * 9000).toString();
+                              const autoPass = Math.floor(1000000000 + Math.random() * 9000000000).toString();
                               setEditingUser({
                                 ...editingUser,
                                 password: autoPass,
-                                pinCode: autoPass,
                               });
                             }}
                             className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                           >
                             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            توليد رمز عشوائي
+                            توليد رمز آمن (10 أرقام)
                           </button>
                           <span className="text-[11px] text-slate-500">
-                            الحالي: <strong className="text-amber-400 font-mono">{editingUser.password || editingUser.pinCode || 'غير محدد'}</strong>
+                            الحالي: <strong className="text-amber-400 font-mono">مشفر وآمن</strong>
                           </span>
                         </div>
                       </div>
@@ -934,7 +933,7 @@ export const UserManagementModal: React.FC<{
                               <div className="flex items-center justify-between text-slate-400">
                                 <span>كلمة المرور / PIN:</span>
                                 <span className="font-mono text-slate-200 font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                                  {user.password || user.pinCode || 'غير محدد'}
+                                  مشفر وآمن
                                 </span>
                               </div>
                               <div className="flex items-center justify-between text-slate-400">

@@ -13,7 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { firebaseAuth, FirebaseUserProfile } from '../../services/firebaseAuthService';
-import { db as localDb } from '../../db/localDatabase';
+import { saveOfflineAuthCache, verifyOfflineAuthCache } from '../../services/offlineAuthService';
 
 interface FirebaseAuthGateProps {
   onAuthenticated: (profile: FirebaseUserProfile) => void;
@@ -42,8 +42,8 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
       return;
     }
 
-    if (isRegistering && password.length < 6) {
-      setError('يجب ألا تقل كلمة المرور للحساب الجديد عن 6 أحرف/أرقام.');
+    if (isRegistering && password.length < 10) {
+      setError('يجب ألا تقل كلمة المرور للحساب الجديد عن 10 أحرف/أرقام.');
       return;
     }
 
@@ -63,42 +63,90 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           }
         }, 1500);
       } else {
-        // 1. Try local system database authentication (supports admin / admin, username, etc.)
-        const localRes = localDb.authenticateUser(normalizedEmail, password);
-        if (localRes.success && localRes.user) {
-          const profile: FirebaseUserProfile = {
-            uid: localRes.user.id,
-            email: localRes.user.email || `${localRes.user.username}@system.local`,
-            name: localRes.user.name,
-            role: localRes.user.role as any,
-            roleTitleArabic: localRes.user.roleTitleArabic || 'مدير النظام والشريك المسؤول',
-            canAccessTreasury: true,
-            canAccessAuditTrail: true,
-            canAccessCreditFiles: true,
-            canAccessTaxReports: true,
-            canManageUsers: true,
-            canPostEntries: true,
-            canEditPostedEntries: true,
-            canDeleteRecords: true,
+        // 1. Primary path: Server Authentication via /api/auth/login
+        let serverSuccess = false;
+        let serverUser: any = null;
+        let serverMessage = '';
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail, password }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.user) {
+              serverSuccess = true;
+              serverUser = data.user;
+            } else {
+              serverMessage = data.error || 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+            }
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            serverMessage = errData.error || 'خطأ في بيانات تسجيل الدخول.';
+          }
+        } catch (fetchErr) {
+          console.warn('Server login unreachable, fallback to offline verification:', fetchErr);
+        }
+
+        // Handle successful server login
+        if (serverSuccess && serverUser) {
+          const roleTitleMap: Record<string, string> = {
+            ADMIN: 'مدير المنظومة والشريك المسؤول',
+            AUDITOR: 'مراقب حسابات ومراجع قانوني',
+            ACCOUNTANT: 'محاسب مالي ومدخل قيود',
+            SECRETARY: 'سكرتارية وإدارة ملفات',
+            PENDING: 'حساب جديد قيد الانتظار',
           };
+
+          const profile: FirebaseUserProfile = {
+            uid: String(serverUser.id),
+            email: serverUser.email,
+            name: serverUser.name || serverUser.email,
+            role: serverUser.role,
+            roleTitleArabic: roleTitleMap[serverUser.role] || 'مستخدم النظام',
+            canAccessTreasury: !!serverUser.canAccessTreasury,
+            canAccessAuditTrail: !!serverUser.canAccessAuditTrail,
+            canAccessCreditFiles: !!serverUser.canAccessCreditFiles,
+            canAccessTaxReports: !!serverUser.canAccessTaxReports,
+            canManageUsers: !!serverUser.canManageUsers,
+            canPostEntries: !!serverUser.canPostEntries,
+            canEditPostedEntries: !!serverUser.canEditPostedEntries,
+            canDeleteRecords: !!serverUser.canDeleteRecords,
+            isOffline: false,
+          };
+
+          // Save PBKDF2 salted hash to local storage for future 7-day offline access (NO plaintext stored)
+          await saveOfflineAuthCache(profile.email, password, profile);
+
           setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
           setTimeout(() => onAuthenticated(profile), 400);
           return;
         }
 
-        // 2. Try Firebase authentication if local check didn't match
+        // 2. Secondary path: Firebase Auth
         try {
           const profile = await firebaseAuth.signIn(formattedEmail, password);
-          setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
+          await saveOfflineAuthCache(profile.email, password, profile);
+          setSuccessMsg(`أهلاً بك، تم تسجيل الدخول عبر السحابة: ${profile.name}`);
           setTimeout(() => onAuthenticated(profile), 400);
-        } catch (firebaseErr: any) {
-          console.warn('Firebase login attempt failed:', firebaseErr);
-          if (localRes.message) {
-            setError(localRes.message);
-          } else {
-            setError('خطأ في اسم المستخدم أو كلمة المرور (بيانات تسجيل الدخول الافتراضية: admin / admin).');
-          }
+          return;
+        } catch (fbErr) {
+          // Ignore Firebase fail if offline
         }
+
+        // 3. Fallback path: Offline PBKDF2 salted hash verification
+        const offlineRes = await verifyOfflineAuthCache(normalizedEmail, password);
+        if (offlineRes.success && offlineRes.profile) {
+          setSuccessMsg(`أهلاً بك، تم الدخول في وضع أوفلاين (غير متصل بالسيرفر): ${offlineRes.profile.name}`);
+          setTimeout(() => onAuthenticated(offlineRes.profile!), 400);
+          return;
+        }
+
+        // Display error message
+        setError(offlineRes.message || serverMessage || 'البريد الإلكتروني أو كلمة المرور غير صحيحة.');
       }
     } catch (err: any) {
       console.error('Auth Error:', err);

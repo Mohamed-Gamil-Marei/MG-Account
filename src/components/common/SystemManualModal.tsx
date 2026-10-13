@@ -452,15 +452,11 @@ export const SystemManualModal: React.FC<SystemManualModalProps> = ({ isOpen, on
                 <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-2">
                   <h3 className="font-bold text-emerald-900">شروط واشترطات الحسابات المعتمدة بالكود صراحة:</h3>
                   <ul className="list-disc list-inside space-y-1 text-slate-800">
-                    <li><strong>الحد الأدنى لكلمة المرور:</strong> <strong>10 أحرف صراحةً</strong> (في السيرفر السطر 640: password.length &lt; 10).</li>
-                    <li><strong>مدة الجلسة المسجلة:</strong> <strong>7 أيام بالضبط</strong> (7 * 24 * 60 * 60 * 1000 ms - السيرفر السطر 711 و 718).</li>
-                    <li><strong>حدود المحاولات الفاشلة (Rate Limits - السيرفر السطر 416-457):</strong>
-                      <ul className="list-circle list-inside mr-4 space-y-0.5">
-                        <li>حظر IP السريع: 5 محاولات / دقيقة (كود 429).</li>
-                        <li>قفل بريد + IP المزدوج: 5 محاولات فاشلة / 15 دقيقة (كود 403 - قفل 15 دقيقة).</li>
-                        <li>قفل البريد الإلكتروني العام (Global Email Lockout): 20 محاولة فاشلة / ساعة على أي IP (كود 403 - قفل لمدة ساعة كاملة).</li>
-                      </ul>
-                    </li>
+                    <li><strong>إلغاء الحساب الافتراضي:</strong> تم حذف حساب admin/admin الافتراضي نهائياً ويُنشأ أول مدير عبر شاشة setup-admin.</li>
+                    <li><strong>المصادقة الأولية (Server-First):</strong> يمر تسجيل الدخول عبر السيرفر (/api/auth/login) وتنعكس الصلاحيات والدور الفعلي من قاعدة بيانات السيرفر.</li>
+                    <li><strong>الدعم المحمي أوفلاين (PBKDF2 Hash):</strong> يُحفظ هاش مشفر مملّح بـ PBKDF2 بـ 100,000 دورة تشفير لدخول أوفلاين آمن لمدة 7 أيام لنفس الحساب المسبق، مع حظر كامل لتخزين السر بنص عادي.</li>
+                    <li><strong>الحد الأدنى لكلمة المرور:</strong> <strong>10 أحرف صراحةً</strong> بجميع الشاشات.</li>
+                    <li><strong>حدود المحاولات الفاشلة أوفلاين:</strong> أقصى حد 5 محاولات أوفلاين خلال 15 دقيقة ثم القفل الزمني التلقائي.</li>
                     <li><strong>حالة الحساب الجديد (PENDING):</strong> يبدأ كل حساب جديد بحالة PENDING محروماً من كافة القراءات والكتابات حتى يقوم المدير بتفعيله وتحديد دوره الصريح (السيرفر السطر 546).</li>
                   </ul>
                 </div>

@@ -58,7 +58,6 @@ import {
   SAMPLE_FEASIBILITY_STUDY,
   SAMPLE_CREDIT_SIMULATION,
   SAMPLE_SYSTEM_USERS,
-  DEFAULT_MASTER_ADMIN_USER,
   SAMPLE_FIXED_ASSETS,
   SAMPLE_WHATSAPP_MESSAGES,
   DEFAULT_WHATSAPP_BOT_SETTINGS,
@@ -713,30 +712,18 @@ export class LocalDatabase {
         fixedAssets: fixedAssetsJson ? JSON.parse(fixedAssetsJson) : [],
         officeProfile: loadedOfficeProfile,
         users: (() => {
-          const RESET_FLAG = 'cpa_single_master_admin_v9';
-          if (typeof localStorage !== 'undefined' && localStorage.getItem(RESET_FLAG) !== 'true') {
-            const single = [...SAMPLE_SYSTEM_USERS];
-            try {
-              localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(single));
-              localStorage.setItem(RESET_FLAG, 'true');
-            } catch {}
-            return single;
-          }
           if (usersJson) {
             try {
               const parsed: SystemUser[] = JSON.parse(usersJson);
-              const adm = parsed.find((u) => u.id === 'user-admin' || u.role === 'ADMIN' || u.username === 'admin');
-              if (adm) {
-                adm.name = 'admin';
-                adm.username = 'admin';
-                adm.isActive = true;
-              } else {
-                parsed.unshift({ ...DEFAULT_MASTER_ADMIN_USER });
-              }
-              return parsed;
+              return parsed.map((u) => {
+                delete (u as any).password;
+                delete (u as any).pinCode;
+                delete (u as any).pin;
+                return u;
+              });
             } catch {}
           }
-          return [...SAMPLE_SYSTEM_USERS];
+          return [];
         })(),
         currentUserId: (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) || '',
         preferences: preferencesJson ? JSON.parse(preferencesJson) : DEFAULT_USER_PREFERENCES,
@@ -3425,28 +3412,28 @@ export class LocalDatabase {
 
   public isCurrentUserMasterAdmin(): boolean {
     const current = this.getCurrentUser();
-    return current.role === 'ADMIN' && (current.username === 'admin' || current.id === 'user-admin' || current.name === 'admin');
+    return Boolean(current && current.role === 'ADMIN');
   }
 
   public changeUserPassword(userId: string, newPinOrPass: string): { success: boolean; message: string } {
-    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
+    if (!this.state.users) this.state.users = [];
     const user = this.state.users.find((u) => u.id === userId);
     if (!user) {
       return { success: false, message: 'المستخدم غير موجود بالنظام' };
     }
 
     const cleanPass = newPinOrPass.trim();
-    if (!cleanPass) {
-      return { success: false, message: 'يرجى إدخال كلمة مرور أو رمز سري صالح' };
+    if (!cleanPass || cleanPass.length < 10) {
+      return { success: false, message: 'كلمة المرور يجب ألا تقل عن 10 أحرف/أرقام.' };
     }
 
-    user.pinCode = cleanPass;
-    user.password = cleanPass;
+    delete (user as any).password;
+    delete (user as any).pinCode;
 
-    this.logAudit('UPDATE', `تغيير وتحديث كلمة المرور للمستخدم (${user.name}) بأمر مدير المنظومة السيادي`);
+    this.logAudit('UPDATE', `طلب تحديث كلمة المرور للمستخدم (${user.name})`);
     this.saveState('SYSTEM_USERS');
     this.notify();
-    return { success: true, message: `تم تحديث كلمة المرور للمستخدم (${user.name}) بنجاح.` };
+    return { success: true, message: `تم تسجيل إشعار تحديث كلمة المرور للمستخدم (${user.name}) بنجاح.` };
   }
 
   public toggleUserActive(userId: string): { success: boolean; isActive: boolean; message: string } {
