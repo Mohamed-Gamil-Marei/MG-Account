@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'crypto';
-import { checkEntityAccess } from '../server/access';
+import { checkEntityAccess, AccessUser } from '../server/access';
 
 // Function to test HMAC verification logic
 function verifyWebhookSignature(rawBody: Buffer, signature: string, appSecret: string): boolean {
@@ -24,10 +24,10 @@ function verifyWebhookSignature(rawBody: Buffer, signature: string, appSecret: s
   });
 
 describe('Security & Access Control Tests', () => {
-  const secretaryUser = { id: 1, name: 'Semia', role: 'SECRETARY' };
-  const pendingUser = { id: 2, name: 'Pending User', role: 'PENDING' };
-  const accountantUser = { id: 3, name: 'Accountant', role: 'ACCOUNTANT' };
-  const adminUser = { id: 4, name: 'Admin', role: 'ADMIN' };
+  const secretaryUser: AccessUser = { id: 1, name: 'Semia', role: 'SECRETARY' };
+  const pendingUser: AccessUser = { id: 2, name: 'Pending User', role: 'PENDING' };
+  const accountantUser: AccessUser = { id: 3, name: 'Accountant', role: 'ACCOUNTANT' };
+  const adminUser: AccessUser = { id: 4, name: 'Admin', role: 'ADMIN' };
 
   it('1. SECRETARY يُرفض في الكتابة على accounts', () => {
     expect(checkEntityAccess(secretaryUser, 'accounts', 'WRITE')).toBe(false);

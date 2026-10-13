@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkEntityAccess } from './access';
+import { checkEntityAccess, AccessUser } from './access';
 
 interface MockServerRecord {
   id: string;
@@ -38,9 +38,9 @@ class MockServerDatabase {
 }
 
 describe('Client-Server Compatibility & Security Tests', () => {
-  const secretaryUser = { id: 'sec-1', name: 'سكرتير المكتب', role: 'SECRETARY' };
-  const accountantUser = { id: 'acc-1', name: 'المحاسب المسؤول', role: 'ACCOUNTANT' };
-  const adminUser = { id: 'adm-1', name: 'المدير العام', role: 'ADMIN' };
+  const secretaryUser: AccessUser = { id: 'sec-1', name: 'سكرتير المكتب', role: 'SECRETARY' };
+  const accountantUser: AccessUser = { id: 'acc-1', name: 'المحاسب المسؤول', role: 'ACCOUNTANT' };
+  const adminUser: AccessUser = { id: 'adm-1', name: 'المدير العام', role: 'ADMIN' };
 
   it('1. تعديل نفس السجل 3 مرات متتالية بنجاح مع زيادة رقم الإصدار (Version Increment)', () => {
     const db = new MockServerDatabase();

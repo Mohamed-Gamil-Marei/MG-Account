@@ -20,13 +20,12 @@ export interface AccessUser {
 export function checkEntityAccess(user: AccessUser | null | undefined, entityType: string, action: 'READ' | 'WRITE' | 'DELETE'): boolean {
   if (!user || user.role === 'PENDING') return false;
   if (!VALID_ROLES.includes(user.role as UserRole)) return false;
+
   // 1. Audit logs: client cannot WRITE or DELETE auditLogs
   if (entityType === 'auditLogs') {
     if (action === 'WRITE' || action === 'DELETE') return false;
     if (action === 'READ') return !!user.canAccessAuditTrail || user.role === 'ADMIN';
   }
-
-  if (user.role === 'ADMIN') return true;
 
   // 3. WhatsApp entity: Allowed for ADMIN and ACCOUNTANT only. SECRETARY and PENDING are blocked.
   if (entityType === 'whatsapp') {
@@ -43,6 +42,8 @@ export function checkEntityAccess(user: AccessUser | null | undefined, entityTyp
   if (entityType === 'preferences') {
     return true;
   }
+
+  if (user.role === 'ADMIN') return true;
 
   // Secretary limits
   if (user.role === 'SECRETARY') {

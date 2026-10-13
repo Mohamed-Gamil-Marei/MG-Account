@@ -80,6 +80,7 @@ describe('Auth Security Fixes Tests', () => {
       role: 'ACCOUNTANT',
       roleTitleArabic: 'محاسب مالي',
       canAccessTreasury: true,
+      canAccessAuditTrail: false,
     };
 
     const pass = 'Password12345!';
@@ -104,6 +105,7 @@ describe('Auth Security Fixes Tests', () => {
       role: 'AUDITOR',
       roleTitleArabic: 'مراقب',
       canAccessTreasury: true,
+      canAccessAuditTrail: false,
     };
 
     const pass = 'Password12345!';
