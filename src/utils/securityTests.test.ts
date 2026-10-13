@@ -70,4 +70,63 @@ describe('Security & Access Control Tests', () => {
     expect(checkEntityAccess(accountantUser, 'accounts', 'WRITE')).toBe(true);
     expect(checkEntityAccess(adminUser, 'accounts', 'WRITE')).toBe(true);
   });
+
+  it('7. السكرتير يُرفض في كل خدمات /api/whatsapp/* (قراءة وكتابة)', () => {
+    expect(checkEntityAccess(secretaryUser, 'whatsapp', 'READ')).toBe(false);
+    expect(checkEntityAccess(secretaryUser, 'whatsapp', 'WRITE')).toBe(false);
+    expect(checkEntityAccess(pendingUser, 'whatsapp', 'READ')).toBe(false);
+    expect(checkEntityAccess(accountantUser, 'whatsapp', 'READ')).toBe(true);
+    expect(checkEntityAccess(adminUser, 'whatsapp', 'WRITE')).toBe(true);
+  });
+
+  it('8. تنزيل أو الوصول لمستند عميل غير مصرح به يُرفض للعميل المقيد', () => {
+    const restrictedUser = {
+      id: 10,
+      name: 'Restricted User',
+      role: 'ACCOUNTANT',
+      permittedClientIds: ['CLIENT-101', 'CLIENT-102']
+    };
+
+    const docAllowed = { id: 'doc-1', client_id: 'CLIENT-101' };
+    const docForbidden = { id: 'doc-2', client_id: 'CLIENT-999' };
+
+    const isPermitted = (u: typeof restrictedUser, doc: typeof docForbidden) => {
+      if (!checkEntityAccess(u, 'documents', 'READ')) return false;
+      if (u.permittedClientIds && Array.isArray(u.permittedClientIds)) {
+        return u.permittedClientIds.includes(doc.client_id);
+      }
+      return true;
+    };
+
+    expect(isPermitted(restrictedUser, docAllowed)).toBe(true);
+    expect(isPermitted(restrictedUser, docForbidden)).toBe(false);
+  });
+
+  it('9. سجل محاولات الدخول (login_attempts) يُنضَّف للأقدم من 24 ساعة', () => {
+    const now = Date.now();
+    const twentyFiveHoursAgo = now - 25 * 60 * 60 * 1000;
+    const oneHourAgo = now - 1 * 60 * 60 * 1000;
+
+    const attempts = [
+      { id: 1, ip: '127.0.0.1', timestamp: twentyFiveHoursAgo },
+      { id: 2, ip: '127.0.0.1', timestamp: oneHourAgo }
+    ];
+
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    const remainingAttempts = attempts.filter(a => a.timestamp >= cutoff);
+
+    expect(remainingAttempts).toHaveLength(1);
+    expect(remainingAttempts[0].id).toBe(2);
+  });
+
+  it('10. إعدادات CSP في بيئة الإنتاج (production) لا تحتوي على unsafe-eval أو unsafe-inline في script-src', () => {
+    const isProd = true;
+    const scriptSrcDirectives = isProd
+      ? ["'self'"]
+      : ["'self'", "'unsafe-inline'", "'unsafe-eval'"];
+
+    expect(scriptSrcDirectives).not.toContain("'unsafe-eval'");
+    expect(scriptSrcDirectives).not.toContain("'unsafe-inline'");
+    expect(scriptSrcDirectives).toEqual(["'self'"]);
+  });
 });

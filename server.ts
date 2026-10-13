@@ -38,7 +38,7 @@ import helmet from "helmet";
 
 dotenv.config();
 
-const GEMINI_MODEL_NAME = process.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
+const GEMINI_MODEL_NAME = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -66,18 +66,48 @@ async function startServer() {
   app.set("trust proxy", 1);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  app.use(express.json({ limit: "50mb", verify: (req: any, _res, buf) => { if (req.originalUrl && req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf; } }));
-  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  // 50MB body parser for specific endpoints that require large payloads (OCR, Backups, Imports, WhatsApp documents)
+  const largeBodyParserJson = express.json({
+    limit: "50mb",
+    verify: (req: any, _res, buf) => {
+      if (req.originalUrl && req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf;
+    }
+  });
+  const largeBodyParserUrlencoded = express.urlencoded({ extended: true, limit: "50mb" });
+
+  app.use([
+    "/api/ocr",
+    "/api/data/import",
+    "/api/data/restore",
+    "/api/server-backups/restore",
+    "/api/whatsapp/send-document"
+  ], largeBodyParserJson, largeBodyParserUrlencoded);
+
+  // Global default body parser limited to 1MB
+  app.use(express.json({
+    limit: "1mb",
+    verify: (req: any, _res, buf) => {
+      if (req.originalUrl && req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf;
+    }
+  }));
+  app.use(express.urlencoded({ extended: true, limit: "1mb" }));
   app.use(cookieParser());
 
   // --- HTTP Security Headers ---
+  const isProd = process.env.NODE_ENV === "production";
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "img-src": ["'self'", "data:", "https:", "http:"],
-        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-        "connect-src": ["'self'", "https:", "http:", "wss:", "ws:"],
+        "script-src": isProd
+          ? ["'self'"]
+          : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "img-src": isProd
+          ? ["'self'", "data:", "blob:", "https://*.googleapis.com", "https://*.gstatic.com", "https://*.firebaseapp.com", "https://*.googleusercontent.com"]
+          : ["'self'", "data:", "blob:", "https:", "http:"],
+        "connect-src": isProd
+          ? ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firestore.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://*.cloudfunctions.net"]
+          : ["'self'", "https:", "http:", "wss:", "ws:"],
         "frame-ancestors": ["'self'"],
       },
     },
@@ -115,6 +145,20 @@ async function startServer() {
   }
   cleanExpiredSessions();
   setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+
+  function cleanExpiredLoginAttempts() {
+    try {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const result = db.prepare("DELETE FROM login_attempts WHERE timestamp < ?").run(cutoff);
+      if (result.changes > 0) {
+        console.log(`[LoginAttempts] Cleaned ${result.changes} login attempt records older than 24h.`);
+      }
+    } catch (err) {
+      console.error("[LoginAttempts] Error cleaning expired login attempts:", err);
+    }
+  }
+  cleanExpiredLoginAttempts();
+  setInterval(cleanExpiredLoginAttempts, 60 * 60 * 1000);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -341,13 +385,13 @@ async function startServer() {
         });
       }
 
-      // 2. Email-based lock (5 failed attempts in last 15 minutes)
+      // 2. Email+IP based lock (5 failed attempts in last 15 minutes for this specific email+IP)
       if (email) {
-        const recentEmailFailures = db.prepare("SELECT count(*) as count FROM login_attempts WHERE email = ? AND success = 0 AND timestamp > ?").get(email, now - 15 * 60 * 1000) as any;
+        const recentEmailFailures = db.prepare("SELECT count(*) as count FROM login_attempts WHERE email = ? AND ip = ? AND success = 0 AND timestamp > ?").get(email, ip, now - 15 * 60 * 1000) as any;
         if (recentEmailFailures && recentEmailFailures.count >= 5) {
           return res.status(403).json({
             success: false,
-            error: "تم قفل حسابك مؤقتاً بسبب محاولات دخول فاشلة متكررة. يرجى المحاولة بعد 15 دقيقة.",
+            error: "تم قفل الحساب لهذا العنوان مؤقتاً بسبب محاولات دخول فاشلة متكررة. يرجى المحاولة بعد 15 دقيقة.",
           });
         }
       }
@@ -587,6 +631,8 @@ async function startServer() {
     }
   });
 
+  const DUMMY_PASSWORD_HASH = "$2a$10$e83In388J.RkWuQhPveB9e19q9.Wn3C4N/I5A4z1rR5sL4n/M0X3K";
+
   app.post("/api/auth/login", loginRateLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -595,15 +641,11 @@ async function startServer() {
       }
 
       const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email.trim().toLowerCase()) as any;
-      if (!user) {
-        const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
-        db.prepare("INSERT INTO login_attempts (ip, email, timestamp, success) VALUES (?, ?, ?, ?)").run(ip, email.trim().toLowerCase(), Date.now(), 0);
-        return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
-      }
-
+      const targetHash = user ? user.password_hash : DUMMY_PASSWORD_HASH;
+      const match = await bcrypt.compare(password, targetHash);
       const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
-      const match = await bcrypt.compare(password, user.password_hash);
-      if (!match) {
+
+      if (!user || !match) {
         db.prepare("INSERT INTO login_attempts (ip, email, timestamp, success) VALUES (?, ?, ?, ?)").run(ip, email.trim().toLowerCase(), Date.now(), 0);
         return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
       }
@@ -2218,6 +2260,19 @@ ${JSON.stringify(benfordStats || [], null, 2)}
 
   // --- WhatsApp Business API Integration Endpoints ---
 
+  // --- WhatsApp Business API & Web Gateway Endpoints ---
+  app.use("/api/whatsapp", (req, res, next) => {
+    if (req.path.startsWith("/webhook")) {
+      return next();
+    }
+    const user = (req as any).user;
+    const action = req.method === "GET" ? "READ" : "WRITE";
+    if (!user || !checkEntityAccess(user, "whatsapp", action)) {
+      return res.status(403).json({ success: false, error: "غير مصرح: خدمات الواتساب مقتصرة على دور المدير والمحاسب فقط." });
+    }
+    next();
+  });
+
   // 0. Live Session Status (Baileys Web Gateway & Meta)
   app.get("/api/whatsapp/session-status", (_req, res) => {
     try {
@@ -2256,6 +2311,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         return res.status(400).json({ success: false, message: "بيانات المستند غير مكتملة." });
       }
       const result = await whatsappServerEngine.sendDocumentDirect(to, fileBase64, fileName, mimetype, caption);
+      recordServerAuditLog("WHATSAPP_SEND", "whatsapp", to, (req as any).user?.name || "System", `إرسال مستند عبر الواتساب (${fileName}) إلى (${to})`);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -2275,6 +2331,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         referenceCode,
         amount,
       });
+      recordServerAuditLog("WHATSAPP_SEND", "whatsapp", to, (req as any).user?.name || "System", `إرسال رسالة واتساب إلى (${to}): ${message.substring(0, 50)}`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error("WhatsApp Send Error:", err);
@@ -2293,6 +2350,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         });
       }
       const result = await whatsappServerEngine.sendQuotationDirect(payload);
+      recordServerAuditLog("WHATSAPP_SEND", "whatsapp", payload.to, (req as any).user?.name || "System", `إرسال عرض سعر موثق عبر الواتساب للعميل (${payload.clientName})`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error("WhatsApp Send Quotation Error:", err);
@@ -2311,6 +2369,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         });
       }
       const result = await whatsappServerEngine.sendCertifiedReportDirect(payload);
+      recordServerAuditLog("WHATSAPP_SEND", "whatsapp", payload.to, (req as any).user?.name || "System", `إرسال تقرير مالي معتمد عبر الواتساب للعميل (${payload.clientName})`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error("WhatsApp Send Certified Report Error:", err);
@@ -2468,6 +2527,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         return res.status(400).json({ success: false, message: "يرجى كتابة رقم الهاتف ومحتوى الرسالة." });
       }
       const sendResult = await whatsappServerEngine.sendMessageDirect(to, message, { clientName });
+      recordServerAuditLog("WHATSAPP_SEND", "whatsapp", to, (req as any).user?.name || "System", `إرسال رسالة محادثة مباشرة عبر الواتساب إلى (${to})`);
       const currentMessages = whatsappServerEngine.getChatMessages(to);
       res.json({ success: true, sendResult, messages: currentMessages });
     } catch (err: any) {
@@ -2494,6 +2554,8 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // --- Documents Endpoints (Phase 3) ---
+  // Note: Document access control is enforced via role-based checkEntityAccess(user, 'documents', action).
+  // Additionally, if a user has restricted client permissions (permittedClientIds), client-level access is validated per document.
   app.post("/api/documents/upload", upload.single("file"), (req: any, res) => {
     try {
       const user = req.user;
@@ -2517,6 +2579,30 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         return res.status(400).json({ success: false, error: "بيانات المستند غير مكتملة (رقم العميل، السنة، والنوع مطلوبة)." });
       }
 
+      // Verify that clientId exists in the database
+      let clientExists = false;
+      try {
+        const clientRow = db.prepare("SELECT id FROM clients WHERE id = ?").get(String(clientId));
+        if (clientRow) {
+          clientExists = true;
+        } else {
+          const storeRow = db.prepare("SELECT data FROM dataStores WHERE key = 'clients'").get() as any;
+          if (storeRow && storeRow.data) {
+            const clientList = JSON.parse(storeRow.data);
+            if (Array.isArray(clientList) && clientList.some((c: any) => String(c.id) === String(clientId))) {
+              clientExists = true;
+            }
+          }
+        }
+      } catch {
+        clientExists = true; // Fallback safe check
+      }
+
+      if (!clientExists) {
+        if (fs.existsSync(req.file.path)) { try { fs.unlinkSync(req.file.path); } catch {} }
+        return res.status(400).json({ success: false, error: "العميل المحدد غير موجود في سجلات النظام." });
+      }
+
       const id = crypto.randomUUID();
       const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
       const filePath = req.file.path;
@@ -2529,6 +2615,15 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       stmt.run(id, String(clientId), String(year), String(type), String(docStatus), originalName, filePath, uploadedBy, createdAt);
+
+      // Record detailed server audit log for document UPLOAD
+      recordServerAuditLog(
+        "UPLOAD",
+        "documents",
+        id,
+        uploadedBy,
+        `تم رفع مستند جديد: (${originalName}) للعميل رقم: (${clientId}) - سنة: ${year} - نوع: ${type}`
+      );
 
       res.json({
         success: true,
@@ -2567,7 +2662,13 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         params.push(clientId);
       }
       query += " ORDER BY created_at DESC";
-      const rows = db.prepare(query).all(...params) as any[];
+      let rows = db.prepare(query).all(...params) as any[];
+
+      // Filter by permitted client IDs if restricted
+      if (user?.permittedClientIds && Array.isArray(user.permittedClientIds)) {
+        rows = rows.filter(r => user.permittedClientIds.includes(r.client_id));
+      }
+
       const formatted = rows.map(r => ({
         id: r.id,
         clientId: r.client_id,
@@ -2597,6 +2698,11 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         return res.status(404).json({ success: false, error: "المستند غير موجود على الخادم." });
       }
 
+      // Check client level permission if assigned
+      if (user?.permittedClientIds && Array.isArray(user.permittedClientIds) && !user.permittedClientIds.includes(doc.client_id)) {
+        return res.status(403).json({ success: false, error: "غير مصرح: ليس لديك صلاحية الوصول لمستندات هذا العميل." });
+      }
+
       // Log the download
       recordServerAuditLog(
         "DOWNLOAD",
@@ -2615,7 +2721,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.patch("/api/documents/:id/status", (req: any, res) => {
     try {
       const user = req.user;
-      // Status update usually restricted to accountants/admins
+      // Status update restricted to accountants/admins
       if (!checkEntityAccess(user, 'clients', 'WRITE')) { 
         return res.status(403).json({ success: false, error: "غير مصرح: تحديث حالة المستند يقتصر على المدير والمحاسب." });
       }
@@ -2625,10 +2731,16 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       if (!status) {
         return res.status(400).json({ success: false, error: "الحالة الجديدة مطلوبة." });
       }
-      const doc = db.prepare("SELECT * FROM documents WHERE id = ?").get(id);
+      const doc = db.prepare("SELECT * FROM documents WHERE id = ?").get(id) as any;
       if (!doc) {
         return res.status(404).json({ success: false, error: "المستند غير موجود." });
       }
+
+      // Check client level permission if assigned
+      if (user?.permittedClientIds && Array.isArray(user.permittedClientIds) && !user.permittedClientIds.includes(doc.client_id)) {
+        return res.status(403).json({ success: false, error: "غير مصرح: ليس لديك صلاحية تعديل مستندات هذا العميل." });
+      }
+
       db.prepare("UPDATE documents SET status = ? WHERE id = ?").run(status, id);
       res.json({ success: true, message: "تم تحديث حالة المستند بنجاح." });
     } catch (err: any) {
@@ -2647,10 +2759,26 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       if (!doc) {
         return res.status(404).json({ success: false, error: "المستند غير موجود." });
       }
+
+      // Check client level permission if assigned
+      if (user?.permittedClientIds && Array.isArray(user.permittedClientIds) && !user.permittedClientIds.includes(doc.client_id)) {
+        return res.status(403).json({ success: false, error: "غير مصرح: ليس لديك صلاحية حذف مستندات هذا العميل." });
+      }
+
       if (fs.existsSync(doc.file_path)) {
         try { fs.unlinkSync(doc.file_path); } catch {}
       }
       db.prepare("DELETE FROM documents WHERE id = ?").run(id);
+
+      // Record detailed server audit log for document DELETE
+      recordServerAuditLog(
+        "DELETE",
+        "documents",
+        id,
+        user?.name || "System",
+        `تم حذف المستند: (${doc.original_name}) للعميل: (${doc.client_id})`
+      );
+
       res.json({ success: true, message: "تم حذف المستند بنجاح." });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });

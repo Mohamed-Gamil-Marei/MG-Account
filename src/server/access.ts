@@ -24,7 +24,12 @@ export function checkEntityAccess(user: AccessUser | null | undefined, entityTyp
     if (action === 'READ') return !!user.canAccessAuditTrail || user.role === 'ADMIN';
   }
 
-  // 2. Treasury access
+  // 3. WhatsApp entity: Allowed for ADMIN and ACCOUNTANT only. SECRETARY and PENDING are blocked.
+  if (entityType === 'whatsapp') {
+    return ['ADMIN', 'ACCOUNTANT'].includes(user.role);
+  }
+
+  // 4. Treasury access
   if (entityType === 'treasury') {
     if (!user.canAccessTreasury && user.role !== 'ADMIN' && user.role !== 'AUDITOR') return false;
   }
