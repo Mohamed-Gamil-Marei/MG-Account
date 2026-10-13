@@ -13,7 +13,8 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { firebaseAuth, FirebaseUserProfile } from '../../services/firebaseAuthService';
-import { saveOfflineAuthCache, verifyOfflineAuthCache } from '../../services/offlineAuthService';
+import { saveOfflineAuthCache, verifyOfflineAuthCache, clearOfflineAuthCache } from '../../services/offlineAuthService';
+import { db } from '../../db/localDatabase';
 
 interface FirebaseAuthGateProps {
   onAuthenticated: (profile: FirebaseUserProfile) => void;
@@ -56,6 +57,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           return;
         }
         const profile = await firebaseAuth.signUp(name.trim(), formattedEmail, password);
+        db.syncLoggedInUser(profile);
         setSuccessMsg('تم إنشاء الحساب بنجاح وهو الآن قيد الانتظار (PENDING) بانتظار تفعيل المدير.');
         setTimeout(() => {
           if (profile.role !== 'PENDING') {
@@ -67,6 +69,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
         let serverSuccess = false;
         let serverUser: any = null;
         let serverMessage = '';
+        let isNetworkError = false;
 
         try {
           const res = await fetch('/api/auth/login', {
@@ -86,9 +89,14 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           } else {
             const errData = await res.json().catch(() => ({}));
             serverMessage = errData.error || 'خطأ في بيانات تسجيل الدخول.';
+            
+            // Server responded with HTTP error (401/403/429 etc.): Clear offline cache for this email
+            clearOfflineAuthCache(normalizedEmail);
+            clearOfflineAuthCache(formattedEmail);
           }
         } catch (fetchErr) {
-          console.warn('Server login unreachable, fallback to offline verification:', fetchErr);
+          isNetworkError = true;
+          console.warn('Server login unreachable due to network error, checking offline fallback:', fetchErr);
         }
 
         // Handle successful server login
@@ -120,16 +128,25 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
           // Save PBKDF2 salted hash to local storage for future 7-day offline access (NO plaintext stored)
           await saveOfflineAuthCache(profile.email, password, profile);
+          db.syncLoggedInUser(profile);
 
           setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
           setTimeout(() => onAuthenticated(profile), 400);
           return;
         }
 
-        // 2. Secondary path: Firebase Auth
+        // If server responded (not a network error), DO NOT attempt offline verification
+        if (!isNetworkError) {
+          setError(serverMessage || 'البريد الإلكتروني أو كلمة المرور غير صحيحة.');
+          setIsLoading(false);
+          return;
+        }
+
+        // 2. Secondary path: Firebase Auth (only if network available)
         try {
           const profile = await firebaseAuth.signIn(formattedEmail, password);
           await saveOfflineAuthCache(profile.email, password, profile);
+          db.syncLoggedInUser(profile);
           setSuccessMsg(`أهلاً بك، تم تسجيل الدخول عبر السحابة: ${profile.name}`);
           setTimeout(() => onAuthenticated(profile), 400);
           return;
@@ -137,16 +154,17 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           // Ignore Firebase fail if offline
         }
 
-        // 3. Fallback path: Offline PBKDF2 salted hash verification
+        // 3. Fallback path ONLY on network error: Offline PBKDF2 salted hash verification
         const offlineRes = await verifyOfflineAuthCache(normalizedEmail, password);
         if (offlineRes.success && offlineRes.profile) {
+          db.syncLoggedInUser(offlineRes.profile);
           setSuccessMsg(`أهلاً بك، تم الدخول في وضع أوفلاين (غير متصل بالسيرفر): ${offlineRes.profile.name}`);
           setTimeout(() => onAuthenticated(offlineRes.profile!), 400);
           return;
         }
 
         // Display error message
-        setError(offlineRes.message || serverMessage || 'البريد الإلكتروني أو كلمة المرور غير صحيحة.');
+        setError(offlineRes.message || 'تعذر الاتصال بالسيرفر ولا يوجد تسجيل دخول أوفلاين صالح لهذه البيانات.');
       }
     } catch (err: any) {
       console.error('Auth Error:', err);

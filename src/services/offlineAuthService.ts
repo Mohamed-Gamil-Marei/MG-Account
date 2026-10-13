@@ -192,10 +192,8 @@ export async function verifyOfflineAuthCache(
     const cacheData: OfflineAuthCacheData = JSON.parse(rawCache);
     const cleanEmailInput = emailInput.trim().toLowerCase();
 
-    const storedEmailPrefix = cacheData.email.split('@')[0];
-    const inputEmailPrefix = cleanEmailInput.split('@')[0];
-
-    if (cacheData.email !== cleanEmailInput && storedEmailPrefix !== inputEmailPrefix) {
+    // Exact email match requirement (no prefix matching)
+    if (cacheData.email !== cleanEmailInput) {
       recordFailedOfflineAttempt();
       return {
         success: false,
@@ -243,11 +241,21 @@ export async function verifyOfflineAuthCache(
 }
 
 /**
- * Clears stored offline authentication cache.
+ * Clears stored offline authentication cache for all accounts or a specific target email.
  */
-export function clearOfflineAuthCache(): void {
+export function clearOfflineAuthCache(targetEmail?: string): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.removeItem(OFFLINE_AUTH_KEY);
+    if (!targetEmail) {
+      localStorage.removeItem(OFFLINE_AUTH_KEY);
+      return;
+    }
+    const rawCache = localStorage.getItem(OFFLINE_AUTH_KEY);
+    if (rawCache) {
+      const cacheData: OfflineAuthCacheData = JSON.parse(rawCache);
+      if (cacheData.email === targetEmail.trim().toLowerCase()) {
+        localStorage.removeItem(OFFLINE_AUTH_KEY);
+      }
+    }
   } catch {}
 }

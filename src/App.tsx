@@ -197,18 +197,87 @@ export default function App() {
   const [firebaseProfile, setFirebaseProfile] = useState<FirebaseUserProfile | null>(() => firebaseAuth.getCurrentProfile());
   const [authResolved, setAuthResolved] = useState<boolean>(false);
 
-  // Mandatory Firebase Authentication & Firestore Partitioned Sync Listener
+  // Mandatory Session & Firebase Authentication Sync
   useEffect(() => {
+    let isMounted = true;
+
+    const roleTitleMap: Record<string, string> = {
+      ADMIN: 'مدير المنظومة والشريك المسؤول',
+      AUDITOR: 'مراقب حسابات ومراجع قانوني',
+      ACCOUNTANT: 'محاسب مالي ومدخل قيود',
+      SECRETARY: 'سكرتارية وإدارة ملفات',
+      PENDING: 'حساب جديد قيد الانتظار',
+    };
+
+    const checkServerSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            const profile: FirebaseUserProfile = {
+              uid: String(data.user.id),
+              email: data.user.email,
+              name: data.user.name || data.user.email,
+              role: data.user.role,
+              roleTitleArabic: roleTitleMap[data.user.role] || 'مستخدم النظام',
+              canAccessTreasury: !!data.user.canAccessTreasury,
+              canAccessAuditTrail: !!data.user.canAccessAuditTrail,
+              canAccessCreditFiles: !!data.user.canAccessCreditFiles,
+              canAccessTaxReports: !!data.user.canAccessTaxReports,
+              canManageUsers: !!data.user.canManageUsers,
+              canPostEntries: !!data.user.canPostEntries,
+              canEditPostedEntries: !!data.user.canEditPostedEntries,
+              canDeleteRecords: !!data.user.canDeleteRecords,
+              isOffline: false,
+            };
+            db.syncLoggedInUser(profile);
+            if (isMounted) {
+              setFirebaseProfile(profile);
+              setAuthResolved(true);
+            }
+            return;
+          }
+        }
+        // Server returned 401/403 (unauthenticated)
+        if (isMounted) {
+          setFirebaseProfile(null);
+          setAuthResolved(true);
+        }
+      } catch (networkErr) {
+        // Server unreachable (Offline mode)
+        console.warn('Server /api/auth/me unreachable (offline mode):', networkErr);
+        const localProfile = firebaseAuth.getCurrentProfile();
+        if (localProfile && isMounted) {
+          db.syncLoggedInUser(localProfile);
+          setFirebaseProfile(localProfile);
+        } else if (isMounted) {
+          setFirebaseProfile(null);
+        }
+        if (isMounted) {
+          setAuthResolved(true);
+        }
+      }
+    };
+
+    checkServerSession();
+
     const unsubAuth = firebaseAuth.subscribe((profile) => {
-      setFirebaseProfile(profile);
-      setAuthResolved(true);
       if (profile) {
+        db.syncLoggedInUser(profile);
+        setFirebaseProfile(profile);
         cloudSync.initRealtimeSync((remote) => {
           db.mergeRemoteState(remote);
         });
+      } else if (!authResolved) {
+        setAuthResolved(true);
       }
     });
-    return unsubAuth;
+
+    return () => {
+      isMounted = false;
+      unsubAuth();
+    };
   }, []);
 
   // Persist activeTab to localStorage including DASHBOARD

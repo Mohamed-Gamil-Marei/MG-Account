@@ -42,6 +42,24 @@ import {
   ClientFeeAgreement,
   ClientFeeCollection,
 } from '../types';
+import { FirebaseUserProfile } from '../services/firebaseAuthService';
+
+export const SAFE_FALLBACK_USER: SystemUser = {
+  id: 'guest-pending-user',
+  name: 'زائر / حساب غير مفعل',
+  email: 'guest@system.local',
+  role: 'PENDING',
+  roleTitleArabic: 'حساب جديد قيد الانتظار',
+  isActive: true,
+  canManageUsers: false,
+  canAccessTreasury: false,
+  canAccessAuditTrail: false,
+  canPostEntries: false,
+  canEditPostedEntries: false,
+  canDeleteRecords: false,
+  canAccessCreditFiles: false,
+  canAccessTaxReports: false,
+};
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
 import { SecurityAuthService } from '../services/securityAuth';
@@ -3324,9 +3342,57 @@ export class LocalDatabase {
   }
 
   public getCurrentUser(): SystemUser {
+    if (!this.state.currentUserId) {
+      return SAFE_FALLBACK_USER;
+    }
     const users = this.getUsers();
     const user = users.find((u) => u.id === this.state.currentUserId);
-    return user || users[0] || SAMPLE_SYSTEM_USERS[0];
+    return user || SAFE_FALLBACK_USER;
+  }
+
+  public syncLoggedInUser(profile: FirebaseUserProfile): SystemUser {
+    if (!profile) return this.getCurrentUser();
+    const userId = profile.uid || profile.email;
+    if (!this.state.users) {
+      this.state.users = [];
+    }
+    const existingIndex = this.state.users.findIndex(
+      (u) => u.id === userId || (u.email && u.email.toLowerCase() === profile.email.toLowerCase())
+    );
+
+    const mappedUser: SystemUser = {
+      id: userId,
+      name: profile.name || profile.email,
+      email: profile.email,
+      role: profile.role,
+      roleTitleArabic: profile.roleTitleArabic || 'مستخدم النظام',
+      isActive: true,
+      canManageUsers: !!profile.canManageUsers,
+      canAccessTreasury: !!profile.canAccessTreasury,
+      canAccessAuditTrail: !!profile.canAccessAuditTrail,
+      canPostEntries: !!profile.canPostEntries,
+      canEditPostedEntries: !!profile.canEditPostedEntries,
+      canDeleteRecords: !!profile.canDeleteRecords,
+      canAccessCreditFiles: !!profile.canAccessCreditFiles,
+      canAccessTaxReports: !!profile.canAccessTaxReports,
+    };
+
+    if (existingIndex >= 0) {
+      this.state.users[existingIndex] = mappedUser;
+    } else {
+      this.state.users.push(mappedUser);
+    }
+
+    this.state.currentUserId = userId;
+    this.saveState('USERS');
+    this.notify();
+    return mappedUser;
+  }
+
+  public clearCurrentUser(): void {
+    this.state.currentUserId = '';
+    this.saveState('CURRENT_USER_ID');
+    this.notify();
   }
 
   public setCurrentUserId(userId: string) {

@@ -168,7 +168,28 @@ class FirebaseAuthService {
   }
 
   public async signOut(): Promise<void> {
-    await fbSignOut(auth);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    } catch {}
+
+    try {
+      const { clearOfflineAuthCache } = await import('./offlineAuthService');
+      clearOfflineAuthCache();
+    } catch {}
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('mg_firebase_user');
+      localStorage.removeItem('cpa_offline_auth_v1');
+    }
+
+    try {
+      localDb.clearCurrentUser();
+    } catch {}
+
+    try {
+      await fbSignOut(auth).catch(() => {});
+    } catch {}
+
     this.currentUserProfile = null;
     this.rawFirebaseUser = null;
     this.notifyListeners();
