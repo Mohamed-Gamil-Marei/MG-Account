@@ -105,6 +105,8 @@ import { DedicatedYearWorkspace } from './credit/DedicatedYearWorkspace';
 
 interface CreditFinancialsSimulatorProps {
   state: DatabaseState;
+  initialTab?: SimulatorTab;
+  initialMode?: SimulatorTab;
 }
 
 export type SimulatorTab =
@@ -119,8 +121,8 @@ export type SimulatorTab =
   | 'ADMIN_EXPENSES'
   | 'NOTES';
 
-export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps> = ({ state }) => {
-  const [activeTab, setActiveTab] = useState<SimulatorTab>('DEDICATED_YEAR');
+export const CreditFinancialsSimulator: React.FC<CreditFinancialsSimulatorProps> = ({ state, initialTab, initialMode }) => {
+  const [activeTab, setActiveTab] = useState<SimulatorTab>(initialTab || initialMode || 'DEDICATED_YEAR');
   const [sector, setSector] = useState<'COMMERCIAL' | 'INDUSTRIAL' | 'CONTRACTING' | 'SERVICES'>('COMMERCIAL');
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [yearsList, setYearsList] = useState<number[]>([2024, 2025, 2026]);

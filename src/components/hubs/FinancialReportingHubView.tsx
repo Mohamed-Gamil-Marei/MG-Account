@@ -45,21 +45,31 @@ interface FinancialReportingHubViewProps {
   state: DatabaseState;
   initialSubTab?: FinancialReportingSubTab;
   fiscalYear?: number;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps> = ({
   state,
   initialSubTab = 'ANNUAL_FINANCIAL_DOSSIER',
   fiscalYear = 2026,
+  onNavigateToTab,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<FinancialReportingSubTab>(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<FinancialReportingSubTab>(
+    initialSubTab === 'CREDIT_SIMULATOR' || initialSubTab === 'BUDGET_AND_CASHFLOW'
+      ? 'ANNUAL_FINANCIAL_DOSSIER'
+      : initialSubTab
+  );
   const [dossierSection, setDossierSection] = useState<'STATEMENTS' | 'NOTES' | 'AUDITOR_REPORT'>('STATEMENTS');
   const [budgetSection, setBudgetSection] = useState<'BUDGET' | 'CASH_FLOW'>('BUDGET');
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialSubTab) {
-      if (initialSubTab === 'FINANCIAL_STATEMENTS') {
+      if (initialSubTab === 'CREDIT_SIMULATOR' && onNavigateToTab) {
+        onNavigateToTab('CREDIT_HUB');
+      } else if (initialSubTab === 'BUDGET_AND_CASHFLOW' && onNavigateToTab) {
+        onNavigateToTab('FINANCIAL_PLANNING_HUB');
+      } else if (initialSubTab === 'FINANCIAL_STATEMENTS') {
         setActiveSubTab('ANNUAL_FINANCIAL_DOSSIER');
         setDossierSection('STATEMENTS');
       } else if (initialSubTab === 'FINANCIAL_NOTES') {
@@ -72,7 +82,7 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
         setActiveSubTab(initialSubTab);
       }
     }
-  }, [initialSubTab]);
+  }, [initialSubTab, onNavigateToTab]);
 
   const tabs: {
     id: FinancialReportingSubTab;
@@ -101,20 +111,6 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       icon: LineChart,
       badge: 'تحليل مالي',
       badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
-    },
-    {
-      id: 'CREDIT_SIMULATOR',
-      label: 'ملف الائتمان والتحليل المالي للبنوك',
-      icon: TrendingUp,
-      badge: 'تسهيلات بنكية',
-      badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800',
-    },
-    {
-      id: 'BUDGET_AND_CASHFLOW',
-      label: 'الموازنة التقديرية وتوقعات السيولة النقدية',
-      icon: Calculator,
-      badge: 'تخطيط مالي',
-      badgeColor: 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800',
     },
   ];
 

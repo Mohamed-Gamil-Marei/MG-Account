@@ -171,7 +171,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       title: 'منصة التدقيق الذكي (الإكسيل، الاحتيال، وفحص القيود)',
       category: 'NAVIGATION',
       description: 'فحص ميزان المراجعة، مؤشرات بنفورد لكشف الاحتيال، وتدقيق شذوذ القيود',
-      shortcut: 'Ctrl+E',
+      shortcut: 'Ctrl+Shift+A',
       icon: Sparkles,
       action: () => {
         onNavigateTab('AUDIT_TOOLS_HUB');
@@ -183,7 +183,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       title: 'التخطيط والتقدير المالي (الموازنة والتدفقات)',
       category: 'NAVIGATION',
       description: 'الموازنة التقديرية للعام وتوقعات التدفقات النقدية التشغيلية',
-      shortcut: 'Ctrl+B',
+      shortcut: 'Ctrl+Shift+B',
       icon: Scale,
       action: () => {
         onNavigateTab('FINANCIAL_PLANNING_HUB');
@@ -195,7 +195,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       title: 'مركز الائتمان والملفات البنكية',
       category: 'NAVIGATION',
       description: 'محاكي الائتمان، الملف البنكي السريع وسجل ملفات التسهيلات',
-      shortcut: 'Ctrl+R',
+      shortcut: 'Ctrl+Shift+R',
       icon: TrendingUp,
       action: () => {
         onNavigateTab('CREDIT_HUB');

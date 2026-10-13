@@ -54,10 +54,12 @@ export const OfficePracticeHubView: React.FC<OfficePracticeHubViewProps> = ({
   const currentUser = db.getCurrentUser();
 
   useEffect(() => {
-    if (initialSubTab) {
+    if (initialSubTab === 'CREDIT_DOSSIER_REGISTRY' && onNavigateToTab) {
+      onNavigateToTab('CREDIT_HUB');
+    } else if (initialSubTab) {
       setActiveSubTab(initialSubTab);
     }
-  }, [initialSubTab]);
+  }, [initialSubTab, onNavigateToTab]);
 
   const tabs: {
     id: OfficePracticeSubTab;
@@ -78,11 +80,6 @@ export const OfficePracticeHubView: React.FC<OfficePracticeHubViewProps> = ({
       id: 'PRACTICE_MANAGEMENT',
       label: 'عقود المراجعة والارتباط',
       icon: Briefcase,
-    },
-    {
-      id: 'CREDIT_DOSSIER_REGISTRY',
-      label: 'الملف الائتماني',
-      icon: FileText,
     },
     {
       id: 'WHATSAPP_BUSINESS_API',

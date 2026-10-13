@@ -218,7 +218,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
       },
       {
         id: 'nav-credit',
-        keyCombo: ['Ctrl', 'R'],
+        keyCombo: ['Ctrl', 'Shift', 'R'],
         label: 'مركز الائتمان والملفات البنكية',
         category: 'NAVIGATION',
         description: 'محاكي الائتمان والملف البنكي وسجل دراسات التسهيلات',

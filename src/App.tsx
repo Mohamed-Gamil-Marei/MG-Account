@@ -356,6 +356,26 @@ export default function App() {
         return;
       }
 
+      // Alt + 1/2/3 quick navigation
+      if (e.altKey && !isModifier) {
+        if (e.key === '1') {
+          e.preventDefault();
+          setActiveTab('CREDIT_HUB');
+          setIsShortcutsModalOpen(false);
+          return;
+        } else if (e.key === '2') {
+          e.preventDefault();
+          setActiveTab('FINANCIAL_PLANNING_HUB');
+          setIsShortcutsModalOpen(false);
+          return;
+        } else if (e.key === '3') {
+          e.preventDefault();
+          setActiveTab('AUDIT_TOOLS_HUB');
+          setIsShortcutsModalOpen(false);
+          return;
+        }
+      }
+
       if (!isModifier) return;
 
       // Ctrl + K: Toggle shortcuts command palette / quick launcher
@@ -437,8 +457,19 @@ export default function App() {
           setActiveTab('CHART_OF_ACCOUNTS');
           setIsShortcutsModalOpen(false);
           break;
-        case 'a': // Ctrl + A -> Auditor Report (if no text selected)
-          if (!hasTextSelection && !isInput) {
+        case 'r': // Ctrl + Shift + R -> Credit Hub
+          if (e.shiftKey) {
+            e.preventDefault();
+            setActiveTab('CREDIT_HUB');
+            setIsShortcutsModalOpen(false);
+          }
+          break;
+        case 'a': // Ctrl + Shift + A -> Audit Tools Hub; Ctrl + A -> Auditor Report
+          if (e.shiftKey) {
+            e.preventDefault();
+            setActiveTab('AUDIT_TOOLS_HUB');
+            setIsShortcutsModalOpen(false);
+          } else if (!hasTextSelection && !isInput) {
             e.preventDefault();
             setActiveTab('AUDITOR_REPORT');
             setIsShortcutsModalOpen(false);
@@ -449,9 +480,13 @@ export default function App() {
           setActiveTab('FINANCIAL_NOTES');
           setIsShortcutsModalOpen(false);
           break;
-        case 'b': // Ctrl + B -> Backup Modal
+        case 'b': // Ctrl + Shift + B -> Financial Planning Hub; Ctrl + B -> Backup Modal
           e.preventDefault();
-          setIsBackupModalOpen(true);
+          if (e.shiftKey) {
+            setActiveTab('FINANCIAL_PLANNING_HUB');
+          } else {
+            setIsBackupModalOpen(true);
+          }
           setIsShortcutsModalOpen(false);
           break;
         case 'u': // Ctrl + U -> Check Update
@@ -657,6 +692,7 @@ export default function App() {
                 : 'ANNUAL_FINANCIAL_DOSSIER'
             }
             fiscalYear={selectedFiscalYear}
+            onNavigateToTab={(tab) => setActiveTab(tab)}
           />
         );
 
@@ -669,7 +705,13 @@ export default function App() {
       case 'ETA_RECONCILIATION':
       case 'PAYROLL_INSURANCE':
       case 'AUDIT_WORKING_PAPERS':
-        return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
+        return (
+          <TaxAuditHubView
+            state={state}
+            initialSubTab="TAX_TRACKER"
+            onNavigateToTab={(tab) => setActiveTab(tab)}
+          />
+        );
 
       // 4. Office Practice Hub (إدارة المكتب والعملاء)
       case 'OFFICE_HUB':
@@ -1437,7 +1479,7 @@ export default function App() {
                       { id: 'INVOICING', label: 'فواتير الأتعاب والمبيعات' },
                       { id: 'CERTIFICATES', label: 'الشهادات والاعتمادات الرسمية' },
                       { id: 'FEASIBILITY_STUDY', label: 'دراسات الجدوى' },
-                      { id: 'CREDIT_SIMULATOR', label: 'محاكي الائتمان والملاءة' },
+                      { id: 'CREDIT_HUB', label: 'مركز الائتمان والملفات البنكية' },
                       { id: 'CUSTOMS_HUB', label: 'الجمارك وسلاسل الإمداد' },
                       { id: 'AUDIT_TRAIL', label: 'سجل العمليات والرقابة' },
                       { id: 'MULTI_TENANT_WORKSPACES', label: 'بيئات عمل الشركات' },

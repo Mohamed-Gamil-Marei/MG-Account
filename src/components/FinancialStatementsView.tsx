@@ -142,6 +142,7 @@ interface FinancialStatementsViewProps {
     | 'ACTIVITY_LOG';
   onNavigateToExchangeRates?: () => void;
   onNavigateToCreditSimulator?: () => void;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export interface CustomFinancialLine {
@@ -172,6 +173,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
   activeTabControlled,
   onNavigateToExchangeRates,
   onNavigateToCreditSimulator,
+  onNavigateToTab,
 }) => {
   const [internalStatementTab, setInternalStatementTab] = useState<
     | 'BALANCE_SHEET'
@@ -1116,7 +1118,15 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
         <button
           type="button"
-          onClick={() => handleTopModeChange('QUICK_BANK_DOSSIER')}
+          onClick={() => {
+            if (onNavigateToTab) {
+              onNavigateToTab('CREDIT_HUB');
+            } else if (onNavigateToCreditSimulator) {
+              onNavigateToCreditSimulator();
+            } else {
+              handleTopModeChange('QUICK_BANK_DOSSIER');
+            }
+          }}
           className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
             topViewMode === 'QUICK_BANK_DOSSIER'
               ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900'

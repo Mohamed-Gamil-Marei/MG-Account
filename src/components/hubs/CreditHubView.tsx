@@ -106,10 +106,10 @@ export const CreditHubView: React.FC<CreditHubViewProps> = ({
       {/* Sub View Content */}
       <div>
         {activeSubTab === 'CREDIT_SIMULATOR' && (
-          <CreditFinancialsSimulator state={state} />
+          <CreditFinancialsSimulator state={state} initialMode="DEDICATED_YEAR" />
         )}
         {activeSubTab === 'QUICK_BANK_DOSSIER' && (
-          <CreditFinancialsSimulator state={state} />
+          <CreditFinancialsSimulator state={state} initialMode="KPIS" />
         )}
         {activeSubTab === 'CREDIT_DOSSIER_REGISTRY' && (
           <CreditDossierRegistryView state={state} />

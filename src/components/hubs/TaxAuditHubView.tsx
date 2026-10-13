@@ -47,19 +47,34 @@ export type TaxAuditSubTab =
 interface TaxAuditHubViewProps {
   state: DatabaseState;
   initialSubTab?: TaxAuditSubTab;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
   state,
   initialSubTab = 'TAX_TRACKER',
+  onNavigateToTab,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<TaxAuditSubTab>(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<TaxAuditSubTab>(
+    initialSubTab === 'EXCEL_AUDIT_SENTINEL' ||
+      initialSubTab === 'JOURNAL_AUDIT_SCANNER' ||
+      initialSubTab === 'FRAUD_AUDIT_SENTINEL'
+      ? 'TAX_TRACKER'
+      : initialSubTab
+  );
 
   useEffect(() => {
-    if (initialSubTab) {
+    if (
+      (initialSubTab === 'EXCEL_AUDIT_SENTINEL' ||
+        initialSubTab === 'JOURNAL_AUDIT_SCANNER' ||
+        initialSubTab === 'FRAUD_AUDIT_SENTINEL') &&
+      onNavigateToTab
+    ) {
+      onNavigateToTab('AUDIT_TOOLS_HUB');
+    } else if (initialSubTab) {
       setActiveSubTab(initialSubTab);
     }
-  }, [initialSubTab]);
+  }, [initialSubTab, onNavigateToTab]);
 
   const pendingTaxesCount = state.taxDeclarations.filter(
     (t) => t.status === 'READY_TO_SUBMIT' || t.status === 'DRAFT'
@@ -93,18 +108,6 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
       id: 'TAX_PENALTY_SIMULATOR',
       label: 'المخاطر وغرامات التأخير (قانون 206)',
       icon: Scale,
-    },
-    {
-      id: 'EXCEL_AUDIT_SENTINEL',
-      label: 'مختبر مراجعة الإكسيل (XAI)',
-      icon: Sparkles,
-      badge: 'فحص ذكي',
-      badgeColor: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
-    },
-    {
-      id: 'JOURNAL_AUDIT_SCANNER',
-      label: 'فحص القيود والدفاتر',
-      icon: ShieldAlert,
     },
     {
       id: 'AUDIT_WORKING_PAPERS',
