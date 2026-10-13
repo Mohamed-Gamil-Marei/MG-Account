@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Printer,
-  Download,
   BookOpen,
   CheckCircle2,
   FileSpreadsheet,
@@ -12,22 +11,30 @@ import {
   ShieldCheck,
   Percent,
   Layers,
-  Camera,
   FolderTree,
   Lock,
   Globe2,
   HelpCircle,
   Database,
-  ArrowRight,
   TrendingUp,
-  FileCheck2,
   CreditCard,
   MessageSquare,
   Users,
-  Ship,
+  Search,
+  Key,
+  Terminal,
+  FileText,
+  AlertTriangle,
+  Download,
+  LayoutDashboard,
+  FileCode,
+  FileCheck,
 } from 'lucide-react';
 import { PrintService } from '../../services/PrintService';
-import { PrintLayoutWrapper } from '../common/PrintLayoutWrapper';
+import { db } from '../../db/localDatabase';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
+import packageJson from '../../../package.json';
 
 interface SystemManualModalProps {
   isOpen: boolean;
@@ -36,497 +43,632 @@ interface SystemManualModalProps {
 
 export const SystemManualModal: React.FC<SystemManualModalProps> = ({ isOpen, onClose }) => {
   const [activeSection, setActiveSection] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [pageSize, setPageSize] = useState<'A4' | 'A3' | 'Letter'>('A4');
 
   if (!isOpen) return null;
 
+  const officeProfile = db.getState().officeProfile || {
+    name: 'مكتب المحاسبة القانونية والمراجعة',
+    taxNumber: '100-200-300',
+  };
+
+  const currentDate = new Date().toLocaleDateString('ar-EG', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const appVersion = packageJson.version || '1.2.0';
+
+  // Method 1: Browser Print / PDF via PrintService
   const handlePrintPdf = async () => {
     setIsPrinting(true);
-    await PrintService.printElementById('system-manual-printable-dossier', {
-      title: 'دليل المستخدم الشامل ودورة العمل المحاسبية - المنظومة المحاسبية والضريبية المصرية',
-      customDelayMs: 300,
-      onAfterPrint: () => setIsPrinting(false),
-    });
+    try {
+      await PrintService.printElementById('system-manual-printable-dossier', {
+        title: `دليل المستخدم الشامل v${appVersion} - منظومة MG-Account`,
+        pageSize: pageSize,
+        customDelayMs: 300,
+        onAfterPrint: () => setIsPrinting(false),
+      });
+    } catch (err) {
+      console.error('Print failed:', err);
+      setIsPrinting(false);
+    }
+  };
+
+  // Method 2: Direct PDF File Download via html2canvas-pro + jsPDF
+  // CRITICAL REQUIREMENT: Do NOT use jsPDF.text() with Arabic strings!
+  // All titles, headers, footers, cover page, and pages are rendered strictly from HTML elements.
+  const handleDirectDownloadPdf = async () => {
+    const element = document.getElementById('system-manual-printable-dossier');
+    if (!element) return;
+
+    setIsExportingPdf(true);
+    try {
+      // Temporarily set fixed width for pristine high-res canvas rendering
+      const originalWidth = element.style.width;
+      element.style.width = '850px';
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      element.style.width = originalWidth;
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+      // Page dimensions in mm
+      const pdfWidth = pageSize === 'A3' ? 297 : pageSize === 'Letter' ? 216 : 210;
+      const pdfHeight = pageSize === 'A3' ? 420 : pageSize === 'Letter' ? 279 : 297;
+
+      const imgWidth = pdfWidth - 20; // 10mm margins on left & right
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const pageHeightPixels = (canvas.width * (pdfHeight - 20)) / imgWidth;
+
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: pageSize.toLowerCase() as any,
+      });
+
+      let heightLeft = canvas.height;
+      let position = 10;
+
+      // First Page
+      pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+      heightLeft -= pageHeightPixels;
+
+      // Subsequent Pages (purely image slices without ANY jsPDF.text calls to prevent character corruptions)
+      while (heightLeft > 0) {
+        position -= pdfHeight - 20;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+        heightLeft -= pageHeightPixels;
+      }
+
+      pdf.save(`MG_Account_User_Guide_v${appVersion}_${activeSection}_${pageSize}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-6xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden text-right">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-slate-900 text-slate-100 rounded-2xl shadow-2xl max-w-6xl w-full h-[92vh] flex flex-col border border-slate-800 overflow-hidden font-sans text-right" dir="rtl">
         
-        {/* Header Bar */}
-        <div className="bg-slate-900 border-b border-slate-800 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-inner">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                دليل المستخدم الشامل ودورة العمل التفاعلية (User Manual & Screen Guide)
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold">
-                  PDF مصور
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-300">
+                  التوثيق الرسمي المعالج v{appVersion}
                 </span>
+                <span className="text-xs text-slate-400">إصدار {appVersion} المعاير</span>
+              </div>
+              <h2 className="text-base font-bold text-white mt-0.5" style={{ letterSpacing: 'normal' }}>
+                دليل استخدام منظومة MG-Account المحاسبية والضريبية الشاملة
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                شرح تفصيلي لكافة شاشات ومراكز المنظومة ودورة القيد والإقفال والضرائب والفحص بالمعايير المصرية
-              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Paper Size Selector */}
+            <div className="flex items-center bg-slate-800/80 p-1 rounded-lg border border-slate-700 text-xs">
+              <span className="text-slate-400 px-2 font-medium">الورق:</span>
+              {(['A4', 'A3', 'Letter'] as const).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setPageSize(size)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    pageSize === size ? 'bg-emerald-600 text-white shadow' : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+
+            {/* Direct PDF Export */}
+            <button
+              onClick={handleDirectDownloadPdf}
+              disabled={isExportingPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md hover:shadow-emerald-900/30 disabled:opacity-50 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>{isExportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}</span>
+            </button>
+
+            {/* Print Button */}
             <button
               onClick={handlePrintPdf}
               disabled={isPrinting}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs shadow-lg shadow-emerald-700/30 transition flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold border border-slate-700 transition-all cursor-pointer"
             >
-              <Printer className="w-4 h-4" />
-              <span>{isPrinting ? 'جاري التجهيز...' : 'طباعة وتحميل كـ PDF مصور'}</span>
+              <Printer className="w-4 h-4 text-emerald-400" />
+              <span>{isPrinting ? 'جاري التحضير...' : 'طباعة / معاينة'}</span>
             </button>
+
+            {/* Close Modal Button */}
             <button
               onClick={onClose}
-              className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold transition"
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-red-900/40 hover:text-red-300 text-slate-400 text-xs font-bold border border-slate-700 transition-all cursor-pointer"
             >
-              ✕
+              إغلاق
             </button>
           </div>
         </div>
 
-        {/* Filter Toolbar */}
-        <div className="bg-slate-950/60 border-b border-slate-800 px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs shrink-0">
-          <span className="text-slate-400 font-bold shrink-0">تصفح المحاور:</span>
-          {[
-            { id: 'ALL', label: 'كامل الدليل (Full Manual)' },
-            { id: 'ACCOUNTING', label: '1. الدورة المحاسبية و OCR' },
-            { id: 'FINANCIAL', label: '2. القوائم والتحليل المالي' },
-            { id: 'TAX', label: '3. الضرائب ومنظومة الفاتورة' },
-            { id: 'AUDIT', label: '4. المراجعة وأوراق العمل' },
-            { id: 'OFFICE', label: '5. إدارة المكتب والعملاء' },
-            { id: 'CUSTOMS', label: '6. الجمارك والتكلفة الإنزالية والـ ACI' },
-            { id: 'SECURITY', label: '7. الأمان والنسخ الاحتياطي' },
-          ].map((sec) => (
+        {/* Navigation Controls Bar */}
+        <div className="bg-slate-950/60 p-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none text-xs">
             <button
-              key={sec.id}
-              onClick={() => setActiveSection(sec.id)}
-              className={`px-3 py-1.5 rounded-lg font-bold transition shrink-0 ${
-                activeSection === sec.id
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700'
+              onClick={() => setActiveSection('ALL')}
+              className={`px-3 py-1.5 rounded-lg font-bold whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'ALL'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
-              {sec.label}
+              عرض كافة الأقسام
             </button>
-          ))}
+            <button
+              onClick={() => setActiveSection('OVERVIEW')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'OVERVIEW'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              1. نظرة عامة
+            </button>
+            <button
+              onClick={() => setActiveSection('SETUP')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'SETUP'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              2. التشغيل والإنتاج
+            </button>
+            <button
+              onClick={() => setActiveSection('AUTH')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'AUTH'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              3. إنشاء الحساب والصلاحيات
+            </button>
+            <button
+              onClick={() => setActiveSection('HUBS')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'HUBS'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              4. شرح الشاشات الـ 18
+            </button>
+            <button
+              onClick={() => setActiveSection('CYCLE')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'CYCLE'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              5. مثال الدورة المحاسبية
+            </button>
+            <button
+              onClick={() => setActiveSection('BACKUP')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'BACKUP'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              6. النسخ والاستعادة
+            </button>
+            <button
+              onClick={() => setActiveSection('SECURITY')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'SECURITY'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              7. الأمان وأفضل الممارسات
+            </button>
+            <button
+              onClick={() => setActiveSection('UNCERTAIN')}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
+                activeSection === 'UNCERTAIN'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              8. الملفات غير المؤكدة
+            </button>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="بحث في الدليل..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
         </div>
 
-        {/* Scrollable Printable Manual Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950 space-y-8">
-          
-          <div id="system-manual-printable-dossier" className="bg-white text-slate-900 rounded-2xl shadow-xl overflow-hidden p-6 sm:p-10 space-y-10">
+        {/* Printable & Interactive Dossier Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-900 space-y-6 text-xs text-slate-300 leading-relaxed scrollbar-thin scrollbar-thumb-slate-700">
+          <div id="system-manual-printable-dossier" className="bg-white text-slate-900 p-6 sm:p-10 rounded-xl shadow-lg border border-slate-200 space-y-8 font-sans" dir="rtl">
             
-            {/* Document Official Cover & Header */}
-            <div className="border-b-4 border-slate-900 pb-6">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-right">
-                <div>
-                  <span className="inline-block px-3 py-1 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-black mb-2">
-                    المرجع الفني والتشغيلي المعتمد v2.6.4
-                  </span>
-                  <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
-                    الدليل الإرشادي الشامل ومخطط دورة العمل المحاسبية
-                  </h1>
-                  <p className="text-sm font-bold text-slate-600 mt-1">
-                    منظومة المحاسب القانوني وإدارة حسابات الشركات والضرائب المصرية وفق معايير EAS
-                  </p>
-                </div>
-                <div className="text-center sm:text-left bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-xs space-y-1">
-                  <div className="font-bold text-slate-800">إصدار الوثيقة: سبتمبر 2026</div>
-                  <div className="text-slate-600">التوافق: مصلحة الضرائب المصرية (ETA)</div>
-                  <div className="text-slate-600">طريقة التخزين: محلي مشفر + سحابي متزامن</div>
+            {/* HTML COVER PAGE WITH ZERO LETTER SPACING ISSUES */}
+            <div className="border-b-4 border-emerald-600 pb-8 text-center space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3 text-xs text-slate-600 font-bold">
+                <span>{officeProfile.name || 'مكتب المحاسبة القانونية والمراجعة'}</span>
+                <span>تاريخ التقرير: {currentDate}</span>
+                <span>الإصدار: v{appVersion}</span>
+              </div>
+
+              <div className="py-6 space-y-2">
+                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  دليل الاستخدام التشغيلي والتوثيق الفني الشامل
+                </span>
+                <h1 className="text-2xl font-black text-slate-900 mt-2" style={{ letterSpacing: 'normal' }}>
+                  منظومة MG-Account المحاسبية والضريبية المعتمدة
+                </h1>
+                <p className="text-sm text-slate-600 max-w-2xl mx-auto">
+                  دليل تشغيلي متكامل وفق معايير المحاسبة المصرية (EAS) والدولية (IFRS) والتعليمات التنفيذية لمصلحة الضرائب المصرية
+                </p>
+              </div>
+
+              {/* Table of Contents HTML Box */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-right space-y-2">
+                <h3 className="font-bold text-slate-900 text-xs border-b border-slate-200 pb-1 mb-2">فهرس المحتويات والأقسام الرئيسية:</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-700 font-medium">
+                  <div>1. نظرة عامة والتقنيات</div>
+                  <div>2. التشغيل والإنتاج</div>
+                  <div>3. إنشاء الحساب والصلاحيات</div>
+                  <div>4. شرح الشاشات الـ 18</div>
+                  <div>5. الدورة المحاسبية العملية</div>
+                  <div>6. النسخ والاستعادة</div>
+                  <div>7. الأمان والحدود</div>
+                  <div>8. الملفات المعتمد عليها</div>
                 </div>
               </div>
             </div>
 
-            {/* Quick Architecture Diagram / Summary */}
-            <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-5">
-              <h3 className="text-base font-black text-slate-900 mb-3 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-indigo-700" />
-                هندسة دورة البيانات والمعالجة في المنظومة (Flow Diagram):
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-center text-xs">
-                <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-xs">
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-800 flex items-center justify-center font-black mx-auto mb-1.5">1</div>
-                  <strong className="block text-slate-900">المستندات والفواتير</strong>
-                  <span className="text-slate-500 text-[11px]">كاميرا OCR / رفع Excel / تسجيل يدوي</span>
-                </div>
-                <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-xs">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-black mx-auto mb-1.5">2</div>
-                  <strong className="block text-slate-900">قيود اليومية العامة</strong>
-                  <span className="text-slate-500 text-[11px]">قيد مزدوج متوازن + تدقيق آلي</span>
-                </div>
-                <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-xs">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-black mx-auto mb-1.5">3</div>
-                  <strong className="block text-slate-900">الأستاذ وميزان المراجعة</strong>
-                  <span className="text-slate-500 text-[11px]">ترحيل فوري للأرصدة بالمجاميع</span>
-                </div>
-                <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-xs">
-                  <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-black mx-auto mb-1.5">4</div>
-                  <strong className="block text-slate-900">القوائم والضرائب</strong>
-                  <span className="text-slate-500 text-[11px]">دخل، مركز مالي، نموذج 10، نموذج 41</span>
-                </div>
-                <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-xs">
-                  <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center font-black mx-auto mb-1.5">5</div>
-                  <strong className="block text-slate-900">المراجعة والتقارير</strong>
-                  <span className="text-slate-500 text-[11px]">تقرير المراجع المعتمد + QR Code</span>
-                </div>
-              </div>
-            </div>
-
-            {/* SECTION 1: ACCOUNTING CYCLE & OCR */}
-            {(activeSection === 'ALL' || activeSection === 'ACCOUNTING') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-indigo-600 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور الأول: مركز الدورة المحاسبية العامة والماسح الضوئي (OCR Scanner)
+            {/* SECTION 1: OVERVIEW */}
+            {(activeSection === 'ALL' || activeSection === 'OVERVIEW') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <BookOpen className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    1. نظرة عامة والتقنيات المستخدمة (Overview)
                   </h2>
                 </div>
 
-                {/* Module Card 1: OCR Scanner */}
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-black text-indigo-900 flex items-center gap-2">
-                      <Camera className="w-4 h-4 text-indigo-700" />
-                      1.1 الماسح الضوئي الذكي للفواتير الورقية (OCR Scanner):
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[11px] font-bold">
-                      كاميرا + ذكاء اصطناعي
-                    </span>
+                <div className="space-y-2">
+                  <h3 className="font-bold text-slate-800">ما هي منظومة MG-Account؟</h3>
+                  <p className="text-slate-700">
+                    منظومة <strong>MG-Account</strong> هي برنامج محاسبي وإداري وضريبي شمولياً موجه لمكاتب المحاسبة القانونية ومراقبي الحسابات والشركات. تتيح إدارة كافة مراحل الدورة المحاسبية بدءاً من تكويد شجرة الحسابات وتسجيل قيود اليومية، وصولاً إلى الميزانيات العمومية والقوائم المالية الختامية والإيضاحات المتممة وتقرير مراقب الحسابات وإقرارات مصلحة الضرائب المصرية.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="font-bold text-slate-900">البنية البرمجية المحققة بالكود (`package.json` & `server.ts`):</h3>
+                  <ul className="list-disc list-inside space-y-1 text-slate-700">
+                    <li><strong>الواجهة الأمامية:</strong> React 19 + TypeScript + Tailwind CSS v4 + Vite 6.</li>
+                    <li><strong>الخادم الخلفي:</strong> Express 4 عبر `server.ts` منفذ على البورت 3000.</li>
+                    <li><strong>قواعد البيانات:</strong> SQLite محلياً عبر `better-sqlite3` في `data/app.db` للتنفيذ الفائق السرعة مع دعم المعاملات الذرية.</li>
+                    <li><strong>السحابة:</strong> Firebase Firestore + Auth للتزامن الميداني المزدوج.</li>
+                    <li><strong>الذكاء الاصطناعي:</strong> حزمة `@google/genai` الرسمية للفحص الضريبي وقراءة الفواتير الضريبية.</li>
+                  </ul>
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 2: SETUP & ENV VARS */}
+            {(activeSection === 'ALL' || activeSection === 'SETUP') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <Terminal className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    2. التشغيل والإنتاج ومتغيرات البيئة (Setup & Env Vars)
+                  </h2>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right border-collapse border border-slate-200 text-[11px]">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-200">
+                        <th className="p-2 border border-slate-200">اسم المتغير</th>
+                        <th className="p-2 border border-slate-200">الوظيفة والمسار بالكود</th>
+                        <th className="p-2 border border-slate-200">النوع</th>
+                        <th className="p-2 border border-slate-200">ماذا يحدث لو تغيّر أو ضاع؟</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-slate-700">
+                      <tr>
+                        <td className="p-2 font-mono font-bold border border-slate-200">GEMINI_API_KEY</td>
+                        <td className="p-2 border border-slate-200">مفتاح الاتصال بنموذج الجيمناي للفحص الذكي (`server.ts` السطر 49)</td>
+                        <td className="p-2 border border-slate-200 font-bold text-amber-700">اختياري</td>
+                        <td className="p-2 border border-slate-200">تعطل ميزة فحص الذكاء الاصطناعي وترجع رسالة "الميزة معطلة".</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2 font-mono font-bold border border-slate-200">SETUP_TOKEN</td>
+                        <td className="p-2 border border-slate-200">رمز تأكيد إنشاء أول أدمن للمنظومة (`server.ts` السطر 632)</td>
+                        <td className="p-2 border border-slate-200 font-bold text-red-700">إجباري في الإنتاج</td>
+                        <td className="p-2 border border-slate-200">يرفض الخادم إنشاء المدير إذا كانت قاعدة البيانات خالية.</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2 font-mono font-bold border border-slate-200">CREDENTIALS_KEY</td>
+                        <td className="p-2 border border-slate-200">تشفير بوابات العملاء والضرائب والسرية</td>
+                        <td className="p-2 border border-slate-200 font-bold text-amber-700">اختياري</td>
+                        <td className="p-2 border border-slate-200">تعذر فك تشفير كلمة مرور البوابات المنسوخة بالمفتاح القديم.</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2 font-mono font-bold border border-slate-200">BACKUP_SIGNATURE_KEY</td>
+                        <td className="p-2 border border-slate-200">توقيع HMAC لتأمين النسخ الاحتياطية المرفوعة</td>
+                        <td className="p-2 border border-slate-200 font-bold text-amber-700">اختياري</td>
+                        <td className="p-2 border border-slate-200">يتم استخدام التوقيع الداخلي الافتراضي.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 3: ACCOUNT & RBAC */}
+            {(activeSection === 'ALL' || activeSection === 'AUTH') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    3. إنشاء الحساب وتفعيله والصلاحيات (Account & RBAC)
+                  </h2>
+                </div>
+
+                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-2">
+                  <h3 className="font-bold text-emerald-900">شروط واشترطات الحسابات المعتمدة بالكود صراحة:</h3>
+                  <ul className="list-disc list-inside space-y-1 text-slate-800">
+                    <li><strong>الحد الأدنى لكلمة المرور:</strong> <strong>10 أحرف صراحةً</strong> (في السيرفر السطر 640: password.length &lt; 10).</li>
+                    <li><strong>مدة الجلسة المسجلة:</strong> <strong>7 أيام بالضبط</strong> (7 * 24 * 60 * 60 * 1000 ms - السيرفر السطر 711 و 718).</li>
+                    <li><strong>حدود المحاولات الفاشلة (Rate Limits - السيرفر السطر 416-457):</strong>
+                      <ul className="list-circle list-inside mr-4 space-y-0.5">
+                        <li>حظر IP السريع: 5 محاولات / دقيقة (كود 429).</li>
+                        <li>قفل بريد + IP المزدوج: 5 محاولات فاشلة / 15 دقيقة (كود 403 - قفل 15 دقيقة).</li>
+                        <li>قفل البريد الإلكتروني العام (Global Email Lockout): 20 محاولة فاشلة / ساعة على أي IP (كود 403 - قفل لمدة ساعة كاملة).</li>
+                      </ul>
+                    </li>
+                    <li><strong>حالة الحساب الجديد (PENDING):</strong> يبدأ كل حساب جديد بحالة PENDING محروماً من كافة القراءات والكتابات حتى يقوم المدير بتفعيله وتحديد دوره الصريح (السيرفر السطر 546).</li>
+                  </ul>
+                </div>
+
+                {/* RBAC Table from access.ts */}
+                <div className="space-y-2">
+                  <h3 className="font-bold text-slate-800">مصفوفة التحكم بالوصول للأدوار المأخوذة صراحة من access.ts:</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right border-collapse border border-slate-200 text-[10px]">
+                      <thead>
+                        <tr className="bg-slate-800 text-white font-bold">
+                          <th className="p-1.5 border border-slate-700">الكيان المحاسبي (entityType)</th>
+                          <th className="p-1.5 border border-slate-700">ADMIN</th>
+                          <th className="p-1.5 border border-slate-700">ACCOUNTANT</th>
+                          <th className="p-1.5 border border-slate-700">AUDITOR</th>
+                          <th className="p-1.5 border border-slate-700">SECRETARY</th>
+                          <th className="p-1.5 border border-slate-700">PENDING</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
+                        <tr>
+                          <td className="p-1.5 font-bold border border-slate-200">العملاء (clients)</td>
+                          <td className="p-1.5 border border-slate-200 text-emerald-700 font-bold">قراءة / كتابة / حذف</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / كتابة</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / كتابة</td>
+                          <td className="p-1.5 border border-slate-200">قراءة فقط</td>
+                          <td className="p-1.5 border border-slate-200 text-red-600 font-bold">مرفوض</td>
+                        </tr>
+                        <tr>
+                          <td className="p-1.5 font-bold border border-slate-200">قيود اليومية (journalEntries)</td>
+                          <td className="p-1.5 border border-slate-200 text-emerald-700 font-bold">قراءة / كتابة / حذف</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / كتابة</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / كتابة</td>
+                          <td className="p-1.5 border border-slate-200 text-red-600">مرفوض</td>
+                          <td className="p-1.5 border border-slate-200 text-red-600 font-bold">مرفوض</td>
+                        </tr>
+                        <tr>
+                          <td className="p-1.5 font-bold border border-slate-200">المستندات والأرشيف (documents)</td>
+                          <td className="p-1.5 border border-slate-200 text-emerald-700 font-bold">قراءة / كتابة / حذف</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / كتابة</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / كتابة</td>
+                          <td className="p-1.5 border border-slate-200">قراءة / رفع</td>
+                          <td className="p-1.5 border border-slate-200 text-red-600 font-bold">مرفوض</td>
+                        </tr>
+                        <tr>
+                          <td className="p-1.5 font-bold border border-slate-200">سجل الرقابة (auditLogs)</td>
+                          <td className="p-1.5 border border-slate-200 text-emerald-700 font-bold">قراءة فقط (غير قابل للحذف)</td>
+                          <td className="p-1.5 border border-slate-200">بالصلاحية</td>
+                          <td className="p-1.5 border border-slate-200">بالصلاحية</td>
+                          <td className="p-1.5 border border-slate-200 text-red-600">مرفوض</td>
+                          <td className="p-1.5 border border-slate-200 text-red-600 font-bold">مرفوض</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 4: 18 HUBS & SCREENS */}
+            {(activeSection === 'ALL' || activeSection === 'HUBS') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <LayoutDashboard className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    4. شرح شاشات ومراكز المنظومة الـ 18 بالتفصيل (Hubs & Screens)
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">1. الرئيسية (Dashboard)</h4>
+                    <p className="text-slate-600">ملخص مؤشرات المكتب الأرباح، والقيود المعلقة والتنبيهات المستحقة.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">2. اليومية والقيود (Journal &amp; Ledger)</h4>
+                    <p className="text-slate-600">إدخال القيود، الترحيل isPosted = true والتصدير المباشر.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">3. دليل الحسابات (Chart of Accounts)</h4>
+                    <p className="text-slate-600">شجرة الحسابات المصرية ذات الـ 5 مستويات الهيكلية.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">4. الأتعاب والخزنة (Office Treasury)</h4>
+                    <p className="text-slate-600">تسجيل مقبوضات أتعاب العملاء وسندات الصرف.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">5. الفواتير والمبيعات (Invoicing)</h4>
+                    <p className="text-slate-600">تحرير فواتير خدمات الأتعاب بضريبة القيمة المضافة و QR Code.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">6. أصول ثابتة وإهلاك (Fixed Assets)</h4>
+                    <p className="text-slate-600">حصر الأصول، القسط الثابت والمتناقص والتوليد الآلي لقيود الإهلاك.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">7. القفل الزمني للفترات (Period Lock)</h4>
+                    <p className="text-slate-600">إغلاق السنوات المكتملة لمنع أي تعديل تراجعي خلفي.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">8. الفاتورة الإلكترونية (ETA)</h4>
+                    <p className="text-slate-600">الرفع المباشر والجماعي بحد 10MB وتفويض الإقرارات.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">9. أرشيف المستندات (Documents)</h4>
+                    <p className="text-slate-600">رفع الملفات في documents/[clientId]/[year] بحد 10MB وفحص Magic Bytes.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                    <h4 className="font-bold text-slate-900">10. سجل العمليات (Audit Trail)</h4>
+                    <p className="text-slate-600">مراقبة حركات النظام غير القابلة للتعديل أو المسح.</p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 5: ACCOUNTING CYCLE */}
+            {(activeSection === 'ALL' || activeSection === 'CYCLE') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <TrendingUp className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    5. مثال عملي تطبيقي للدورة المحاسبية الكاملة (Accounting Cycle)
+                  </h2>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-[11px]">
+                  <ol className="list-decimal list-inside space-y-2 text-slate-800">
+                    <li><strong>تكويد العميل:</strong> افتح "العملاء" ← اضغط "إضافة عميل جديد" (المصرية للتوريدات).</li>
+                    <li><strong>شجرة الحسابات:</strong> افتح "دليل الحسابات" ← تأكد من الحسابات: البنك (`1112`)، المبيعات (`4110`)، القيمة المضافة (`2130`).</li>
+                    <li><strong>تسجيل قيد اليومية:</strong>
+                      <div className="bg-white p-2 border border-slate-300 rounded mt-1 font-mono text-[10px]">
+                        مدين: البنك الأهلي (1112) = 114,000 ج.م<br />
+                        دائن: مبيعات خدمات (4110) = 100,000 ج.م<br />
+                        دائن: ضريبة القيمة المضافة 14% (2130) = 14,000 ج.م
+                      </div>
+                    </li>
+                    <li><strong>ترحيل القيد:</strong> اضغط زر "ترحيل القيد" للربط الختامي بالنظام.</li>
+                    <li><strong>ميزان المراجعة والقوائم المالية:</strong> توليد القوائم المعتمدة والميزانية وإقفال السنة مالياً.</li>
+                  </ol>
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 6: BACKUP & RESTORE */}
+            {(activeSection === 'ALL' || activeSection === 'BACKUP') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <Database className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    6. النسخ الاحتياطي والاستعادة وفحص السلامة (Backup & Restore)
+                  </h2>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-[11px]">
+                  <p><strong>النسخ الاحتياطي التلقائي:</strong> يتم يومياً عند الساعة 23:00 تلقائياً في `data/backups/` مع الاحتفاظ بـ 30 نسخة أحدث تنظيفاً.</p>
+                  <p><strong>استعادة النسخ وفحص السلامة (`server.ts` السطر 78 - حد 50MB):</strong></p>
+                  <ul className="list-disc list-inside text-slate-700 space-y-1">
+                    <li>يشترط دور المدير **ADMIN** ومسار `/api/server-backups/restore`.</li>
+                    <li>يجري السيرفر فحص سلامة تلقائي بـ `PRAGMA integrity_check`.</li>
+                    <li>إذا فشلت النتيجة ويرجع خطأ integrity check يتم إلغاء العملية لحماية البيانات من التلف.</li>
+                    <li>تنشأ نسخة طارئة للحالة الحالية قبل الاستبدال كإجراء احترازي.</li>
+                  </ul>
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 7: RELIED UPON FILES & UNCERTAIN POINTS */}
+            {(activeSection === 'ALL' || activeSection === 'UNCERTAIN') && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b-2 border-emerald-600 pb-2">
+                  <FileCode className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-base font-bold text-slate-900" style={{ letterSpacing: 'normal' }}>
+                    7. قائمة الملفات المعتمد عليها والنقاط غير المؤكدة
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg space-y-1">
+                    <h4 className="font-bold text-emerald-900">الملفات المعتمد عليها صراحة بالكود:</h4>
+                    <ul className="list-disc list-inside text-slate-800 space-y-0.5">
+                      <li>`server.ts` - حدود الأمان وتوثيق الـ 10 أحرف والـ 7 أيام.</li>
+                      <li>`package.json` - الإصدار v{appVersion} والمكتبات المستوردة.</li>
+                      <li>`src/server/access.ts` - مصفوفة التحكم بالأدوار والصلاحيات.</li>
+                      <li>`firestore.rules` - القواعد السحابية.</li>
+                      <li>`src/services/PrintService.ts` - الطباعة المعزولة.</li>
+                    </ul>
                   </div>
 
-                  {/* Visual Screen Mockup */}
-                  <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs border border-slate-800 space-y-2 shadow-inner">
-                    <div className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1.5">
-                      <span>📸 [عدسة الماسح الضوئي الحي / مسح الفاتورة]</span>
-                      <span className="text-emerald-400">● دقة الفحص: 98%</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">رقم الفاتورة:</span>
-                        <strong className="text-white">INV-2026-88912</strong>
-                      </div>
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">المورد / الجهة:</span>
-                        <strong className="text-white">شركة الأهرام للتوريدات</strong>
-                      </div>
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">الضريبة 14% + 1% أ.ت.ص:</span>
-                        <strong className="text-emerald-400">+1,400 / -100 ج.م</strong>
-                      </div>
-                    </div>
-                    <div className="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] text-slate-300">
-                      <strong>مقترح القيد التلقائي:</strong> من حـ/ المشتريات (10,000) وحـ/ ض.ق.م (1,400) إلى حـ/ خصم أ.ت.ص (100) وحـ/ الموردين (11,300).
-                    </div>
-                  </div>
-
-                  <div className="text-xs text-slate-700 space-y-1 leading-relaxed">
-                    <p><strong>كيفية الاستخدام:</strong></p>
-                    <ul className="list-disc list-inside space-y-1 pr-2">
-                      <li>افتح شاشة <strong>الماسح الضوئي (OCR)</strong> من القائمة الجانبية أو اضغط على زر الكاميرا داخل شاشة قيود اليومية.</li>
-                      <li>وجه الكاميرا نحو الفاتورة الورقية أو اسحب ملف الصورة؛ سيقوم النظام فورياً بعزل المبالغ والضريبة وتوليد القيد المتوازن.</li>
-                      <li>راجع الحسابات واضغط <strong>"اعتماد وترحيل القيد المحاسبي"</strong> ليتم ترحيله فوراً إلى دفتر اليومية والأستاذ.</li>
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg space-y-1">
+                    <h4 className="font-bold text-amber-900">النقاط غير المؤكدة من الكود المباشر:</h4>
+                    <ul className="list-disc list-inside text-slate-800 space-y-0.5">
+                      <li>تكامل WhatsApp Webhooks المتقدم الخارجي لشركة Meta (`server.ts` & `whatsappService.ts`).</li>
+                      <li>حدود سعة الاستضافة المباشرة لـ Firebase Storage السحابية (`firestore.rules`).</li>
                     </ul>
                   </div>
                 </div>
-
-                {/* Module Card 2: Chart of Accounts & General Journal */}
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <span className="text-sm font-black text-indigo-900 flex items-center gap-2">
-                    <FolderTree className="w-4 h-4 text-indigo-700" />
-                    1.2 شجرة الحسابات الموحدة ودفتر اليومية العامة:
-                  </span>
-                  
-                  {/* Visual Screen Mockup */}
-                  <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs border border-slate-800 space-y-2 shadow-inner">
-                    <div className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1.5">
-                      <span>📖 [دفتر قيود اليومية المزدوجة - المعايير المصرية]</span>
-                      <span className="text-indigo-400">اختصار سريع: Ctrl+J</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-right text-[11px]">
-                        <thead>
-                          <tr className="text-slate-400 border-b border-slate-800">
-                            <th className="py-1">رقم القيد</th>
-                            <th className="py-1">التاريخ</th>
-                            <th className="py-1">كود واسم الحساب</th>
-                            <th className="py-1">مدين</th>
-                            <th className="py-1">دائن</th>
-                            <th className="py-1">الحالة</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-slate-300">
-                          <tr className="border-b border-slate-800/50">
-                            <td className="py-1 font-bold text-amber-400">JV-2026-001</td>
-                            <td className="py-1">2026-01-15</td>
-                            <td className="py-1">1111 - حـ/ الصندوق والخزينة</td>
-                            <td className="py-1 text-emerald-400 font-bold">50,000</td>
-                            <td className="py-1">0.00</td>
-                            <td className="py-1 text-emerald-400">مرحل ✔</td>
-                          </tr>
-                          <tr>
-                            <td className="py-1"></td>
-                            <td className="py-1"></td>
-                            <td className="py-1">2111 - حـ/ رأس المال المدفوع</td>
-                            <td className="py-1">0.00</td>
-                            <td className="py-1 text-emerald-400 font-bold">50,000</td>
-                            <td className="py-1 text-emerald-400">مرحل ✔</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    <strong>المزايا الرئيسية:</strong> فحص تلقائي لتوازن القيد، إمكانية إرفاق صور المستندات، شجرة حسابات جاهزة بـ 4 مستويات هرمية، وتصدير كامل بصيغ Excel و PDF والطباعة الرسمية المعتمدة.
-                  </p>
-                </div>
-              </div>
+              </section>
             )}
 
-            {/* SECTION 2: FINANCIAL REPORTING & STATEMENTS */}
-            {(activeSection === 'ALL' || activeSection === 'FINANCIAL') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-emerald-600 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور الثاني: القوائم المالية، الإيضاحات المتممة، والمحاكي المالي
-                  </h2>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <span className="text-sm font-black text-emerald-900 flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-                    2.1 القوائم المالية الختامية وفق معيار المحاسبة المصري رقم (1):
-                  </span>
-
-                  {/* Visual Screen Mockup */}
-                  <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs border border-slate-800 space-y-2 shadow-inner">
-                    <div className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1.5">
-                      <span>📊 [قائمة الدخل الشامل والمركز المالي - مقارنة سنوية]</span>
-                      <span className="text-emerald-400">السنة المالية 2026 / 2025</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">صافي المبيعات والإيرادات:</span>
-                        <strong className="text-white">1,250,000 ج.م</strong>
-                      </div>
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">مجمل الربح التجاري:</span>
-                        <strong className="text-emerald-400">450,000 ج.م</strong>
-                      </div>
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">صافي الأرباح بعد الضريبة:</span>
-                        <strong className="text-emerald-400">285,000 ج.م</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    توليد تلقائي فوري لقوائم (المركز المالي، الدخل الشامل، التدفقات النقدية بالطريقة غير المباشرة، والتغير في حقوق الملكية) مع صانع الإيضاحات المتممة وتقرير مراجع الحسابات المستقل المذيل بختم QR Code.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* SECTION 3: TAXATION & ETA PLATFORM */}
-            {(activeSection === 'ALL' || activeSection === 'TAX') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-amber-600 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور الثالث: الضرائب المصرية ومنظومة الفاتورة والإيصال الإلكتروني (ETA)
-                  </h2>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <span className="text-sm font-black text-amber-900 flex items-center gap-2">
-                    <Percent className="w-4 h-4 text-amber-700" />
-                    3.1 الإقرارات الضريبية والمطابقة مع منظومة الفاتورة الإلكترونية:
-                  </span>
-
-                  {/* Visual Screen Mockup */}
-                  <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs border border-slate-800 space-y-2 shadow-inner">
-                    <div className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1.5">
-                      <span>🏛️ [مركز تتبع الإقرارات ومطابقة منظومة الضرائب ETA]</span>
-                      <span className="text-amber-400">قانون 206 لسنة 2020</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">إقرار القيمة المضافة (نموذج 10):</span>
-                        <strong className="text-white">جاهز للإرسال (شهري)</strong>
-                      </div>
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">الخصم والتحصيل (نموذج 41):</span>
-                        <strong className="text-white">الربع الثالث 2026</strong>
-                      </div>
-                      <div className="bg-slate-800 p-2 rounded">
-                        <span className="text-slate-400 block">فروق المطابقة مع البوابة:</span>
-                        <strong className="text-emerald-400">0.00 ج.م (مطابق 100%)</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    <strong>النماذج المدعومة:</strong> إقرار الدخل السنوي للشركات والأفراد، إقرار ض.ق.م نموذج 10، نموذج 41 للخصم من المنبع، إقرار كسب العمل والمرتبات، مع محاكي احتساب مقابل التأخير وغرامات المادة 70.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* SECTION 4: AUDIT WORKING PAPERS */}
-            {(activeSection === 'ALL' || activeSection === 'AUDIT') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-teal-600 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور الرابع: أوراق عمل المراجعة القانونية ومكافحة الاحتيال
-                  </h2>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <span className="text-sm font-black text-teal-900 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-teal-700" />
-                    4.1 أوراق العمل والتحقق من بنود القوائم المالية (Audit Working Papers):
-                  </span>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    ملف مراجعة إلكتروني متكامل يحتوي على برامج مراجعة الخزينة، البنوك، العملاء والمصادقات، المخزون والجرد الفعلي، الأصول الثابتة، مع فاحص الاحتيال واختبار قانون بنفورد (Benford's Law) لكشف التلاعب بالأرقام.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* SECTION 5: OFFICE & CLIENTS ARCHIVE */}
-            {(activeSection === 'ALL' || activeSection === 'OFFICE') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-blue-600 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور الخامس: إدارة مكتب المحاسبة، أرشيف العملاء، وخدمة WhatsApp Bot
-                  </h2>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <span className="text-sm font-black text-blue-900 flex items-center gap-2">
-                    <Users className="w-4 h-4 text-blue-700" />
-                    5.1 بطاقات العملاء، الخزينة المهنية، ومراسلات الواتساب:
-                  </span>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    إدارة شاملة للملفات الضريبية والسجلات التجارية للعملاء، متابعة عقود وأتعاب المحاسبة وسندات القبض والصرف، وتوليد إشعارات التنبيه بمواعيد الإقرارات وإرسالها مباشرة لعملاء المكتب عبر الواتساب.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* SECTION 6: CUSTOMS & GLOBAL TRADE & LANDED COST */}
-            {(activeSection === 'ALL' || activeSection === 'CUSTOMS') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-cyan-600 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور السادس: الجمارك، منظومة نافذة (ACI)، واحتساب التكلفة الإنزالية (EAS 2)
-                  </h2>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-4">
-                  <span className="text-sm font-black text-cyan-900 flex items-center gap-2">
-                    <Ship className="w-4 h-4 text-cyan-700" />
-                    6.1 دورة التجارة الدولية والشحنات الجمركية والربط المحاسبي الكامل:
-                  </span>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    وحدة متكاملة لإدارة دورة الشحنات الواردة والصادرة تحت قانون الجمارك المصري رقم 207 لسنة 2020 ومنظومة التسجيل المسبق للشحنات (ACI / Nafeza). تتيح المنظومة متابعة رقم الـ ACID ومطابقة الفاتورة التجارية والشهادات وبوليصة الشحن مع البيان الجمركي الموحد (نموذج 46).
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-700 pt-2">
-                    <div className="bg-white border border-slate-200 p-3 rounded-xl space-y-1.5 shadow-2xs">
-                      <strong className="text-slate-900 block font-bold text-cyan-950">
-                        1. محرك التكلفة الإنزالية (Landed Cost):
-                      </strong>
-                      <p className="text-slate-600 leading-relaxed">
-                        حساب التكلفة الرأسمالية للمخزون طبقاً للمعيار المصري رقم (2) متضمناً: قيمة البضاعة بالعملة الأجنبية مقومة بسعر البنك المركزي (EAS 13)، الشحن والنولون، التأمين البحري، ضريبة الوارد الجمركية، ورسوم الخدمات الإضافية.
-                      </p>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 p-3 rounded-xl space-y-1.5 shadow-2xs">
-                      <strong className="text-slate-900 block font-bold text-cyan-950">
-                        2. التوليد الآلي للقيود المحاسبية:
-                      </strong>
-                      <p className="text-slate-600 leading-relaxed">
-                        توليد حزمة قيود متكاملة بضغطة زر: (1) قيد الاعتماد المستندي والبضاعة بالطريق، (2) قيد سداد الرسوم الجمركية وضريبة الجدول وضريبة القيمة المضافة القابلة للخصم، (3) قيد إقفال الشحنة ورسملة المخزون النهائي في المستودع.
-                      </p>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 p-3 rounded-xl space-y-1.5 shadow-2xs">
-                      <strong className="text-slate-900 block font-bold text-cyan-950">
-                        3. الربط بالخزنة والأرشيف الإلكتروني:
-                      </strong>
-                      <p className="text-slate-600 leading-relaxed">
-                        سداد المصروفات الجمركية وأتعاب المخلص فورياً من خزنة وحسابات المكتب مع توليد سند صرف رسمي، وحفظ وأرشفة كافة مستندات الشحنة رقمياً في ملف العميل بالأرشيف العام.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SECTION 7: SECURITY & DESKTOP SYNC */}
-            {(activeSection === 'ALL' || activeSection === 'SECURITY') && (
-              <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-2 border-r-4 border-slate-800 pr-3">
-                  <h2 className="text-lg font-black text-slate-950">
-                    المحور السابع: الأمان المشفر، النسخ الاحتياطي، والتشغيل دون إنترنت
-                  </h2>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-5 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-700">
-                    <div className="bg-white border border-slate-300 p-3.5 rounded-xl space-y-1">
-                      <strong className="text-slate-900 block flex items-center gap-1.5">
-                        <Lock className="w-4 h-4 text-amber-600" />
-                        صلاحيات المستخدمين وقفل الشاشة:
-                      </strong>
-                      <p className="text-slate-600">
-                        نظام أدوار متعدد (مدير شريك، مراجع، محاسب، مدخل بيانات) مع حماية كل مستخدم برمز PIN سري وسجل تدقيق للعمليات.
-                      </p>
-                    </div>
-
-                    <div className="bg-white border border-slate-300 p-3.5 rounded-xl space-y-1">
-                      <strong className="text-slate-900 block flex items-center gap-1.5">
-                        <Database className="w-4 h-4 text-blue-600" />
-                        النسخ الاحتياطي السحابي والمحلي:
-                      </strong>
-                      <p className="text-slate-600">
-                        تصدير واستيراد قواعد البيانات بضغطة زر بصيغة JSON مشفرة، وتزامن سحابي فوري بين أجهزة المكتب.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Official Signature & QR Stamp Footer */}
-            <div className="pt-8 border-t-2 border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-right">
-              <div>
-                <div className="text-xs font-bold text-slate-900">
-                  تم إصدار هذا الدليل آلياً من المنظومة المحاسبية والضريبية الرسمية
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  مرخص ومطابق لمعايير المحاسبة المصرية وقوانين الإجراءات الضريبية الموحدة
-                </div>
-              </div>
-
-              <div className="text-center bg-slate-100 border border-slate-300 p-3 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-700 block">وثيقة معتمدة رسمياً</span>
-                <span className="text-xs font-black text-emerald-800 font-mono">OFFICIAL-GUIDE-VERIFIED</span>
-              </div>
+            {/* Document Footer */}
+            <div className="border-t border-slate-200 pt-4 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+              <span>{officeProfile.name || 'مكتب المحاسبة القانونية'} - توثيق معتمد</span>
+              <span>دليل الاستخدام v{appVersion}</span>
+              <span>صفحة 1 من 1</span>
             </div>
 
           </div>
-
         </div>
+
       </div>
     </div>
   );

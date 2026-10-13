@@ -66,22 +66,35 @@ async function startServer() {
   app.set("trust proxy", 1);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // 50MB body parser for specific endpoints that require large payloads (OCR, Backups, Imports, WhatsApp documents)
-  const largeBodyParserJson = express.json({
+  // 50MB body parser for specific endpoints that require large payloads (OCR, Server Backups Restore, Data Migration)
+  const bodyParser50mbJson = express.json({
     limit: "50mb",
     verify: (req: any, _res, buf) => {
       if (req.originalUrl && req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf;
     }
   });
-  const largeBodyParserUrlencoded = express.urlencoded({ extended: true, limit: "50mb" });
+  const bodyParser50mbUrlencoded = express.urlencoded({ extended: true, limit: "50mb" });
 
   app.use([
     "/api/ocr",
-    "/api/data/import",
-    "/api/data/restore",
     "/api/server-backups/restore",
-    "/api/whatsapp/send-document"
-  ], largeBodyParserJson, largeBodyParserUrlencoded);
+    "/api/data/migrate-all"
+  ], bodyParser50mbJson, bodyParser50mbUrlencoded);
+
+  // 10MB body parser for entity data, AI, and batch submissions
+  const bodyParser10mbJson = express.json({
+    limit: "10mb",
+    verify: (req: any, _res, buf) => {
+      if (req.originalUrl && req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf;
+    }
+  });
+  const bodyParser10mbUrlencoded = express.urlencoded({ extended: true, limit: "10mb" });
+
+  app.use([
+    "/api/data",
+    "/api/ai",
+    "/api/eta/documents/batch-submit"
+  ], bodyParser10mbJson, bodyParser10mbUrlencoded);
 
   // Global default body parser limited to 1MB
   app.use(express.json({
@@ -263,10 +276,40 @@ async function startServer() {
     );
   `);
 
+  function checkClientExists(clientId: string): boolean {
+    if (!clientId || clientId === "general") return false;
+    try {
+      const clientRow = db.prepare("SELECT id FROM clients WHERE id = ?").get(String(clientId));
+      if (clientRow) return true;
+      const storeRow = db.prepare("SELECT data FROM dataStores WHERE key = 'clients'").get() as any;
+      if (storeRow && storeRow.data) {
+        const clientList = JSON.parse(storeRow.data);
+        if (Array.isArray(clientList) && clientList.some((c: any) => String(c.id) === String(clientId))) {
+          return true;
+        }
+      }
+    } catch {
+      return true; // Fallback
+    }
+    return false;
+  }
+
   const storage = multer.diskStorage({
     destination: (req, _file, cb) => {
-      const clientId = String(req.body.clientId || req.query.clientId || "general").replace(/[^a-zA-Z0-9_-]/g, "");
+      const rawClientId = req.body.clientId || req.query.clientId;
+      const clientId = String(rawClientId || "").replace(/[^a-zA-Z0-9_-]/g, "");
       const year = String(req.body.year || req.query.year || new Date().getFullYear()).replace(/[^a-zA-Z0-9_-]/g, "");
+      
+      // Verify client exists before creating any target folder on disk
+      const clientExists = checkClientExists(clientId);
+      if (!clientExists) {
+        const tempDir = path.join(documentsDir, "_temp");
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        return cb(null, tempDir);
+      }
+
       const targetDir = path.join(documentsDir, clientId, year);
       if (!fs.existsSync(targetDir)) {
         fs.mkdirSync(targetDir, { recursive: true });
@@ -392,6 +435,17 @@ async function startServer() {
           return res.status(403).json({
             success: false,
             error: "تم قفل الحساب لهذا العنوان مؤقتاً بسبب محاولات دخول فاشلة متكررة. يرجى المحاولة بعد 15 دقيقة.",
+          });
+        }
+      }
+
+      // 3. Email-only global lock (20 failed attempts in last 1 hour across any IP)
+      if (email) {
+        const recentGlobalEmailFailures = db.prepare("SELECT count(*) as count FROM login_attempts WHERE email = ? AND success = 0 AND timestamp > ?").get(email, now - 60 * 60 * 1000) as any;
+        if (recentGlobalEmailFailures && recentGlobalEmailFailures.count >= 20) {
+          return res.status(403).json({
+            success: false,
+            error: "تم قفل الحساب لهذا البريد الإلكتروني مؤقتاً بسبب كثرة المحاولات الفاشلة المتكررة. يرجى الانتظار ساعة قبل المحاولة مجدداً.",
           });
         }
       }
@@ -2890,6 +2944,21 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  // Centralized Express Error Handler (Handles 413 Payload Too Large and other unhandled errors)
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (err && (err.status === 413 || err.statusCode === 413 || err.type === "entity.too.large")) {
+      return res.status(413).json({
+        success: false,
+        error: "حجم البيانات المرسلة يتجاوز الحد الأقصى المسموح به لهذا المسار (413 Payload Too Large)."
+      });
+    }
+    console.error("[ServerError]", err);
+    res.status(err?.status || 500).json({
+      success: false,
+      error: err?.message || "حدث خطأ غير متوقع في الخادم."
+    });
   });
 
   // Static public assets folder (videos, manifest, icons)

@@ -18,6 +18,7 @@ import {
   CreditCard,
   Building,
   KeyRound,
+  Scale,
   FileSpreadsheet,
   HelpCircle,
   X,

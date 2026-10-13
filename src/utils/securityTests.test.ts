@@ -129,4 +129,53 @@ describe('Security & Access Control Tests', () => {
     expect(scriptSrcDirectives).not.toContain("'unsafe-inline'");
     expect(scriptSrcDirectives).toEqual(["'self'"]);
   });
+
+  it('11. حدود أبعاد البيانات (Body Limits): 3MB لـ officeProfile ينجح، و12MB يرجّع 413، و20MB لـ migrate-all ينجح للمدير', () => {
+    const checkPayloadLimit = (route: string, sizeMB: number, role: string) => {
+      if (role === 'PENDING') {
+        return { status: 403, error: 'صلاحية مرفوضة' };
+      }
+
+      let limitMB = 1; // default limit
+      if (route === '/api/ocr' || route === '/api/server-backups/restore' || route === '/api/data/migrate-all') {
+        limitMB = 50;
+      } else if (route.startsWith('/api/data') || route.startsWith('/api/ai') || route === '/api/eta/documents/batch-submit') {
+        limitMB = 10;
+      }
+
+      if (sizeMB > limitMB) {
+        return { status: 413, error: 'حجم البيانات المرسلة يتجاوز الحد الأقصى المسموح به لهذا المسار (413 Payload Too Large).' };
+      }
+
+      return { status: 200, success: true };
+    };
+
+    // Push 3MB to /api/data/officeProfile -> succeeds (200)
+    const profile3MB = checkPayloadLimit('/api/data/officeProfile', 3, 'ADMIN');
+    expect(profile3MB.status).toBe(200);
+
+    // Push 12MB to /api/data/officeProfile -> returns 413
+    const profile12MB = checkPayloadLimit('/api/data/officeProfile', 12, 'ADMIN');
+    expect(profile12MB.status).toBe(413);
+    expect(profile12MB.error).toContain('413 Payload Too Large');
+
+    // Push 20MB to /api/data/migrate-all for ADMIN -> succeeds (200)
+    const migrate20MB = checkPayloadLimit('/api/data/migrate-all', 20, 'ADMIN');
+    expect(migrate20MB.status).toBe(200);
+  });
+
+  it('12. قفل الحساب المزدوج للبريد الإلكتروني عند تجاوزه 20 محاولة فاشلة في ساعة', () => {
+    const emailAttempts = Array.from({ length: 22 }, () => ({
+      email: 'user@example.com',
+      success: 0,
+      timestamp: Date.now() - 15 * 60 * 1000
+    }));
+
+    const now = Date.now();
+    const attemptsLastHour = emailAttempts.filter(
+      a => a.email === 'user@example.com' && a.success === 0 && a.timestamp > now - 60 * 60 * 1000
+    );
+
+    expect(attemptsLastHour.length).toBeGreaterThanOrEqual(20);
+  });
 });

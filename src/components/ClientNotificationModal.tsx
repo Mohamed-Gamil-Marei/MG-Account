@@ -83,6 +83,7 @@ export const ClientNotificationModal: React.FC<ClientNotificationModalProps> = (
   const generateMessage = (): { subject: string; text: string } => {
     const officePhone = db.getState().officeProfile?.phone || '';
     const signature = `\n\nمع خالص التقدير والاحترام،\n${officeName}\nالمحاسب القانوني: ${auditorName}${officePhone ? `\nهاتف المكتب: ${officePhone}` : ''}`;
+    const clientGreeting = `السادة / ${client.name} المحترمين\nتحية طيبة وبعد،`;
 
     switch (notifyType) {
       case 'PROCEDURE_UPDATE': {

@@ -423,6 +423,13 @@ export class LocalDatabase {
                   rec._updatedAt = resJson.updatedAt;
                 }
               }
+            } else if (res.status === 413) {
+              allRecordsSynced = false;
+              const errJson = await res.json().catch(() => ({}));
+              const errorMsg = errJson.error || 'حجم البيانات يتجاوز الحد الأقصى المسموح به لهذا المسار.';
+              console.warn(`[413 Payload Too Large] ${mapping.endpoint}:`, errorMsg);
+              this.showNotificationNotice(`تنبيه (413): تعذر حفظ (${mapping.endpoint}) - ${errorMsg}`);
+              break;
             } else if (res.status === 403) {
               allRecordsSynced = false;
               this.forbidden403Keys.add(key);
@@ -477,7 +484,7 @@ export class LocalDatabase {
                         if (mapping.endpoint === 'whatsappBotSettings') this.state.whatsappBotSettings = singleData;
                       }
                     }
-                    this.persistState();
+                    this.saveState();
                     this.notify();
                   }
                 }
