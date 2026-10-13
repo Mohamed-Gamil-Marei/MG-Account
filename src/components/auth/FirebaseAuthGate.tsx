@@ -45,44 +45,52 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  const checkSetupStatus = async () => {
+    setCheckingSetup(true);
+    setSetupCheckError(null);
     let isMounted = true;
-    const checkSetupStatus = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch('/api/auth/check-setup', { signal: controller.signal });
-        clearTimeout(timeoutId);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch('/api/auth/check-setup', { signal: controller.signal });
+      clearTimeout(timeoutId);
 
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data.success) {
-            if (data.needsSetup) {
-              setNeedsAdminSetup(true);
-            } else {
-              setNeedsAdminSetup(false);
-            }
-          }
-        } else {
-          if (isMounted) {
-            setSetupCheckError('تعذر الاتصال بالسيرفر');
+      if (res.ok) {
+        const data = await res.json();
+        if (isMounted && data.success) {
+          if (data.needsSetup) {
+            setNeedsAdminSetup(true);
+          } else {
             setNeedsAdminSetup(false);
           }
         }
-      } catch (err) {
+      } else {
+        const status = res.status;
         if (isMounted) {
-          setSetupCheckError('تعذر الاتصال بالسيرفر');
+          if (status >= 500 && status <= 504) {
+            setSetupCheckError(`السيرفر غير متاح (خطأ ${status}): فشل الاستجابة من الخادم.`);
+          } else {
+            setSetupCheckError(`تعذر الاتصال بالسيرفر (رمز الاستجابة: ${status}).`);
+          }
           setNeedsAdminSetup(false);
         }
-      } finally {
-        if (isMounted) setCheckingSetup(false);
       }
-    };
+    } catch (err: any) {
+      if (isMounted) {
+        if (err.name === 'AbortError') {
+          setSetupCheckError('انتهت مهلة الاتصال بالخادم (Timeout بعد 8 ثوانٍ). السيرفر غير متاح.');
+        } else {
+          setSetupCheckError('تعذر الاتصال بالسيرفر (خطأ شبكة أو السيرفر متوقف).');
+        }
+        setNeedsAdminSetup(false);
+      }
+    } finally {
+      if (isMounted) setCheckingSetup(false);
+    }
+  };
 
+  useEffect(() => {
     checkSetupStatus();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const handleAdminSetupSubmit = async (e: React.FormEvent) => {
@@ -461,9 +469,20 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
         <div className="p-6 space-y-4">
           {setupCheckError && (
-            <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <span>{setupCheckError} (العمل في وضع الأوفلاين إن وجد كاش مسجل)</span>
+            <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-300 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>{setupCheckError} (العمل في وضع الأوفلاين إن وجد كاش مسجل)</span>
+              </div>
+              <div className="text-left">
+                <button
+                  type="button"
+                  onClick={checkSetupStatus}
+                  className="px-3 py-1 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إعادة المحاولة
+                </button>
+              </div>
             </div>
           )}
 

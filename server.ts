@@ -490,6 +490,7 @@ async function startServer() {
 
   // --- Local SQLite Auth Middleware for all /api/* routes ---
   function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const fullPath = req.originalUrl ? req.originalUrl.split('?')[0] : ((req.baseUrl || "") + req.path);
     const publicPaths = [
       "/api/health",
       "/api/currency/rates",
@@ -498,7 +499,7 @@ async function startServer() {
       "/api/auth/login",
     ];
 
-    if (publicPaths.includes(req.path) || req.path.startsWith("/api/whatsapp/webhook")) {
+    if (publicPaths.includes(fullPath) || fullPath.startsWith("/api/whatsapp/webhook")) {
       return next();
     }
 
@@ -544,8 +545,8 @@ async function startServer() {
     };
 
     if (user.role === 'PENDING') {
-      const allowedPendingPaths = ["/api/auth/me", "/api/auth/logout", "/auth/me", "/auth/logout"];
-      if (!allowedPendingPaths.includes(req.path)) {
+      const allowedPendingPaths = ["/api/auth/me", "/api/auth/logout"];
+      if (!allowedPendingPaths.includes(fullPath)) {
         return res.status(403).json({
           success: false,
           error: "غير مصرح: حسابك في انتظار موافقة مسؤول النظام.",
