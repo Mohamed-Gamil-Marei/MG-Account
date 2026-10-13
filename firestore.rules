@@ -18,7 +18,7 @@ service cloud.firestore {
     // Role Hierarchy:
     // 1. ADMIN (مدير النظام والشريك المسؤول)
     function isAdmin() {
-      return isSignedIn() && (getUserRole() == 'ADMIN' || getUserRole() == 'MANAGER');
+      return isSignedIn() && getUserRole() == 'ADMIN';
     }
 
     // 2. ACCOUNTANT (محاسب مالي ومراقب حسابات)
@@ -29,6 +29,10 @@ service cloud.firestore {
     // 3. SECRETARY (سكرتارية واستقبال)
     function isSecretary() {
       return isSignedIn() && (isAccountant() || getUserRole() == 'SECRETARY');
+    }
+
+    function hasRole() {
+      return isSignedIn() && getUserRole() != 'PENDING' && getUserRole() != null;
     }
 
     // --- 1. User Profiles & Permissions ---
@@ -102,7 +106,16 @@ service cloud.firestore {
     // --- 11. Audit Trail Logs (سجل العمليات والرقابة) ---
     match /auditLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if hasRole() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['userId', 'action', 'entity', 'timestamp']) &&
+        request.resource.data.userId is string &&
+        request.resource.data.action is string &&
+        request.resource.data.entity is string &&
+        request.resource.data.timestamp is string &&
+        request.resource.data.action.size() <= 100 &&
+        request.resource.data.entity.size() <= 100 &&
+        (request.resource.data.get('details', '') is string && request.resource.data.get('details', '').size() <= 2000);
       allow update, delete: if false;
     }
 

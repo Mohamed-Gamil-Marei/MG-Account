@@ -34,8 +34,11 @@ import cookieParser from "cookie-parser";
 import { GoogleGenAI } from "@google/genai";
 import { etaMiddleware } from "./server/etaMiddleware.ts";
 import { whatsappServerEngine } from "./server/whatsappServerEngine.ts";
+import helmet from "helmet";
 
 dotenv.config();
+
+const GEMINI_MODEL_NAME = process.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
 
 function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -43,11 +46,15 @@ function hashToken(token: string): string {
 
 let aiClient: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("[Gemini] API Key is missing in environment variables.");
+    return null;
+  }
+  if (!aiClient) {
     try {
       aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     } catch (err) {
-      console.warn("Gemini client initialization error:", err);
+      console.error("[Gemini] Client initialization error:", err);
     }
   }
   return aiClient;
@@ -55,7 +62,6 @@ function getAI(): GoogleGenAI | null {
 
 async function startServer() {
   const app = express();
-const GEMINI_MODEL_NAME = "gemini-2.5-flash";
 
   app.set("trust proxy", 1);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -64,21 +70,30 @@ const GEMINI_MODEL_NAME = "gemini-2.5-flash";
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(cookieParser());
 
-  
-function cleanExpiredSessions() {
-  try {
-    const now = new Date().toISOString();
-    const result = db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
-    if (result.changes > 0) {
-      console.log(`[Sessions] Cleaned ${result.changes} expired sessions.`);
-    }
-  } catch (err) {
-    console.error("[Sessions] Error cleaning expired sessions:", err);
-  }
-}
-cleanExpiredSessions();
-setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+  // --- HTTP Security Headers ---
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "img-src": ["'self'", "data:", "https:", "http:"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "connect-src": ["'self'", "https:", "http:", "wss:", "ws:"],
+        "frame-ancestors": ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }));
 
+  if (process.env.NODE_ENV === "production") {
+    app.use(helmet.hsts({
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }));
+  }
+
+  
   // --- SQLite Database & Local Auth Setup ---
   const dataDir = process.env.DATA_DIR || path.join(process.cwd(), "data");
   if (!fs.existsSync(dataDir)) {
@@ -86,6 +101,20 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
   }
   const dbPath = path.join(dataDir, "app.db");
   const db = new Database(dbPath);
+
+  function cleanExpiredSessions() {
+    try {
+      const now = new Date().toISOString();
+      const result = db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
+      if (result.changes > 0) {
+        console.log(`[Sessions] Cleaned ${result.changes} expired sessions.`);
+      }
+    } catch (err) {
+      console.error("[Sessions] Error cleaning expired sessions:", err);
+    }
+  }
+  cleanExpiredSessions();
+  setInterval(cleanExpiredSessions, 60 * 60 * 1000);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -117,6 +146,14 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       updated_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip TEXT,
+      email TEXT,
+      timestamp INTEGER,
+      success INTEGER
     );
   `);
 
@@ -288,22 +325,37 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
     }
   }, 60 * 1000);
 
-  // --- Rate Limiter for Login (/api/auth/login) - 5 attempts per minute ---
-  const loginRateLimits = new Map<string, number[]>();
+  // --- Rate Limiter for Login (SQLite-based with Email Lock) ---
   function loginRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
     const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
+    const email = (req.body.email || "").trim().toLowerCase();
     const now = Date.now();
-    let timestamps = loginRateLimits.get(ip) || [];
-    timestamps = timestamps.filter(ts => now - ts < 60 * 1000);
-    if (timestamps.length >= 5) {
-      return res.status(429).json({
-        success: false,
-        error: "تم تجاوز الحد المسموح لمحاولات تسجيل الدخول (5 محاولات في الدقيقة). يرجى الانتظار.",
-      });
+
+    try {
+      // 1. IP-based limit (5 attempts per minute)
+      const recentIpAttempts = db.prepare("SELECT count(*) as count FROM login_attempts WHERE ip = ? AND timestamp > ?").get(ip, now - 60 * 1000) as any;
+      if (recentIpAttempts && recentIpAttempts.count >= 5) {
+        return res.status(429).json({
+          success: false,
+          error: "تم تجاوز الحد المسموح لمحاولات تسجيل الدخول من هذا العنوان. يرجى الانتظار دقيقة.",
+        });
+      }
+
+      // 2. Email-based lock (5 failed attempts in last 15 minutes)
+      if (email) {
+        const recentEmailFailures = db.prepare("SELECT count(*) as count FROM login_attempts WHERE email = ? AND success = 0 AND timestamp > ?").get(email, now - 15 * 60 * 1000) as any;
+        if (recentEmailFailures && recentEmailFailures.count >= 5) {
+          return res.status(403).json({
+            success: false,
+            error: "تم قفل حسابك مؤقتاً بسبب محاولات دخول فاشلة متكررة. يرجى المحاولة بعد 15 دقيقة.",
+          });
+        }
+      }
+      next();
+    } catch (err) {
+      console.error("Rate limiter error:", err);
+      next(); // Fail open for safety
     }
-    timestamps.push(now);
-    loginRateLimits.set(ip, timestamps);
-    next();
   }
 
   // --- Rate Limiter for AI Endpoints (/api/ai/* and /api/ocr/*) ---
@@ -544,13 +596,19 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
 
       const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email.trim().toLowerCase()) as any;
       if (!user) {
+        const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
+        db.prepare("INSERT INTO login_attempts (ip, email, timestamp, success) VALUES (?, ?, ?, ?)").run(ip, email.trim().toLowerCase(), Date.now(), 0);
         return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
       }
 
+      const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
       const match = await bcrypt.compare(password, user.password_hash);
       if (!match) {
+        db.prepare("INSERT INTO login_attempts (ip, email, timestamp, success) VALUES (?, ?, ?, ?)").run(ip, email.trim().toLowerCase(), Date.now(), 0);
         return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
       }
+
+      db.prepare("INSERT INTO login_attempts (ip, email, timestamp, success) VALUES (?, ?, ?, ?)").run(ip, email.trim().toLowerCase(), Date.now(), 1);
 
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashToken(rawToken);
@@ -579,6 +637,15 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
         canAccessTaxReports: !!user.can_access_tax_reports,
         createdAt: user.created_at,
       };
+
+      // Record detailed login audit log
+      recordServerAuditLog(
+        "LOGIN",
+        "users",
+        user.id.toString(),
+        user.name || user.email,
+        `تسجيل دخول ناجح للمستخدم: ${user.name || user.email} (الدور المحاسبي: ${user.role})`
+      );
 
       res.json({ success: true, user: userProfile, message: "تم تسجيل الدخول بنجاح." });
     } catch (err: any) {
@@ -972,6 +1039,36 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
     return client;
   }
 
+  // Helper function for writing server-side audit logs
+  function recordServerAuditLog(
+    action: string,
+    entity: string,
+    recordId: string,
+    userName: string,
+    details: string,
+    timestamp: string = new Date().toISOString()
+  ) {
+    try {
+      const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+      const auditRecord = {
+        id: auditId,
+        action,
+        entity,
+        recordId,
+        userName: userName || "النظام",
+        timestamp,
+        details,
+      };
+      db.prepare(`
+        INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
+      `).run(auditId, JSON.stringify(auditRecord), timestamp, userName || "النظام", JSON.stringify(auditRecord), timestamp, userName || "النظام");
+    } catch (err) {
+      console.warn("Failed to write audit log:", err);
+    }
+  }
+
   // --- Data Storage Endpoints (/api/data/:entityType) ---
   app.get("/api/data/:entityType", (req, res) => {
     try {
@@ -984,6 +1081,15 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
         return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية القراءة لهذا النوع من البيانات." });
       }
       const rows = db.prepare(`SELECT * FROM ${entityType}`).all() as any[];
+      if (entityType === "preferences" && user) {
+        const userRow = rows.find(r => r.id === (user.name || "") || r.id === (user.email || "") || r.id === String(user.id || ""));
+        if (userRow) {
+          try {
+            const parsed = JSON.parse(userRow.data);
+            return res.json({ success: true, data: [{ ...parsed, _version: userRow.version, _updatedAt: userRow.updated_at, _updatedBy: userRow.updated_by }] });
+          } catch {}
+        }
+      }
       const data = rows.map((r) => {
         try {
           let parsed = JSON.parse(r.data);
@@ -1059,6 +1165,13 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
         return res.status(400).json({ success: false, error: "معرف السجل والبيانات مطلوبة." });
       }
 
+      // If entity is preferences, namespace by user so personal preferences are separated per user
+      if (entityType === "preferences" && user) {
+        if (id === "main" || !id) {
+          id = user.name || user.email || String(user.id);
+        }
+      }
+
       const existingRow = db.prepare(`SELECT version, data FROM ${entityType} WHERE id = ?`).get(id) as any;
       if (existingRow) {
         if (version === undefined || version !== existingRow.version) {
@@ -1086,23 +1199,54 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
         ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = ?, updated_by = ?
       `).run(id, dataStr, updatedAt, newVersion, updatedBy, dataStr, updatedAt, newVersion, updatedBy);
 
-      // Write audit log if important
+      // Write automatic detailed audit log if important
       if (entityType !== "auditLogs") {
-        const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
-        const auditRecord = {
-          id: auditId,
-          action: existingRow ? "UPDATE" : "CREATE",
-          entity: entityType,
-          recordId: id,
-          userName: updatedBy,
-          timestamp: updatedAt,
-          details: `تم ${existingRow ? "تعديل" : "إضافة"} سجل في ${entityType} (${id})`
-        };
-        db.prepare(`
-          INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
-          VALUES (?, ?, ?, 1, ?)
-          ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
-        `).run(auditId, JSON.stringify(auditRecord), updatedAt, updatedBy, JSON.stringify(auditRecord), updatedAt, updatedBy);
+        let auditAction = existingRow ? "UPDATE" : "CREATE";
+        let auditDetails = `تم ${existingRow ? "تعديل" : "إضافة"} سجل في (${entityType}) - المعرف: ${id}`;
+
+        const parsedData = typeof data === "string" ? JSON.parse(data) : data;
+        const existingData = existingRow && existingRow.data ? (typeof existingRow.data === "string" ? JSON.parse(existingRow.data) : existingRow.data) : null;
+
+        if (entityType === "journalEntries") {
+          const entryNo = parsedData?.entryNumber || parsedData?.serialNumber || parsedData?.id || id;
+          const desc = parsedData?.description || parsedData?.narration || "بدون بيان";
+          const wasPosted = existingData && (existingData.status === "POSTED" || existingData.isPosted);
+          const isNowDraft = parsedData && (parsedData.status === "DRAFT" || parsedData.isPosted === false);
+          const isNowPosted = parsedData && (parsedData.status === "POSTED" || parsedData.isPosted === true);
+
+          if (wasPosted && isNowDraft) {
+            auditAction = "UNPOST_JOURNAL_ENTRY";
+            auditDetails = `إلغاء ترحيل القيد المحاسبي رقم (${entryNo}) - البيان: ${desc}`;
+          } else if (isNowPosted) {
+            auditAction = "POST_JOURNAL_ENTRY";
+            auditDetails = `ترحيل/اعتماد القيد المحاسبي رقم (${entryNo}) - البيان: ${desc}`;
+          } else if (existingRow) {
+            auditAction = "UPDATE_JOURNAL_ENTRY";
+            auditDetails = `تعديل القيد المحاسبي رقم (${entryNo}) - البيان: ${desc}`;
+          } else {
+            auditAction = "CREATE_JOURNAL_ENTRY";
+            auditDetails = `إنشاء قيد محاسبي جديد رقم (${entryNo}) - البيان: ${desc}`;
+          }
+        } else if (entityType === "fiscalPeriodLocks") {
+          const isLocked = parsedData?.isLocked || parsedData?.status === "LOCKED";
+          const periodName = parsedData?.periodName || parsedData?.year || id;
+          auditAction = isLocked ? "LOCK_PERIOD" : "UNLOCK_PERIOD";
+          auditDetails = `${isLocked ? "قفل" : "فتح/تعديل"} الفترة المالية (${periodName})`;
+        } else if (entityType === "accounts") {
+          const code = parsedData?.code || id;
+          const name = parsedData?.name || "";
+          auditAction = existingRow ? "UPDATE_ACCOUNT" : "CREATE_ACCOUNT";
+          auditDetails = `${existingRow ? "تعديل" : "إنشاء"} حساب بجدول الحسابات: (${code} - ${name})`;
+        } else if (entityType === "clients") {
+          const name = parsedData?.name || id;
+          auditAction = existingRow ? "UPDATE_CLIENT" : "CREATE_CLIENT";
+          auditDetails = `${existingRow ? "تعديل بيانات" : "إضافة موكل جديد"}: (${name})`;
+        } else if (entityType === "preferences") {
+          auditAction = "UPDATE_PREFERENCES";
+          auditDetails = `حفظ وتحديث التفضيلات الشخصية للمستخدم (${updatedBy})`;
+        }
+
+        recordServerAuditLog(auditAction, entityType, id, updatedBy, auditDetails, updatedAt);
       }
 
       res.json({ success: true, version: newVersion, updatedAt });
@@ -1199,21 +1343,13 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
       db.prepare("INSERT OR REPLACE INTO tombstones (entity_type, record_id, deleted_at) VALUES (?, ?, ?)").run(entityType, id, new Date().toISOString());
 
       if (entityType !== "auditLogs") {
-        const auditId = "audit-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
-        const auditRecord = {
-          id: auditId,
-          action: "DELETE",
-          entity: entityType,
-          recordId: id,
-          userName: user ? user.name : "System",
-          timestamp: new Date().toISOString(),
-          details: `تم حذف سجل من ${entityType} (${id})`
-        };
-        db.prepare(`
-          INSERT INTO auditLogs (id, data, updated_at, version, updated_by)
-          VALUES (?, ?, ?, 1, ?)
-          ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
-        `).run(auditId, JSON.stringify(auditRecord), auditRecord.timestamp, auditRecord.userName, JSON.stringify(auditRecord), auditRecord.timestamp, auditRecord.userName);
+        let auditAction = "DELETE";
+        let auditDetails = `تم حذف سجل من (${entityType}) - المعرف: (${id})`;
+        if (entityType === "journalEntries") {
+          auditAction = "DELETE_JOURNAL_ENTRY";
+          auditDetails = `حذف القيد المحاسبي رقم (${id})`;
+        }
+        recordServerAuditLog(auditAction, entityType, id, user ? user.name : "System", auditDetails);
       }
 
       res.json({ success: true, message: "تم حذف السجل بنجاح." });
@@ -1546,7 +1682,7 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
         return res.json({
           success: false,
           fallback: true,
-          message: "API Key not configured, using local rule-based accounting engine",
+          message: `نموذج الذكاء الاصطناعي (${GEMINI_MODEL_NAME}) غير متاح حالياً أو مفتاح API غير مضبوط؛ يتم استخدام المحرك المحاسبي المحلي.`,
         });
       }
 
@@ -1585,7 +1721,7 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
       res.json({ success: true, data: parsed });
     } catch (err: any) {
       console.error("AI Error:", err);
-      res.status(500).json({ success: false, error: err.message });
+      res.status(500).json({ success: false, error: `تعذر الاتصال بنموذج الذكاء الاصطناعي (${GEMINI_MODEL_NAME}): ${err.message}` });
     }
   });
 
@@ -1598,7 +1734,7 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
         return res.json({
           success: false,
           fallback: true,
-          message: "Gemini API key not active; relying on local ESA audit engine",
+          message: `نموذج الذكاء الاصطناعي (${GEMINI_MODEL_NAME}) غير متاح حالياً أو مفتاح API غير مضبوط؛ يتم الاعتماد على محرك فحص معايير المراجعة المحلية.`,
         });
       }
 
@@ -2361,9 +2497,9 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.post("/api/documents/upload", upload.single("file"), (req: any, res) => {
     try {
       const user = req.user;
-      if (!user || user.role === 'PENDING') {
+      if (!checkEntityAccess(user, 'documents', 'WRITE')) {
         if (req.file && fs.existsSync(req.file.path)) { try { fs.unlinkSync(req.file.path); } catch {} }
-        return res.status(403).json({ success: false, error: "غير مصرح: حسابك ليس له صلاحية الرفع." });
+        return res.status(403).json({ success: false, error: "غير مصرح: ليس لديك صلاحية رفع المستندات." });
       }
 
       if (!req.file) {
@@ -2419,7 +2555,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.get("/api/documents", (req: any, res) => {
     try {
       const user = req.user;
-      if (!user || user.role === 'PENDING') {
+      if (!checkEntityAccess(user, 'documents', 'READ')) {
         return res.status(403).json({ success: false, error: "غير مصرح." });
       }
 
@@ -2451,7 +2587,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.get("/api/documents/:id", (req: any, res) => {
     try {
       const user = req.user;
-      if (!user || user.role === 'PENDING') {
+      if (!checkEntityAccess(user, 'documents', 'READ')) {
         return res.status(403).json({ success: false, error: "غير مصرح." });
       }
 
@@ -2460,6 +2596,16 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       if (!doc || !fs.existsSync(doc.file_path)) {
         return res.status(404).json({ success: false, error: "المستند غير موجود على الخادم." });
       }
+
+      // Log the download
+      recordServerAuditLog(
+        "DOWNLOAD",
+        "documents",
+        id,
+        user.name || "Unknown",
+        `تم تنزيل المستند: (${doc.original_name}) للعميل: (${doc.client_id})`
+      );
+
       res.download(doc.file_path, doc.original_name);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -2469,7 +2615,8 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.patch("/api/documents/:id/status", (req: any, res) => {
     try {
       const user = req.user;
-      if (!user || user.role === 'PENDING' || user.role === 'SECRETARY') {
+      // Status update usually restricted to accountants/admins
+      if (!checkEntityAccess(user, 'clients', 'WRITE')) { 
         return res.status(403).json({ success: false, error: "غير مصرح: تحديث حالة المستند يقتصر على المدير والمحاسب." });
       }
 
@@ -2492,8 +2639,8 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.delete("/api/documents/:id", (req: any, res) => {
     try {
       const user = req.user;
-      if (user?.role !== 'ADMIN') {
-        return res.status(403).json({ success: false, error: "غير مصرح: حذف المستندات متاح للمدير فقط." });
+      if (!checkEntityAccess(user, 'documents', 'DELETE')) {
+        return res.status(403).json({ success: false, error: "غير مصرح: حذف المستندات غير متاح لهذا الدور." });
       }
       const { id } = req.params;
       const doc = db.prepare("SELECT * FROM documents WHERE id = ?").get(id) as any;
@@ -2562,23 +2709,36 @@ ${JSON.stringify(benfordStats || [], null, 2)}
         return res.status(403).json({ success: false, error: "غير مصرح: استعادة النسخ الاحتياطية متاحة للمدير فقط." });
       }
       const { backupName, confirmationText } = req.body;
-      if (confirmationText !== "تأكيد الاستعادة") {
-        return res.status(400).json({ success: false, error: "يرجى كتابة جملة التأكيد الصحيحة 'تأكيد الاستعادة' للمتابعة." });
+      if (confirmationText !== "تأكيد الاستعادة" && confirmationText !== "CONFIRM RESTORE") {
+        return res.status(400).json({ success: false, error: "يرجى تأكيد الاستعادة للمتابعة." });
       }
+
       if (!backupName || typeof backupName !== 'string' || !/^backup_[A-Za-z0-9_-]+$/.test(backupName) || backupName.includes("..") || backupName.includes("/")) {
-        return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية غير صالح أو غير مسموح به." });
+        return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية غير صالح." });
       }
 
       const targetPath = path.join(backupDir, backupName);
       const backupDbPath = path.join(targetPath, "app.db");
       if (!fs.existsSync(targetPath) || !fs.existsSync(backupDbPath)) {
-        return res.status(404).json({ success: false, error: "ملف النسخة الاحتياطية غير موجود أو تالف (فشل التحقق من السلامة)." });
+        return res.status(404).json({ success: false, error: "ملف النسخة الاحتياطية غير موجود." });
       }
 
-      // 1. Emergency backup of current state
+      // 1. Integrity check on the backup before restore
+      try {
+        const checkDb = new Database(backupDbPath, { readonly: true });
+        const integrity = checkDb.prepare("PRAGMA integrity_check").get() as any;
+        checkDb.close();
+        if (!integrity || integrity.integrity_check !== "ok") {
+          return res.status(400).json({ success: false, error: "فشل فحص سلامة النسخة الاحتياطية (Integrity Check Failed). قد تكون البيانات تالفة." });
+        }
+      } catch (checkErr) {
+        return res.status(400).json({ success: false, error: "فشل في فحص ملف النسخة الاحتياطية." });
+      }
+
+      // 2. Emergency backup of current state
       runDailyBackup();
 
-      // 2. Close db & replace db file
+      // 3. Close db & replace db file
       db.close();
 
       const currentDbPath = path.join(dataDir, "app.db");

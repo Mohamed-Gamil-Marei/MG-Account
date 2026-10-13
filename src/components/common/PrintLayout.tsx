@@ -82,7 +82,7 @@ export async function printElementWithPrintLayout(
   const officeTitle = office?.title || 'محاسب ومراجع قانوني - خبير ضرائب واستشارات مالية';
   const licenseNumber = office?.licenseNumber || 'سجل المحاسبين والمراجعين رقم 43122';
   const taxNumber = office?.taxAuthorityRegNo || '654-987-321';
-  const phone = office?.phone || office?.mobile || '01003335360';
+  const phone = office?.phone || office?.mobile || '';
   const logoUrl = office?.logoUrl || '';
 
   const docTitle = options?.title || 'وثيقة رسمية معتمدة';
@@ -370,7 +370,7 @@ export const PrintLayout: React.FC<PrintLayoutProps> & {
   const officeTitle = stateProfile?.title || 'محاسب ومراجع قانوني - خبير ضرائب واستشارات مالية';
   const licenseNumber = stateProfile?.licenseNumber || 'سجل المحاسبين والمراجعين رقم 43122';
   const taxAuthorityRegNo = stateProfile?.taxAuthorityRegNo || '654-987-321';
-  const officePhone = stateProfile?.phone || stateProfile?.mobile || '01003335360';
+  const officePhone = stateProfile?.phone || stateProfile?.mobile || '';
   const logoUrl = stateProfile?.logoUrl || '';
 
   const [activeOrientation, setActiveOrientation] = useState<'portrait' | 'landscape'>(orientation);

@@ -1127,7 +1127,13 @@ export type NavigationTab =
   | 'CUSTOMS_SHIPMENTS'
   | 'SAP_ERP'
   | 'AUDIT_TRAIL'
-  | 'EXCEL_AUDIT_SENTINEL';
+  | 'EXCEL_AUDIT_SENTINEL'
+  | 'CREDIT_HUB'
+  | 'QUICK_BANK_DOSSIER'
+  | 'CREDIT_DOSSIER_REGISTRY'
+  | 'FINANCIAL_PLANNING_HUB'
+  | 'BUDGET_AND_CASHFLOW'
+  | 'AUDIT_TOOLS_HUB';
 
 // Bank Reconciliation Interfaces
 export interface BankStatementLine {

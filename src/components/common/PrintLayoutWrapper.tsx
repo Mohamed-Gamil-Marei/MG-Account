@@ -83,7 +83,7 @@ export const PrintLayoutWrapper: React.FC<PrintLayoutWrapperProps> = ({
     stateProfile?.taxAuthorityRegNo || '654-987-321'
   );
   const [editablePhone, setEditablePhone] = useState(
-    stateProfile?.phone || stateProfile?.mobile || '01003335360'
+    stateProfile?.phone || stateProfile?.mobile || ''
   );
   const [editableDocTitle, setEditableDocTitle] = useState(initialEffectiveTitle);
   const [editableDocSubtitle, setEditableDocSubtitle] = useState(documentSubtitle || '');
@@ -124,7 +124,7 @@ export const PrintLayoutWrapper: React.FC<PrintLayoutWrapperProps> = ({
       currentProfile?.licenseNumber || 'سجل المحاسبين والمراجعين رقم 43122'
     );
     setEditableTaxNumber(currentProfile?.taxAuthorityRegNo || '654-987-321');
-    setEditablePhone(currentProfile?.phone || currentProfile?.mobile || '01003335360');
+    setEditablePhone(currentProfile?.phone || currentProfile?.mobile || '');
     setEditableDocTitle(initialEffectiveTitle);
     setEditableDocSubtitle(documentSubtitle || '');
     setEditableCompanyName(companyName || '');

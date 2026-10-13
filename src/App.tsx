@@ -74,6 +74,9 @@ function lazyWithRetry(
 
 // Secondary hubs loaded on demand to make initial startup instantaneous
 const FinancialReportingHubView = lazyWithRetry(() => import('./components/hubs/FinancialReportingHubView'));
+const CreditHubView = lazyWithRetry(() => import('./components/hubs/CreditHubView'));
+const FinancialPlanningHubView = lazyWithRetry(() => import('./components/hubs/FinancialPlanningHubView'));
+const AuditToolsHubView = lazyWithRetry(() => import('./components/hubs/AuditToolsHubView'));
 const TaxAuditHubView = lazyWithRetry(() => import('./components/hubs/TaxAuditHubView'));
 const OfficePracticeHubView = lazyWithRetry(() => import('./components/hubs/OfficePracticeHubView'));
 const SecurityAuditHubView = lazyWithRetry(() => import('./components/hubs/SecurityAuditHubView'));
@@ -145,11 +148,11 @@ export default function App() {
       const saved = localStorage.getItem('mg_app_view_mode');
       if (saved === 'mobile') return 'MOBILE_COMPANION';
       const savedTab = localStorage.getItem('mg_active_tab');
-      if (savedTab && savedTab !== 'DASHBOARD') return savedTab;
+      if (savedTab) return savedTab;
     } catch {
       // Fallback
     }
-    return 'JOURNAL_ENTRIES';
+    return 'DASHBOARD';
   });
 
   const handleSwitchToMobileMode = () => {
@@ -207,6 +210,17 @@ export default function App() {
     });
     return unsubAuth;
   }, []);
+
+  // Persist activeTab to localStorage including DASHBOARD
+  useEffect(() => {
+    try {
+      if (activeTab && activeTab !== 'MOBILE_COMPANION') {
+        localStorage.setItem('mg_active_tab', activeTab);
+      }
+    } catch {
+      // Safe fallback
+    }
+  }, [activeTab]);
 
   // Non-blocking initialization of print header injection
   useEffect(() => {
@@ -507,7 +521,12 @@ export default function App() {
 
     if (tab === 'OFFICE_TREASURY' && !currentUser.canAccessTreasury) return false;
     if (tab === 'AUDIT_TRAIL' && !currentUser.canAccessAuditTrail) return false;
-    if (tab === 'CREDIT_SIMULATOR' && currentUser.canAccessCreditFiles === false) return false;
+    if (
+      (tab === 'CREDIT_HUB' || tab === 'CREDIT_SIMULATOR' || tab === 'QUICK_BANK_DOSSIER' || tab === 'CREDIT_DOSSIER_REGISTRY') &&
+      currentUser.canAccessCreditFiles === false
+    ) {
+      return false;
+    }
     if ((tab === 'TAX_TRACKER' || tab === 'TAX_PENALTY_SIMULATOR' || tab === 'TAX_EXPOSURE_SIMULATOR' || tab === 'ETA_RECONCILIATION' || tab === 'PAYROLL_INSURANCE' || tab === 'TAX_AUDIT_HUB') && currentUser.canAccessTaxReports === false) return false;
 
     return true;
@@ -573,42 +592,84 @@ export default function App() {
       case 'CURRENCY_EXCHANGE_RATES':
         return <AccountingHubView state={state} initialSubTab="CURRENCY_EXCHANGE_RATES" fiscalYear={selectedFiscalYear} />;
 
-      // 2. Credit, Feasibility & Advisory Hub (الائتمان ودراسات الجدوى والاستشارات)
-      case 'FINANCIAL_REPORTING_HUB':
+      // 1. Credit Hub (مركز الائتمان والملفات البنكية - مُوحّد مع دعم الـ Aliases القديمة)
+      case 'CREDIT_HUB':
       case 'CREDIT_SIMULATOR':
-        return <FinancialReportingHubView state={state} initialSubTab="CREDIT_SIMULATOR" fiscalYear={selectedFiscalYear} />;
+      case 'QUICK_BANK_DOSSIER':
+      case 'CREDIT_DOSSIER_REGISTRY':
+        return (
+          <CreditHubView
+            state={state}
+            initialSubTab={
+              tabToRender === 'QUICK_BANK_DOSSIER'
+                ? 'QUICK_BANK_DOSSIER'
+                : tabToRender === 'CREDIT_DOSSIER_REGISTRY'
+                ? 'CREDIT_DOSSIER_REGISTRY'
+                : 'CREDIT_SIMULATOR'
+            }
+          />
+        );
+
+      // 2. Financial Planning Hub (التخطيط والتقدير المالي - مُوحّد مع دعم الـ Aliases القديمة)
+      case 'FINANCIAL_PLANNING_HUB':
       case 'BUDGET_PLANNER':
       case 'CASH_FLOW_PREDICTOR':
       case 'BUDGET_AND_CASHFLOW':
-        return <FinancialReportingHubView state={state} initialSubTab="BUDGET_AND_CASHFLOW" fiscalYear={selectedFiscalYear} />;
-      case 'FINANCIAL_SIMULATOR':
-        return <FinancialReportingHubView state={state} initialSubTab="CREDIT_SIMULATOR" fiscalYear={selectedFiscalYear} />;
-      case 'CERTIFICATES':
-        return <FinancialReportingHubView state={state} initialSubTab="CERTIFICATES" fiscalYear={selectedFiscalYear} />;
-      case 'FEASIBILITY_STUDY':
-        return <FinancialReportingHubView state={state} initialSubTab="FEASIBILITY_STUDY" fiscalYear={selectedFiscalYear} />;
+        return (
+          <FinancialPlanningHubView
+            state={state}
+            fiscalYear={selectedFiscalYear}
+            initialSubTab={tabToRender === 'CASH_FLOW_PREDICTOR' ? 'CASH_FLOW_PREDICTOR' : 'BUDGET_PLANNER'}
+          />
+        );
 
-      // 3. Tax & Audit Hub (الضرائب والمراجعة والامتثال)
+      // 3. Audit Tools Hub (منصة التدقيق الذكي - مُوحّد مع دعم الـ Aliases القديمة)
+      case 'AUDIT_TOOLS_HUB':
+      case 'EXCEL_AUDIT_SENTINEL':
+      case 'FRAUD_AUDIT_SENTINEL':
+      case 'JOURNAL_AUDIT_SCANNER':
+        return (
+          <AuditToolsHubView
+            state={state}
+            initialSubTab={
+              tabToRender === 'FRAUD_AUDIT_SENTINEL'
+                ? 'FRAUD_AUDIT_SENTINEL'
+                : tabToRender === 'JOURNAL_AUDIT_SCANNER'
+                ? 'JOURNAL_AUDIT_SCANNER'
+                : 'EXCEL_AUDIT_SENTINEL'
+            }
+          />
+        );
+
+      // 4. Financial Reporting Hub (القوائم والتقارير المالية)
+      case 'FINANCIAL_REPORTING_HUB':
+      case 'FINANCIAL_SIMULATOR':
+      case 'CERTIFICATES':
+      case 'FEASIBILITY_STUDY':
+        return (
+          <FinancialReportingHubView
+            state={state}
+            initialSubTab={
+              tabToRender === 'CERTIFICATES'
+                ? 'CERTIFICATES'
+                : tabToRender === 'FEASIBILITY_STUDY'
+                ? 'FEASIBILITY_STUDY'
+                : 'ANNUAL_FINANCIAL_DOSSIER'
+            }
+            fiscalYear={selectedFiscalYear}
+          />
+        );
+
+      // 5. Tax & Audit Hub (الضرائب والمراجعة والامتثال)
       case 'TAX_AUDIT_HUB':
       case 'TAX_FILING_CELLS':
       case 'TAX_TRACKER':
-        return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
-      case 'EXCEL_AUDIT_SENTINEL':
-        return <TaxAuditHubView state={state} initialSubTab="EXCEL_AUDIT_SENTINEL" />;
       case 'TAX_PENALTY_SIMULATOR':
-        return <TaxAuditHubView state={state} initialSubTab="TAX_PENALTY_SIMULATOR" />;
-      case 'FRAUD_AUDIT_SENTINEL':
-        return <TaxAuditHubView state={state} initialSubTab="FRAUD_AUDIT_SENTINEL" />;
-      case 'JOURNAL_AUDIT_SCANNER':
-        return <TaxAuditHubView state={state} initialSubTab="JOURNAL_AUDIT_SCANNER" />;
       case 'TAX_EXPOSURE_SIMULATOR':
-        return <TaxAuditHubView state={state} initialSubTab="TAX_EXPOSURE_SIMULATOR" />;
       case 'ETA_RECONCILIATION':
-        return <TaxAuditHubView state={state} initialSubTab="ETA_RECONCILIATION" />;
       case 'PAYROLL_INSURANCE':
-        return <TaxAuditHubView state={state} initialSubTab="PAYROLL_INSURANCE" />;
       case 'AUDIT_WORKING_PAPERS':
-        return <TaxAuditHubView state={state} initialSubTab="AUDIT_WORKING_PAPERS" />;
+        return <TaxAuditHubView state={state} initialSubTab="TAX_TRACKER" />;
 
       // 4. Office Practice Hub (إدارة المكتب والعملاء)
       case 'OFFICE_HUB':

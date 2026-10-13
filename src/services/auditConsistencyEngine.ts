@@ -1,3 +1,4 @@
+import { getTaxConfig } from '../config/taxSettings';
 import { DatabaseState } from '../db/localDatabase';
 import {
   computeAccountBalances,
@@ -279,9 +280,10 @@ export function runAuditConsistencySentinel(
     });
   }
 
-  // Check 6: Egyptian Statutory Tax Compliance (Law 91 / 22.5%)
+  // Check 6: Egyptian Statutory Tax Compliance (Law 91 / Corporate Tax)
+  const taxConfig = getTaxConfig();
   if (incomeData.profitBeforeTax > 0) {
-    const expectedTax = incomeData.profitBeforeTax * 0.225;
+    const expectedTax = incomeData.profitBeforeTax * taxConfig.corporateTaxRate;
     const actualTaxRecorded = incomeData.taxExpense;
     const taxDiff = Math.abs(actualTaxRecorded - expectedTax);
 
@@ -289,11 +291,11 @@ export function runAuditConsistencySentinel(
       checks.push({
         id: 'TAX_PROVISION',
         category: 'TAX_COMPLIANCE',
-        titleAr: 'عدم احتساب مخصص ضريبة الدخل السنوية (قانون 91)',
+        titleAr: 'عدم احتساب مخصص ضريبة الدخل السنوية',
         titleEn: 'Missing Income Tax Provision',
-        descriptionAr: `المنشأة حققت ربحاً قدره ${incomeData.profitBeforeTax.toLocaleString('ar-EG')} ج.م ولم يُثبت مخصص ضريبة الدخل 22.5% المقدر بـ ${expectedTax.toLocaleString('ar-EG')} ج.م.`,
+        descriptionAr: `المنشأة حققت ربحاً قدره ${incomeData.profitBeforeTax.toLocaleString('ar-EG')} ج.م ولم يُثبت مخصص ضريبة الدخل (${(taxConfig.corporateTaxRate * 100).toFixed(1)}%) المقدر بـ ${expectedTax.toLocaleString('ar-EG')} ج.م.`,
         severity: 'WARNING',
-        standardReference: 'قانون الضريبة على الدخل 91 والمعيار المصري 24',
+        standardReference: 'قانون الضريبة على الدخل والمعيار المصري 24',
         status: 'WARNING',
         metricValue: actualTaxRecorded,
         expectedValue: expectedTax,

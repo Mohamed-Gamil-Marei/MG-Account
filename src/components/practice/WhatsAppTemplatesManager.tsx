@@ -147,7 +147,7 @@ export const WhatsAppTemplatesManager: React.FC = () => {
                 title: 'قالب إشعار جديد مخصص',
                 category: 'GENERAL',
                 subject: 'إشعار مالي وإداري',
-                templateBody: `السادة / *{CLIENT_NAME}*\nعناية: {CONTACT_PERSON} المحترمين\nتحية طيبة وبعد،،\n\nنحيط سيادتكم علماً بما يلي بخصوص شركتكم:\n\n📋 *البيان:* {DOC_TITLE}\n📅 *التاريخ:* {DATE}\n\n📞 هاتف التواصل والاستفسار: 01003335360\nالمحاسب القانوني: أ/ محمد جميل مرعي`,
+                templateBody: `السادة / *{CLIENT_NAME}*\nعناية: {CONTACT_PERSON} المحترمين\nتحية طيبة وبعد،،\n\nنحيط سيادتكم علماً بما يلي بخصوص شركتكم:\n\n📋 *البيان:* {DOC_TITLE}\n📅 *التاريخ:* {DATE}\n\n📞 هاتف التواصل والاستفسار: {OFFICE_PHONE}\nالمحاسب القانوني: {AUDITOR_NAME}`,
                 isDefault: false,
                 isActive: true,
               });
@@ -319,7 +319,7 @@ export const WhatsAppTemplatesManager: React.FC = () => {
                     { key: 'AMOUNT', label: 'المبلغ' },
                     { key: 'DATE', label: 'التاريخ' },
                     { key: 'VERIFICATION_CODE', label: 'كود التحقق والاعتماد' },
-                    { key: 'OFFICE_PHONE', label: 'هاتف المكتب 01003335360' },
+                    { key: 'OFFICE_PHONE', label: 'هاتف المكتب' },
                     { key: 'SIGNATURE', label: 'توقيع المكتب' },
                   ].map((v) => (
                     <button

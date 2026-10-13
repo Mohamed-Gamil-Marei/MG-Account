@@ -546,10 +546,10 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   const handleSendDirectWhatsApp = (client: ClientArchiveRecord, proc?: ClientProcedureTask | null) => {
     if (!client) return;
     const phone = (client.phone || '').replace(/[^0-9]/g, '');
-    const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
+    const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone;
     const auditorName = state.officeProfile?.auditorName || 'محمد جميل مرعي';
     const firmName = state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
-    const officePhone = state.officeProfile?.phone || '01003335360';
+    const officePhone = state.officeProfile?.phone || '';
 
     let text = '';
     if (proc) {
@@ -596,10 +596,10 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   ) => {
     if (!client) return;
     const phone = (client.phone || '').replace(/[^0-9]/g, '');
-    const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
+    const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone;
     const auditorName = state.officeProfile?.auditorName || 'محمد جميل مرعي';
     const firmName = state.officeProfile?.firmName || 'مكتب المحاسب القانوني ومراقب الحسابات';
-    const officePhone = state.officeProfile?.phone || '01003335360';
+    const officePhone = state.officeProfile?.phone || '';
 
     const text = `عناية السادة / *${client.name}*\nتحية طيبة وبعد،،\n\nنلفت انتباهكم الكريم إلى أن صلاحية كلمة المرور الخاصة بالمنظومة:\n🔐 *${portalName}*\n👤 اسم المستخدم / التسجيل: *${username || client.taxCardNo || '—'}*\n📅 تاريخ انتهاء الصلاحية: *${expiryDate || 'قريباً'}*\n\n⚠️ يرجى التكرم بتجديد كلمة المرور وتزويدنا بالبيانات المحدثة أو التنسيق مع فريق العمل بالمكتب لتفادي توقف إصدار الفواتير أو تعطل الإقرارات الضريبية.\n\nمع وافر الشكر والتقدير،،\n*${firmName}*\nالمحاسب القانوني: *${auditorName}*\nهاتف التواصل: ${officePhone}`;
 
@@ -671,7 +671,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
           <div>
             <h2 style="margin: 0; color: #0f172a; font-size: 18px; font-weight: 900;">${firm}</h2>
             <div style="font-size: 12px; color: #475569; margin-top: 4px;">المحاسب القانوني ومراقب الحسابات: ${auditor}</div>
-            <div style="font-size: 11px; color: #64748b;">هاتف: ${office.phone || '01003335360'} | العنوان: ${office.address || 'القاهرة، جمهورية مصر العربية'}</div>
+            <div style="font-size: 11px; color: #64748b;">${office.phone ? `هاتف: ${office.phone} | ` : ''}العنوان: ${office.address || 'القاهرة، جمهورية مصر العربية'}</div>
           </div>
           <div style="text-align: left;">
             <div style="background: #f1f5f9; padding: 6px 12px; border-radius: 8px; font-size: 11px; border: 1px solid #cbd5e1;">
@@ -1999,7 +1999,11 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                               type="button"
                               onClick={() => {
                                 const phone = (liveSelectedClient.phone || '').replace(/[^0-9]/g, '');
-                                const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone || '201003335360';
+                                const cleanPhone = phone.startsWith('0') ? '2' + phone : phone.startsWith('20') ? phone : phone;
+                                if (!cleanPhone) {
+                                  alert('يرجى تسجيل رقم هاتف العميل أولاً لإرسال إشعار عبر الواتساب.');
+                                  return;
+                                }
                                 const msg = `السادة المحترمون / ${liveSelectedClient.name}
 تحية طيبة وبعد،،
 نحيطكم علماً بأنه تم مراجعة حسابكم على [${portal.title}]، ونرجو التكرم بمتابعة تحديث أو تأكيد كلمة المرور الخاصة بكم لضمان استمرارية تقديم الخدمات الضريبية والمحاسبية دون توقف.

@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'ACCOUNTANT' | 'SECRETARY' | 'PENDING' | string;
+export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT' | 'SECRETARY' | 'PENDING' | string;
 
 export interface AccessUser {
   id?: string | number;
@@ -26,39 +26,44 @@ export function checkEntityAccess(user: AccessUser | null | undefined, entityTyp
 
   // 2. Treasury access
   if (entityType === 'treasury') {
-    if (!user.canAccessTreasury && user.role !== 'ADMIN') return false;
+    if (!user.canAccessTreasury && user.role !== 'ADMIN' && user.role !== 'AUDITOR') return false;
   }
 
-  // 3. Secretary limits
+  // 3. User Preferences: personal settings allowed for all authenticated non-PENDING roles
+  if (entityType === 'preferences') {
+    return true;
+  }
+
+  // 4. Secretary limits
   if (user.role === 'SECRETARY') {
     if (action === 'READ') {
-      return ['clients', 'invoices', 'certificates'].includes(entityType);
+      return ['clients', 'invoices', 'certificates', 'preferences', 'documents'].includes(entityType);
     }
     if (action === 'WRITE') {
-      return entityType === 'invoices';
+      return ['invoices', 'preferences', 'documents'].includes(entityType);
     }
     return false;
   }
 
-  // 4. Admin-only write entities
-  const adminOnlyWriteEntities = ['officeProfile', 'systemUsers', 'fiscalPeriodLocks', 'preferences'];
+  // 5. Admin-only write entities (office profile, system users, fiscal period locks)
+  const adminOnlyWriteEntities = ['officeProfile', 'systemUsers', 'fiscalPeriodLocks'];
   if (adminOnlyWriteEntities.includes(entityType) && action !== 'READ') {
     return user.role === 'ADMIN';
   }
 
-  // 5. Accountant/Admin write entities
+  // 6. Accountant/Auditor/Admin write entities
   const accountantAdminWriteEntities = ['accounts', 'taxDeclarations', 'taxAudits', 'fixedAssets', 'exchangeRates'];
   if (accountantAdminWriteEntities.includes(entityType) && action !== 'READ') {
-    return user.role === 'ACCOUNTANT' || user.role === 'ADMIN';
+    return ['ACCOUNTANT', 'AUDITOR', 'ADMIN'].includes(user.role);
   }
 
   // Journal entries posting
   if (entityType === 'journalEntries' && action === 'WRITE') {
-    return !!user.canPostEntries || user.role === 'ADMIN' || user.role === 'ACCOUNTANT';
+    return !!user.canPostEntries || ['ADMIN', 'ACCOUNTANT', 'AUDITOR'].includes(user.role);
   }
 
   if (action === 'DELETE') {
-    return !!user.canDeleteRecords || user.role === 'ADMIN' || user.role === 'ACCOUNTANT';
+    return !!user.canDeleteRecords || ['ADMIN', 'ACCOUNTANT', 'AUDITOR'].includes(user.role);
   }
 
   return true;

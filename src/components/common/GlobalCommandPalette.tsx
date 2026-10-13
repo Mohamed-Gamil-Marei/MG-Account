@@ -167,14 +167,38 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       },
     },
     {
-      id: 'nav-excel-audit',
-      title: 'مختبر مراجعة الإكسيل الذكي (XAI & Unsupervised ML)',
+      id: 'nav-audit-tools',
+      title: 'منصة التدقيق الذكي (الإكسيل، الاحتيال، وفحص القيود)',
       category: 'NAVIGATION',
-      description: 'فحص ملفات إكسيل الشركات، كشف الاحتيال وشذوذ بنفورد وتكرار التوزيع مع تقارير Word/Excel/PDF',
+      description: 'فحص ميزان المراجعة، مؤشرات بنفورد لكشف الاحتيال، وتدقيق شذوذ القيود',
       shortcut: 'Ctrl+E',
       icon: Sparkles,
       action: () => {
-        onNavigateTab('EXCEL_AUDIT_SENTINEL');
+        onNavigateTab('AUDIT_TOOLS_HUB');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-financial-planning',
+      title: 'التخطيط والتقدير المالي (الموازنة والتدفقات)',
+      category: 'NAVIGATION',
+      description: 'الموازنة التقديرية للعام وتوقعات التدفقات النقدية التشغيلية',
+      shortcut: 'Ctrl+B',
+      icon: Scale,
+      action: () => {
+        onNavigateTab('FINANCIAL_PLANNING_HUB');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-credit-hub',
+      title: 'مركز الائتمان والملفات البنكية',
+      category: 'NAVIGATION',
+      description: 'محاكي الائتمان، الملف البنكي السريع وسجل ملفات التسهيلات',
+      shortcut: 'Ctrl+R',
+      icon: TrendingUp,
+      action: () => {
+        onNavigateTab('CREDIT_HUB');
         onClose();
       },
     },
@@ -209,18 +233,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       description: 'إقرارات الدخل 101/102/105، القيمة المضافة، والخصم والإضافة',
       icon: Shield,
       action: () => {
-        onNavigateTab('TAX_HUB');
-        onClose();
-      },
-    },
-    {
-      id: 'nav-credit-simulator',
-      title: 'محاكي الاعتماد الائتماني والتمويل البنكي',
-      category: 'REPORTS',
-      description: 'تحليل الجدارة الائتمانية واحتساب نسب التغطية ونموذج Altman Z-Score',
-      icon: Sparkles,
-      action: () => {
-        onNavigateTab('CREDIT_SIMULATOR');
+        onNavigateTab('TAX_AUDIT_HUB');
         onClose();
       },
     },

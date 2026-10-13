@@ -64,7 +64,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
   const [waTemplateType, setWaTemplateType] = useState<'TAX_POSITION' | 'SAP_RENEWAL' | 'AUDIT_ALERT' | 'FEE_CLAIM'>('TAX_POSITION');
   const [customWaNotes, setCustomWaNotes] = useState<string>('');
 
-  const targetClient = (state.clients || []).find((c) => c.id === selectedClientId) || (state.clients || [])[0];
+  const targetClient = (state.clients || []).find((c) => c.id === selectedClientId) || (state.clients || [])[0] || null;
   const targetWaClient = (state.clients || []).find((c) => c.id === waTargetClientId) || targetClient;
 
   // 1. RADAR INSIGHTS CALCULATION (Real-time Rule-Based Expert Engine)
@@ -100,7 +100,7 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
 
     // Rule B: Cash Transaction Limit Check (Law 18 of 2019 on Non-Cash Payments)
     const highCashEntries = (state.journalEntries || []).filter((e) => {
-      const hasCash = e.lines?.some((l) => (l.accountId?.startsWith('111') || l.accountName?.includes('خزينة') || l.accountName?.includes('صندوق')));
+      const hasCash = e.lines?.some((l) => ((l.accountId || '').startsWith('111') || (l.accountName || '').includes('خزينة') || (l.accountName || '').includes('صندوق')));
       const hasHighAmount = e.lines?.some((l) => (l.debit || 0) > 10000 || (l.credit || 0) > 10000);
       return hasCash && hasHighAmount;
     });
@@ -173,13 +173,13 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
 
     clientEntries.forEach((e) => {
       e.lines?.forEach((l) => {
-        if (l.accountId?.startsWith('4') || l.accountName?.includes('إيراد') || l.accountName?.includes('مبيعات')) {
+        if ((l.accountId || '').startsWith('4') || (l.accountName || '').includes('إيراد') || (l.accountName || '').includes('مبيعات')) {
           totalRevenue += Number(l.credit || 0) - Number(l.debit || 0);
         }
-        if (l.accountId?.startsWith('5') || l.accountId?.startsWith('3') || l.accountName?.includes('تكلفة') || l.accountName?.includes('مشتريات')) {
+        if ((l.accountId || '').startsWith('5') || (l.accountId || '').startsWith('3') || (l.accountName || '').includes('تكلفة') || (l.accountName || '').includes('مشتريات')) {
           totalCogs += Number(l.debit || 0) - Number(l.credit || 0);
         }
-        if (l.accountName?.includes('مصروف') || l.accountName?.includes('إيجار') || l.accountName?.includes('عمومي')) {
+        if ((l.accountName || '').includes('مصروف') || (l.accountName || '').includes('إيجار') || (l.accountName || '').includes('عمومي')) {
           totalExpenses += Number(l.debit || 0) - Number(l.credit || 0);
         }
       });
@@ -265,11 +265,12 @@ export const CpaAutonomousCommandDeck: React.FC<CpaAutonomousCommandDeckProps> =
   // 4. WHATSAPP MESSAGE BUILDER
   const waGeneratedMessage = useMemo(() => {
     const client = targetWaClient;
-    const phone = client.phone || '01003335360';
+    const phone = client?.phone || '01003335360';
+    const clientName = client?.name || 'العميل';
     let text = '';
 
     if (waTemplateType === 'TAX_POSITION') {
-      text = `السادة المحترمون / شركة ${client.name}
+      text = `السادة المحترمون / شركة ${clientName}
 تحية طيبة وبعد،،
 نحيطكم علماً بأن مكتب المحاسب القانوني أتم مراجعة الموقف الضريبي لمنشأتكم:
 • إقرار ضريبة القيمة المضافة: جاهز للسداد والتقديم

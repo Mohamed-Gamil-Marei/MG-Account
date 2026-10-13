@@ -1,4 +1,5 @@
 import { Account, JournalEntry } from '../types';
+import { getTaxConfig } from '../config/taxSettings';
 
 /**
  * دالة تقريب موحدة لمنع الأخطاء العائمة والتراكمية (Floating-point precision)
@@ -53,6 +54,8 @@ export function computeAccountBalances(accounts: Account[], entries: JournalEntr
 
     return {
       ...acc,
+      code: acc.code || '',
+      name: acc.name || '',
       movementDebit: movDebit,
       movementCredit: movCredit,
       totalDebit,
@@ -120,17 +123,17 @@ export function generateIncomeStatement(
     const expenseBal = round2(acc.endingBalanceDebit - acc.endingBalanceCredit); // Expenses are debit
 
     if (acc.category === 'REVENUES') {
-      if (acc.code.startsWith('4110') || acc.name.includes('مبيعات')) salesRevenue += balance;
-      else if (acc.code.startsWith('4120') || acc.name.includes('خدمات')) servicesRevenue += balance;
-      else if (acc.code.startsWith('4190') || acc.name.includes('مردودات مبيعات')) salesReturns += Math.abs(expenseBal);
+      if ((acc.code || '').startsWith('4110') || (acc.name || '').includes('مبيعات')) salesRevenue += balance;
+      else if ((acc.code || '').startsWith('4120') || (acc.name || '').includes('خدمات')) servicesRevenue += balance;
+      else if ((acc.code || '').startsWith('4190') || (acc.name || '').includes('مردودات مبيعات')) salesReturns += Math.abs(expenseBal);
       else otherIncomes += balance;
     } else if (acc.category === 'EXPENSES') {
-      if (acc.code.startsWith('5100') || acc.code.startsWith('5110') || acc.name.includes('تكلفة المبيعات') || acc.name.includes('مشتريات')) costOfGoodsSold += expenseBal;
-      else if (acc.code.startsWith('5360') || acc.name.includes('إهلاك')) depreciationExpense += expenseBal;
-      else if (acc.code.startsWith('52') || acc.name.includes('تسويق') || acc.name.includes('بيع')) sellingAndMarketingExpenses += expenseBal;
-      else if (acc.code.startsWith('53') || acc.name.includes('عمومي') || acc.name.includes('إداري')) administrativeExpenses += expenseBal;
-      else if (acc.code.startsWith('54') || acc.name.includes('تمويل') || acc.name.includes('فوائد')) financeCosts += expenseBal;
-      else if (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) {
+      if ((acc.code || '').startsWith('5100') || (acc.code || '').startsWith('5110') || (acc.name || '').includes('تكلفة المبيعات') || (acc.name || '').includes('مشتريات')) costOfGoodsSold += expenseBal;
+      else if ((acc.code || '').startsWith('5360') || (acc.name || '').includes('إهلاك')) depreciationExpense += expenseBal;
+      else if ((acc.code || '').startsWith('52') || (acc.name || '').includes('تسويق') || (acc.name || '').includes('بيع')) sellingAndMarketingExpenses += expenseBal;
+      else if ((acc.code || '').startsWith('53') || (acc.name || '').includes('عمومي') || (acc.name || '').includes('إداري')) administrativeExpenses += expenseBal;
+      else if ((acc.code || '').startsWith('54') || (acc.name || '').includes('تمويل') || (acc.name || '').includes('فوائد')) financeCosts += expenseBal;
+      else if ((acc.code || '').startsWith('55') || (acc.name || '').includes('ضريبة الدخل')) {
         taxExpense += expenseBal;
         hasTaxRecorded = true;
       }
@@ -155,11 +158,12 @@ export function generateIncomeStatement(
   const operatingProfit = round2(grossProfit - operatingExpenses);
   const profitBeforeTax = round2(operatingProfit - depreciationExpense - financeCosts + otherIncomes);
 
-  // If tax expense not booked yet in journal, calculate Egyptian statutory 22.5% on positive profit
+  // If tax expense not booked yet in journal, calculate statutory tax on positive profit
+  const taxConfig = getTaxConfig();
   const effectiveTax = round2(
     taxExpense > 0 
       ? taxExpense 
-      : (estimateTaxIfMissing && profitBeforeTax > 0 ? profitBeforeTax * 0.225 : 0)
+      : (estimateTaxIfMissing && profitBeforeTax > 0 ? profitBeforeTax * taxConfig.corporateTaxRate : 0)
   );
   const netProfitAfterTax = round2(profitBeforeTax - effectiveTax);
 
@@ -294,25 +298,25 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     const creditBal = acc.endingBalanceCredit;
 
     if (acc.category === 'ASSETS') {
-      if (acc.code === '1190' || acc.name.includes('مجمع إهلاك') || acc.nature === 'CREDIT') {
+      if ((acc.code || '') === '1190' || (acc.name || '').includes('مجمع إهلاك') || acc.nature === 'CREDIT') {
         accumulatedDepreciation += creditBal;
-      } else if (acc.code.startsWith('11')) {
+      } else if ((acc.code || '').startsWith('11')) {
         propertyPlantEquipment += debitBal;
-      } else if (acc.code === '1210') {
+      } else if ((acc.code || '') === '1210') {
         inventory += debitBal;
-      } else if (acc.code === '1220') {
+      } else if ((acc.code || '') === '1220') {
         tradeReceivables += debitBal;
-      } else if (acc.code === '1225') {
+      } else if ((acc.code || '') === '1225') {
         notesReceivable += debitBal;
-      } else if (acc.code === '1230') {
+      } else if ((acc.code || '') === '1230') {
         whtTaxDebit += debitBal;
-      } else if (acc.code === '1235') {
+      } else if ((acc.code || '') === '1235') {
         vatInputTax += debitBal;
-      } else if (acc.code === '1240') {
+      } else if ((acc.code || '') === '1240') {
         prepaymentsAndOther += debitBal;
-      } else if (acc.code === '1250' || acc.code.startsWith('126')) {
+      } else if ((acc.code || '') === '1250' || (acc.code || '').startsWith('126')) {
         cashAndBanks += debitBal;
-      } else if (acc.code.startsWith('12')) {
+      } else if ((acc.code || '').startsWith('12')) {
         prepaymentsAndOther += debitBal;
       } else {
         otherNonCurrentAssets += debitBal;
@@ -320,46 +324,46 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     } else if (acc.category === 'LIABILITIES') {
       // 1. التزامات ضريبة القيمة المضافة ومصلحة الضرائب (أولوية الكود أولاً كالتزامات متداولة)
       if (
-        acc.code === '2145' ||
-        acc.code === '2140' ||
-        acc.code === '214' ||
-        acc.code.startsWith('214') ||
-        acc.code === '2230'
+        (acc.code || '') === '2145' ||
+        (acc.code || '') === '2140' ||
+        (acc.code || '') === '214' ||
+        (acc.code || '').startsWith('214') ||
+        (acc.code || '') === '2230'
       ) {
         vatOutputTax += creditBal;
-      } else if (acc.code === '2110') {
+      } else if ((acc.code || '') === '2110') {
         longTermLoans += creditBal;
-      } else if (acc.code === '2120') {
+      } else if ((acc.code || '') === '2120') {
         deferredTaxLiabilities += creditBal;
-      } else if (acc.code.startsWith('21')) {
+      } else if ((acc.code || '').startsWith('21')) {
         otherNonCurrentLiabilities += creditBal;
-      } else if (acc.code === '2210') {
+      } else if ((acc.code || '') === '2210') {
         tradePayables += creditBal;
-      } else if (acc.code === '2220') {
+      } else if ((acc.code || '') === '2220') {
         notesPayable += creditBal;
-      } else if (acc.code === '2235') {
+      } else if ((acc.code || '') === '2235') {
         payrollTaxPayable += creditBal;
-      } else if (acc.code === '2238') {
+      } else if ((acc.code || '') === '2238') {
         whtPayable += creditBal;
-      } else if (acc.code === '2240') {
+      } else if ((acc.code || '') === '2240') {
         socialInsurancePayable += creditBal;
-      } else if (acc.code === '2250') {
+      } else if ((acc.code || '') === '2250') {
         accruedExpenses += creditBal;
       } else {
         otherCurrentLiabilities += creditBal;
       }
     } else if (acc.category === 'EQUITY') {
-      if (acc.code === '3100') {
+      if ((acc.code || '') === '3100') {
         paidUpCapital += creditBal;
-      } else if (acc.code === '3200') {
+      } else if ((acc.code || '') === '3200') {
         legalReserve += creditBal;
-      } else if (acc.code === '3300' || acc.code.startsWith('33') || acc.name.includes('احتياطي')) {
+      } else if ((acc.code || '') === '3300' || (acc.code || '').startsWith('33') || (acc.name || '').includes('احتياطي')) {
         otherReserves += creditBal;
-      } else if (acc.code === '3400') {
+      } else if ((acc.code || '') === '3400') {
         retainedEarnings += (creditBal - debitBal);
-      } else if (acc.code === '3500' || acc.name.includes('أرباح العام')) {
+      } else if ((acc.code || '') === '3500' || (acc.name || '').includes('أرباح العام')) {
         currentYearNetProfitAccount += (creditBal - debitBal);
-      } else if (acc.code === '3600') {
+      } else if ((acc.code || '') === '3600') {
         partnersCurrentAccount += (creditBal - debitBal);
       } else {
         otherEquity += (creditBal - debitBal);
@@ -405,10 +409,10 @@ export function generateBalanceSheet(calculatedAccounts: CalculatedAccount[], in
     calculatedAccounts.some(
       (acc) =>
         (acc.category === 'EXPENSES' &&
-          (acc.code.startsWith('55') || acc.name.includes('ضريبة الدخل')) &&
+          ((acc.code || '').startsWith('55') || (acc.name || '').includes('ضريبة الدخل')) &&
           (acc.movementDebit > 0 || acc.endingBalanceDebit > 0)) ||
         (acc.category === 'LIABILITIES' &&
-          (acc.code === '2260' || acc.code.startsWith('226') || acc.name.includes('ضريبة الدخل')) &&
+          ((acc.code || '') === '2260' || (acc.code || '').startsWith('226') || (acc.name || '').includes('ضريبة الدخل')) &&
           (acc.endingBalanceCredit > 0 || acc.movementCredit > 0))
     );
 
@@ -686,7 +690,7 @@ export function findSuspectedDiscrepancyCause(
     }
 
     // حساب أصول برصيد دائن شاذ
-    if (acc.category === 'ASSETS' && net < -1.0 && acc.code !== '1190' && !acc.name.includes('مجمع إهلاك') && acc.nature !== 'CREDIT') {
+    if (acc.category === 'ASSETS' && net < -1.0 && (acc.code || '') !== '1190' && !(acc.name || '').includes('مجمع إهلاك') && acc.nature !== 'CREDIT') {
       return {
         type: 'ACCOUNT',
         name: `${acc.code} - ${acc.name}`,
@@ -697,7 +701,7 @@ export function findSuspectedDiscrepancyCause(
     }
 
     // حساب التزامات أو ملكية برصيد مدين شاذ
-    if ((acc.category === 'LIABILITIES' || acc.category === 'EQUITY') && net > 1.0 && acc.code !== '3400' && acc.nature !== 'DEBIT') {
+    if ((acc.category === 'LIABILITIES' || acc.category === 'EQUITY') && net > 1.0 && (acc.code || '') !== '3400' && acc.nature !== 'DEBIT') {
       return {
         type: 'ACCOUNT',
         name: `${acc.code} - ${acc.name}`,

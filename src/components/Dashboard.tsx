@@ -42,6 +42,7 @@ import {
 } from '../utils/accountingCalculations';
 import { formatEgyptianCurrency } from '../utils/qrCodeGenerator';
 import { computeFeeSummary } from '../utils/clientFees';
+import { LocalErrorBoundary } from './common/LocalErrorBoundary';
 
 export type KpiCategory = 'ALL' | 'FINANCIAL' | 'LIQUIDITY' | 'TAX' | 'OPERATIONS';
 
@@ -71,7 +72,7 @@ interface KpiCardItem {
   actions: ActionMenuItem[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({
+const DashboardInner: React.FC<DashboardProps> = ({
   state,
   onNavigate,
   onSelectTab,
@@ -79,10 +80,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenQuickTreasury,
   fiscalYear = 2026,
 }) => {
-  const navigate = (tabId: string) => {
+  const navigate = React.useCallback((tabId: string) => {
     if (onNavigate) onNavigate(tabId);
     else if (onSelectTab) onSelectTab(tabId);
-  };
+  }, [onNavigate, onSelectTab]);
   const [selectedCategory, setSelectedCategory] = useState<KpiCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -126,7 +127,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         };
       })
       .filter((d) => d.calcStatus === 'OVERDUE' || d.calcStatus === 'DUE_SOON')
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+      .filter((d) => typeof d?.dueDate === 'string' && d.dueDate.trim().length > 0)
+      .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
   }, [state.clientDeadlines, state.clients]);
 
   // Filter journal entries by active client context and fiscal year
@@ -175,11 +177,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const { liquidCash, scheduledTaxLiabilities, taxCoverageRatio, isCriticalTaxCoverage } = useMemo(() => {
     const cashAccounts = calculatedAccounts.filter(
       (a) =>
-        a.code.startsWith('11') ||
-        a.name.includes('خزينة') ||
-        a.name.includes('بنك') ||
-        a.name.includes('صندوق') ||
-        a.name.includes('نقدية')
+        (a.code || '').startsWith('11') ||
+        (a.name || '').includes('خزينة') ||
+        (a.name || '').includes('بنك') ||
+        (a.name || '').includes('صندوق') ||
+        (a.name || '').includes('نقدية')
     );
     const accountsCashSum = cashAccounts.reduce(
       (acc, a) => acc + (a.endingBalanceDebit - a.endingBalanceCredit),
@@ -193,11 +195,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     const taxAccounts = calculatedAccounts.filter(
       (a) =>
-        a.code.startsWith('22') ||
-        a.name.includes('ضريبة') ||
-        a.name.includes('مصلحة الضرائب') ||
-        a.name.includes('كسب عمل') ||
-        a.name.includes('قيمة مضافة')
+        (a.code || '').startsWith('22') ||
+        (a.name || '').includes('ضريبة') ||
+        (a.name || '').includes('مصلحة الضرائب') ||
+        (a.name || '').includes('كسب عمل') ||
+        (a.name || '').includes('قيمة مضافة')
     );
     const taxAccSum = taxAccounts.reduce(
       (acc, a) => acc + (a.endingBalanceCredit - a.endingBalanceDebit),
@@ -208,13 +210,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const coverage = totalTaxDue > 0 ? (totalLiquid / totalTaxDue) * 100 : 100;
     const isCritical = coverage < 15;
 
-    return {
-      liquidCash: totalLiquid,
-      scheduledTaxLiabilities: totalTaxDue,
-      taxCoverageRatio: Number(coverage.toFixed(1)),
-      isCriticalTaxCoverage: isCritical,
-    };
-  }, [calculatedAccounts, treasuryNetBalance, state.taxDeclarations]);
+      return {
+        liquidCash: totalLiquid,
+        scheduledTaxLiabilities: totalTaxDue,
+        taxCoverageRatio: Number(coverage.toFixed(1)),
+        isCriticalTaxCoverage: isCritical,
+      };
+    }, [calculatedAccounts, treasuryNetBalance, state.taxDeclarations]);
 
   // Build the list of Square KPI cards
   const kpis: KpiCardItem[] = useMemo(() => {
@@ -642,7 +644,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     (state.clients || []).length,
     (state.journalEntries || []).length,
     (state.accounts || []).length,
-    navigate,
   ]);
 
   // Filter KPIs by Category and Search Term
@@ -717,222 +718,230 @@ export const Dashboard: React.FC<DashboardProps> = ({
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Central Screen Client & Fiscal Year Context Banner */}
-      <ClientSelector state={state} />
+    <div className="space-y-4 animate-in fade-in duration-300">
+        {/* Central Screen Client & Fiscal Year Context Banner */}
+        <ClientSelector state={state} />
 
-      {/* Week / Critical Deadlines Compact Section (Requirement 3) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5">
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-          <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-            <span>مواعيد الأسبوع والمواعيد الحرجة ({weekDeadlines.length})</span>
-          </h3>
-          <button
-            type="button"
-            onClick={() => navigate('CLIENTS_ARCHIVE')}
-            className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            عرض أرشيف العملاء والمواعيد ←
-          </button>
-        </div>
-
-        {weekDeadlines.length === 0 ? (
-          <p className="text-xs text-slate-500 py-1">
-            ✓ لا توجد مواعيد إقرارات متأخرة أو مستحقة خلال الـ 7 أيام القادمة.
-          </p>
-        ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-            {weekDeadlines.map((item) => (
-              <div
-                key={item.id}
-                className="py-1.5 flex items-center justify-between gap-3 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-1 rounded transition-colors"
-              >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <span
-                    className={`font-mono text-[11px] font-bold shrink-0 ${
-                      item.calcStatus === 'OVERDUE' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    {item.dueDate}
-                  </span>
-                  <span className="font-semibold shrink-0 text-slate-900 dark:text-white">
-                    [{item.clientName}]
-                  </span>
-                  <span className="truncate text-slate-600 dark:text-slate-400">
-                    {formatDeadlineTypeLabel(item.type)} - {item.title}
-                  </span>
-                </div>
-
-                <div className="shrink-0 font-medium">
-                  {item.calcStatus === 'OVERDUE' ? (
-                    <span className="text-rose-600 dark:text-rose-400 font-bold text-[11px]">
-                      متأخر
-                    </span>
-                  ) : (
-                    <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px]">
-                      مستحق خلال أسبوع
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+        {/* Week / Critical Deadlines Compact Section (Requirement 3) */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              <span>مواعيد الأسبوع والمواعيد الحرجة ({weekDeadlines.length})</span>
+            </h3>
+            <button
+              type="button"
+              onClick={() => navigate('CLIENTS_ARCHIVE')}
+              className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              عرض أرشيف العملاء والمواعيد ←
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* Requirement 4: سطر صغير "أتعاب متأخرة" بقائمة العملاء المتأخرين (اسم + المتبقي) */}
-      {overdueClientsList.length > 0 && (
-        <div className="bg-rose-50 dark:bg-rose-950/40 p-2.5 px-4 rounded-xl border border-rose-200 dark:border-rose-900 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
-              <span>⚠</span>
-              <span>أتعاب متأخرة:</span>
-            </span>
-            <div className="flex items-center gap-3 flex-wrap">
-              {overdueClientsList.map((c) => (
-                <span key={c.clientId} className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-rose-300 dark:border-rose-800 text-[11px]">
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{c.clientName}:</span>
-                  <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
-                    {formatEgyptianCurrency(c.remaining)}
-                  </span>
-                  <span className="text-[10px] text-rose-500 font-mono">({c.daysOverdue} يوم)</span>
-                </span>
+          {weekDeadlines.length === 0 ? (
+            <p className="text-xs text-slate-500 py-1">
+              ✓ لا توجد مواعيد إقرارات متأخرة أو مستحقة خلال الـ 7 أيام القادمة.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+              {weekDeadlines.map((item) => (
+                <div
+                  key={item.id}
+                  className="py-1.5 flex items-center justify-between gap-3 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-1 rounded transition-colors"
+                >
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <span
+                      className={`font-mono text-[11px] font-bold shrink-0 ${
+                        item.calcStatus === 'OVERDUE' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      {item.dueDate}
+                    </span>
+                    <span className="font-semibold shrink-0 text-slate-900 dark:text-white">
+                      [{item.clientName}]
+                    </span>
+                    <span className="truncate text-slate-600 dark:text-slate-400">
+                      {formatDeadlineTypeLabel(item.type)} - {item.title}
+                    </span>
+                  </div>
+
+                  <div className="shrink-0 font-medium">
+                    {item.calcStatus === 'OVERDUE' ? (
+                      <span className="text-rose-600 dark:text-rose-400 font-bold text-[11px]">
+                        متأخر
+                      </span>
+                    ) : (
+                      <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px]">
+                        مستحق خلال أسبوع
+                      </span>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('CLIENTS_ARCHIVE')}
-            className="text-[11px] font-bold text-rose-700 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
-          >
-            متابعة الأتعاب والتحصيل ←
-          </button>
+          )}
         </div>
-      )}
 
-      {/* Last successful backup info banner */}
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>حالة الحفظ والنسخ الاحتياطي السحابي:</span>
-        </div>
-        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-          آخر نسخة احتياطية ناجحة: {localStorage.getItem('egy_acc_last_successful_backup') || 'لم تقم بإنشاء نسخة بعد'}
-        </span>
-      </div>
-
-      {/* Autonomous CPA Command Deck (Morning Radar, War-Room & One-Click Tools) */}
-      <CpaAutonomousCommandDeck
-        state={state}
-        onNavigate={navigate}
-        fiscalYear={currentFiscalYear}
-      />
-
-      <UnifiedScreenCard
-        title="لوحة مؤشرات الأداء المالي والمحاسبي"
-        subtitle={
-          activeClient
-            ? `مؤشرات الفحص المالي والمحاسبي لـ (${activeClient.name}) • السنة المالية ${currentFiscalYear}`
-            : `المؤشرات التنفيذية المجمعة للمكتب لكافة الشركات • السنة المالية ${currentFiscalYear}`
-        }
-        icon={Gauge}
-      badge={`${filteredKpis.length} مؤشر نشط`}
-      badgeVariant="emerald"
-      actionMenuItems={dashboardHeaderActions}
-      searchTerm={searchQuery}
-      onSearchChange={setSearchQuery}
-      searchPlaceholder="بحث في مؤشرات الأداء والقيم..."
-      filterButtons={[
-        {
-          id: 'ALL',
-          label: 'كافة المؤشرات',
-          active: selectedCategory === 'ALL',
-          onClick: () => setSelectedCategory('ALL'),
-          count: kpis.length,
-        },
-        {
-          id: 'FINANCIAL',
-          label: 'المالية والقوائم',
-          active: selectedCategory === 'FINANCIAL',
-          onClick: () => setSelectedCategory('FINANCIAL'),
-        },
-        {
-          id: 'LIQUIDITY',
-          label: 'السيولة والخزينة',
-          active: selectedCategory === 'LIQUIDITY',
-          onClick: () => setSelectedCategory('LIQUIDITY'),
-        },
-        {
-          id: 'TAX',
-          label: 'الضرائب والفحص',
-          active: selectedCategory === 'TAX',
-          onClick: () => setSelectedCategory('TAX'),
-        },
-        {
-          id: 'OPERATIONS',
-          label: 'العمليات والموكلين',
-          active: selectedCategory === 'OPERATIONS',
-          onClick: () => setSelectedCategory('OPERATIONS'),
-        },
-      ]}
-    >
-      {/* Compact Clean KPI Items Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-        {filteredKpis.map((kpi) => {
-          const isNegativeOrAlert =
-            String(kpi.value).includes('-') ||
-            kpi.badgeVariant === 'rose' ||
-            String(kpi.value).includes('فارق') ||
-            String(kpi.value).includes('عجز');
-
-          return (
-            <div
-              key={kpi.id}
-              onClick={() => navigate(kpi.targetTab)}
-              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-2.5 flex flex-col justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors"
-              title={`انقر للانتقال إلى تفاصيل ${kpi.title}`}
-            >
-              <div className="flex items-center justify-between gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <span className="truncate">{kpi.title}</span>
-                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                  <ActionMenu
-                    items={kpi.actions}
-                    title="خيارات المؤشر"
-                    triggerType="three_dots_vertical"
-                    size="xs"
-                    buttonVariant="ghost"
-                    align="left"
-                  />
-                </div>
-              </div>
-
-              <div
-                className={`font-mono text-sm sm:text-base font-semibold truncate my-1.5 ${
-                  isNegativeOrAlert ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100'
-                }`}
-                title={String(kpi.value)}
-              >
-                {kpi.value}
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700/50">
-                <span className={isNegativeOrAlert ? 'text-red-600 font-semibold' : 'text-slate-500'}>
-                  {kpi.badge}
-                </span>
+        {/* Requirement 4: سطر صغير "أتعاب متأخرة" بقائمة العملاء المتأخرين (اسم + المتبقي) */}
+        {overdueClientsList.length > 0 && (
+          <div className="bg-rose-50 dark:bg-rose-950/40 p-2.5 px-4 rounded-xl border border-rose-200 dark:border-rose-900 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                <span>⚠</span>
+                <span>أتعاب متأخرة:</span>
+              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                {overdueClientsList.map((c) => (
+                  <span key={c.clientId} className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-rose-300 dark:border-rose-800 text-[11px]">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{c.clientName}:</span>
+                    <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
+                      {formatEgyptianCurrency(c.remaining)}
+                    </span>
+                    <span className="text-[10px] text-rose-500 font-mono">({c.daysOverdue} يوم)</span>
+                  </span>
+                ))}
               </div>
             </div>
-          );
-        })}
-
-        {filteredKpis.length === 0 && (
-          <div className="col-span-full py-8 text-center text-slate-400 text-xs bg-slate-50/50 dark:bg-slate-800/30 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
-            لا توجد مؤشرات تطابق معايير البحث أو التصفية الحالية.
+            <button
+              type="button"
+              onClick={() => navigate('CLIENTS_ARCHIVE')}
+              className="text-[11px] font-bold text-rose-700 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
+            >
+              متابعة الأتعاب والتحصيل ←
+            </button>
           </div>
         )}
+
+        {/* Last successful backup info banner */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>حالة الحفظ والنسخ الاحتياطي السحابي:</span>
+          </div>
+          <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+            آخر نسخة احتياطية ناجحة: {localStorage.getItem('egy_acc_last_successful_backup') || 'لم تقم بإنشاء نسخة بعد'}
+          </span>
+        </div>
+
+        {/* Autonomous CPA Command Deck (Morning Radar, War-Room & One-Click Tools) */}
+        <CpaAutonomousCommandDeck
+          state={state}
+          onNavigate={navigate}
+          fiscalYear={currentFiscalYear}
+        />
+
+        <UnifiedScreenCard
+          title="لوحة مؤشرات الأداء المالي والمحاسبي"
+          subtitle={
+            activeClient
+              ? `مؤشرات الفحص المالي والمحاسبي لـ (${activeClient.name}) • السنة المالية ${currentFiscalYear}`
+              : `المؤشرات التنفيذية المجمعة للمكتب لكافة الشركات • السنة المالية ${currentFiscalYear}`
+          }
+          icon={Gauge}
+          badge={`${filteredKpis.length} مؤشر نشط`}
+          badgeVariant="emerald"
+          actionMenuItems={dashboardHeaderActions}
+          searchTerm={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="بحث في مؤشرات الأداء والقيم..."
+          filterButtons={[
+            {
+              id: 'ALL',
+              label: 'كافة المؤشرات',
+              active: selectedCategory === 'ALL',
+              onClick: () => setSelectedCategory('ALL'),
+              count: kpis.length,
+            },
+            {
+              id: 'FINANCIAL',
+              label: 'المالية والقوائم',
+              active: selectedCategory === 'FINANCIAL',
+              onClick: () => setSelectedCategory('FINANCIAL'),
+            },
+            {
+              id: 'LIQUIDITY',
+              label: 'السيولة والخزينة',
+              active: selectedCategory === 'LIQUIDITY',
+              onClick: () => setSelectedCategory('LIQUIDITY'),
+            },
+            {
+              id: 'TAX',
+              label: 'الضرائب والفحص',
+              active: selectedCategory === 'TAX',
+              onClick: () => setSelectedCategory('TAX'),
+            },
+            {
+              id: 'OPERATIONS',
+              label: 'العمليات والموكلين',
+              active: selectedCategory === 'OPERATIONS',
+              onClick: () => setSelectedCategory('OPERATIONS'),
+            },
+          ]}
+        >
+          {/* Compact Clean KPI Items Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {filteredKpis.map((kpi) => {
+              const isNegativeOrAlert =
+                String(kpi.value).includes('-') ||
+                kpi.badgeVariant === 'rose' ||
+                String(kpi.value).includes('فارق') ||
+                String(kpi.value).includes('عجز');
+
+              return (
+                <div
+                  key={kpi.id}
+                  onClick={() => navigate(kpi.targetTab)}
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-2.5 flex flex-col justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors"
+                  title={`انقر للانتقال إلى تفاصيل ${kpi.title}`}
+                >
+                  <div className="flex items-center justify-between gap-1 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="truncate">{kpi.title}</span>
+                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      <ActionMenu
+                        items={kpi.actions}
+                        title="خيارات المؤشر"
+                        triggerType="three_dots_vertical"
+                        size="xs"
+                        buttonVariant="ghost"
+                        align="left"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className={`font-mono text-sm sm:text-base font-semibold truncate my-1.5 ${
+                      isNegativeOrAlert ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100'
+                    }`}
+                    title={String(kpi.value)}
+                  >
+                    {kpi.value}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700/50">
+                    <span className={isNegativeOrAlert ? 'text-red-600 font-semibold' : 'text-slate-500'}>
+                      {kpi.badge}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredKpis.length === 0 && (
+              <div className="col-span-full py-8 text-center text-slate-400 text-xs bg-slate-50/50 dark:bg-slate-800/30 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
+                لا توجد مؤشرات تطابق معايير البحث أو التصفية الحالية.
+              </div>
+            )}
+          </div>
+        </UnifiedScreenCard>
       </div>
-    </UnifiedScreenCard>
-    </div>
+  );
+};
+
+export const Dashboard: React.FC<DashboardProps> = (props) => {
+  return (
+    <LocalErrorBoundary title="لوحة القيادة والمؤشرات (Dashboard)">
+      <DashboardInner {...props} />
+    </LocalErrorBoundary>
   );
 };
 

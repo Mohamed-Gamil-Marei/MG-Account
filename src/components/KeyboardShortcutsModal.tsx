@@ -219,13 +219,39 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
       {
         id: 'nav-credit',
         keyCombo: ['Ctrl', 'R'],
-        label: 'ملف الائتمان ونموذج التوزيع البنكي',
+        label: 'مركز الائتمان والملفات البنكية',
         category: 'NAVIGATION',
-        description: 'تحليل التدفقات النقدية وملاءمة التسهيلات الائتمانية',
+        description: 'محاكي الائتمان والملف البنكي وسجل دراسات التسهيلات',
         icon: TrendingUp,
-        targetTabId: 'CREDIT_SIMULATOR',
+        targetTabId: 'CREDIT_HUB',
         action: () => {
-          onNavigate('CREDIT_SIMULATOR');
+          onNavigate('CREDIT_HUB');
+          onClose();
+        },
+      },
+      {
+        id: 'nav-financial-planning',
+        keyCombo: ['Ctrl', 'Shift', 'B'],
+        label: 'التخطيط والتقدير المالي (الموازنة والتدفقات)',
+        category: 'NAVIGATION',
+        description: 'الموازنة التقديرية للعام وتوقعات التدفقات النقدية التشغيلية',
+        icon: Scale,
+        targetTabId: 'FINANCIAL_PLANNING_HUB',
+        action: () => {
+          onNavigate('FINANCIAL_PLANNING_HUB');
+          onClose();
+        },
+      },
+      {
+        id: 'nav-audit-tools',
+        keyCombo: ['Ctrl', 'Shift', 'A'],
+        label: 'منصة التدقيق الذكي وفحص القيود',
+        category: 'NAVIGATION',
+        description: 'مختبر فحص الإكسيل، كشف الاحتيال، وفاحص قيود اليومية',
+        icon: Sparkles,
+        targetTabId: 'AUDIT_TOOLS_HUB',
+        action: () => {
+          onNavigate('AUDIT_TOOLS_HUB');
           onClose();
         },
       },

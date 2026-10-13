@@ -81,8 +81,8 @@ export const ClientNotificationModal: React.FC<ClientNotificationModalProps> = (
 
   // Pre-configured message generators
   const generateMessage = (): { subject: string; text: string } => {
-    const clientGreeting = `السادة / ${client.name}\nعناية: ${client.contactPerson || 'الإدارة المالية'}\nتحية طيبة وبعد،،`;
-    const signature = `\n\nمع خالص التقدير والاحترام،\n${officeName}\nالمحاسب القانوني: ${auditorName}\nهاتف المكتب: 01000000000`;
+    const officePhone = db.getState().officeProfile?.phone || '';
+    const signature = `\n\nمع خالص التقدير والاحترام،\n${officeName}\nالمحاسب القانوني: ${auditorName}${officePhone ? `\nهاتف المكتب: ${officePhone}` : ''}`;
 
     switch (notifyType) {
       case 'PROCEDURE_UPDATE': {

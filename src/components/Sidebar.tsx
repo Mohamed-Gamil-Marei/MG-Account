@@ -72,22 +72,34 @@ export const getParentHub = (tabId: string): string => {
     case 'BANK_RECONCILIATION':
     case 'CURRENCY_EXCHANGE_RATES':
     case 'OCR_INVOICE_SCANNER':
-    case 'EXCEL_AUDIT_SENTINEL':
-    case 'JOURNAL_AUDIT_SCANNER':
     case 'AUDIT_WORKING_PAPERS':
     case 'ACCOUNTING_HUB':
       return 'ACCOUNTING_HUB';
 
+    case 'CREDIT_HUB':
+    case 'CREDIT_SIMULATOR':
+    case 'QUICK_BANK_DOSSIER':
+    case 'CREDIT_DOSSIER_REGISTRY':
+      return 'CREDIT_HUB';
+
+    case 'FINANCIAL_PLANNING_HUB':
+    case 'BUDGET_PLANNER':
+    case 'BUDGET_AND_CASHFLOW':
+    case 'CASH_FLOW_PREDICTOR':
+      return 'FINANCIAL_PLANNING_HUB';
+
+    case 'AUDIT_TOOLS_HUB':
+    case 'EXCEL_AUDIT_SENTINEL':
+    case 'FRAUD_AUDIT_SENTINEL':
+    case 'JOURNAL_AUDIT_SCANNER':
+      return 'AUDIT_TOOLS_HUB';
+
     case 'FINANCIAL_STATEMENTS':
     case 'ANNUAL_FINANCIAL_DOSSIER':
     case 'FINANCIAL_DOSSIER_GENERATOR':
-    case 'BUDGET_PLANNER':
-    case 'BUDGET_AND_CASHFLOW':
     case 'FINANCIAL_NOTES':
     case 'AUDITOR_REPORT':
     case 'FINANCIAL_SIMULATOR':
-    case 'CREDIT_SIMULATOR':
-    case 'CASH_FLOW_PREDICTOR':
     case 'CERTIFICATES':
     case 'FEASIBILITY_STUDY':
     case 'FINANCIAL_REPORTING_HUB':
@@ -99,7 +111,6 @@ export const getParentHub = (tabId: string): string => {
     case 'TAX_EXPOSURE_SIMULATOR':
     case 'ETA_RECONCILIATION':
     case 'PAYROLL_INSURANCE':
-    case 'FRAUD_AUDIT_SENTINEL':
     case 'AUDIT_CONSISTENCY_SENTINEL':
     case 'TAX_AUDIT_HUB':
       return 'TAX_AUDIT_HUB';
@@ -236,14 +247,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
     },
     {
-      id: 'CREDIT_SIMULATOR',
-      defaultTab: 'CREDIT_SIMULATOR',
+      id: 'CREDIT_HUB',
+      defaultTab: 'CREDIT_HUB',
       number: '5',
-      label: 'ملف بنكي سريع',
-      labelEn: 'Fast Bank Dossier',
+      label: 'مركز الائتمان',
+      labelEn: 'Credit Hub',
       icon: TrendingUp,
-      description: 'الملف الائتماني والتحليل المالي للبنوك',
-      badge: isEn ? 'Credit' : 'ائتمان وبنوك',
+      description: 'محاكي الائتمان، الملف البنكي وسجل الملفات',
+      badge: isEn ? 'Credit' : 'مركز الائتمان',
       badgeColor: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
     },
     {
@@ -274,6 +285,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // --- Remaining Screens Moved to "المزيد" (باقي الشاشات في بند المزيد) ---
   const moreTools = [
+    {
+      id: 'FINANCIAL_PLANNING_HUB',
+      defaultTab: 'FINANCIAL_PLANNING_HUB',
+      label: 'التخطيط والتقدير المالي',
+      labelEn: 'Financial Planning & Budgets',
+      icon: Calculator,
+      badge: 'موازنة وتدفقات',
+    },
+    {
+      id: 'AUDIT_TOOLS_HUB',
+      defaultTab: 'AUDIT_TOOLS_HUB',
+      label: 'منصة التدقيق وفحص القيود',
+      labelEn: 'Audit Sentinel Hub',
+      icon: Sparkles,
+      badge: 'فحص ذكي',
+    },
     {
       id: 'CUSTOMS_HUB',
       defaultTab: 'CUSTOMS_SHIPMENTS',

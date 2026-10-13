@@ -281,7 +281,7 @@ export class LocalDatabase {
       let hasChanged = false;
       for (const [entityType, stateKey] of Object.entries(entityMap)) {
         try {
-          const res = await fetch(`/api/data/${entityType}`);
+          const res = await fetch(this.getApiUrl(`/api/data/${entityType}`));
           if (res.ok) {
             const json = await res.json();
             if (json.success && Array.isArray(json.data)) {
@@ -324,7 +324,6 @@ export class LocalDatabase {
         creditSimulations: this.state.creditSimulations,
         fixedAssets: this.state.fixedAssets,
         officeProfile: this.state.officeProfile,
-        auditLogs: this.state.auditLogs,
         systemUsers: this.state.users,
         preferences: this.state.preferences,
         whatsappMessages: this.state.whatsappMessages,
@@ -351,6 +350,22 @@ export class LocalDatabase {
     }
   }
 
+  private forbidden403Keys: Set<string> = new Set();
+  private notified403Keys: Set<string> = new Set();
+
+  private showNotificationNotice(message: string) {
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('system-notification', { detail: { message } });
+      window.dispatchEvent(event);
+    }
+  }
+
+  private getApiUrl(path: string): string {
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+  }
+
   public async pushDirtyToServer() {
     const entityMapping: Record<string, { endpoint: string, data: any }> = {
       [STORAGE_KEYS.CLIENTS]: { endpoint: 'clients', data: this.state.clients },
@@ -365,7 +380,7 @@ export class LocalDatabase {
       [STORAGE_KEYS.CREDIT_SIM]: { endpoint: 'creditSimulations', data: this.state.creditSimulations },
       [STORAGE_KEYS.FIXED_ASSETS]: { endpoint: 'fixedAssets', data: this.state.fixedAssets },
       [STORAGE_KEYS.OFFICE_PROFILE]: { endpoint: 'officeProfile', data: [this.state.officeProfile] },
-      [STORAGE_KEYS.AUDIT_LOGS]: { endpoint: 'auditLogs', data: this.state.auditLogs },
+      // Note: auditLogs is explicitly excluded from client pushing (server handles audit logs)
       [STORAGE_KEYS.SYSTEM_USERS]: { endpoint: 'systemUsers', data: this.state.users },
       [STORAGE_KEYS.USER_PREFERENCES]: { endpoint: 'preferences', data: [this.state.preferences] },
       [STORAGE_KEYS.WHATSAPP_MESSAGES]: { endpoint: 'whatsappMessages', data: this.state.whatsappMessages },
@@ -378,12 +393,17 @@ export class LocalDatabase {
     };
 
     for (const [key, mapping] of Object.entries(entityMapping)) {
+      if (this.forbidden403Keys.has(key)) continue;
+
       if (this.dirtyKeys.has(key as any)) {
         const records = Array.isArray(mapping.data) ? mapping.data : [mapping.data];
+        let allRecordsSynced = true;
+
         for (const rec of records) {
+          if (!rec) continue;
           const recId = rec.id || 'main';
           try {
-            const res = await fetch(`/api/data/${mapping.endpoint}`, {
+            const res = await fetch(this.getApiUrl(`/api/data/${mapping.endpoint}`), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -392,16 +412,91 @@ export class LocalDatabase {
                 version: rec._version || 1,
               }),
             });
-            if (res.status === 409) {
-              const errJson = await res.json();
-              console.warn('Version conflict:', errJson.error);
-              if (typeof window !== 'undefined') {
-                window.alert(errJson.error || 'تعارض إصدار (Version Conflict): تم تعديل هذا السجل من قبل مستخدم آخر.');
+
+            if (res.ok) {
+              const resJson = await res.json();
+              if (resJson.success) {
+                if (typeof resJson.version === 'number') {
+                  rec._version = resJson.version;
+                }
+                if (resJson.updatedAt) {
+                  rec._updatedAt = resJson.updatedAt;
+                }
               }
+            } else if (res.status === 403) {
+              allRecordsSynced = false;
+              this.forbidden403Keys.add(key);
+              if (!this.notified403Keys.has(key)) {
+                this.notified403Keys.add(key);
+                console.warn(`[403 Forbidden] لا تملك صلاحية التزامن مع السيرفر لـ ${mapping.endpoint}`);
+                this.showNotificationNotice(`غير مصرح: ليس لديك صلاحية كتابة أو حفظ (${mapping.endpoint}) على السيرفر.`);
+              }
+              break;
+            } else if (res.status === 409) {
+              allRecordsSynced = false;
+              const errJson = await res.json().catch(() => ({}));
+              console.warn('Version conflict (409):', errJson.error);
+
+              // Pull latest version from server for this entity
+              try {
+                const pullRes = await fetch(this.getApiUrl(`/api/data/${mapping.endpoint}`));
+                if (pullRes.ok) {
+                  const pullJson = await pullRes.json();
+                  if (pullJson.success && Array.isArray(pullJson.data)) {
+                    if (Array.isArray(mapping.data)) {
+                      const updatedList = pullJson.data;
+                      const stateKeyMap: Record<string, keyof DatabaseState> = {
+                        clients: 'clients',
+                        journalEntries: 'journalEntries',
+                        accounts: 'accounts',
+                        treasury: 'treasuryTransactions',
+                        taxDeclarations: 'taxDeclarations',
+                        taxMandates: 'taxMandates',
+                        certificates: 'certificates',
+                        invoices: 'invoices',
+                        feasibilityStudies: 'feasibilityStudies',
+                        creditSimulations: 'creditSimulations',
+                        fixedAssets: 'fixedAssets',
+                        systemUsers: 'users',
+                        whatsappMessages: 'whatsappMessages',
+                        exchangeRates: 'exchangeRates',
+                        fiscalPeriodLocks: 'fiscalPeriodLocks',
+                        feeEstimates: 'feeEstimates',
+                        customsShipments: 'customsShipments',
+                        financialActivityLogs: 'financialActivityLogs',
+                      };
+                      const stKey = stateKeyMap[mapping.endpoint];
+                      if (stKey) {
+                        (this.state as any)[stKey] = updatedList;
+                      }
+                    } else {
+                      if (pullJson.data.length > 0) {
+                        const singleData = pullJson.data[0];
+                        if (mapping.endpoint === 'officeProfile') this.state.officeProfile = singleData;
+                        if (mapping.endpoint === 'preferences') this.state.preferences = singleData;
+                        if (mapping.endpoint === 'whatsappBotSettings') this.state.whatsappBotSettings = singleData;
+                      }
+                    }
+                    this.persistState();
+                    this.notify();
+                  }
+                }
+              } catch (pullErr) {
+                console.warn('Error pulling fresh record after 409:', pullErr);
+              }
+
+              this.showNotificationNotice(`تعارض إصدار (409): تم سحب النسخة الأحدث للسجل (${recId}) من السيرفر بنجاح.`);
+            } else {
+              allRecordsSynced = false;
             }
           } catch (err) {
+            allRecordsSynced = false;
             console.warn('Error pushing record to server:', err);
           }
+        }
+
+        if (allRecordsSynced) {
+          this.dirtyKeys.delete(key as any);
         }
       }
     }
@@ -721,9 +816,16 @@ export class LocalDatabase {
 
   public saveState(specificKey?: keyof typeof STORAGE_KEYS) {
     if (specificKey) {
-      this.dirtyKeys.add(STORAGE_KEYS[specificKey]);
+      const keyVal = STORAGE_KEYS[specificKey];
+      this.dirtyKeys.add(keyVal);
+      this.forbidden403Keys.delete(keyVal);
+      this.notified403Keys.delete(keyVal);
     } else {
-      Object.values(STORAGE_KEYS).forEach((k) => this.dirtyKeys.add(k));
+      Object.values(STORAGE_KEYS).forEach((k) => {
+        this.dirtyKeys.add(k);
+        this.forbidden403Keys.delete(k);
+        this.notified403Keys.delete(k);
+      });
     }
 
     // Immediately notify UI for 0ms zero-lag reactivity
@@ -826,7 +928,6 @@ export class LocalDatabase {
       if (this.dirtyKeys.has(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS)) {
         localStorage.setItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS, JSON.stringify(this.state.financialActivityLogs || []));
       }
-      this.dirtyKeys.clear();
 
       this.pushDirtyToServer();
     } catch (e: any) {
