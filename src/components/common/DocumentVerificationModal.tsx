@@ -34,7 +34,7 @@ import {
 } from '../../utils/qrCodeGenerator';
 
 interface DocumentVerificationModalProps {
-  data: VerificationPayloadData;
+  data?: VerificationPayloadData | null;
   onClose: () => void;
   isOpen?: boolean;
 }
@@ -44,6 +44,7 @@ export const DocumentVerificationModal: React.FC<DocumentVerificationModalProps>
   onClose,
   isOpen = true,
 }) => {
+  if (!isOpen || !data) return null;
   const [modalLang, setModalLang] = useState<'ar' | 'en'>('ar');
   const [activeTab, setActiveTab] = useState<'audit' | 'encrypted_pdf' | 'offline_seal'>('encrypted_pdf');
   const [copied, setCopied] = useState(false);

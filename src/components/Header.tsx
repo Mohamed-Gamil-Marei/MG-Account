@@ -45,6 +45,7 @@ interface HeaderProps {
   onOpenDesktopModal?: () => void;
   onOpenShortcutsModal?: () => void;
   onOpenPinAuthModal?: () => void;
+  onSignOut?: () => void;
   onSelectTab: (tabId: NavigationTab) => void;
   activeTab: NavigationTab;
 }
@@ -56,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDesktopModal,
   onOpenShortcutsModal,
   onOpenPinAuthModal,
+  onSignOut,
   onSelectTab,
   activeTab,
 }) => {
@@ -290,6 +292,7 @@ export const Header: React.FC<HeaderProps> = ({
             onOpenDesktop={onOpenDesktopModal}
             onOpenShortcuts={onOpenShortcutsModal}
             onOpenPinAuth={onOpenPinAuthModal}
+            onSignOut={onSignOut}
           />
         </div>
       </div>

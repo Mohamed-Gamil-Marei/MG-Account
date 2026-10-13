@@ -7,6 +7,7 @@ import {
   Download,
   Keyboard,
   Lock,
+  LogOut,
   ChevronDown,
   Layers,
   Sparkles,
@@ -20,6 +21,7 @@ interface HeaderSystemDropdownProps {
   onOpenDesktop?: () => void;
   onOpenShortcuts?: () => void;
   onOpenPinAuth?: () => void;
+  onSignOut?: () => void;
 }
 
 export const HeaderSystemDropdown: React.FC<HeaderSystemDropdownProps> = ({
@@ -29,6 +31,7 @@ export const HeaderSystemDropdown: React.FC<HeaderSystemDropdownProps> = ({
   onOpenDesktop,
   onOpenShortcuts,
   onOpenPinAuth,
+  onSignOut,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -159,6 +162,24 @@ export const HeaderSystemDropdown: React.FC<HeaderSystemDropdownProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-xs">قفل الشاشة السريع</div>
                   <div className="text-[10px] text-slate-400">حماية البيانات بكلمة المرور</div>
+                </div>
+              </button>
+            )}
+
+            {onSignOut && (
+              <button
+                onClick={() => {
+                  if (window.confirm('هل أنت متأكد من تسجيل الخروج النهائي من المنظومة؟')) {
+                    handleAction(onSignOut);
+                  }
+                }}
+                id="menu-btn-signout"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-right hover:bg-rose-950/40 text-rose-300 hover:text-rose-200 transition-all cursor-pointer group"
+              >
+                <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-xs">تسجيل الخروج</div>
+                  <div className="text-[10px] text-slate-400">إنهاء الجلسة والعودة لبوابة الدخول</div>
                 </div>
               </button>
             )}

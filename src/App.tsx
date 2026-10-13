@@ -27,6 +27,7 @@ import {
   Shield,
   Users,
   Lock,
+  LogOut,
   Trash2,
   Maximize2,
   BookOpen,
@@ -312,7 +313,10 @@ export default function App() {
         cloudSync.initRealtimeSync((remote) => {
           db.mergeRemoteState(remote);
         });
-      } else if (!authResolved) {
+      } else {
+        setFirebaseProfile(null);
+      }
+      if (!authResolved) {
         setAuthResolved(true);
       }
     });
@@ -810,7 +814,7 @@ export default function App() {
         return (
           <TaxAuditHubView
             state={state}
-            initialSubTab="TAX_TRACKER"
+            initialSubTab={activeTab === 'TAX_AUDIT_HUB' ? 'TAX_TRACKER' : (activeTab as any)}
             onNavigateToTab={(tab) => setActiveTab(tab)}
           />
         );
@@ -1068,7 +1072,7 @@ export default function App() {
         <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4" dir="rtl">
           <Suspense fallback={<HubLoadingFallback />}>
             <DocumentVerificationModal
-              initialData={verificationData}
+              data={verificationData}
               onClose={() => setVerificationData(null)}
             />
           </Suspense>
@@ -1455,6 +1459,20 @@ export default function App() {
                           <Lock className="w-4 h-4 text-amber-500" />
                           <span>{!isRtl ? 'Lock Screen / PIN Code' : 'قفل الشاشة / تغيير الرمز PIN'}</span>
                         </button>
+
+                        <button
+                          onClick={async () => {
+                            setIsToolsMenuOpen(false);
+                            if (window.confirm('هل أنت متأكد من تسجيل الخروج النهائي من المنظومة؟')) {
+                              await firebaseAuth.signOut();
+                              setFirebaseProfile(null);
+                            }
+                          }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors text-right cursor-pointer font-semibold mt-1"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-500" />
+                          <span>{!isRtl ? 'Sign Out' : 'تسجيل الخروج'}</span>
+                        </button>
                       </div>
                     </div>
                   </>
@@ -1509,17 +1527,6 @@ export default function App() {
           </div>
         </main>
 
-        {/* Mobile Quick Return Floating Badge when viewing Desktop mode on mobile screens */}
-        <div className="md:hidden fixed bottom-20 left-4 right-4 z-30 flex justify-center pointer-events-none">
-          <button
-            onClick={handleSwitchToMobileMode}
-            className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xl border border-emerald-400/40 active:scale-95 transition-all animate-in fade-in slide-in-from-bottom-3"
-          >
-            <Smartphone className="w-4 h-4" />
-            <span>التبديل إلى وضع الهاتف الميداني 📱</span>
-          </button>
-        </div>
-
         {/* Mobile Fixed Bottom Navigation Bar (أقل من 768px: شريط تنقل سفلي ثابت بـ 5 أزرار) */}
         <MobileBottomNavigation
           activeTab={activeTab}
@@ -1550,6 +1557,19 @@ export default function App() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
+
+              {/* Mobile Field Mode Button inside More Sheet */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMoreSheetOpen(false);
+                  handleSwitchToMobileMode();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-all text-xs"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>التبديل إلى وضع الهاتف الميداني 📱</span>
+              </button>
 
               {/* Sections list grouped and filtered by isTabAccessible */}
               <div className="space-y-4">

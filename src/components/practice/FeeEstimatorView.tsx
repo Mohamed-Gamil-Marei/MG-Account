@@ -390,22 +390,26 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
   ]);
 
   // Generate / Save Quotation Object
-  const generateQuotationObject = (): FeeQuotationEstimate => {
+  const generateQuotationObject = (shouldRegister: boolean = false): FeeQuotationEstimate => {
     const quoteNum = `QUO-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const today = new Date().toISOString().split('T')[0];
     const validUntilDate = new Date();
     validUntilDate.setDate(validUntilDate.getDate() + 30);
     const validUntil = validUntilDate.toISOString().split('T')[0];
 
-    const docResult = IssuedDocumentService.issueVerifiedDocument({
-      documentType: 'مقترح أتعاب مهنية',
-      displayDocNumber: quoteNum,
-    });
-    docResult.registered.then(isRegistered => {
-      if (!isRegistered) {
-        alert('تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل');
-      }
-    });
+    const verificationCode = IssuedDocumentService.createVerificationCode();
+
+    if (shouldRegister) {
+      const docResult = IssuedDocumentService.issueVerifiedDocument({
+        documentType: 'مقترح أتعاب مهنية',
+        displayDocNumber: quoteNum,
+      });
+      docResult.registered.then(isRegistered => {
+        if (!isRegistered) {
+          alert('تعذر تسجيل المستند في سجل التحقق، لن يعمل رمز QR حتى يُسجَّل');
+        }
+      });
+    }
 
     return {
       id: `quo-${Date.now()}`,
@@ -447,14 +451,14 @@ export const FeeEstimatorView: React.FC<FeeEstimatorViewProps> = ({ state, onCon
       paymentTerms: calculations.calculatedMilestones,
       executionDurationDays: executionDays,
       notes,
-      verificationCode: docResult.verificationCode,
+      verificationCode,
       status: 'DRAFT',
       createdAt: new Date().toISOString(),
     };
   };
 
   const handleSaveQuotation = () => {
-    const quote = generateQuotationObject();
+    const quote = generateQuotationObject(true);
     const saved = db.saveFeeEstimate(quote);
     setQuotations(db.getFeeEstimates());
     setToastMessage(`تم حفظ عرض السعر رقم (${saved.quotationNumber}) بنجاح.`);

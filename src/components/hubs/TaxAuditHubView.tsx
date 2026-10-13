@@ -11,6 +11,7 @@ import {
   Clock,
   Activity,
   Key,
+  Calendar,
 } from 'lucide-react';
 import { DatabaseState } from '../../db/localDatabase';
 import { TaxTrackerView } from '../TaxTrackerView';
@@ -27,6 +28,8 @@ import { AuditConsistencySentinelView } from '../audit/AuditConsistencySentinelV
 import { SmartExcelAuditSentinelView } from '../audit/SmartExcelAuditSentinelView';
 import { ClientSelector } from '../common/ClientSelector';
 import { TaxRiskAndPenaltiesView } from '../tax/TaxRiskAndPenaltiesView';
+import { TaxAppealsDefenseView } from '../tax/TaxAppealsDefenseView';
+import { TaxMandateScheduler } from '../TaxMandateScheduler';
 import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 import { Scale } from 'lucide-react';
 import { runAutomatedJournalAudit } from '../../services/journalAuditEngine';
@@ -42,7 +45,9 @@ export type TaxAuditSubTab =
   | 'AUDIT_WORKING_PAPERS'
   | 'TAX_EXPOSURE_SIMULATOR'
   | 'ETA_RECONCILIATION'
-  | 'PAYROLL_INSURANCE';
+  | 'PAYROLL_INSURANCE'
+  | 'TAX_APPEALS'
+  | 'TAX_MANDATES';
 
 interface TaxAuditHubViewProps {
   state: DatabaseState;
@@ -116,6 +121,16 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
       badge: 'ESA 320',
       badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
     },
+    {
+      id: 'TAX_APPEALS',
+      label: 'الطعون والمذكرات الضريبية',
+      icon: Scale,
+    },
+    {
+      id: 'TAX_MANDATES',
+      label: 'مأموريات ومواعيد الضرائب',
+      icon: Calendar,
+    },
   ];
 
   return (
@@ -177,6 +192,8 @@ export const TaxAuditHubView: React.FC<TaxAuditHubViewProps> = ({
         {activeSubTab === 'AUDIT_WORKING_PAPERS' && <AuditWorkingPapersView state={state} />}
         {activeSubTab === 'ETA_RECONCILIATION' && <EtaReconciliationView state={state} />}
         {activeSubTab === 'PAYROLL_INSURANCE' && <PayrollInsuranceEngineView state={state} />}
+        {activeSubTab === 'TAX_APPEALS' && <TaxAppealsDefenseView state={state} />}
+        {activeSubTab === 'TAX_MANDATES' && <TaxMandateScheduler state={state} />}
       </div>
     </div>
   );
