@@ -211,7 +211,11 @@ export default function App() {
 
     const checkServerSession = async () => {
       try {
-        const res = await fetch('/api/auth/me');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch('/api/auth/me', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.user) {
@@ -239,18 +243,57 @@ export default function App() {
             return;
           }
         }
-        // Server returned 401/403 (unauthenticated)
+
+        // Server returned 401 (Session invalid and server available): clear offline cache
+        if (res.status === 401) {
+          const localProfile = firebaseAuth.getCurrentProfile();
+          if (localProfile?.email) {
+            const { clearOfflineAuthCache } = await import('./services/offlineAuthService');
+            clearOfflineAuthCache(localProfile.email);
+          }
+          if (isMounted) {
+            setFirebaseProfile(null);
+            setAuthResolved(true);
+          }
+          return;
+        }
+
+        // Server returned 500/502/503/504 or status 0 (Server unavailable): allow offline fallback without clearing cache
+        if (res.status >= 500 && res.status <= 504) {
+          const localProfile = firebaseAuth.getCurrentProfile();
+          if (localProfile && isMounted) {
+            const offlineProfile = { ...localProfile, isOffline: true };
+            db.syncLoggedInUser(offlineProfile);
+            setFirebaseProfile(offlineProfile);
+          } else if (isMounted) {
+            setFirebaseProfile(null);
+          }
+          if (isMounted) {
+            setAuthResolved(true);
+          }
+          return;
+        }
+
+        // Other errors (e.g. 403, 429): keep local session offline if available
         if (isMounted) {
-          setFirebaseProfile(null);
+          const localProfile = firebaseAuth.getCurrentProfile();
+          if (localProfile) {
+            const offlineProfile = { ...localProfile, isOffline: true };
+            db.syncLoggedInUser(offlineProfile);
+            setFirebaseProfile(offlineProfile);
+          } else {
+            setFirebaseProfile(null);
+          }
           setAuthResolved(true);
         }
       } catch (networkErr) {
-        // Server unreachable (Offline mode)
-        console.warn('Server /api/auth/me unreachable (offline mode):', networkErr);
+        // Timeout or network error / status 0 -> Server unavailable (Offline mode)
+        console.warn('Server /api/auth/me unreachable (offline mode or timeout):', networkErr);
         const localProfile = firebaseAuth.getCurrentProfile();
         if (localProfile && isMounted) {
-          db.syncLoggedInUser(localProfile);
-          setFirebaseProfile(localProfile);
+          const offlineProfile = { ...localProfile, isOffline: true };
+          db.syncLoggedInUser(offlineProfile);
+          setFirebaseProfile(offlineProfile);
         } else if (isMounted) {
           setFirebaseProfile(null);
         }

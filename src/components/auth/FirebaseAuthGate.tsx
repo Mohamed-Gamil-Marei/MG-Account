@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   Mail,
@@ -11,6 +11,9 @@ import {
   AlertCircle,
   Loader2,
   CheckCircle2,
+  Crown,
+  Sparkles,
+  Key,
 } from 'lucide-react';
 import { firebaseAuth, FirebaseUserProfile } from '../../services/firebaseAuthService';
 import { saveOfflineAuthCache, verifyOfflineAuthCache, clearOfflineAuthCache } from '../../services/offlineAuthService';
@@ -21,6 +24,18 @@ interface FirebaseAuthGateProps {
 }
 
 export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthenticated }) => {
+  const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
+  const [checkingSetup, setCheckingSetup] = useState(true);
+  const [setupCheckError, setSetupCheckError] = useState<string | null>(null);
+
+  // Admin Setup form state
+  const [setupName, setSetupName] = useState('');
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupConfirmPassword, setSetupConfirmPassword] = useState('');
+  const [setupToken, setSetupToken] = useState('');
+
+  // Standard Login / Register state
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +44,118 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkSetupStatus = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch('/api/auth/check-setup', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.success) {
+            if (data.needsSetup) {
+              setNeedsAdminSetup(true);
+            } else {
+              setNeedsAdminSetup(false);
+            }
+          }
+        } else {
+          if (isMounted) {
+            setSetupCheckError('تعذر الاتصال بالسيرفر');
+            setNeedsAdminSetup(false);
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setSetupCheckError('تعذر الاتصال بالسيرفر');
+          setNeedsAdminSetup(false);
+        }
+      } finally {
+        if (isMounted) setCheckingSetup(false);
+      }
+    };
+
+    checkSetupStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleAdminSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    const cleanName = setupName.trim();
+    const cleanEmail = setupEmail.trim().toLowerCase();
+
+    if (!cleanName || !cleanEmail || !setupPassword || !setupConfirmPassword || !setupToken.trim()) {
+      setError('يرجى ملء كافة الحقول لإعداد حساب المدير الرئيسي (بما في ذلك رمز الإعداد وتأكيد كلمة المرور).');
+      return;
+    }
+
+    if (setupPassword.length < 10) {
+      setError('يجب ألا تقل كلمة المرور عن 10 أحرف/أرقام لضمان أمان حساب المدير.');
+      return;
+    }
+
+    if (setupPassword !== setupConfirmPassword) {
+      setError('كلمات المرور غير متطابقة. يرجى التأكد من تطابق كلمة المرور وتأكيدها.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/setup-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName,
+          email: cleanEmail,
+          password: setupPassword,
+          setupToken: setupToken.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.user) {
+        throw new Error(data.error || 'فشل إنشاء حساب المدير الرئيسي.');
+      }
+
+      const adminProfile: FirebaseUserProfile = {
+        uid: String(data.user.id),
+        email: data.user.email,
+        name: data.user.name,
+        role: 'ADMIN',
+        roleTitleArabic: 'مدير المنظومة والشريك المسؤول',
+        canAccessTreasury: true,
+        canAccessAuditTrail: true,
+        canAccessCreditFiles: true,
+        canAccessTaxReports: true,
+        canManageUsers: true,
+        canPostEntries: true,
+        canEditPostedEntries: true,
+        canDeleteRecords: true,
+        isOffline: false,
+      };
+
+      await saveOfflineAuthCache(adminProfile.email, setupPassword, adminProfile);
+      db.syncLoggedInUser(adminProfile);
+
+      setSuccessMsg(`مبارك! تم إنشاء حساب المدير الرئيسي بنجاح: ${adminProfile.name}`);
+      setTimeout(() => {
+        onAuthenticated(adminProfile);
+      }, 800);
+    } catch (err: any) {
+      setError(err?.message || 'حدث خطأ أثناء إنشاء حساب المدير.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,64 +184,46 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
           return;
         }
         const profile = await firebaseAuth.signUp(name.trim(), formattedEmail, password);
+        await saveOfflineAuthCache(profile.email, password, profile);
         db.syncLoggedInUser(profile);
-        setSuccessMsg('تم إنشاء الحساب بنجاح وهو الآن قيد الانتظار (PENDING) بانتظار تفعيل المدير.');
+        setSuccessMsg('تم تسجيل حسابك بنجاح. حسابك بانتظار تفعيل المدير (PENDING).');
         setTimeout(() => {
-          if (profile.role !== 'PENDING') {
-            onAuthenticated(profile);
-          }
-        }, 1500);
+          onAuthenticated(profile);
+        }, 1200);
       } else {
-        // 1. Primary path: Server Authentication via /api/auth/login
-        let serverSuccess = false;
-        let serverUser: any = null;
-        let serverMessage = '';
-        let isNetworkError = false;
-
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
           const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: normalizedEmail, password }),
+            body: JSON.stringify({ email: formattedEmail, password }),
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
 
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.user) {
-              serverSuccess = true;
-              serverUser = data.user;
-            } else {
-              serverMessage = data.error || 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+          const data = await res.json();
+          if (!res.ok || !data.success || !data.user) {
+            const errCode = res.status;
+            if (errCode >= 500 && errCode <= 504) {
+              const verifyRes = await verifyOfflineAuthCache(formattedEmail, password);
+              if (verifyRes.success && verifyRes.profile) {
+                db.syncLoggedInUser(verifyRes.profile);
+                onAuthenticated(verifyRes.profile);
+                return;
+              }
+              throw new Error('السيرفر غير متاح مؤقتاً (خطأ 50x) ولا يوجد كاش أوفلاين لهذا الحساب.');
             }
-          } else {
-            const errData = await res.json().catch(() => ({}));
-            serverMessage = errData.error || 'خطأ في بيانات تسجيل الدخول.';
-            
-            // Server responded with HTTP error (401/403/429 etc.): Clear offline cache for this email
-            clearOfflineAuthCache(normalizedEmail);
-            clearOfflineAuthCache(formattedEmail);
+            throw new Error(data.error || 'فشل تسجيل الدخول.');
           }
-        } catch (fetchErr) {
-          isNetworkError = true;
-          console.warn('Server login unreachable due to network error, checking offline fallback:', fetchErr);
-        }
 
-        // Handle successful server login
-        if (serverSuccess && serverUser) {
-          const roleTitleMap: Record<string, string> = {
-            ADMIN: 'مدير المنظومة والشريك المسؤول',
-            AUDITOR: 'مراقب حسابات ومراجع قانوني',
-            ACCOUNTANT: 'محاسب مالي ومدخل قيود',
-            SECRETARY: 'سكرتارية وإدارة ملفات',
-            PENDING: 'حساب جديد قيد الانتظار',
-          };
-
-          const profile: FirebaseUserProfile = {
+          const serverUser = data.user;
+          const userProfile: FirebaseUserProfile = {
             uid: String(serverUser.id),
             email: serverUser.email,
-            name: serverUser.name || serverUser.email,
+            name: serverUser.name,
             role: serverUser.role,
-            roleTitleArabic: roleTitleMap[serverUser.role] || 'مستخدم النظام',
+            roleTitleArabic: serverUser.role === 'ADMIN' ? 'مدير المنظومة' : serverUser.role === 'ACCOUNTANT' ? 'محاسب مالي' : 'مستخدم',
             canAccessTreasury: !!serverUser.canAccessTreasury,
             canAccessAuditTrail: !!serverUser.canAccessAuditTrail,
             canAccessCreditFiles: !!serverUser.canAccessCreditFiles,
@@ -126,54 +235,210 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             isOffline: false,
           };
 
-          // Save PBKDF2 salted hash to local storage for future 7-day offline access (NO plaintext stored)
-          await saveOfflineAuthCache(profile.email, password, profile);
-          db.syncLoggedInUser(profile);
+          await saveOfflineAuthCache(userProfile.email, password, userProfile);
+          db.syncLoggedInUser(userProfile);
+          onAuthenticated(userProfile);
+        } catch (fetchErr: any) {
+          const isNetworkError =
+            fetchErr.name === 'AbortError' ||
+            fetchErr.message?.includes('Failed to fetch') ||
+            fetchErr.message?.includes('NetworkError') ||
+            fetchErr.message?.includes('502') ||
+            fetchErr.message?.includes('503') ||
+            fetchErr.message?.includes('504');
 
-          setSuccessMsg(`أهلاً بك، تم تسجيل الدخول بنجاح: ${profile.name}`);
-          setTimeout(() => onAuthenticated(profile), 400);
-          return;
+          if (isNetworkError) {
+            const verifyRes = await verifyOfflineAuthCache(formattedEmail, password);
+            if (verifyRes.success && verifyRes.profile) {
+              db.syncLoggedInUser(verifyRes.profile);
+              onAuthenticated(verifyRes.profile);
+              return;
+            }
+            throw new Error('تعذر الاتصال بالسيرفر ولا يوجد كاش أوفلاين صالح لهذا الحساب.');
+          }
+          throw fetchErr;
         }
-
-        // If server responded (not a network error), DO NOT attempt offline verification
-        if (!isNetworkError) {
-          setError(serverMessage || 'البريد الإلكتروني أو كلمة المرور غير صحيحة.');
-          setIsLoading(false);
-          return;
-        }
-
-        // 2. Secondary path: Firebase Auth (only if network available)
-        try {
-          const profile = await firebaseAuth.signIn(formattedEmail, password);
-          await saveOfflineAuthCache(profile.email, password, profile);
-          db.syncLoggedInUser(profile);
-          setSuccessMsg(`أهلاً بك، تم تسجيل الدخول عبر السحابة: ${profile.name}`);
-          setTimeout(() => onAuthenticated(profile), 400);
-          return;
-        } catch (fbErr) {
-          // Ignore Firebase fail if offline
-        }
-
-        // 3. Fallback path ONLY on network error: Offline PBKDF2 salted hash verification
-        const offlineRes = await verifyOfflineAuthCache(normalizedEmail, password);
-        if (offlineRes.success && offlineRes.profile) {
-          db.syncLoggedInUser(offlineRes.profile);
-          setSuccessMsg(`أهلاً بك، تم الدخول في وضع أوفلاين (غير متصل بالسيرفر): ${offlineRes.profile.name}`);
-          setTimeout(() => onAuthenticated(offlineRes.profile!), 400);
-          return;
-        }
-
-        // Display error message
-        setError(offlineRes.message || 'تعذر الاتصال بالسيرفر ولا يوجد تسجيل دخول أوفلاين صالح لهذه البيانات.');
       }
     } catch (err: any) {
-      console.error('Auth Error:', err);
-      setError(err?.message || 'حدث خطأ أثناء المصادقة، يرجى المحاولة مرة أخرى.');
+      setError(err?.message || 'حدث خطأ أثناء المصادقة.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  if (checkingSetup) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4" dir="rtl">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
+          <p className="text-xs text-slate-400 font-medium">جاري التحقق من حالة المنظومة...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // FIRST MASTER ADMIN SETUP FORM
+  if (needsAdminSetup) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 overflow-y-auto" dir="rtl">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-600/15 rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative w-full max-w-md bg-slate-900 border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-gradient-to-r from-amber-950/60 via-slate-900 to-blue-950/60 p-6 border-b border-slate-800 text-center">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-600/20 border border-amber-500/30 text-amber-400 mb-3 shadow-inner">
+              <Crown className="w-8 h-8 text-amber-400" />
+            </div>
+            <h1 className="text-lg font-black text-white tracking-tight flex items-center justify-center gap-2">
+              <span>إعداد المدير الرئيسي الأول</span>
+              <Sparkles className="w-4 h-4 text-amber-400" />
+            </h1>
+            <p className="text-xs text-amber-300/80 mt-1.5 font-medium leading-relaxed">
+              أهلاً بك! النظام خالي من المستخدمين حالياً. يرجى إنشاء حساب المدير الرئيسي ووضع رمز الإعداد (SETUP_TOKEN).
+            </p>
+          </div>
+
+          <div className="p-6 space-y-4">
+            {error && (
+              <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAdminSetupSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  اسم المدير الرئيسي الكامل:
+                </label>
+                <div className="relative">
+                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={setupName}
+                    onChange={(e) => setSetupName(e.target.value)}
+                    placeholder="مثال: د. أحمد المحاسب"
+                    required
+                    className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  البريد الإلكتروني للمدير:
+                </label>
+                <div className="relative">
+                  <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    value={setupEmail}
+                    onChange={(e) => setSetupEmail(e.target.value)}
+                    placeholder="admin@company.com"
+                    required
+                    className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  كلمة المرور (10 أحرف على الأقل):
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={setupPassword}
+                    onChange={(e) => setSetupPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    required
+                    minLength={10}
+                    className="w-full pr-9 pl-10 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  تأكيد كلمة المرور:
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={setupConfirmPassword}
+                    onChange={(e) => setSetupConfirmPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    required
+                    minLength={10}
+                    className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-amber-300 mb-1 flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-amber-400" />
+                  <span>رمز الإعداد (SETUP_TOKEN):</span>
+                </label>
+                <div className="relative">
+                  <ShieldCheck className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                  <input
+                    type="text"
+                    value={setupToken}
+                    onChange={(e) => setSetupToken(e.target.value)}
+                    placeholder="أدخل رمز SETUP_TOKEN الخاص بالخادم"
+                    required
+                    className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-amber-500/50 rounded-xl text-sm text-amber-100 placeholder-amber-500/50 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-amber-400/70 mt-1">
+                  رمز الأمان المطلوب لإنشاء أول حساب مدير في البيئة.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-blue-600 hover:from-amber-500 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-amber-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs mt-2 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>جاري تفعيل حساب المدير...</span>
+                  </>
+                ) : (
+                  <>
+                    <Crown className="w-4 h-4 text-amber-300" />
+                    <span>إنشاء حساب المدير الرئيسي والبدء</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // STANDARD LOGIN / REGISTER FORM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 overflow-y-auto" dir="rtl">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -190,11 +455,18 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             منظومة المحاسب القانوني ومراقب الحسابات
           </h1>
           <p className="text-xs text-slate-400 mt-1 font-medium">
-            {isRegistering ? 'تسجيل حساب جديد (دور PENDING افتراضياً)' : 'تسجيل الدخول الآمن عبر Firebase Spark'}
+            {isRegistering ? 'تسجيل حساب جديد (دور PENDING قيد الموافقة)' : 'تسجيل الدخول الآمن للأنظمة'}
           </p>
         </div>
 
         <div className="p-6 space-y-4">
+          {setupCheckError && (
+            <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <span>{setupCheckError} (العمل في وضع الأوفلاين إن وجد كاش مسجل)</span>
+            </div>
+          )}
+
           {error && (
             <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -221,7 +493,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="اسم المستخدم"
+                    placeholder="الاسم الثلاثي أو الرباعي"
                     required
                     className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
@@ -239,7 +511,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin أو admin@system.local"
+                  placeholder="example@domain.com أو اسم المستخدم"
                   required
                   className="w-full pr-9 pl-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
@@ -248,7 +520,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                كلمة المرور (6 أحرف على الأقل):
+                كلمة المرور (10 أحرف على الأقل):
               </label>
               <div className="relative">
                 <KeyRound className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -256,8 +528,9 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="••••••••••••"
                   required
+                  minLength={10}
                   className="w-full pr-9 pl-10 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
                 <button

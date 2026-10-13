@@ -152,9 +152,29 @@ export const Header: React.FC<HeaderProps> = ({
             onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
+          {/* Offline Mode Badge */}
+          {(() => {
+            const currentProf = firebaseAuth.getCurrentProfile();
+            const isOffline = !!currentProf?.isOffline;
+            if (!isOffline) return null;
+            return (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold animate-pulse">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>وضع أوفلاين</span>
+              </div>
+            );
+          })()}
+
           {/* Cloud Sync Pulse Indicator */}
           <button
-            onClick={() => setIsUserManagerOpen(true)}
+            onClick={() => {
+              const currentProf = firebaseAuth.getCurrentProfile();
+              if (currentProf?.isOffline) {
+                alert('عذراً، إدارة المستخدمين معطلة في وضع أوفلاين لأسباب أمنية.');
+                return;
+              }
+              setIsUserManagerOpen(true);
+            }}
             id="cloud-sync-status-indicator"
             className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 text-xs font-semibold transition-all cursor-pointer"
             title={isEn ? 'Realtime Cloud Sync active across office workstations' : 'حالة المزامنة السحابية اللحظية مع أجهزة المكتب'}
@@ -166,7 +186,14 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User Profile & Role Switcher */}
           <button
-            onClick={() => setIsUserManagerOpen(true)}
+            onClick={() => {
+              const currentProf = firebaseAuth.getCurrentProfile();
+              if (currentProf?.isOffline) {
+                alert('عذراً، إدارة المستخدمين معطلة في وضع أوفلاين لأسباب أمنية.');
+                return;
+              }
+              setIsUserManagerOpen(true);
+            }}
             id="btn-user-manager"
             className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
             title={isEn ? 'User RBAC, Roles & Hardware Binding' : 'إدارة الموظفين وصلاحيات الوصول وتزامن الأجهزة'}
@@ -252,7 +279,14 @@ export const Header: React.FC<HeaderProps> = ({
           <HeaderSystemDropdown
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenManual={() => setIsManualOpen(true)}
-            onOpenBackup={onOpenBackupModal}
+            onOpenBackup={() => {
+              const currentProf = firebaseAuth.getCurrentProfile();
+              if (currentProf?.isOffline) {
+                alert('عذراً، النسخ الاحتياطي والاستعادة معطلة في وضع أوفلاين.');
+                return;
+              }
+              onOpenBackupModal();
+            }}
             onOpenDesktop={onOpenDesktopModal}
             onOpenShortcuts={onOpenShortcutsModal}
             onOpenPinAuth={onOpenPinAuthModal}
