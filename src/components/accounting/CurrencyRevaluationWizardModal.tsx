@@ -109,12 +109,13 @@ export const CurrencyRevaluationWizardModal: React.FC<CurrencyRevaluationWizardM
     });
 
     // Provide default illustrative demo accounts if no specific foreign sub-accounts configured yet
-    if (items.length === 0) {
-      const demoBankAcc = state.accounts.find((a) => a.code.startsWith('1102')) || state.accounts[0];
-      const demoCustAcc = state.accounts.find((a) => a.code.startsWith('1103')) || state.accounts[1];
+    if (items.length === 0 && (state.accounts || []).length > 0) {
+      const demoBankAcc = state.accounts.find((a) => (a.code || '').startsWith('1102')) || state.accounts[0];
+      const demoCustAcc = state.accounts.find((a) => (a.code || '').startsWith('1103')) || state.accounts[1];
 
-      items.push({
-        accountId: demoBankAcc.id,
+      if (demoBankAcc) {
+        items.push({
+          accountId: demoBankAcc.id,
         accountCode: demoBankAcc.code,
         accountName: `${demoBankAcc.name} (حساب النقد الأجنبي - ${selectedCurrency})`,
         currency: selectedCurrency,
@@ -127,19 +128,20 @@ export const CurrencyRevaluationWizardModal: React.FC<CurrencyRevaluationWizardM
         nature: 'DEBIT',
       });
 
-      items.push({
-        accountId: demoCustAcc.id,
-        accountCode: demoCustAcc.code,
-        accountName: `عملاء التصدير - شركة جلوبال تريد (${selectedCurrency})`,
-        currency: selectedCurrency,
-        foreignBalance: 12000,
-        bookValueEgp: 12000 * 48.10,
-        closingRate: customRate,
-        revaluedValueEgp: 12000 * customRate,
-        fxDifferenceEgp: 12000 * customRate - 12000 * 48.10,
-        category: 'ASSETS',
-        nature: 'DEBIT',
-      });
+        items.push({
+          accountId: demoCustAcc?.id || demoBankAcc.id,
+          accountCode: demoCustAcc?.code || demoBankAcc.code,
+          accountName: `عملاء التصدير - شركة جلوبال تريد (${selectedCurrency})`,
+          currency: selectedCurrency,
+          foreignBalance: 12000,
+          bookValueEgp: 12000 * 48.10,
+          closingRate: customRate,
+          revaluedValueEgp: 12000 * customRate,
+          fxDifferenceEgp: 12000 * customRate - 12000 * 48.10,
+          category: 'ASSETS',
+          nature: 'DEBIT',
+        });
+      }
     }
 
     return items;

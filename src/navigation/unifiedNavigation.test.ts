@@ -215,22 +215,6 @@ describe('Unified Screens & Navigation Aliases Tests', () => {
       expect(res.targetTab).toBeUndefined();
     });
 
-    it('Ctrl+Shift+B triggers Financial Planning Hub without conflicting with Backup', () => {
-      const res = simulateKeyPress({ key: 'b', ctrlKey: true, shiftKey: true });
-      expect(res.targetTab).toBe('FINANCIAL_PLANNING_HUB');
-      expect(res.action).toBeUndefined();
-    });
-
-    it('Ctrl+Shift+R triggers Credit Hub without browser refresh clash', () => {
-      const res = simulateKeyPress({ key: 'r', ctrlKey: true, shiftKey: true });
-      expect(res.targetTab).toBe('CREDIT_HUB');
-    });
-
-    it('Ctrl+Shift+A triggers Audit Tools Hub without browser search clash', () => {
-      const res = simulateKeyPress({ key: 'a', ctrlKey: true, shiftKey: true });
-      expect(res.targetTab).toBe('AUDIT_TOOLS_HUB');
-    });
-
     it('Alt+1, Alt+2, Alt+3 trigger Credit, Financial Planning, and Audit Hubs respectively', () => {
       expect(simulateKeyPress({ key: '1', altKey: true })).toEqual({ targetTab: 'CREDIT_HUB' });
       expect(simulateKeyPress({ key: '2', altKey: true })).toEqual({ targetTab: 'FINANCIAL_PLANNING_HUB' });

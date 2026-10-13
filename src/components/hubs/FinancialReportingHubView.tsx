@@ -1,27 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   FileSpreadsheet,
-  FileText,
-  FileCheck2,
-  TrendingUp,
   Award,
-  Sparkles,
-  Sliders,
-  Calendar,
-  Calculator,
-  DollarSign,
   LineChart,
-  Layers,
 } from 'lucide-react';
 import { DatabaseState } from '../../db/localDatabase';
-import { FinancialStatementsView } from '../FinancialStatementsView';
 import { UnifiedFinancialReportsView } from '../UnifiedFinancialReportsView';
-import { FinancialNotesBuilderView } from '../FinancialNotesBuilderView';
-import { AuditorReportView } from '../AuditorReportView';
-import { CreditFinancialsSimulator } from '../CreditFinancialsSimulator';
-import { FinancialSimulatorView } from '../FinancialSimulatorView';
-import { CashFlowPredictorView } from '../financial/CashFlowPredictorView';
-import { BudgetPlannerView } from '../financial/BudgetPlannerView';
 import { ExchangeRatesManagerView } from '../ExchangeRatesManagerView';
 import { CertificatesGeneratorView } from '../CertificatesGeneratorView';
 import { FeasibilityStudyView } from '../FeasibilityStudyView';
@@ -60,7 +44,6 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
       : initialSubTab
   );
   const [dossierSection, setDossierSection] = useState<'STATEMENTS' | 'NOTES' | 'AUDITOR_REPORT'>('STATEMENTS');
-  const [budgetSection, setBudgetSection] = useState<'BUDGET' | 'CASH_FLOW'>('BUDGET');
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -163,7 +146,12 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
                 : 'BALANCE_SHEET'
             }
             onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_RATES')}
-            onNavigateToCreditSimulator={() => setActiveSubTab('CREDIT_SIMULATOR')}
+            onNavigateToCreditSimulator={() => {
+              if (onNavigateToTab) {
+                onNavigateToTab('CREDIT_HUB');
+              }
+            }}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
 
@@ -173,48 +161,6 @@ export const FinancialReportingHubView: React.FC<FinancialReportingHubViewProps>
 
         {activeSubTab === 'FEASIBILITY_STUDY' && (
           <FeasibilityStudyView state={state} />
-        )}
-
-        {activeSubTab === 'CREDIT_SIMULATOR' && (
-          <CreditFinancialsSimulator state={state} />
-        )}
-
-        {activeSubTab === 'BUDGET_AND_CASHFLOW' && (
-          <div className="space-y-3">
-            <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 max-w-md">
-              <button
-                type="button"
-                onClick={() => setBudgetSection('BUDGET')}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  budgetSection === 'BUDGET'
-                    ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                <span>الموازنة التقديرية للعام</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setBudgetSection('CASH_FLOW')}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  budgetSection === 'CASH_FLOW'
-                    ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>توقعات التدفقات النقدية</span>
-              </button>
-            </div>
-
-            {budgetSection === 'BUDGET' ? (
-              <BudgetPlannerView state={state} fiscalYear={fiscalYear} />
-            ) : (
-              <CashFlowPredictorView state={state} />
-            )}
-          </div>
         )}
 
         {activeSubTab === 'CURRENCY_RATES' && (

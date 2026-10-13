@@ -44,6 +44,7 @@ interface UnifiedFinancialReportsViewProps {
   initialMode?: UnifiedFinancialTab | 'FINANCIAL_STATEMENTS';
   onNavigateToExchangeRates?: () => void;
   onNavigateToCreditSimulator?: () => void;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewProps> = ({
@@ -52,6 +53,7 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
   initialMode = 'TRIAL_BALANCE',
   onNavigateToExchangeRates,
   onNavigateToCreditSimulator,
+  onNavigateToTab,
 }) => {
   const getResolvedTab = (mode: string): UnifiedFinancialTab => {
     if (mode === 'FINANCIAL_STATEMENTS') return 'BALANCE_SHEET';
@@ -362,6 +364,7 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
             hideStatementTabs={true}
             onNavigateToExchangeRates={onNavigateToExchangeRates}
             onNavigateToCreditSimulator={onNavigateToCreditSimulator}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
 
@@ -374,6 +377,7 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
             hideStatementTabs={true}
             onNavigateToExchangeRates={onNavigateToExchangeRates}
             onNavigateToCreditSimulator={onNavigateToCreditSimulator}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
 
@@ -386,6 +390,7 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
             hideStatementTabs={true}
             onNavigateToExchangeRates={onNavigateToExchangeRates}
             onNavigateToCreditSimulator={onNavigateToCreditSimulator}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
 
@@ -398,6 +403,7 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
             hideStatementTabs={true}
             onNavigateToExchangeRates={onNavigateToExchangeRates}
             onNavigateToCreditSimulator={onNavigateToCreditSimulator}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
 
@@ -414,6 +420,7 @@ export const UnifiedFinancialReportsView: React.FC<UnifiedFinancialReportsViewPr
             hideStatementTabs={true}
             onNavigateToExchangeRates={onNavigateToExchangeRates}
             onNavigateToCreditSimulator={onNavigateToCreditSimulator}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
       </div>

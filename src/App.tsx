@@ -457,19 +457,8 @@ export default function App() {
           setActiveTab('CHART_OF_ACCOUNTS');
           setIsShortcutsModalOpen(false);
           break;
-        case 'r': // Ctrl + Shift + R -> Credit Hub
-          if (e.shiftKey) {
-            e.preventDefault();
-            setActiveTab('CREDIT_HUB');
-            setIsShortcutsModalOpen(false);
-          }
-          break;
-        case 'a': // Ctrl + Shift + A -> Audit Tools Hub; Ctrl + A -> Auditor Report
-          if (e.shiftKey) {
-            e.preventDefault();
-            setActiveTab('AUDIT_TOOLS_HUB');
-            setIsShortcutsModalOpen(false);
-          } else if (!hasTextSelection && !isInput) {
+        case 'a': // Ctrl + A -> Auditor Report (if no text selected)
+          if (!hasTextSelection && !isInput) {
             e.preventDefault();
             setActiveTab('AUDITOR_REPORT');
             setIsShortcutsModalOpen(false);
@@ -480,13 +469,9 @@ export default function App() {
           setActiveTab('FINANCIAL_NOTES');
           setIsShortcutsModalOpen(false);
           break;
-        case 'b': // Ctrl + Shift + B -> Financial Planning Hub; Ctrl + B -> Backup Modal
+        case 'b': // Ctrl + B -> Backup Modal
           e.preventDefault();
-          if (e.shiftKey) {
-            setActiveTab('FINANCIAL_PLANNING_HUB');
-          } else {
-            setIsBackupModalOpen(true);
-          }
+          setIsBackupModalOpen(true);
           setIsShortcutsModalOpen(false);
           break;
         case 'u': // Ctrl + U -> Check Update
@@ -602,30 +587,35 @@ export default function App() {
 
       // 1. Accounting & Financial Statements Hub (الحسابات والقوائم المالية المعتمدة)
       case 'ACCOUNTING_HUB':
-        return <AccountingHubView state={state} initialSubTab="JOURNAL_ENTRIES" fiscalYear={selectedFiscalYear} />;
       case 'CHART_OF_ACCOUNTS':
-        return <AccountingHubView state={state} initialSubTab="CHART_OF_ACCOUNTS" fiscalYear={selectedFiscalYear} />;
       case 'JOURNAL_ENTRIES':
-        return <AccountingHubView state={state} initialSubTab="JOURNAL_ENTRIES" fiscalYear={selectedFiscalYear} />;
       case 'GENERAL_LEDGER':
-        return <AccountingHubView state={state} initialSubTab="GENERAL_LEDGER" fiscalYear={selectedFiscalYear} />;
       case 'TRIAL_BALANCE':
-        return <AccountingHubView state={state} initialSubTab="TRIAL_BALANCE" fiscalYear={selectedFiscalYear} />;
       case 'FILE_REVIEW':
-        return <AccountingHubView state={state} initialSubTab="FILE_REVIEW" fiscalYear={selectedFiscalYear} />;
       case 'FINANCIAL_STATEMENTS':
       case 'FINANCIAL_DOSSIER_GENERATOR':
       case 'FINANCIAL_NOTES':
       case 'AUDITOR_REPORT':
-        return <AccountingHubView state={state} initialSubTab="FINANCIAL_STATEMENTS" fiscalYear={selectedFiscalYear} />;
       case 'FIXED_ASSETS':
-        return <AccountingHubView state={state} initialSubTab="FIXED_ASSETS" fiscalYear={selectedFiscalYear} />;
       case 'BANK_RECONCILIATION':
-        return <AccountingHubView state={state} initialSubTab="BANK_RECONCILIATION" fiscalYear={selectedFiscalYear} />;
       case 'OCR_INVOICE_SCANNER':
-        return <AccountingHubView state={state} initialSubTab="OCR_INVOICE_SCANNER" fiscalYear={selectedFiscalYear} />;
       case 'CURRENCY_EXCHANGE_RATES':
-        return <AccountingHubView state={state} initialSubTab="CURRENCY_EXCHANGE_RATES" fiscalYear={selectedFiscalYear} />;
+        return (
+          <AccountingHubView
+            state={state}
+            initialSubTab={
+              tabToRender === 'ACCOUNTING_HUB'
+                ? 'JOURNAL_ENTRIES'
+                : (tabToRender === 'FINANCIAL_DOSSIER_GENERATOR' ||
+                   tabToRender === 'FINANCIAL_NOTES' ||
+                   tabToRender === 'AUDITOR_REPORT'
+                    ? 'FINANCIAL_STATEMENTS'
+                    : (tabToRender as any))
+            }
+            fiscalYear={selectedFiscalYear}
+            onNavigateToTab={(tab) => setActiveTab(tab)}
+          />
+        );
 
       // 1. Credit Hub (مركز الائتمان والملفات البنكية - مُوحّد مع دعم الـ Aliases القديمة)
       case 'CREDIT_HUB':

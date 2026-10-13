@@ -76,7 +76,6 @@ import { compareApprovedSnapshots } from '../utils/approvedStatements';
 import { FinancialActivityLogView } from './financial/FinancialActivityLogView';
 import { exportFinancialStatementsToExcelWithLetterhead } from '../utils/certifiedDocumentExporter';
 import { FileReviewWizardView } from './audit/FileReviewWizardView';
-import { CreditFinancialsSimulator } from './CreditFinancialsSimulator';
 
 export const formatArabicDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -193,7 +192,7 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
       setInternalStatementTab(initialStatementTab);
     }
   }, [initialStatementTab]);
-  const [topViewMode, setTopViewMode] = useState<'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER'>(() => {
+  const [topViewMode, setTopViewMode] = useState<'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW'>(() => {
     try {
       const saved = localStorage.getItem('financial_statements_top_mode');
       if (saved === 'STATEMENTS_FROM_BOOKS' || saved === 'FILE_REVIEW') {
@@ -205,17 +204,12 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
     return 'STATEMENTS_FROM_BOOKS';
   });
 
-  const handleTopModeChange = (mode: 'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW' | 'QUICK_BANK_DOSSIER') => {
+  const handleTopModeChange = (mode: 'STATEMENTS_FROM_BOOKS' | 'FILE_REVIEW') => {
     setTopViewMode(mode);
-    if (mode === 'STATEMENTS_FROM_BOOKS' || mode === 'FILE_REVIEW') {
-      try {
-        localStorage.setItem('financial_statements_top_mode', mode);
-      } catch {
-        // ignore
-      }
-    }
-    if (mode === 'QUICK_BANK_DOSSIER' && onNavigateToCreditSimulator) {
-      onNavigateToCreditSimulator();
+    try {
+      localStorage.setItem('financial_statements_top_mode', mode);
+    } catch {
+      // ignore
     }
   };
   const [fiscalYear, setFiscalYear] = useState<number>(initialFiscalYear || 2026);
@@ -1123,15 +1117,9 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
               onNavigateToTab('CREDIT_HUB');
             } else if (onNavigateToCreditSimulator) {
               onNavigateToCreditSimulator();
-            } else {
-              handleTopModeChange('QUICK_BANK_DOSSIER');
             }
           }}
-          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-            topViewMode === 'QUICK_BANK_DOSSIER'
-              ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-          }`}
+          className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
         >
           <Building2 className="w-4 h-4 shrink-0" />
           <span className="truncate">ملف بنكي سريع</span>
@@ -1140,8 +1128,6 @@ export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = (
 
       {topViewMode === 'FILE_REVIEW' ? (
         <FileReviewWizardView state={state} onNavigateToTab={() => {}} />
-      ) : topViewMode === 'QUICK_BANK_DOSSIER' ? (
-        <CreditFinancialsSimulator state={state} />
       ) : (
         <>
           <UnifiedScreenCard

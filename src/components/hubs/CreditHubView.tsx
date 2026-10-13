@@ -61,16 +61,16 @@ export const CreditHubView: React.FC<CreditHubViewProps> = ({
   }[] = [
     {
       id: 'CREDIT_SIMULATOR',
-      label: 'محاكي الائتمان والملاءة المصرفية',
+      label: 'القوائم السنوية وملف البنك التقديري',
       icon: TrendingUp,
-      badge: 'CBE & Basel',
+      badge: 'EAS 1 & البنوك',
       badgeColor: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800',
     },
     {
       id: 'QUICK_BANK_DOSSIER',
-      label: 'الملف البنكي السريع ونسب التغطية',
+      label: 'التحليل الائتماني السريع ونسب الجدارة',
       icon: FileSpreadsheet,
-      badge: 'ملف بنكي سريع',
+      badge: 'نسب التغطية وZ-Score',
       badgeColor: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
     },
     {

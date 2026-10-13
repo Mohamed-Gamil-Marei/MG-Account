@@ -47,12 +47,14 @@ interface AccountingHubViewProps {
   state: DatabaseState;
   initialSubTab?: AccountingSubTab;
   fiscalYear?: number;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
   state,
   initialSubTab = 'JOURNAL_ENTRIES',
   fiscalYear = 2026,
+  onNavigateToTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<AccountingSubTab>(initialSubTab);
   const [isWorkspacesModalOpen, setIsWorkspacesModalOpen] = useState(false);
@@ -237,6 +239,12 @@ export const AccountingHubView: React.FC<AccountingHubViewProps> = ({
             fiscalYear={fiscalYear}
             initialMode="BALANCE_SHEET"
             onNavigateToExchangeRates={() => setActiveSubTab('CURRENCY_EXCHANGE_RATES')}
+            onNavigateToCreditSimulator={() => {
+              if (onNavigateToTab) {
+                onNavigateToTab('CREDIT_HUB');
+              }
+            }}
+            onNavigateToTab={onNavigateToTab}
           />
         )}
         {activeSubTab === 'OCR_INVOICE_SCANNER' && (

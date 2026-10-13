@@ -218,7 +218,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
       },
       {
         id: 'nav-credit',
-        keyCombo: ['Ctrl', 'Shift', 'R'],
+        keyCombo: ['Alt', '1'],
         label: 'مركز الائتمان والملفات البنكية',
         category: 'NAVIGATION',
         description: 'محاكي الائتمان والملف البنكي وسجل دراسات التسهيلات',
@@ -231,7 +231,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
       },
       {
         id: 'nav-financial-planning',
-        keyCombo: ['Ctrl', 'Shift', 'B'],
+        keyCombo: ['Alt', '2'],
         label: 'التخطيط والتقدير المالي (الموازنة والتدفقات)',
         category: 'NAVIGATION',
         description: 'الموازنة التقديرية للعام وتوقعات التدفقات النقدية التشغيلية',
@@ -244,7 +244,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
       },
       {
         id: 'nav-audit-tools',
-        keyCombo: ['Ctrl', 'Shift', 'A'],
+        keyCombo: ['Alt', '3'],
         label: 'منصة التدقيق الذكي وفحص القيود',
         category: 'NAVIGATION',
         description: 'مختبر فحص الإكسيل، كشف الاحتيال، وفاحص قيود اليومية',
