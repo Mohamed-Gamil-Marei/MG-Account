@@ -2450,7 +2450,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 6. Get Transmission Logs
-  app.get("/api/eta/logs", (req, res) => {
+  app.get("/api/eta/logs", requireAuth, (req, res) => {
     try {
       const user = (req as any).user;
       if (!user || user.role !== 'ADMIN') {
@@ -2464,7 +2464,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 7. Clear Transmission Logs
-  app.delete("/api/eta/logs", (req, res) => {
+  app.delete("/api/eta/logs", requireAuth, (req, res) => {
     try {
       const user = (req as any).user;
       if (!user || user.role !== 'ADMIN') {
@@ -2478,7 +2478,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 8. Get current Server ETA config
-  app.get("/api/eta/config", (req, res) => {
+  app.get("/api/eta/config", requireAuth, (req, res) => {
     try {
       const user = (req as any).user;
       if (!user || user.role !== 'ADMIN') {
@@ -2498,7 +2498,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   });
 
   // 9. Update Server ETA config
-  app.post("/api/eta/config", (req, res) => {
+  app.post("/api/eta/config", requireAuth, (req, res) => {
     try {
       const user = (req as any).user;
       if (!user || user.role !== 'ADMIN') {
