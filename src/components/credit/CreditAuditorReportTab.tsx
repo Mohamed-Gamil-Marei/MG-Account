@@ -219,16 +219,18 @@ export const CreditAuditorReportTab: React.FC<CreditAuditorReportTabProps> = ({
               >
                 <div
                   dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(
-                      buildAuditorReportQrText({
-                        auditorName: officeProfile.auditorName,
-                        licenseNumber: officeProfile.licenseNumber,
-                        companyName,
-                        fiscalYear: selectedYear,
-                        opinion: opinionType === 'CLEAN' ? 'رأي نظيف' : 'رأي متحفظ',
-                        refNumber: `CREDIT-AUD-${selectedYear}-991`,
-                      }),
-                      100
+                    __html: sanitizeSvg(
+                      generateQrCodeSvg(
+                        buildAuditorReportQrText({
+                          auditorName: officeProfile.auditorName,
+                          licenseNumber: officeProfile.licenseNumber,
+                          companyName,
+                          fiscalYear: selectedYear,
+                          opinion: opinionType === 'CLEAN' ? 'رأي نظيف' : 'رأي متحفظ',
+                          refNumber: `CREDIT-AUD-${selectedYear}-991`,
+                        }),
+                        100
+                      )
                     ),
                   }}
                 />

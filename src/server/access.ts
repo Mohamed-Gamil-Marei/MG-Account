@@ -45,6 +45,20 @@ export function checkEntityAccess(user: AccessUser | null | undefined, entityTyp
 
   if (user.role === 'ADMIN') return true;
 
+  const auditorReadOnlyEntities = [
+    'closingChecklists',
+    'clientDeadlines',
+    'openItems',
+    'approvedStatements',
+    'feeAgreements',
+    'feeCollections'
+  ];
+  if (auditorReadOnlyEntities.includes(entityType)) {
+    if (user.role === 'AUDITOR') {
+      return action === 'READ';
+    }
+  }
+
   // Secretary limits
   if (user.role === 'SECRETARY') {
     if (action === 'READ') {

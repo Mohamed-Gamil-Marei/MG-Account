@@ -22,6 +22,7 @@ function isValidMagicBytes(filePath: string): boolean {
     return false;
   }
 }
+import JSZip from "jszip";
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -264,7 +265,13 @@ export async function createApp(): Promise<express.Express> {
     "customsShipments",
     "financialActivityLogs",
     "preferences",
-    "systemUsers"
+    "systemUsers",
+    "closingChecklists",
+    "clientDeadlines",
+    "openItems",
+    "approvedStatements",
+    "feeAgreements",
+    "feeCollections"
   ];
 
   for (const type of entityTypes) {
@@ -601,6 +608,7 @@ export async function createApp(): Promise<express.Express> {
       canAccessTreasury: !!user.can_access_treasury,
       canAccessAuditTrail: !!user.can_access_audit_trail,
       canPostEntries: !!user.can_post_entries,
+      can_post_entries: !!user.can_post_entries,
       canEditPostedEntries: !!user.can_edit_posted_entries,
       canDeleteRecords: !!user.can_delete_records,
       canAccessCreditFiles: !!user.can_access_credit_files,
@@ -1475,6 +1483,20 @@ export async function createApp(): Promise<express.Express> {
       }
 
       if (entityType === "journalEntries") {
+        const parsedEntry = typeof data === "string" ? JSON.parse(data) : data;
+        const isTryingToPost = parsedEntry && (
+          parsedEntry.isPosted === true ||
+          parsedEntry.isPosted === "true" ||
+          String(parsedEntry.status || "").toUpperCase() === "POSTED"
+        );
+        const hasCanPost = user && (Boolean(user.canPostEntries) || Boolean(user.can_post_entries) || user.role === 'ADMIN');
+        if (isTryingToPost && !hasCanPost) {
+          return res.status(403).json({
+            success: false,
+            error: "غير مصرح: لا تملك صلاحية ترحيل القيود (can_post_entries) لحفظ قيد بحالة مرحّل (POSTED).",
+          });
+        }
+
         try {
           data = validateAndProcessJournalEntryOnServer(id, data, existingRow, user);
         } catch (err: any) {
@@ -1743,7 +1765,51 @@ export async function createApp(): Promise<express.Express> {
   });
 
   // --- Rate Limiter for Master Verification ---
+  const MAX_RATE_LIMIT_KEYS = 5000;
   const verifyMasterRateLimits = new Map<string, number[]>();
+
+  function cleanExpiredRateLimits() {
+    const now = Date.now();
+    // 1. Clean aiRateLimits
+    for (const [key, record] of aiRateLimits.entries()) {
+      record.timestamps = record.timestamps.filter((ts) => now - ts < AI_RATE_LIMIT_WINDOW_MS);
+      if (record.timestamps.length === 0) {
+        aiRateLimits.delete(key);
+      }
+    }
+    if (aiRateLimits.size > MAX_RATE_LIMIT_KEYS) {
+      const keysToDelete = Array.from(aiRateLimits.keys()).slice(0, aiRateLimits.size - MAX_RATE_LIMIT_KEYS);
+      for (const k of keysToDelete) {
+        aiRateLimits.delete(k);
+      }
+    }
+
+    // 2. Clean verifyMasterRateLimits
+    for (const [key, timestamps] of verifyMasterRateLimits.entries()) {
+      const active = timestamps.filter((ts) => now - ts < 60 * 1000);
+      if (active.length === 0) {
+        verifyMasterRateLimits.delete(key);
+      } else {
+        verifyMasterRateLimits.set(key, active);
+      }
+    }
+    if (verifyMasterRateLimits.size > MAX_RATE_LIMIT_KEYS) {
+      const keysToDelete = Array.from(verifyMasterRateLimits.keys()).slice(0, verifyMasterRateLimits.size - MAX_RATE_LIMIT_KEYS);
+      for (const k of keysToDelete) {
+        verifyMasterRateLimits.delete(k);
+      }
+    }
+  }
+
+  cleanExpiredRateLimits();
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    setInterval(cleanExpiredRateLimits, 5 * 60 * 1000);
+  }
+
+  (app as any).cleanExpiredRateLimits = cleanExpiredRateLimits;
+  (app as any).aiRateLimits = aiRateLimits;
+  (app as any).verifyMasterRateLimits = verifyMasterRateLimits;
+
   function verifyMasterRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
     const ip = (req.ip || (req.headers["x-forwarded-for"] as string) || "anonymous").split(",")[0].trim();
     const now = Date.now();
@@ -3164,12 +3230,30 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     }
   });
 
-  app.get(["/api/server-backups/:backupName/download", "/api/server-backups/download/:backupName"], (req: any, res) => {
+  function addFolderToZip(zip: JSZip, folderPath: string, zipPath: string) {
+    if (!fs.existsSync(folderPath)) return;
+    const items = fs.readdirSync(folderPath, { withFileTypes: true });
+    for (const item of items) {
+      const fullPath = path.join(folderPath, item.name);
+      const itemZipPath = `${zipPath}/${item.name}`;
+      if (item.isDirectory()) {
+        addFolderToZip(zip, fullPath, itemZipPath);
+      } else if (item.isFile()) {
+        zip.file(itemZipPath, fs.readFileSync(fullPath));
+      }
+    }
+  }
+
+  app.get(["/api/server-backups/:backupName/download", "/api/server-backups/download/:backupName", "/api/server-backups/:backupName/download-zip", "/api/server-backups/download-zip/:backupName"], async (req: any, res) => {
     try {
       if (req.user?.role !== 'ADMIN') {
         return res.status(403).json({ success: false, error: "غير مصرح: تحميل وتصدير النسخ الاحتياطية متاح للمدير فقط." });
       }
       const { backupName } = req.params;
+      const reqUrl = req.originalUrl || req.url || "";
+      const formatParam = (req.query.format || req.query.type || "").toString().toLowerCase();
+      const isZipRequest = reqUrl.includes("download-zip") || formatParam === "zip";
+
       if (!backupName || typeof backupName !== 'string' || !/^backup_[A-Za-z0-9_-]+$/.test(backupName) || backupName.includes("..") || backupName.includes("/")) {
         return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية غير صالح." });
       }
@@ -3178,6 +3262,25 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       const backupDbPath = path.join(targetPath, "app.db");
       if (!fs.existsSync(targetPath) || !fs.existsSync(backupDbPath)) {
         return res.status(404).json({ success: false, error: "ملف النسخة الاحتياطية غير موجود." });
+      }
+
+      if (isZipRequest) {
+        const zip = new JSZip();
+        zip.file("app.db", fs.readFileSync(backupDbPath));
+
+        const backupDocsPath = path.join(targetPath, "documents");
+        const sysDocsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, "documents");
+
+        if (fs.existsSync(backupDocsPath)) {
+          addFolderToZip(zip, backupDocsPath, "documents");
+        } else if (fs.existsSync(sysDocsDir)) {
+          addFolderToZip(zip, sysDocsDir, "documents");
+        }
+
+        const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", `attachment; filename="${backupName}.zip"`);
+        return res.send(buffer);
       }
 
       res.download(backupDbPath, `${backupName}.db`);

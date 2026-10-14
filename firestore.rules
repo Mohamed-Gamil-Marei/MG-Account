@@ -87,7 +87,7 @@ service cloud.firestore {
 
     // --- 4. Office Treasury & Cash Box (خزنة المكتب) ---
     match /treasury/{txId} {
-      allow read: if isAccountant() || isAuditor() || (isSecretary() && getUserData().canAccessTreasury == true);
+      allow read: if isAdmin() || (getUserData().canAccessTreasury == true && (getUserRole() == 'ACCOUNTANT' || getUserRole() == 'AUDITOR' || getUserRole() == 'SECRETARY'));
       allow create, update: if isAdmin() || (isAccountant() && getUserData().canAccessTreasury == true);
       allow delete: if isAdmin() || (isAccountant() && getUserData().canAccessTreasury == true && getUserData().canDeleteRecords == true);
     }

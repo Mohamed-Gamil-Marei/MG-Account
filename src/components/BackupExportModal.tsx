@@ -669,11 +669,21 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                           <a
                             href={`/api/server-backups/${b.name}/download`}
                             download={`${b.name}.db`}
-                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl font-bold border border-blue-200 flex items-center gap-1.5 cursor-pointer text-xs"
-                            title="تصدير وتحميل النسخة الاحتياطية خارج القرص"
+                            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl font-bold border border-blue-200 flex items-center gap-1 cursor-pointer text-xs"
+                            title="تصدير وتحميل قاعدة البيانات فقط (.db)"
                           >
                             <Download className="w-3.5 h-3.5" />
-                            <span>تصدير خارجي (تحميل)</span>
+                            <span>قاعدة البيانات (.db)</span>
+                          </a>
+
+                          <a
+                            href={`/api/server-backups/${b.name}/download?format=zip`}
+                            download={`${b.name}.zip`}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold border border-emerald-200 flex items-center gap-1 cursor-pointer text-xs"
+                            title="تحميل نسخة مضغوطة شاملة لقاعدة البيانات والمستندات (.zip)"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>مضغوطة (.zip + المستندات)</span>
                           </a>
 
                           {selectedBackupToRestore === b.name ? (

@@ -267,6 +267,17 @@ export class LocalDatabase {
     setInterval(() => {
       this.pullFromServer();
     }, 10000);
+
+    const MIGRATION_KEY = 'egy_acc_six_entities_migrated_v1';
+    if (typeof localStorage !== 'undefined' && !localStorage.getItem(MIGRATION_KEY)) {
+      this.migrateLocalStorageToServer()
+        .then(() => {
+          localStorage.setItem(MIGRATION_KEY, 'true');
+        })
+        .catch((err) => {
+          console.warn('[One-Time Migration Notice]:', err);
+        });
+    }
   }
 
   public async pullFromServer() {
@@ -294,6 +305,12 @@ export class LocalDatabase {
         feeEstimates: 'feeEstimates',
         customsShipments: 'customsShipments',
         financialActivityLogs: 'financialActivityLogs',
+        closingChecklists: 'closingChecklists',
+        clientDeadlines: 'clientDeadlines',
+        openItems: 'openItems',
+        approvedStatements: 'approvedStatements',
+        feeAgreements: 'feeAgreements',
+        feeCollections: 'feeCollections',
       };
 
       let hasChanged = false;
@@ -308,6 +325,15 @@ export class LocalDatabase {
                   this.state[stateKey] = json.data[0];
                   hasChanged = true;
                 }
+              } else if (entityType === 'closingChecklists') {
+                const map: Record<string, any> = {};
+                for (const item of json.data) {
+                  if (item && item.id) {
+                    map[item.id] = item.steps || item.data || item;
+                  }
+                }
+                this.state.closingChecklists = map;
+                hasChanged = true;
               } else {
                 this.state[stateKey] = json.data as any;
                 hasChanged = true;
@@ -351,9 +377,15 @@ export class LocalDatabase {
         feeEstimates: this.state.feeEstimates,
         customsShipments: this.state.customsShipments,
         financialActivityLogs: this.state.financialActivityLogs,
+        closingChecklists: Object.entries(this.state.closingChecklists || {}).map(([key, steps]) => ({ id: key, steps })),
+        clientDeadlines: this.state.clientDeadlines || [],
+        openItems: this.state.openItems || [],
+        approvedStatements: this.state.approvedStatements || [],
+        feeAgreements: this.state.feeAgreements || [],
+        feeCollections: this.state.feeCollections || [],
       };
 
-      const res = await fetch('/api/data/migrate-all', {
+      const res = await fetch(this.getApiUrl('/api/data/migrate-all'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -408,6 +440,15 @@ export class LocalDatabase {
       [STORAGE_KEYS.FEE_ESTIMATES]: { endpoint: 'feeEstimates', data: this.state.feeEstimates },
       [STORAGE_KEYS.CUSTOMS_SHIPMENTS]: { endpoint: 'customsShipments', data: this.state.customsShipments },
       [STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS]: { endpoint: 'financialActivityLogs', data: this.state.financialActivityLogs },
+      [STORAGE_KEYS.CLOSING_CHECKLISTS]: {
+        endpoint: 'closingChecklists',
+        data: Object.entries(this.state.closingChecklists || {}).map(([key, steps]) => ({ id: key, steps }))
+      },
+      [STORAGE_KEYS.CLIENT_DEADLINES]: { endpoint: 'clientDeadlines', data: this.state.clientDeadlines || [] },
+      [STORAGE_KEYS.OPEN_ITEMS]: { endpoint: 'openItems', data: this.state.openItems || [] },
+      [STORAGE_KEYS.APPROVED_STATEMENTS]: { endpoint: 'approvedStatements', data: this.state.approvedStatements || [] },
+      [STORAGE_KEYS.FEE_AGREEMENTS]: { endpoint: 'feeAgreements', data: this.state.feeAgreements || [] },
+      [STORAGE_KEYS.FEE_COLLECTIONS]: { endpoint: 'feeCollections', data: this.state.feeCollections || [] },
     };
 
     for (const [key, mapping] of Object.entries(entityMapping)) {

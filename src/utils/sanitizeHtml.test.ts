@@ -47,6 +47,15 @@ describe('sanitizeSvg utility', () => {
     expect(result).not.toContain('<script');
     expect(result).not.toContain('onload');
   });
+
+  it('cleans SVG strings containing <script> elements and inline handlers', () => {
+    const maliciousQrSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><script>alert("QR XSS")</script><rect x="0" y="0" width="10" height="10" onclick="alert(1)"/></svg>';
+    const cleaned = sanitizeSvg(maliciousQrSvg);
+    expect(cleaned).not.toContain('<script');
+    expect(cleaned).not.toContain('alert');
+    expect(cleaned).not.toContain('onclick');
+    expect(cleaned).toContain('<rect');
+  });
 });
 
 describe('sanitizePrintHtml utility', () => {

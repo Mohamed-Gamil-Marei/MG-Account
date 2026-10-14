@@ -6,6 +6,7 @@ import os from 'os';
 import crypto from 'crypto';
 import type { Express } from 'express';
 import Database from 'better-sqlite3';
+import JSZip from 'jszip';
 
 const TEST_PURGE_MASTER = 'PURGE_MASTER_TEST_SECRET_KEY_1234';
 const TEST_CREDENTIALS_KEY = 'TEST_CREDENTIALS_KEY_32_CHARS_LONG_OK_1234';
@@ -22,6 +23,7 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
   // Raw session tokens for each user role
   const adminToken = 'admin-raw-session-token-secret-xyz';
   const accountantToken = 'accountant-raw-session-token-secret-xyz';
+  const accountantNoPostToken = 'accountant-nopost-raw-session-token-secret-xyz';
   const auditorToken = 'auditor-raw-session-token-secret-xyz';
   const secretaryToken = 'secretary-raw-session-token-secret-xyz';
   const pendingToken = 'pending-raw-session-token-secret-xyz';
@@ -46,6 +48,7 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       { id: 3, name: 'Auditor User', email: 'auditor@test.local', role: 'AUDITOR', canPost: 0, canEditPosted: 0, canDelete: 0, token: auditorToken },
       { id: 4, name: 'Secretary User', email: 'secretary@test.local', role: 'SECRETARY', canPost: 0, canEditPosted: 0, canDelete: 0, token: secretaryToken },
       { id: 5, name: 'Pending User', email: 'pending@test.local', role: 'PENDING', canPost: 0, canEditPosted: 0, canDelete: 0, token: pendingToken },
+      { id: 6, name: 'Restricted Accountant User', email: 'accountant_nopost@test.local', role: 'ACCOUNTANT', canPost: 0, canEditPosted: 0, canDelete: 0, token: accountantNoPostToken },
     ];
 
     const insertUser = db.prepare(`
@@ -683,6 +686,314 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
     });
+
+    it('يدعم تحميل النسخة الاحتياطية كملف مضغوط zip يحتوي على قاعدة البيانات والمستندات للمدير فقط ويرفض غيره برمز 403', async () => {
+      const createRes = await request(app)
+        .post('/api/server-backups/create')
+        .set('Cookie', [`session_token=${adminToken}`]);
+
+      expect(createRes.status).toBe(200);
+      const backupName = createRes.body.backupName;
+
+      const zipRes = await request(app)
+        .get(`/api/server-backups/${backupName}/download?format=zip`)
+        .set('Cookie', [`session_token=${adminToken}`])
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: any[] = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+
+      expect(zipRes.status).toBe(200);
+      expect(zipRes.headers['content-type']).toContain('zip');
+
+      const zip = await JSZip.loadAsync(zipRes.body as Buffer);
+      expect(zip.file('app.db')).not.toBeNull();
+
+      const forbiddenRes = await request(app)
+        .get(`/api/server-backups/${backupName}/download?format=zip`)
+        .set('Cookie', [`session_token=${auditorToken}`]);
+
+      expect(forbiddenRes.status).toBe(403);
+    });
+
+    it('يستعيد قاعدة البيانات ومجلد المستندات المرفوعة كاملاً عند تنفيذ الاستعادة', async () => {
+      const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+      const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
+      const docsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, 'documents');
+
+      const dummyBackupName = `backup_test_docs_${Date.now()}`;
+      const dummyBackupPath = path.join(backupDir, dummyBackupName);
+      const dummyBackupDocs = path.join(dummyBackupPath, 'documents');
+
+      fs.mkdirSync(dummyBackupDocs, { recursive: true });
+
+      const currentDbPath = process.env.DB_PATH || path.join(dataDir, 'app.db');
+      fs.copyFileSync(currentDbPath, path.join(dummyBackupPath, 'app.db'));
+
+      const testDocFile = path.join(dummyBackupDocs, 'doc_restored_test.pdf');
+      fs.writeFileSync(testDocFile, '%PDF-1.4 Restored Document Test Content');
+
+      fs.mkdirSync(docsDir, { recursive: true });
+      fs.writeFileSync(path.join(docsDir, 'doc_to_be_overwritten.txt'), 'Junk Data Before Restore');
+
+      const restoreRes = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          backupName: dummyBackupName,
+          confirmationText: 'تأكيد الاستعادة',
+        });
+
+      expect(restoreRes.status).toBe(200);
+      expect(restoreRes.body.success).toBe(true);
+
+      const restoredDocPath = path.join(docsDir, 'doc_restored_test.pdf');
+      expect(fs.existsSync(restoredDocPath)).toBe(true);
+      const content = fs.readFileSync(restoredDocPath, 'utf8');
+      expect(content).toContain('Restored Document Test Content');
+
+      try { fs.rmSync(dummyBackupPath, { recursive: true, force: true }); } catch {}
+    });
+  });
+
+  // =========================================================================
+  // (ز) رفض حفظ قيد مرحّل (isPosted: true أو status: "POSTED") لمن لا يملك can_post_entries
+  // =========================================================================
+  describe('(ز) حظر حفظ أو ترحيل القيود (isPosted=true / status=POSTED) بدون صلاحية can_post_entries برمز 403', () => {
+    const postedEntryWithFlag = {
+      id: 'je-test-posted-flag-001',
+      data: {
+        id: 'je-test-posted-flag-001',
+        date: '2027-04-10',
+        description: 'قيد رواتب معتمد لاختبار حظر الترحيل',
+        isPosted: true,
+        lines: [
+          { id: 'l1', accountCode: '101', debit: 8000, credit: 0 },
+          { id: 'l2', accountCode: '102', debit: 0, credit: 8000 },
+        ],
+      },
+    };
+
+    const postedEntryWithStatus = {
+      id: 'je-test-posted-status-001',
+      data: {
+        id: 'je-test-posted-status-001',
+        date: '2027-04-11',
+        description: 'قيد رواتب بحالة POSTED لاختبار حظر الترحيل',
+        status: 'POSTED',
+        lines: [
+          { id: 'l1', accountCode: '101', debit: 5500, credit: 0 },
+          { id: 'l2', accountCode: '102', debit: 0, credit: 5500 },
+        ],
+      },
+    };
+
+    it('يرفض محاولة محاسب لا يملك can_post_entries حفظ قيد عبر POST مع isPosted=true برمز 403', async () => {
+      const res = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantNoPostToken}`])
+        .send(postedEntryWithFlag);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('can_post_entries');
+    });
+
+    it('يرفض محاولة محاسب لا يملك can_post_entries حفظ قيد عبر POST مع status="POSTED" برمز 403', async () => {
+      const res = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantNoPostToken}`])
+        .send(postedEntryWithStatus);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('can_post_entries');
+    });
+
+    it('يرفض محاولة محاسب لا يملك can_post_entries تعديل قيد عبر PUT إلى مرحّل برمز 403', async () => {
+      const res = await request(app)
+        .put('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantNoPostToken}`])
+        .send(postedEntryWithFlag);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('can_post_entries');
+    });
+
+    it('يرفض محاولة سكرتير حفظ قيد عبر POST مع isPosted=true أو status="POSTED" برمز 403', async () => {
+      const resPostFlag = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${secretaryToken}`])
+        .send(postedEntryWithFlag);
+
+      expect(resPostFlag.status).toBe(403);
+      expect(resPostFlag.body.success).toBe(false);
+
+      const resPostStatus = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${secretaryToken}`])
+        .send(postedEntryWithStatus);
+
+      expect(resPostStatus.status).toBe(403);
+      expect(resPostStatus.body.success).toBe(false);
+    });
+
+    it('يرفض محاولة سكرتير تعديل قيد عبر PUT إلى مرحّل برمز 403', async () => {
+      const res = await request(app)
+        .put('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${secretaryToken}`])
+        .send(postedEntryWithFlag);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('يسمح للمحاسب الذي لا يملك can_post_entries بحفظ قيد مسودة (isPosted: false / status: DRAFT) بنجاح 200', async () => {
+      const draftPayload = {
+        id: 'je-test-draft-nopost-valid-001',
+        data: {
+          id: 'je-test-draft-nopost-valid-001',
+          date: '2027-04-12',
+          description: 'قيد مسودة عادي مسموح به للمحاسب',
+          isPosted: false,
+          status: 'DRAFT',
+          lines: [
+            { id: 'l1', accountCode: '101', debit: 4000, credit: 0 },
+            { id: 'l2', accountCode: '102', debit: 0, credit: 4000 },
+          ],
+        },
+      };
+
+      const res = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantNoPostToken}`])
+        .send(draftPayload);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it('يسمح للمدير أو المحاسب الذي يملك can_post_entries بحفظ قيد مرحّل (isPosted: true) برمز 200', async () => {
+      const validPostedPayload = {
+        id: 'je-test-posted-valid-accountant-001',
+        data: {
+          id: 'je-test-posted-valid-accountant-001',
+          date: '2027-04-13',
+          description: 'قيد مرحّل نظامي بواسطة محاسب مفوض',
+          isPosted: true,
+          lines: [
+            { id: 'l1', accountCode: '101', debit: 9500, credit: 0 },
+            { id: 'l2', accountCode: '102', debit: 0, credit: 9500 },
+          ],
+        },
+      };
+
+      const res = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send(validPostedPayload);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  // (ح) اختبار مزامنة الكيانات الستة الجديدة على السيرفر الحقيقي وصلاحيات المراجع
+  // =========================================================================
+  describe('(ح) اختبار مزامنة الكيانات الستة الجديدة وصلاحيات المراجع AUDITOR', () => {
+    const sixEntities = [
+      'closingChecklists',
+      'clientDeadlines',
+      'openItems',
+      'approvedStatements',
+      'feeAgreements',
+      'feeCollections',
+    ];
+
+    for (const entity of sixEntities) {
+      it(`يسمح للمدير أو المحاسب بحفظ واسترجاع (${entity}) بنجاح 200`, async () => {
+        const payload = {
+          id: `test-6ent-${entity}-001`,
+          data: { id: `test-6ent-${entity}-001`, name: `Test ${entity}` },
+        };
+
+        const postRes = await request(app)
+          .post(`/api/data/${entity}`)
+          .set('Cookie', [`session_token=${adminToken}`])
+          .send(payload);
+
+        expect(postRes.status).toBe(200);
+        expect(postRes.body.success).toBe(true);
+
+        const getRes = await request(app)
+          .get(`/api/data/${entity}`)
+          .set('Cookie', [`session_token=${adminToken}`]);
+
+        expect(getRes.status).toBe(200);
+        expect(getRes.body.success).toBe(true);
+        expect(Array.isArray(getRes.body.data)).toBe(true);
+        expect(getRes.body.data.some((item: any) => item.id === `test-6ent-${entity}-001`)).toBe(true);
+      });
+
+      it(`يسمح للمراجع AUDITOR بقراءة (${entity}) بينما يرفض تعديله أو حذفه برمز 403`, async () => {
+        const getRes = await request(app)
+          .get(`/api/data/${entity}`)
+          .set('Cookie', [`session_token=${auditorToken}`]);
+
+        expect(getRes.status).toBe(200);
+        expect(getRes.body.success).toBe(true);
+
+        const postRes = await request(app)
+          .post(`/api/data/${entity}`)
+          .set('Cookie', [`session_token=${auditorToken}`])
+          .send({ id: `auditor-fail-${entity}`, data: {} });
+
+        expect(postRes.status).toBe(403);
+
+        const delRes = await request(app)
+          .delete(`/api/data/${entity}/auditor-fail-${entity}`)
+          .set('Cookie', [`session_token=${auditorToken}`]);
+
+        expect(delRes.status).toBe(403);
+      });
+    }
+  });
+
+  // =========================================================================
+  // (ط) اختبار تنظيف محددات المعدل (Rate Limiters Cleanup)
+  // =========================================================================
+  describe('(ط) اختبار تنظيف محددات المعدل (Rate Limiters Cleanup)', () => {
+    it('ينظف المدخلات المنتهية ويحافظ على الحد الأقصى للمفاتيح في الذاكرة', () => {
+      const cleanFn = (app as any).cleanExpiredRateLimits;
+      const aiMap: Map<string, any> = (app as any).aiRateLimits;
+      const verifyMap: Map<string, any> = (app as any).verifyMasterRateLimits;
+
+      expect(typeof cleanFn).toBe('function');
+
+      const now = Date.now();
+      // Add expired and active entries to aiRateLimits
+      aiMap.set('ip-expired', { timestamps: [now - 120000] }); // expired (>60s)
+      aiMap.set('ip-active', { timestamps: [now - 5000] });     // active
+
+      // Add expired and active entries to verifyMasterRateLimits
+      verifyMap.set('ip-master-expired', [now - 120000]);
+      verifyMap.set('ip-master-active', [now - 2000]);
+
+      // Run cleanup
+      cleanFn();
+
+      // Expired entries should be deleted
+      expect(aiMap.has('ip-expired')).toBe(false);
+      expect(aiMap.has('ip-active')).toBe(true);
+
+      expect(verifyMap.has('ip-master-expired')).toBe(false);
+      expect(verifyMap.has('ip-master-active')).toBe(true);
+    });
   });
 });
+
 

@@ -287,16 +287,18 @@ export const CreditTaxCertificateTab: React.FC<CreditTaxCertificateTabProps> = (
               data-qr-container="true"
               className="qr-print-container bg-white p-1 rounded-lg border border-slate-200"
               dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(
-                  buildTaxDeclarationQrText({
-                    taxpayerName: companyName,
-                    taxCardNumber: taxRegNumber,
-                    fiscalYear: statusYear,
-                    declarationType: 'شهادة الموقف الضريبي والتأميني المعتمدة',
-                    netTaxDue: 0,
-                    auditorName: officeProfile.auditorName,
-                  }),
-                  100
+                __html: sanitizeSvg(
+                  generateQrCodeSvg(
+                    buildTaxDeclarationQrText({
+                      taxpayerName: companyName,
+                      taxCardNumber: taxRegNumber,
+                      fiscalYear: statusYear,
+                      declarationType: 'شهادة الموقف الضريبي والتأميني المعتمدة',
+                      netTaxDue: 0,
+                      auditorName: officeProfile.auditorName,
+                    }),
+                    100
+                  )
                 ),
               }}
             />

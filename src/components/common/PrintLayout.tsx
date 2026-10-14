@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../db/localDatabase';
 import { generateQrCodeSvg } from '../../utils/qrCodeGenerator';
+import { sanitizeSvg } from '../../utils/sanitizeHtml';
 import { MgBrandBadge } from './MgBrandBadge';
 
 export interface PrintLayoutProps {
@@ -497,7 +498,7 @@ export const PrintLayout: React.FC<PrintLayoutProps> & {
               >
                 <div
                   dangerouslySetInnerHTML={{
-                    __html: generateQrCodeSvg(verificationPayload, 72),
+                    __html: sanitizeSvg(generateQrCodeSvg(verificationPayload, 72)),
                   }}
                 />
                 <span className="text-[8px] font-mono font-bold text-slate-500 mt-0.5">وثيقة معتمدة</span>
