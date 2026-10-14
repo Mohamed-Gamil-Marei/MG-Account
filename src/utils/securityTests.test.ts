@@ -80,7 +80,7 @@ describe('Security & Access Control Tests', () => {
   });
 
   it('8. تنزيل أو الوصول لمستند عميل غير مصرح به يُرفض للعميل المقيد', () => {
-    const restrictedUser = {
+    const restrictedUser: AccessUser & { permittedClientIds: string[] } = {
       id: 10,
       name: 'Restricted User',
       role: 'ACCOUNTANT',

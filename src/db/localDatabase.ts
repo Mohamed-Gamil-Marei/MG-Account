@@ -59,6 +59,7 @@ export const SAFE_FALLBACK_USER: SystemUser = {
   canDeleteRecords: false,
   canAccessCreditFiles: false,
   canAccessTaxReports: false,
+  createdAt: '2026-01-01T00:00:00.000Z',
 };
 import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
@@ -3375,6 +3376,7 @@ export class LocalDatabase {
       canDeleteRecords: !!profile.canDeleteRecords,
       canAccessCreditFiles: !!profile.canAccessCreditFiles,
       canAccessTaxReports: !!profile.canAccessTaxReports,
+      createdAt: profile.createdAt || new Date().toISOString(),
     };
 
     if (existingIndex >= 0) {
@@ -3384,7 +3386,7 @@ export class LocalDatabase {
     }
 
     this.state.currentUserId = userId;
-    this.saveState('USERS');
+    this.saveState('SYSTEM_USERS');
     this.notify();
     return mappedUser;
   }

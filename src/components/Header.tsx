@@ -23,6 +23,7 @@ import {
   BookOpen,
   Smartphone,
   LogOut,
+  AlertCircle,
 } from 'lucide-react';
 import { db } from '../db/localDatabase';
 import { cloudSync, SyncStatus } from '../lib/cloudSync';

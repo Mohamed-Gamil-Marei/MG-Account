@@ -56,29 +56,33 @@ export function checkEntityAccess(user: AccessUser | null | undefined, entityTyp
     return false;
   }
 
-  // Admin-only write entities
+  // Admin-only write entities (Admin was already handled above)
   const adminOnlyWriteEntities = ['officeProfile', 'systemUsers', 'fiscalPeriodLocks'];
   if (adminOnlyWriteEntities.includes(entityType) && action !== 'READ') {
-    return user.role === 'ADMIN';
+    return false;
   }
 
-  // Accountant/Admin write entities
+  // Accountant write entities
   const accountantAdminWriteEntities = ['accounts', 'taxDeclarations', 'taxAudits', 'fixedAssets', 'exchangeRates'];
-  if (accountantAdminWriteEntities.includes(entityType) && action !== 'READ') {
-    return ['ACCOUNTANT', 'ADMIN'].includes(user.role);
+  if (accountantAdminWriteEntities.includes(entityType) && action === 'WRITE') {
+    return (user.role as string) === 'ACCOUNTANT';
   }
 
   // Journal entries posting
   if (entityType === 'journalEntries' && action === 'WRITE') {
-    return !!user.canPostEntries || ['ADMIN', 'ACCOUNTANT'].includes(user.role);
+    return !!user.canPostEntries || (user.role as string) === 'ACCOUNTANT';
   }
 
   if (action === 'DELETE') {
-    return !!user.canDeleteRecords || ['ADMIN', 'ACCOUNTANT'].includes(user.role);
+    return !!user.canDeleteRecords;
   }
 
   if (action === 'READ') {
     return true;
+  }
+
+  if (action === 'WRITE') {
+    return (user.role as string) === 'ACCOUNTANT';
   }
 
   return false; // Default to DENY
