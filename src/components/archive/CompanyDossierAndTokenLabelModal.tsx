@@ -105,6 +105,8 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
     insurancePass: client.portalCredentials?.socialInsurancePortal?.password || '',
   });
 
+  const [printPinOnLabel, setPrintPinOnLabel] = useState(false);
+
   // Dynamic Subjection Obligations List with toggleable inclusion and full text customizability
   const [subjectionItems, setSubjectionItems] = useState<SubjectionItem[]>([
     {
@@ -266,7 +268,6 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
         provider: formData.tokenProvider,
         tokenType: formData.tokenType,
         pin: formData.tokenPin,
-        password: formData.tokenPin,
         serialNumber: formData.tokenSerial,
         expiryDate: formData.tokenExpiry,
       },
@@ -628,6 +629,7 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
                     >
                       <option value="E_SEAL">ختم إلكتروني (E-Seal للشركات)</option>
                       <option value="E_SIGNATURE">توقيع إلكتروني (E-Signature للأفراد)</option>
+                      <option value="BOTH">الختم والتوقيع معاً (الاثنين)</option>
                     </select>
                   </div>
                   <div>
@@ -1103,6 +1105,19 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
                     </span>
                   </div>
 
+                  {/* Checkbox for printing PIN on label */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={printPinOnLabel}
+                        onChange={(e) => setPrintPinOnLabel(e.target.checked)}
+                        className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <span>اطبع الرقم السري على الليبل (اختياري - غير مفعّل افتراضياً)</span>
+                    </label>
+                  </div>
+
                   {/* Keyring Label Cards (Includes primary and duplicate backup) */}
                   <div className="flex flex-wrap items-center gap-3">
                     
@@ -1120,7 +1135,7 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
                           {formData.name}
                         </span>
                         <span className="text-[7.5px] font-mono font-bold bg-slate-900 text-white px-1 rounded-sm">
-                          {formData.tokenType === 'E_SEAL' ? 'ختم' : 'توقيع'}
+                          {formData.tokenType === 'E_SEAL' ? 'ختم' : formData.tokenType === 'E_SIGNATURE' ? 'توقيع' : 'الاثنين'}
                         </span>
                       </div>
 
@@ -1129,7 +1144,7 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
                           PIN / باسورد التوكن:
                         </div>
                         <div className="text-[12.5px] font-mono font-black text-rose-700 tracking-wider leading-none">
-                          {formData.tokenPin || 'Mg@2026'}
+                          {printPinOnLabel ? (formData.tokenPin || '••••••') : '••••••'}
                         </div>
                       </div>
 
@@ -1162,7 +1177,7 @@ export const CompanyDossierAndTokenLabelModal: React.FC<CompanyDossierAndTokenLa
                           PIN / باسورد التوكن:
                         </div>
                         <div className="text-[12.5px] font-mono font-black text-slate-950 tracking-wider leading-none">
-                          {formData.tokenPin || 'Mg@2026'}
+                          {printPinOnLabel ? (formData.tokenPin || '••••••') : '••••••'}
                         </div>
                       </div>
 

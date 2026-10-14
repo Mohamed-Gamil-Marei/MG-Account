@@ -263,21 +263,23 @@ export class LocalDatabase {
   }
 
   private initServerSync() {
-    this.pullFromServer();
+    const MIGRATION_KEY = 'egy_acc_six_entities_migrated_v1';
+
+    this.pullFromServer().then(() => {
+      if (typeof localStorage !== 'undefined' && !localStorage.getItem(MIGRATION_KEY)) {
+        this.migrateLocalStorageToServer()
+          .then(() => {
+            localStorage.setItem(MIGRATION_KEY, 'true');
+          })
+          .catch((err) => {
+            console.warn('[One-Time Migration Notice]:', err);
+          });
+      }
+    });
+
     setInterval(() => {
       this.pullFromServer();
     }, 10000);
-
-    const MIGRATION_KEY = 'egy_acc_six_entities_migrated_v1';
-    if (typeof localStorage !== 'undefined' && !localStorage.getItem(MIGRATION_KEY)) {
-      this.migrateLocalStorageToServer()
-        .then(() => {
-          localStorage.setItem(MIGRATION_KEY, 'true');
-        })
-        .catch((err) => {
-          console.warn('[One-Time Migration Notice]:', err);
-        });
-    }
   }
 
   public async pullFromServer() {
@@ -356,27 +358,6 @@ export class LocalDatabase {
   public async migrateLocalStorageToServer() {
     try {
       const payload = {
-        clients: this.state.clients,
-        accounts: this.state.accounts,
-        journalEntries: this.state.journalEntries,
-        treasury: this.state.treasuryTransactions,
-        taxDeclarations: this.state.taxDeclarations,
-        taxMandates: this.state.taxMandates,
-        certificates: this.state.certificates,
-        invoices: this.state.invoices,
-        feasibilityStudies: this.state.feasibilityStudies,
-        creditSimulations: this.state.creditSimulations,
-        fixedAssets: this.state.fixedAssets,
-        officeProfile: this.state.officeProfile,
-        systemUsers: this.state.users,
-        preferences: this.state.preferences,
-        whatsappMessages: this.state.whatsappMessages,
-        whatsappBotSettings: this.state.whatsappBotSettings,
-        exchangeRates: this.state.exchangeRates,
-        fiscalPeriodLocks: this.state.fiscalPeriodLocks,
-        feeEstimates: this.state.feeEstimates,
-        customsShipments: this.state.customsShipments,
-        financialActivityLogs: this.state.financialActivityLogs,
         closingChecklists: Object.entries(this.state.closingChecklists || {}).map(([key, steps]) => ({ id: key, steps })),
         clientDeadlines: this.state.clientDeadlines || [],
         openItems: this.state.openItems || [],
@@ -385,14 +366,14 @@ export class LocalDatabase {
         feeCollections: this.state.feeCollections || [],
       };
 
-      const res = await fetch(this.getApiUrl('/api/data/migrate-all'), {
+      const res = await fetch(this.getApiUrl('/api/data/migrate-local-six'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'فشل ترحيل البيانات.');
+        throw new Error(json.error || 'فشل ترحيل الكيانات الستة.');
       }
       return json.summary;
     } catch (err: any) {

@@ -351,9 +351,8 @@ export interface PortalCredentials {
   // توكن الختم والتوقيع الإلكتروني (Egypt Trust, MCDR, Delta, etc.)
   eSignatureToken?: {
     provider?: string; // شركة إيجيبت ترست / مصر للمقاصة / دلتا
-    tokenType?: 'E_SEAL' | 'E_SIGNATURE'; // ختم إلكتروني / توقيع إلكتروني
-    pin?: string; // الرقم السري للتوكن
-    password?: string;
+    tokenType?: 'E_SEAL' | 'E_SIGNATURE' | 'BOTH'; // ختم إلكتروني / توقيع إلكتروني / الاثنين
+    pin?: string; // الرقم السري للتوكن (حقل موحد مشفر على السيرفر)
     serialNumber?: string;
     expiryDate?: string;
     notes?: string;
@@ -383,6 +382,8 @@ export interface ClientArchiveRecord {
   incomeTaxFileNo: string;
   vatRegistrationNo: string;
   socialInsuranceNo: string;
+  // أنواع الضرائب الخاضع لها (اختيار متعدد في مصر)
+  taxTypes?: string[];
   // تفاصيل الخضوع الضريبي والتأميني والمنظومة
   taxSystemType?: 'SAP' | 'OLD_PORTAL' | 'ETA_INTEGRATED'; // المنظومة: ساب المدمجة / القديمة
   isVatSubject?: boolean; // خاضع لضريبة القيمة المضافة؟

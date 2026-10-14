@@ -76,21 +76,25 @@ export const DeviceLockModal: React.FC<DeviceLockModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleAuthorize = (e: React.FormEvent) => {
+  const handleAuthorize = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    const res = SecurityAuthService.authorizeAndBindNewDevice(passcode, customDeviceName);
-    if (res.success) {
-      setSuccessMessage(res.message);
-      refreshState();
-      setTimeout(() => {
-        if (onUnlocked) onUnlocked();
-        if (!isEnforced) onClose();
-      }, 900);
-    } else {
-      setErrorMessage(res.message);
+    try {
+      const res = await SecurityAuthService.authorizeAndBindNewDevice(passcode, customDeviceName);
+      if (res.success) {
+        setSuccessMessage(res.message);
+        refreshState();
+        setTimeout(() => {
+          if (onUnlocked) onUnlocked();
+          if (!isEnforced) onClose();
+        }, 900);
+      } else {
+        setErrorMessage(res.message);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'مفيش اتصال بالإنترنت أو السيرفر غير متصل.');
     }
   };
 

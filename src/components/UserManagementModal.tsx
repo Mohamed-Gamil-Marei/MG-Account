@@ -110,7 +110,20 @@ export const UserManagementModal: React.FC<{
     }
   }, [isOpen]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
+    try {
+      const res = await fetch('/api/users');
+      const data = await res.json();
+      if (data.success && data.users) {
+        setUsers(data.users.map((u: any) => ({
+          ...u,
+          isActive: u.is_active !== undefined ? !!u.is_active : (u.isActive ?? true)
+        })));
+        const currentSerials = db.getSystemSerials();
+        setSerials(currentSerials);
+        return;
+      }
+    } catch {}
     setUsers(db.getUsers());
     const currentSerials = db.getSystemSerials();
     setSerials(currentSerials);
@@ -241,19 +254,31 @@ export const UserManagementModal: React.FC<{
   };
 
   // Handle Quick Block / Unblock
-  const handleToggleBlock = (user: SystemUser) => {
+  const handleToggleBlock = async (user: SystemUser) => {
     if (user.id === 'user-admin' || user.username === 'admin') {
       alert('لا يمكن حظر حساب المدير الرئيسي للمنظومة!');
       return;
     }
 
-    const actionText = user.isActive === false ? 'فك حظر وتفعيل' : 'حظر وتعطيل';
+    const newActiveState = user.isActive === false ? true : false;
+    const actionText = newActiveState ? 'فك حظر وتفعيل' : 'حظر وتعطيل';
     if (window.confirm(`هل أنت متأكد من ${actionText} حساب المستخدم (${user.name})؟`)) {
-      const res = db.toggleUserActive(user.id);
-      if (res.success) {
-        setSaveSuccessMsg(res.message);
-        setTimeout(() => setSaveSuccessMsg(null), 3500);
-        refreshData();
+      try {
+        const res = await fetch(`/api/users/${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: newActiveState }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setSaveSuccessMsg(data.message || `تم ${actionText} حساب المستخدم (${user.name}) بنجاح.`);
+          setTimeout(() => setSaveSuccessMsg(null), 3500);
+          refreshData();
+        } else {
+          alert(data.error || 'حدث خطأ أثناء تعديل حالة المستخدم.');
+        }
+      } catch (err: any) {
+        alert(err.message || 'حدث خطأ في الاتصال.');
       }
     }
   };

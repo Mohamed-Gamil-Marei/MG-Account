@@ -994,6 +994,242 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       expect(verifyMap.has('ip-master-active')).toBe(true);
     });
   });
+
+  describe('(ي) اختبار ترحيل الكيانات الستة (migrate-local-six)', () => {
+    it('يرفض المراجع AUDITOR والسكرتير SECRETARY برمز 403', async () => {
+      const payload = {
+        clientDeadlines: [{ id: 'dl-test-01', title: 'test deadline' }]
+      };
+
+      const auditorRes = await request(app)
+        .post('/api/data/migrate-local-six')
+        .set('Cookie', [`session_token=${auditorToken}`])
+        .send(payload);
+      expect(auditorRes.status).toBe(403);
+
+      const secretaryRes = await request(app)
+        .post('/api/data/migrate-local-six')
+        .set('Cookie', [`session_token=${secretaryToken}`])
+        .send(payload);
+      expect(secretaryRes.status).toBe(403);
+    });
+
+    it('يضيف سجل جديد ولا يغير سجل موجود مسبقاً على السيرفر (INSERT OR IGNORE)', async () => {
+      const existingId = 'dl-existing-001';
+      const originalData = { id: existingId, title: 'Original Server Title', original: true };
+      const modifiedData = { id: existingId, title: 'Attempted Local Override Title', original: false };
+      const newId = 'dl-new-002';
+      const newData = { id: newId, title: 'New Local Deadline', original: true };
+
+      // 1. Insert original record on server via admin
+      const seedRes = await request(app)
+        .post('/api/data/clientDeadlines')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ id: existingId, data: originalData });
+      expect(seedRes.status).toBe(200);
+
+      // 2. Perform migration call with modified existing record + new record
+      const migrationPayload = {
+        clientDeadlines: [modifiedData, newData]
+      };
+
+      const migrateRes = await request(app)
+        .post('/api/data/migrate-local-six')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send(migrationPayload);
+
+      expect(migrateRes.status).toBe(200);
+      expect(migrateRes.body.success).toBe(true);
+
+      // 3. Verify existing record was NOT changed (remains original data)
+      const getRes = await request(app)
+        .get('/api/data/clientDeadlines')
+        .set('Cookie', [`session_token=${adminToken}`]);
+
+      expect(getRes.status).toBe(200);
+      const items = getRes.body.data;
+      const foundExisting = items.find((item: any) => item.id === existingId);
+      const foundNew = items.find((item: any) => item.id === newId);
+
+      expect(foundExisting).toBeDefined();
+      const parsedExistingData = typeof foundExisting.data === 'string' ? JSON.parse(foundExisting.data) : (foundExisting.data || foundExisting);
+      expect(parsedExistingData.title).toBe('Original Server Title');
+
+      expect(foundNew).toBeDefined();
+    });
+  });
+
+  describe('(ك) اختبار حظر وتفعيل المستخدمين على السيرفر', () => {
+    it('مستخدم موقوف مبيقدرش يسجل دخول (يرجع الحساب موقوف)، والمدير يقدر يوقفه ويرجعه، وغير المدير مبيقدرش', async () => {
+      // 1. Create a test user via admin
+      const createRes = await request(app)
+        .post('/api/users')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          name: 'اختبار الحظر',
+          email: 'blocktest@example.com',
+          password: 'Password12345!',
+          role: 'ACCOUNTANT'
+        });
+      expect(createRes.status).toBe(200);
+      const newUserId = createRes.body.id;
+
+      // 2. Non-admin trying to block user -> 403
+      const nonAdminBlockRes = await request(app)
+        .put(`/api/users/${newUserId}`)
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({ isActive: false });
+      expect(nonAdminBlockRes.status).toBe(403);
+
+      // 3. Admin blocks user
+      const adminBlockRes = await request(app)
+        .put(`/api/users/${newUserId}`)
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ isActive: false });
+      expect(adminBlockRes.status).toBe(200);
+
+      // 4. Suspended user cannot login
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'blocktest@example.com', password: 'Password12345!' });
+      expect(loginRes.status).toBe(401);
+      expect(loginRes.body.error).toBe("الحساب موقوف.");
+
+      // 5. Admin restores user
+      const restoreRes = await request(app)
+        .put(`/api/users/${newUserId}`)
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ isActive: true });
+      expect(restoreRes.status).toBe(200);
+
+      // 6. Restored user can login successfully
+      const loginAfterRestoreRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'blocktest@example.com', password: 'Password12345!' });
+      expect(loginAfterRestoreRes.status).toBe(200);
+      expect(loginAfterRestoreRes.body.success).toBe(true);
+    });
+  });
+
+  describe('(ل) اختبار ترخيص الأجهزة وتفعيلها بالماستر كود على السيرفر', () => {
+    it('يقبل الكود الصحيح، ويرفض الكود الخاطئ و123456، ويشغل الrate limiter بعد 5 محاولات، ويسجل في auditLogs', async () => {
+      if ((app as any).authorizeDeviceRateLimits) {
+        (app as any).authorizeDeviceRateLimits.clear();
+      }
+
+      // 1. Correct code -> 200
+      const correctCode = process.env.DEVICE_ACTIVATION_CODE || '1234567890123456';
+      const correctRes = await request(app)
+        .post('/api/auth/authorize-device')
+        .send({ passcode: correctCode, customDeviceName: 'Main Accounting PC' });
+      expect(correctRes.status).toBe(200);
+      expect(correctRes.body.success).toBe(true);
+      expect(correctRes.body.device).toBeDefined();
+
+      // 2. Wrong code -> 401
+      const wrongRes = await request(app)
+        .post('/api/auth/authorize-device')
+        .send({ passcode: 'WrongCode12345', customDeviceName: 'Test Device 1' });
+      expect(wrongRes.status).toBe(401);
+
+      // 3. Static old code 123456 -> 401
+      const staticRes = await request(app)
+        .post('/api/auth/authorize-device')
+        .send({ passcode: '123456', customDeviceName: 'Test Device 2' });
+      expect(staticRes.status).toBe(401);
+
+      // 4. Rate limiter test (5 attempts total per 15 min per IP)
+      for (let i = 0; i < 5; i++) {
+        await request(app)
+          .post('/api/auth/authorize-device')
+          .set('X-Forwarded-For', '203.0.113.50')
+          .send({ passcode: 'BadPass' });
+      }
+      // 6th attempt from 203.0.113.50 should return 429 Too Many Requests
+      const rateLimitRes = await request(app)
+        .post('/api/auth/authorize-device')
+        .set('X-Forwarded-For', '203.0.113.50')
+        .send({ passcode: 'BadPass' });
+      expect(rateLimitRes.status).toBe(429);
+    });
+  });
+
+  describe('(م) اختبارات أمان وتشفير التوكن والأرقام السرية وصلاحيات الإظهار (Phase A)', () => {
+    it('يحفظ بيانات التوكن مشفرة في قاعدة البيانات ويحذف النص العادي، ويقصر الإظهار على المدير والمحاسب فقط ويرفض المراجع والسكرتير (403)، ويسجل في auditLogs', async () => {
+      const clientId = 'client-token-test-001';
+      const clientPayload = {
+        id: clientId,
+        name: 'شركة التوكن والتبرعات المصرية',
+        portalCredentials: {
+          eSignatureToken: {
+            provider: 'Egypt Trust',
+            tokenType: 'BOTH',
+            pin: '987654321',
+            password: '987654321', // duplicate to test scrubbing
+            serialNumber: 'SN-998877',
+            expiryDate: '2028-12-31'
+          }
+        }
+      };
+
+      // 1. Save client as Admin
+      const saveRes = await request(app)
+        .post('/api/data/clients')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ id: clientId, data: clientPayload });
+      expect(saveRes.status).toBe(200);
+
+      // 2. Verify in SQLite db that _encryptedPortalCredentials exists and raw pin/password are scrubbed from data column
+      const activeDb = (app as any).db || db;
+      const row = activeDb.prepare("SELECT data FROM clients WHERE id = ?").get(clientId) as any;
+      expect(row).toBeDefined();
+      const parsedStored = JSON.parse(row.data);
+      expect(parsedStored._encryptedPortalCredentials).toBeDefined();
+      expect(parsedStored.portalCredentials.eSignatureToken.pin).toBeUndefined();
+      expect(parsedStored.portalCredentials.eSignatureToken.password).toBeUndefined();
+      expect(parsedStored.portalCredentials.eSignatureToken.hasPassword).toBe(true);
+
+      // 3. Test reveal-credentials access control:
+      // - Auditor (403)
+      const auditorReveal = await request(app)
+        .post(`/api/clients/${clientId}/reveal-credentials`)
+        .set('Cookie', [`session_token=${auditorToken}`])
+        .send({ portalKey: 'eSignatureToken' });
+      expect(auditorReveal.status).toBe(403);
+
+      // - Secretary (403)
+      const secretaryReveal = await request(app)
+        .post(`/api/clients/${clientId}/reveal-credentials`)
+        .set('Cookie', [`session_token=${secretaryToken}`])
+        .send({ portalKey: 'eSignatureToken' });
+      expect(secretaryReveal.status).toBe(403);
+
+      // - Accountant (200)
+      const accountantReveal = await request(app)
+        .post(`/api/clients/${clientId}/reveal-credentials`)
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({ portalKey: 'eSignatureToken' });
+      expect(accountantReveal.status).toBe(200);
+      expect(accountantReveal.body.success).toBe(true);
+      expect(accountantReveal.body.credentials.eSignatureToken.pin).toBe('987654321');
+
+      // - Admin (200)
+      const adminReveal = await request(app)
+        .post(`/api/clients/${clientId}/reveal-credentials`)
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ portalKey: 'eSignatureToken' });
+      expect(adminReveal.status).toBe(200);
+      expect(adminReveal.body.credentials.eSignatureToken.pin).toBe('987654321');
+
+      // 4. Verify audit logs recorded the reveal actions
+      const auditRowsRaw = activeDb.prepare("SELECT data FROM auditLogs ORDER BY updated_at DESC").all() as any[];
+      const auditRows = auditRowsRaw.map(r => JSON.parse(r.data)).filter((a: any) => a.recordId === clientId && a.action === 'REVEAL_CLIENT_CREDENTIALS');
+      expect(auditRows.length).toBeGreaterThan(0);
+      const latestAudit = auditRows[0];
+      expect(latestAudit.action).toBe('REVEAL_CLIENT_CREDENTIALS');
+    });
+  });
 });
+
 
 

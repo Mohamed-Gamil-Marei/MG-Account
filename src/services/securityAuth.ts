@@ -56,55 +56,7 @@ export class SecurityAuthService {
    * Validates if the entered password matches the authorized edit passcode
    * or matches user role permissions / custom password.
    */
-  static verifyPassword(password: string): boolean {
-    if (firebaseAuth.isAdmin()) return true;
-    if (!password) return false;
-    const input = this.normalizeInput(password);
-
-    // Default admin & system passcodes
-    if (
-      input === 'admin' ||
-      input === 'master_purge_password' ||
-      input === 'mg-2026-purge' ||
-      input === '123456' ||
-      input === '1234' ||
-      input === '43122'
-    ) {
-      return true;
-    }
-
-    // Check custom password from preferences if set
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const stored = localStorage.getItem(this.STORAGE_USER_PREFERENCES);
-        if (stored) {
-          const pref = JSON.parse(stored);
-          if (pref.customEditPassword && this.normalizeInput(pref.customEditPassword) === input) {
-            return true;
-          }
-        }
-      }
-    } catch {}
-
-    // Check against local database users
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const localDbState = localStorage.getItem('egy_acc_local_db_v1');
-        if (localDbState) {
-          const parsed = JSON.parse(localDbState);
-          if (Array.isArray(parsed.users)) {
-            const matchesAdmin = parsed.users.some((u: any) =>
-              (u.role === 'ADMIN' || u.role === 'SUPER_ADMIN' || u.username === 'admin') &&
-              (this.normalizeInput(u.password) === input ||
-                this.normalizeInput(u.pinCode) === input ||
-                this.normalizeInput(u.username) === input)
-            );
-            if (matchesAdmin) return true;
-          }
-        }
-      }
-    } catch {}
-
+  static verifyPassword(_password: string): boolean {
     return false;
   }
 
@@ -279,44 +231,57 @@ export class SecurityAuthService {
   /**
    * Adds and Authorizes the current or a named device using master code
    */
-  static authorizeAndBindNewDevice(
+  static async authorizeAndBindNewDevice(
     masterPasscode: string,
     customDeviceName?: string
-  ): { success: boolean; message: string; device?: DeviceBindingInfo } {
-    if (!this.verifyPassword(masterPasscode) && !this.verifyPurgePassword(masterPasscode)) {
-      return {
-        success: false,
-        message: 'رمز الماستر كود غير صحيح! يرجى إدخال كود الترخيص المعتمد.',
+  ): Promise<{ success: boolean; message: string; device?: DeviceBindingInfo }> {
+    try {
+      const current = this.getDeviceFingerprint();
+      const res = await fetch('/api/auth/authorize-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          passcode: masterPasscode,
+          customDeviceName,
+          deviceId: current.fingerprint,
+          summary: current.summary,
+        }),
+      });
+      const data = await res.json();
+      if (res.status === 429) {
+        return { success: false, message: 'عدد محاولات كثيرة جداً، يرجى الانتظار 15 دقيقة قبل إعادة المحاولة.' };
+      }
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.error || data.message || 'رمز الماستر كود غير صحيح! يرجى إدخال كود الترخيص المعتمد.' };
+      }
+
+      const list = this.getAuthorizedDevices();
+      const existingIndex = list.findIndex((d) => d.deviceId === current.fingerprint);
+      const newDevice: DeviceBindingInfo = data.device || {
+        deviceId: current.fingerprint,
+        deviceName: customDeviceName?.trim() || current.summary || `جهاز محاسبي ${list.length + 1}`,
+        registeredAt: new Date().toISOString(),
+        isBound: true,
+        fingerprintHash: current.fingerprint,
+        isCurrent: true,
       };
+
+      if (existingIndex >= 0) {
+        list[existingIndex] = { ...list[existingIndex], ...newDevice };
+      } else {
+        list.push(newDevice);
+      }
+
+      this.saveAuthorizedDevices(list);
+
+      return {
+        success: true,
+        message: data.message || `تم ترخيص وإضافة [${newDevice.deviceName}] إلى قائمة الأجهزة المعتمدة بنجاح!`,
+        device: newDevice,
+      };
+    } catch (err) {
+      return { success: false, message: 'مفيش اتصال بالإنترنت أو السيرفر غير متصل.' };
     }
-
-    const current = this.getDeviceFingerprint();
-    const list = this.getAuthorizedDevices();
-
-    // Check if already in list
-    const existingIndex = list.findIndex((d) => d.deviceId === current.fingerprint);
-    const newDevice: DeviceBindingInfo = {
-      deviceId: current.fingerprint,
-      deviceName: customDeviceName?.trim() || current.summary || `جهاز محاسبي ${list.length + 1}`,
-      registeredAt: new Date().toISOString(),
-      isBound: true,
-      fingerprintHash: current.fingerprint,
-      isCurrent: true,
-    };
-
-    if (existingIndex >= 0) {
-      list[existingIndex] = { ...list[existingIndex], ...newDevice };
-    } else {
-      list.push(newDevice);
-    }
-
-    this.saveAuthorizedDevices(list);
-
-    return {
-      success: true,
-      message: `تم ترخيص وإضافة [${newDevice.deviceName}] إلى قائمة الأجهزة المعتمدة بنجاح!`,
-      device: newDevice,
-    };
   }
 
   /**

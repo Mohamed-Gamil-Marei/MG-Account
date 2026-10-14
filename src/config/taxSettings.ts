@@ -8,6 +8,7 @@ export interface TaxConfig {
   effectiveDate: string; // ISO format
   corporateTaxRate: number; // Flat rate for corporations
   individualBrackets: TaxBracket[]; // Bracketed rates for individuals
+  personalExemption?: number; // Personal exemption amount
 }
 
 /**
@@ -18,6 +19,7 @@ export const TAX_CONFIGS: TaxConfig[] = [
   {
     effectiveDate: '2023-01-01',
     corporateTaxRate: 0.225, // 22.5% Flat Rate
+    personalExemption: 20000,
     individualBrackets: [
       { minAmount: 0, maxAmount: 21000, rate: 0 },
       { minAmount: 21000, maxAmount: 30000, rate: 0.025 },
@@ -42,14 +44,15 @@ export function getTaxConfig(date: string = new Date().toISOString()): TaxConfig
 /**
  * Calculates bracketed tax for individual income
  */
-export function calculateBracketedTax(profit: number, brackets: TaxBracket[]): number {
-  if (profit <= 0) return 0;
+export function calculateBracketedTax(profit: number, brackets: TaxBracket[], personalExemption: number = 0): number {
+  const taxablePool = Math.max(0, profit - personalExemption);
+  if (taxablePool <= 0) return 0;
   let totalTax = 0;
   for (const bracket of brackets) {
-    if (profit > bracket.minAmount) {
+    if (taxablePool > bracket.minAmount) {
       const taxableInBracket = bracket.maxAmount 
-        ? Math.min(profit, bracket.maxAmount) - bracket.minAmount 
-        : profit - bracket.minAmount;
+        ? Math.min(taxablePool, bracket.maxAmount) - bracket.minAmount 
+        : taxablePool - bracket.minAmount;
       if (taxableInBracket > 0) {
         totalTax += taxableInBracket * bracket.rate;
       }

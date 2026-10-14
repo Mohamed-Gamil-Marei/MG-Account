@@ -80,6 +80,7 @@ import { WhatsAppDocumentShareModal } from './archive/WhatsAppDocumentShareModal
 import { WhatsAppCodeSenderModal } from './common/WhatsAppCodeSenderModal';
 import { SmartProcedureFeeEstimatorModal } from './SmartProcedureFeeEstimatorModal';
 import { CompanyDossierAndTokenLabelModal } from './archive/CompanyDossierAndTokenLabelModal';
+import { BatchTokenLabelsPrintModal } from './archive/BatchTokenLabelsPrintModal';
 import { ClientExcelImportModal } from './archive/ClientExcelImportModal';
 import { ClientExcelEngine } from '../utils/clientExcelEngine';
 import { ClosingChecklistPanel } from './archive/ClosingChecklistPanel';
@@ -186,6 +187,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
   // Company Master Dossier & Token Keyring Label Modal State
   const [isTokenDossierModalOpen, setIsTokenDossierModalOpen] = useState(false);
   const [tokenDossierTargetClient, setTokenDossierTargetClient] = useState<ClientArchiveRecord | null>(null);
+  const [isBatchLabelsModalOpen, setIsBatchLabelsModalOpen] = useState(false);
 
   // Security Auth for Edit Mode
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -986,6 +988,12 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
             label: 'طباعة كشف البوابات (مشفر)',
             icon: KeyRound,
             onClick: () => setIsExportAuthModalOpen(true),
+          },
+          {
+            id: 'batch-token-labels',
+            label: 'طباعة ليبلات A4 الجماعية (ميداليات التوكن)',
+            icon: Scissors,
+            onClick: () => setIsBatchLabelsModalOpen(true),
           },
         ]}
         searchTerm={searchTerm}
@@ -3966,6 +3974,16 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
           isOpen={isBulkExcelModalOpen}
           onClose={() => setIsBulkExcelModalOpen(false)}
           state={state}
+        />
+      )}
+
+      {/* Batch Token Labels Print Modal (A4 Bulk Keyring Labels) */}
+      {isBatchLabelsModalOpen && (
+        <BatchTokenLabelsPrintModal
+          isOpen={isBatchLabelsModalOpen}
+          onClose={() => setIsBatchLabelsModalOpen(false)}
+          clients={filteredClients}
+          officeProfile={state.officeProfile}
         />
       )}
     </>
