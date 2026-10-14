@@ -728,7 +728,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
   };
 
   const handleBatchPostInvoices = () => {
-    const unposted = state.invoices.filter((inv) => !PostingEngineService.isInvoicePosted(inv.invoiceNumber).isPosted);
+    const unposted = state.invoices.filter((inv) => !PostingEngineService.isInvoicePosted(inv.invoiceNumber, inv.clientId || inv.partnerName).isPosted);
     if (unposted.length === 0) {
       alert('كافة الفواتير الحالية مرحلة بالفعل لدفتر اليومية العامة.');
       return;
@@ -1020,7 +1020,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
               <span>ترحيل اليومية</span>
               {(() => {
                 const unpostedCount = state.invoices.filter(
-                  (inv) => !PostingEngineService.isInvoicePosted(inv.invoiceNumber).isPosted
+                  (inv) => !PostingEngineService.isInvoicePosted(inv.invoiceNumber, inv.clientId || inv.partnerName).isPosted
                 ).length;
                 if (unpostedCount > 0) {
                   return (
@@ -1141,7 +1141,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({ state }) => {
                       </td>
                       <td className="py-1.5 px-2.5 text-center">
                         {(() => {
-                          const postInfo = PostingEngineService.isInvoicePosted(inv.invoiceNumber);
+                          const postInfo = PostingEngineService.isInvoicePosted(inv.invoiceNumber, inv.clientId || inv.partnerName);
                           if (postInfo.isPosted) {
                             return (
                               <span

@@ -161,7 +161,7 @@ export async function createApp(): Promise<express.Express> {
   if (dbPath !== ":memory:" && !fs.existsSync(path.dirname(dbPath))) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   }
-  const db = new Database(dbPath);
+  let db = new Database(dbPath);
   app.locals.db = db;
   (app as any).db = db;
 
@@ -370,16 +370,16 @@ export async function createApp(): Promise<express.Express> {
     fs.mkdirSync(backupDir, { recursive: true });
   }
 
-  function runDailyBackup() {
+  async function runDailyBackup() {
     try {
       const dateStr = new Date().toISOString().slice(0, 10);
       const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, "-");
-      const backupName = `backup_${dateStr}_${timeStr}`;
+      const backupName = `backup_${dateStr}_${timeStr}_${Date.now()}`;
       const targetBackupPath = path.join(backupDir, backupName);
       fs.mkdirSync(targetBackupPath, { recursive: true });
 
       const dbBackupPath = path.join(targetBackupPath, "app.db");
-      db.backup(dbBackupPath);
+      await db.backup(dbBackupPath);
 
       const docsDir = process.env.DOCUMENTS_DIR || path.join(dataDir, "documents");
       if (fs.existsSync(docsDir)) {
@@ -419,17 +419,57 @@ export async function createApp(): Promise<express.Express> {
     }
   }
 
-  // Daily backup scheduler at 11:00 PM (23:00)
+  // Daily backup scheduler and 24-hour catch-up on server startup
+  async function checkAndRunStartupBackup(): Promise<string | null> {
+    try {
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const items = fs.readdirSync(backupDir, { withFileTypes: true });
+      const backups = items
+        .filter(item => item.isDirectory() && item.name.startsWith("backup_"))
+        .map(item => {
+          const itemPath = path.join(backupDir, item.name);
+          return {
+            name: item.name,
+            mtimeMs: fs.statSync(itemPath).mtimeMs,
+          };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+      const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      if (backups.length === 0 || (now - backups[0].mtimeMs) >= TWENTY_FOUR_HOURS_MS) {
+        console.log("[BackupScheduler] No backup found within the last 24 hours (server may have been offline at 23:00). Creating automatic catch-up backup now...");
+        return await runDailyBackup();
+      }
+    } catch (err) {
+      console.error("[BackupScheduler] Error checking startup backup:", err);
+    }
+    return null;
+  }
+
+  app.locals.checkAndRunStartupBackup = checkAndRunStartupBackup;
+  (app as any).checkAndRunStartupBackup = checkAndRunStartupBackup;
+
   if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
-    setInterval(() => {
+    // 1. Run immediate check on startup: if server was down at 23:00 and last backup is older than 24h, take backup now
+    checkAndRunStartupBackup();
+
+    // 2. Schedule recurring checks: at 23:00 daily OR if 24 hours elapsed without a backup
+    setInterval(async () => {
       const now = new Date();
       if (now.getHours() === 23 && now.getMinutes() === 0) {
         const todayStr = now.toISOString().slice(0, 10);
-        const backups = fs.readdirSync(backupDir);
+        const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir) : [];
         const alreadyDone = backups.some(b => b.includes(todayStr));
         if (!alreadyDone) {
-          runDailyBackup();
+          await runDailyBackup();
         }
+      } else {
+        // Hourly check to catch up if missed
+        await checkAndRunStartupBackup();
       }
     }, 60 * 1000);
   }
@@ -1061,7 +1101,7 @@ export async function createApp(): Promise<express.Express> {
 
       // Obligatory backup before any purge
       try {
-        runDailyBackup();
+        await runDailyBackup();
       } catch (backupErr) {
         console.error("Obligatory reset backup failed:", backupErr);
         return res.status(500).json({ success: false, error: "فشل إنشاء النسخة الاحتياطية الإجبارية قبل التفريغ." });
@@ -1403,7 +1443,7 @@ export async function createApp(): Promise<express.Express> {
     return JSON.stringify(parsedData);
   }
 
-  app.post("/api/data/:entityType", (req, res) => {
+  const handleDataWrite = (req: express.Request, res: express.Response) => {
     try {
       const { entityType } = req.params;
       if (!entityTypes.includes(entityType)) {
@@ -1517,6 +1557,14 @@ export async function createApp(): Promise<express.Express> {
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
+  };
+
+  app.post("/api/data/:entityType", handleDataWrite);
+  app.put("/api/data/:entityType", handleDataWrite);
+  app.put("/api/data/:entityType/:id", (req, res) => {
+    req.body = req.body || {};
+    if (!req.body.id) req.body.id = req.params.id;
+    return handleDataWrite(req, res);
   });
 
   // --- Secure Reveal Endpoint for Client Credentials (with Audit Logging) ---
@@ -1587,6 +1635,22 @@ export async function createApp(): Promise<express.Express> {
         credentials: resultCredentials,
         message: "تم إظهار بيانات الاعتماد بنجاح وتسجيل العملية في سجل المراجعة (Audit Log)."
       });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/data/:entityType", (req, res) => {
+    try {
+      const { entityType } = req.params;
+      if (!entityTypes.includes(entityType)) {
+        return res.status(400).json({ success: false, error: "نوع البيانات غير معروف." });
+      }
+      const user = (req as any).user;
+      if (!checkEntityAccess(user, entityType, 'DELETE')) {
+        return res.status(403).json({ success: false, error: "غير مصرح: لا تملك صلاحية الحذف لهذا النوع من البيانات." });
+      }
+      return res.status(400).json({ success: false, error: "معرف السجل مطلوب للحذف." });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -3088,19 +3152,41 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     }
   });
 
-  app.post("/api/server-backups/create", (req: any, res) => {
+  app.post("/api/server-backups/create", async (req: any, res) => {
     try {
       if (req.user?.role !== 'ADMIN') {
         return res.status(403).json({ success: false, error: "غير مصرح: إنشاء النسخ الاحتياطي متاح للمدير فقط." });
       }
-      const backupName = runDailyBackup();
-      res.json({ success: true, message: `تم إنشاء النسخة الاحتياطية [${backupName}] بنجاح.` });
+      const backupName = await runDailyBackup();
+      res.json({ success: true, message: `تم إنشاء النسخة الاحتياطية [${backupName}] بنجاح.`, backupName });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  app.post("/api/server-backups/restore", (req: any, res) => {
+  app.get(["/api/server-backups/:backupName/download", "/api/server-backups/download/:backupName"], (req: any, res) => {
+    try {
+      if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "غير مصرح: تحميل وتصدير النسخ الاحتياطية متاح للمدير فقط." });
+      }
+      const { backupName } = req.params;
+      if (!backupName || typeof backupName !== 'string' || !/^backup_[A-Za-z0-9_-]+$/.test(backupName) || backupName.includes("..") || backupName.includes("/")) {
+        return res.status(400).json({ success: false, error: "اسم النسخة الاحتياطية غير صالح." });
+      }
+
+      const targetPath = path.join(backupDir, backupName);
+      const backupDbPath = path.join(targetPath, "app.db");
+      if (!fs.existsSync(targetPath) || !fs.existsSync(backupDbPath)) {
+        return res.status(404).json({ success: false, error: "ملف النسخة الاحتياطية غير موجود." });
+      }
+
+      res.download(backupDbPath, `${backupName}.db`);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/server-backups/restore", async (req: any, res) => {
     try {
       if (req.user?.role !== 'ADMIN') {
         return res.status(403).json({ success: false, error: "غير مصرح: استعادة النسخ الاحتياطية متاحة للمدير فقط." });
@@ -3133,14 +3219,14 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       }
 
       // 2. Emergency backup of current state
-      runDailyBackup();
+      await runDailyBackup();
 
       // 3. Close db & replace db file
       db.close();
 
-      const currentDbPath = path.join(dataDir, "app.db");
-      const currentWalPath = path.join(dataDir, "app.db-wal");
-      const currentShmPath = path.join(dataDir, "app.db-shm");
+      const currentDbPath = process.env.DB_PATH || path.join(dataDir, "app.db");
+      const currentWalPath = `${currentDbPath}-wal`;
+      const currentShmPath = `${currentDbPath}-shm`;
       const dbWalPathAlt = path.join(dataDir, "db.app-wal");
       const dbShmPathAlt = path.join(dataDir, "db.app-shm");
 
@@ -3151,6 +3237,13 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       });
 
       fs.copyFileSync(backupDbPath, currentDbPath);
+
+      // Reopen db for test environment and memory preservation
+      if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+        db = new Database(currentDbPath);
+        app.locals.db = db;
+        (app as any).db = db;
+      }
 
       // Restore documents: replace instead of merge
       const backupDocsPath = path.join(targetPath, "documents");
@@ -3167,9 +3260,11 @@ ${JSON.stringify(benfordStats || [], null, 2)}
 
       res.json({ success: true, message: "تمت استعادة النسخة الاحتياطية بنجاح. يتم إعادة تشغيل النظام الآن..." });
 
-      setTimeout(() => {
-        process.exit(0);
-      }, 1000);
+      if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+        setTimeout(() => {
+          process.exit(0);
+        }, 1000);
+      }
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

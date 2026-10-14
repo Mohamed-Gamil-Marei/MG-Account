@@ -116,6 +116,41 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       const found = savedEntries.some((e: any) => e.id === imbalancedEntryId);
       expect(found).toBe(false);
     });
+
+    it('يقبل قيداً متزناً بتاريخ في سنة غير مقفولة (مثل 2027) برمز نجاح، و GET يثبت حفظه', async () => {
+      const balancedEntryId = 'je-test-balanced-2027';
+      const balancedPayload = {
+        id: balancedEntryId,
+        data: {
+          id: balancedEntryId,
+          date: '2027-08-15',
+          description: 'قيد رواتب متزن في سنة مالية مفتوحة 2027',
+          lines: [
+            { id: 'l1', accountCode: '101', debit: 6000, credit: 0 },
+            { id: 'l2', accountCode: '102', debit: 0, credit: 6000 },
+          ],
+        },
+      };
+
+      const postRes = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send(balancedPayload);
+
+      expect(postRes.status).toBe(200);
+      expect(postRes.body.success).toBe(true);
+
+      const getRes = await request(app)
+        .get('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`]);
+
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.success).toBe(true);
+
+      const savedEntries = getRes.body.data || [];
+      const found = savedEntries.some((e: any) => e.id === balancedEntryId);
+      expect(found).toBe(true);
+    });
   });
 
   // =========================================================================
@@ -317,6 +352,33 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       expect(clientRow).toBeDefined();
       expect(auditRow).toBeDefined();
     });
+
+    it('يقبل الطلب بكلمة المرور الصحيحة وتأكيد "تفريغ"، ويفرغ جداول البيانات مع الإبقاء على سجلات auditLogs', async () => {
+      // التأكد من وجود سجلات عملاء قبل التفريغ
+      db.prepare(`
+        INSERT OR REPLACE INTO clients (id, data, updated_at, version, updated_by)
+        VALUES ('client-to-purge-1', '{"name":"عميل تجريبي للتفريغ"}', datetime('now'), 1, 'admin')
+      `).run();
+
+      const res = await request(app)
+        .post('/api/admin/reset-production')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          confirmationText: 'تفريغ',
+          passcode: TEST_PURGE_MASTER,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      // جداول البيانات تتفرّغ (جدول clients فارغ)
+      const clientCount = db.prepare('SELECT COUNT(*) as count FROM clients').get() as { count: number };
+      expect(clientCount.count).toBe(0);
+
+      // جدول auditLogs يفضل فيه السجل اللي كان موجود قبل التفريغ
+      const auditRow = db.prepare('SELECT id FROM auditLogs WHERE id = ?').get('audit-safe-1');
+      expect(auditRow).toBeDefined();
+    });
   });
 
   // =========================================================================
@@ -427,4 +489,200 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       });
     });
   });
+
+  // =========================================================================
+  // (هـ) محاولات AUDITOR إجراء POST/PUT/DELETE على القيود والحسابات ورفضها بـ 403
+  // =========================================================================
+  describe('(هـ) حظر تعديل أو حذف أو إضافة البيانات على المراجع القانوني AUDITOR (403 Forbidden)', () => {
+    const targetEntities = ['journalEntries', 'accounts'];
+
+    for (const entity of targetEntities) {
+      it(`يرفض محاولة AUDITOR إنشاء سجل جديد عبر POST على /api/data/${entity} برمز 403`, async () => {
+        const res = await request(app)
+          .post(`/api/data/${entity}`)
+          .set('Cookie', [`session_token=${auditorToken}`])
+          .send({
+            id: `auditor-post-${entity}-test`,
+            data: { id: `auditor-post-${entity}-test`, name: 'Audit Test' },
+          });
+
+        expect(res.status).toBe(403);
+        expect(res.body.success).toBe(false);
+      });
+
+      it(`يرفض محاولة AUDITOR تعديل سجل عبر PUT على /api/data/${entity} برمز 403`, async () => {
+        const res = await request(app)
+          .put(`/api/data/${entity}`)
+          .set('Cookie', [`session_token=${auditorToken}`])
+          .send({
+            id: `auditor-put-${entity}-test`,
+            data: { id: `auditor-put-${entity}-test`, name: 'Audit Test Update' },
+          });
+
+        expect(res.status).toBe(403);
+        expect(res.body.success).toBe(false);
+      });
+
+      it(`يرفض محاولة AUDITOR حذف سجل عبر DELETE على /api/data/${entity}/:id برمز 403`, async () => {
+        const res = await request(app)
+          .delete(`/api/data/${entity}/auditor-del-${entity}-test`)
+          .set('Cookie', [`session_token=${auditorToken}`]);
+
+        expect(res.status).toBe(403);
+        expect(res.body.success).toBe(false);
+      });
+    }
+  });
+
+  // =========================================================================
+  // (و) اختبار استعادة نسخة احتياطية: ينسخ، يغيّر بيانات، يستعيد، ويتأكد إن البيانات رجعت
+  // =========================================================================
+  describe('(و) اختبار استعادة النسخة الاحتياطية (Backup & Restore Real Flow)', () => {
+    it('يقوم بأخذ نسخة، ثم تغيير البيانات، ثم استعادة النسخة، ويتأكد من عودة البيانات بدقة', async () => {
+      // 1. إنشاء حساب أصلي قبل أخذ النسخة الاحتياطية
+      const originalAccount = {
+        id: 'acc-restore-target-001',
+        data: {
+          id: 'acc-restore-target-001',
+          code: '1050',
+          name: 'حساب الصندوق الميداني الأصلي',
+          type: 'ASSET',
+          balance: 25000,
+        },
+      };
+
+      const seedRes = await request(app)
+        .post('/api/data/accounts')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send(originalAccount);
+
+      expect(seedRes.status).toBe(200);
+
+      // التأكد من وجود الحساب
+      const verifySeedRes = await request(app)
+        .get('/api/data/accounts')
+        .set('Cookie', [`session_token=${adminToken}`]);
+
+      const foundInitial = verifySeedRes.body.data.find((a: any) => a.id === originalAccount.id);
+      expect(foundInitial).toBeDefined();
+      expect(foundInitial.name).toBe('حساب الصندوق الميداني الأصلي');
+
+      // 2. إنشاء نسخة احتياطية عبر السيرفر
+      const backupRes = await request(app)
+        .post('/api/server-backups/create')
+        .set('Cookie', [`session_token=${adminToken}`]);
+
+      expect(backupRes.status).toBe(200);
+      expect(backupRes.body.success).toBe(true);
+      const backupName = backupRes.body.backupName;
+      expect(backupName).toBeDefined();
+      expect(backupName).toMatch(/^backup_/);
+
+      // 3. تغيير البيانات بعد أخذ النسخة:
+      // (أ) تعديل الحساب الأصلي
+      const modifiedAccount = {
+        id: 'acc-restore-target-001',
+        data: {
+          id: 'acc-restore-target-001',
+          code: '1050',
+          name: 'حساب تم العبث به بعد النسخة الاحتياطية',
+          type: 'ASSET',
+          balance: 99999,
+        },
+      };
+
+      const putRes = await request(app)
+        .put('/api/data/accounts')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send(modifiedAccount);
+
+      expect(putRes.status).toBe(200);
+
+      // (ب) إضافة حساب دخيل جديد غير موجود في النسخة
+      const junkAccount = {
+        id: 'acc-junk-post-backup-002',
+        data: {
+          id: 'acc-junk-post-backup-002',
+          code: '9999',
+          name: 'حساب مؤقت مضاف بعد النسخة الاحتياطية',
+          type: 'EXPENSE',
+          balance: 500,
+        },
+      };
+
+      const postJunkRes = await request(app)
+        .post('/api/data/accounts')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send(junkAccount);
+
+      expect(postJunkRes.status).toBe(200);
+
+      // التحقق من أن البيانات تغيرت فعلاً
+      const verifyChangedRes = await request(app)
+        .get('/api/data/accounts')
+        .set('Cookie', [`session_token=${adminToken}`]);
+
+      const foundModified = verifyChangedRes.body.data.find((a: any) => a.id === originalAccount.id);
+      expect(foundModified?.name).toBe('حساب تم العبث به بعد النسخة الاحتياطية');
+
+      const foundJunk = verifyChangedRes.body.data.find((a: any) => a.id === junkAccount.id);
+      expect(foundJunk).toBeDefined();
+
+      // 4. استعادة النسخة الاحتياطية
+      const restoreRes = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          backupName,
+          confirmationText: 'تأكيد الاستعادة',
+        });
+
+      expect(restoreRes.status).toBe(200);
+      expect(restoreRes.body.success).toBe(true);
+
+      // 5. التأكد التام من عودة البيانات إلى حالتها الأصلية
+      const verifyRestoredRes = await request(app)
+        .get('/api/data/accounts')
+        .set('Cookie', [`session_token=${adminToken}`]);
+
+      expect(verifyRestoredRes.status).toBe(200);
+
+      // الحساب الأصلي رجع لاسمه ورصيده الأصلي
+      const foundRestored = verifyRestoredRes.body.data.find((a: any) => a.id === originalAccount.id);
+      expect(foundRestored).toBeDefined();
+      expect(foundRestored.name).toBe('حساب الصندوق الميداني الأصلي');
+      expect(foundRestored.balance).toBe(25000);
+
+      // الحساب الدخيل الذي أضيف بعد النسخة اختفى
+      const foundJunkAfterRestore = verifyRestoredRes.body.data.find((a: any) => a.id === junkAccount.id);
+      expect(foundJunkAfterRestore).toBeUndefined();
+    });
+
+    it('يرفض طلب الاستعادة إذا كان نص التأكيد غير صحيح برمز 400', async () => {
+      const res = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          backupName: 'backup_test_dummy',
+          confirmationText: 'نص خاطئ',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('يرفض محاولة غير المدير (مثل ACCOUNTANT) استعادة نسخة احتياطية برمز 403', async () => {
+      const res = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({
+          backupName: 'backup_test_dummy',
+          confirmationText: 'تأكيد الاستعادة',
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+    });
+  });
 });
+

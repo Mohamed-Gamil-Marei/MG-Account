@@ -672,6 +672,8 @@ export interface Invoice {
   status: 'DRAFT' | 'ISSUED' | 'PAID' | 'PARTIAL' | 'CANCELLED';
   paymentMethod: 'CASH' | 'CREDIT' | 'BANK' | 'INSTAPAY';
   qrPayload: string;
+  currency?: CurrencyCode | string;
+  exchangeRate?: number;
   notes?: string;
   
   // ETA Electronic Invoicing & e-Receipt SDK specific fields

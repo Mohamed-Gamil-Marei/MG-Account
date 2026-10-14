@@ -666,6 +666,16 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <a
+                            href={`/api/server-backups/${b.name}/download`}
+                            download={`${b.name}.db`}
+                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl font-bold border border-blue-200 flex items-center gap-1.5 cursor-pointer text-xs"
+                            title="تصدير وتحميل النسخة الاحتياطية خارج القرص"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>تصدير خارجي (تحميل)</span>
+                          </a>
+
                           {selectedBackupToRestore === b.name ? (
                             <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
                               <input

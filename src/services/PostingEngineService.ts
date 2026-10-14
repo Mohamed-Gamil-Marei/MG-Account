@@ -29,11 +29,19 @@ export class PostingEngineService {
     accounts: Account[],
     preferredCodes: string[],
     fallbackCategory: string,
-    fallbackName: string
+    fallbackName: string,
+    disallowedSummaryCodes: string[] = ['41', '214']
   ): { id: string; code: string; name: string } {
     for (const code of preferredCodes) {
       const acc = accounts.find((a) => a.code === code);
-      if (acc) return { id: acc.id, code: acc.code, name: acc.name };
+      if (acc) {
+        if (disallowedSummaryCodes.includes(acc.code)) {
+          throw new Error(
+            `تعذر ترحيل القيد: الحساب المطلوب بكود (${acc.code} - ${acc.name}) هو حساب رئيسي/تجميعي. يرجى إعداد وتحديد حساب تحليلي تفصيلي صريح في دليل الحسابات (مثل 4110 لإيرادات المبيعات أو 2230 لضريبة القيمة المضافة) بدلاً من الترحيل على حساب رئيسي.`
+          );
+        }
+        return { id: acc.id, code: acc.code, name: acc.name };
+      }
     }
     throw new Error(
       `تعذر ترحيل القيد: الحساب المطلوب بكود (${preferredCodes.join(', ')}) غير موجود في دليل الحسابات المعتمد.`
@@ -46,7 +54,8 @@ export class PostingEngineService {
   public static buildInvoiceJournalEntry(
     invoice: Invoice,
     accounts: Account[],
-    fiscalYear?: number
+    fiscalYear?: number,
+    userCanPost?: boolean
   ): Omit<JournalEntry, 'id' | 'serialNumber' | 'entryNumber' | 'createdAt' | 'updatedAt' | 'auditTrail'> {
     const lines: JournalEntryLine[] = [];
     const entryFiscalYear = fiscalYear || new Date(invoice.date).getFullYear();
@@ -65,11 +74,11 @@ export class PostingEngineService {
     // WHT Asset Account (1% أ.ت.ص)
     const whtAccount = this.findAccount(accounts, ['1230', '1231'], 'ASSETS', 'مصلحة الضرائب - ضريبة خصم وتحصيل (أ.ت.ص)');
 
-    // Revenue Account (إيرادات المبيعات)
-    const revenueAccount = this.findAccount(accounts, ['4110', '4100', '41'], 'REVENUES', 'إيرادات المبيعات والخدمات');
+    // Revenue Account (إيرادات المبيعات) - Disallow fallback to parent summary code '41'
+    const revenueAccount = this.findAccount(accounts, ['4110', '4100', '41'], 'REVENUES', 'إيرادات المبيعات والخدمات', ['41']);
 
-    // VAT Liability Account (ضريبة القيمة المضافة 14%)
-    const vatAccount = this.findAccount(accounts, ['2230', '2145', '2140', '214'], 'LIABILITIES', 'مصلحة الضرائب على القيمة المضافة');
+    // VAT Liability Account (ضريبة القيمة المضافة 14%) - Disallow fallback to parent summary code '214'
+    const vatAccount = this.findAccount(accounts, ['2230', '2145', '2140', '214'], 'LIABILITIES', 'مصلحة الضرائب على القيمة المضافة', ['214']);
 
     const totalBeforeTax = Math.round((invoice.subtotal - (invoice.totalDiscount || 0)) * 100) / 100;
     const vatAmount = Math.round((invoice.totalVat || 0) * 100) / 100;
@@ -78,14 +87,18 @@ export class PostingEngineService {
     // Net receivable or cash to receive = Total before tax + VAT - WHT
     const netCashOrReceivable = Math.round((totalBeforeTax + vatAmount - whtAmount) * 100) / 100;
 
+    // Currency resolution: take currency from invoice or default to EGP
+    const invoiceCurrency = (invoice.currency as any) || 'EGP';
+    const invoiceExchangeRate = invoice.exchangeRate || 1;
+
     // Line 1: Debit - Cash / Bank / Receivable
     lines.push({
       id: `line-${Date.now()}-1`,
       accountId: targetPaymentAccount.id,
       accountCode: targetPaymentAccount.code,
       accountName: targetPaymentAccount.name,
-      currency: 'EGP',
-      exchangeRate: 1,
+      currency: invoiceCurrency,
+      exchangeRate: invoiceExchangeRate,
       debit: netCashOrReceivable,
       credit: 0,
       description: `استحقاق فاتورة مبيعات رقم ${invoice.invoiceNumber} - العميل: ${invoice.partnerName}`,
@@ -98,8 +111,8 @@ export class PostingEngineService {
         accountId: whtAccount.id,
         accountCode: whtAccount.code,
         accountName: whtAccount.name,
-        currency: 'EGP',
-        exchangeRate: 1,
+        currency: invoiceCurrency,
+        exchangeRate: invoiceExchangeRate,
         debit: whtAmount,
         credit: 0,
         description: `ضريبة خصم وتحصيل أ.ت.ص مخصومة من فاتورة ${invoice.invoiceNumber}`,
@@ -112,8 +125,8 @@ export class PostingEngineService {
       accountId: revenueAccount.id,
       accountCode: revenueAccount.code,
       accountName: revenueAccount.name,
-      currency: 'EGP',
-      exchangeRate: 1,
+      currency: invoiceCurrency,
+      exchangeRate: invoiceExchangeRate,
       debit: 0,
       credit: totalBeforeTax,
       description: `إيراد مبيعات فاتورة رقم ${invoice.invoiceNumber}`,
@@ -127,8 +140,8 @@ export class PostingEngineService {
         accountId: vatAccount.id,
         accountCode: vatAccount.code,
         accountName: vatAccount.name,
-        currency: 'EGP',
-        exchangeRate: 1,
+        currency: invoiceCurrency,
+        exchangeRate: invoiceExchangeRate,
         debit: 0,
         credit: vatAmount,
         description: `ضريبة القيمة المضافة (${effectiveRate}%) على فاتورة رقم ${invoice.invoiceNumber}`,
@@ -140,14 +153,18 @@ export class PostingEngineService {
     const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
     const difference = Math.abs(totalDebit - totalCredit);
 
+    // Only set isPosted to true if the user explicitly has canPostEntries permission
+    const isPosted = typeof userCanPost === 'boolean' ? userCanPost : !!db.getCurrentUser()?.canPostEntries;
+
     return {
       date: invoice.date || new Date().toISOString().substring(0, 10),
       description: `قيد ترحيل آلي لفاتورة مبيعات إلكترونية رقم [${invoice.invoiceNumber}] - العميل: ${invoice.partnerName}`,
       entryType: 'SALES',
-      currency: 'EGP',
+      currency: invoiceCurrency,
+      exchangeRate: invoiceExchangeRate,
       clientId: invoice.clientId,
       clientName: invoice.partnerName,
-      isPosted: true,
+      isPosted,
       lines,
       totalDebit: Math.round(totalDebit * 100) / 100,
       totalCredit: Math.round(totalCredit * 100) / 100,
@@ -158,7 +175,11 @@ export class PostingEngineService {
   /**
    * ترحيل فاتورة إلكترونية معينة إلى دفتر اليومية
    */
-  public static postInvoice(invoiceId: string, currentUser?: string): PostResult {
+  public static postInvoice(
+    invoiceId: string,
+    currentUser?: string | any,
+    options?: { userCanPost?: boolean }
+  ): PostResult {
     const state = db.getState();
     const invoice = state.invoices.find((i) => i.id === invoiceId);
 
@@ -166,10 +187,19 @@ export class PostingEngineService {
       return { success: false, error: 'لم يتم العثور على الفاتورة المطلوبة.' };
     }
 
-    // Check if already posted
-    const existingEntry = state.journalEntries.find(
-      (je) => je.entryType === 'SALES' && je.referenceNumber === invoice.invoiceNumber
-    );
+    // Check if already posted for this specific (client + invoice number)
+    const existingEntry = state.journalEntries.find((je) => {
+      if (je.entryType !== 'SALES' || je.referenceNumber !== invoice.invoiceNumber) {
+        return false;
+      }
+      const jeClient = je.clientId || je.clientName;
+      const invClient = invoice.clientId || invoice.partnerName;
+      if (jeClient && invClient) {
+        return jeClient === invClient;
+      }
+      return true;
+    });
+
     if (existingEntry) {
       return {
         success: false,
@@ -178,8 +208,21 @@ export class PostingEngineService {
       };
     }
 
+    // Determine user canPostEntries permission
+    let userCanPost = options?.userCanPost;
+    if (userCanPost === undefined) {
+      if (typeof currentUser === 'object' && currentUser !== null) {
+        userCanPost = !!currentUser.canPostEntries;
+      } else if (typeof currentUser === 'string' && currentUser.trim()) {
+        const u = state.users?.find((x) => x.id === currentUser || x.email === currentUser || x.name === currentUser);
+        userCanPost = u ? !!u.canPostEntries : false;
+      } else {
+        userCanPost = !!db.getCurrentUser()?.canPostEntries;
+      }
+    }
+
     try {
-      const entryDraft = this.buildInvoiceJournalEntry(invoice, state.accounts);
+      const entryDraft = this.buildInvoiceJournalEntry(invoice, state.accounts, undefined, userCanPost);
       const diff = Math.abs(entryDraft.totalDebit - entryDraft.totalCredit);
 
       if (diff > 0.005) {
@@ -194,9 +237,9 @@ export class PostingEngineService {
       // Log in audit logs & sync
       db.logAudit(
         'POST',
-        `ترحيل آلي للفاتورة رقم ${invoice.invoiceNumber} إلى قيد اليومية رقم ${createdEntry.serialNumber}`,
+        `ترحيل آلي للفاتورة رقم ${invoice.invoiceNumber} إلى قيد اليومية رقم ${createdEntry.serialNumber} (${createdEntry.isPosted ? 'مرحّل' : 'مسودة غير مرحّلة'})`,
         null,
-        { invoiceId: invoice.id, journalSerial: createdEntry.serialNumber }
+        { invoiceId: invoice.id, journalSerial: createdEntry.serialNumber, isPosted: createdEntry.isPosted }
       );
 
       cloudSync.pushStateToCloud(db.getState());
@@ -216,7 +259,11 @@ export class PostingEngineService {
   /**
    * ترحيل مجمع لمجموعة فواتير غير مرحلة
    */
-  public static batchPostInvoices(invoiceIds: string[], currentUser?: string): BatchPostResult {
+  public static batchPostInvoices(
+    invoiceIds: string[],
+    currentUser?: string | any,
+    options?: { userCanPost?: boolean }
+  ): BatchPostResult {
     const result: BatchPostResult = {
       totalProcessed: invoiceIds.length,
       postedCount: 0,
@@ -226,7 +273,7 @@ export class PostingEngineService {
     };
 
     invoiceIds.forEach((id) => {
-      const postRes = this.postInvoice(id, currentUser);
+      const postRes = this.postInvoice(id, currentUser, options);
       if (postRes.success && postRes.journalEntry) {
         result.postedCount++;
         result.postedEntries.push(postRes.journalEntry);
@@ -328,11 +375,20 @@ export class PostingEngineService {
   /**
    * التحقق مما إذا كانت الفاتورة مرحلة وربط القيد بها
    */
-  public static isInvoicePosted(invoiceNumber: string): { isPosted: boolean; serialNumber?: string; entryId?: string } {
+  public static isInvoicePosted(
+    invoiceNumber: string,
+    clientIdOrPartner?: string
+  ): { isPosted: boolean; serialNumber?: string; entryId?: string } {
     const state = db.getState();
-    const entry = state.journalEntries.find(
-      (je) => je.entryType === 'SALES' && je.referenceNumber === invoiceNumber
-    );
+    const entry = state.journalEntries.find((je) => {
+      if (je.entryType !== 'SALES' || je.referenceNumber !== invoiceNumber) {
+        return false;
+      }
+      if (!clientIdOrPartner) {
+        return true;
+      }
+      return je.clientId === clientIdOrPartner || je.clientName === clientIdOrPartner;
+    });
     if (entry) {
       return { isPosted: true, serialNumber: entry.serialNumber, entryId: entry.id };
     }
