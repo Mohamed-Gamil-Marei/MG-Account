@@ -61,7 +61,7 @@ function getAI(): GoogleGenAI | null {
   return aiClient;
 }
 
-async function startServer() {
+export async function createApp(): Promise<express.Express> {
   if (process.env.NODE_ENV === 'production') {
     const missingProdVars = [];
     if (!process.env.PASSWORD_PURGE_MASTER || process.env.PASSWORD_PURGE_MASTER.length < 16) missingProdVars.push('PASSWORD_PURGE_MASTER (min 16 chars)');
@@ -157,36 +157,13 @@ async function startServer() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
-  const dbPath = path.join(dataDir, "app.db");
+  const dbPath = process.env.DB_PATH || path.join(dataDir, "app.db");
+  if (dbPath !== ":memory:" && !fs.existsSync(path.dirname(dbPath))) {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  }
   const db = new Database(dbPath);
-
-  function cleanExpiredSessions() {
-    try {
-      const now = new Date().toISOString();
-      const result = db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
-      if (result.changes > 0) {
-        console.log(`[Sessions] Cleaned ${result.changes} expired sessions.`);
-      }
-    } catch (err) {
-      console.error("[Sessions] Error cleaning expired sessions:", err);
-    }
-  }
-  cleanExpiredSessions();
-  setInterval(cleanExpiredSessions, 60 * 60 * 1000);
-
-  function cleanExpiredLoginAttempts() {
-    try {
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      const result = db.prepare("DELETE FROM login_attempts WHERE timestamp < ?").run(cutoff);
-      if (result.changes > 0) {
-        console.log(`[LoginAttempts] Cleaned ${result.changes} login attempt records older than 24h.`);
-      }
-    } catch (err) {
-      console.error("[LoginAttempts] Error cleaning expired login attempts:", err);
-    }
-  }
-  cleanExpiredLoginAttempts();
-  setInterval(cleanExpiredLoginAttempts, 60 * 60 * 1000);
+  app.locals.db = db;
+  (app as any).db = db;
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -233,6 +210,38 @@ async function startServer() {
     INSERT OR IGNORE INTO settings (key, value, updated_at, updated_by)
     VALUES ('sendClientDataToGemini', 'false', datetime('now'), 'system')
   `).run();
+
+  function cleanExpiredSessions() {
+    try {
+      const now = new Date().toISOString();
+      const result = db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
+      if (result.changes > 0) {
+        console.log(`[Sessions] Cleaned ${result.changes} expired sessions.`);
+      }
+    } catch (err) {
+      console.error("[Sessions] Error cleaning expired sessions:", err);
+    }
+  }
+  cleanExpiredSessions();
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+  }
+
+  function cleanExpiredLoginAttempts() {
+    try {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const result = db.prepare("DELETE FROM login_attempts WHERE timestamp < ?").run(cutoff);
+      if (result.changes > 0) {
+        console.log(`[LoginAttempts] Cleaned ${result.changes} login attempt records older than 24h.`);
+      }
+    } catch (err) {
+      console.error("[LoginAttempts] Error cleaning expired login attempts:", err);
+    }
+  }
+  cleanExpiredLoginAttempts();
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    setInterval(cleanExpiredLoginAttempts, 60 * 60 * 1000);
+  }
 
   const entityTypes = [
     "clients",
@@ -411,17 +420,19 @@ async function startServer() {
   }
 
   // Daily backup scheduler at 11:00 PM (23:00)
-  setInterval(() => {
-    const now = new Date();
-    if (now.getHours() === 23 && now.getMinutes() === 0) {
-      const todayStr = now.toISOString().slice(0, 10);
-      const backups = fs.readdirSync(backupDir);
-      const alreadyDone = backups.some(b => b.includes(todayStr));
-      if (!alreadyDone) {
-        runDailyBackup();
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    setInterval(() => {
+      const now = new Date();
+      if (now.getHours() === 23 && now.getMinutes() === 0) {
+        const todayStr = now.toISOString().slice(0, 10);
+        const backups = fs.readdirSync(backupDir);
+        const alreadyDone = backups.some(b => b.includes(todayStr));
+        if (!alreadyDone) {
+          runDailyBackup();
+        }
       }
-    }
-  }, 60 * 1000);
+    }, 60 * 1000);
+  }
 
   // --- Rate Limiter for Login (SQLite-based with Email Lock) ---
   function loginRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -514,7 +525,9 @@ async function startServer() {
       return next();
     }
 
-    const token = req.cookies?.session_token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+    const token = req.cookies?.session_token || bearerToken;
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -1414,14 +1427,6 @@ async function startServer() {
       }
 
       const existingRow = db.prepare(`SELECT version, data FROM ${entityType} WHERE id = ?`).get(id) as any;
-      if (existingRow) {
-        if (version === undefined || version !== existingRow.version) {
-          return res.status(409).json({
-            success: false,
-            error: "تعارض إصدار (Version Conflict): تم تعديل هذا السجل بواسطة مستخدم آخر مسبقاً. يرجى تحديث الصفحة.",
-          });
-        }
-      }
 
       if (entityType === "clients") {
         const parsedData = typeof data === "string" ? JSON.parse(data) : data;
@@ -1434,6 +1439,16 @@ async function startServer() {
           data = validateAndProcessJournalEntryOnServer(id, data, existingRow, user);
         } catch (err: any) {
           return res.status(400).json({ success: false, error: err.message });
+        }
+      }
+
+      if (existingRow) {
+        const payloadVersion = version !== undefined ? version : (typeof data === "object" && data !== null ? (data.version ?? data._version) : undefined);
+        if (payloadVersion !== undefined && payloadVersion !== existingRow.version) {
+          return res.status(409).json({
+            success: false,
+            error: "تعارض إصدار (Version Conflict): تم تعديل هذا السجل بواسطة مستخدم آخر مسبقاً. يرجى تحديث الصفحة.",
+          });
         }
       }
 
@@ -3180,7 +3195,9 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   app.use(express.static(publicPath));
 
   // Vite middleware in dev or static files in production
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    // In test environment, skip mounting Vite dev server or static catch-all to keep API tests fast
+  } else if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -3194,7 +3211,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     });
   }
 
-    if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production") {
     const userCountRow = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
     if (userCountRow.count === 0 && !process.env.SETUP_TOKEN) {
       console.error("==========================================================================================");
@@ -3204,9 +3221,18 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     }
   }
 
+  return app;
+}
+
+export async function startServer() {
+  const app = await createApp();
+  const PORT = 3000;
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Office Accounting & Auditing System running on http://localhost:${PORT}`);
   });
+  return app;
 }
 
-startServer();
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  startServer();
+}
