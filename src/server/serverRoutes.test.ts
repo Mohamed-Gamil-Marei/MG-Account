@@ -1229,6 +1229,193 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       expect(latestAudit.action).toBe('REVEAL_CLIENT_CREDENTIALS');
     });
   });
+
+  describe('Task 4: Real-Server JV Concurrency & Numbering (المهمة 4: ترقيم القيود)', () => {
+    it('20 concurrent POST requests in the same year receive unique non-duplicated JV numbers', async () => {
+      const year = 2026;
+      const requests = Array.from({ length: 20 }, (_, i) => {
+        const id = `jv-concurrent-2026-${i + 1}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const entryPayload = {
+          date: `${year}-04-15`,
+          fiscalYear: year,
+          description: `قيد متزامن تجريبي ${i + 1}`,
+          status: 'DRAFT',
+          lines: [
+            { accountId: 'acc-1', accountCode: '101', debit: 500, credit: 0, description: 'مدين' },
+            { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 500, description: 'دائن' },
+          ],
+        };
+        return request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({ id, data: entryPayload });
+      });
+
+      const responses = await Promise.all(requests);
+      for (const res of responses) {
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+      }
+
+      // Read back all stored entries from DB
+      const activeDb = (app as any).db || db;
+      const allRows = activeDb.prepare("SELECT data FROM journalEntries").all() as any[];
+      const entries2026 = allRows
+        .map((r: any) => JSON.parse(r.data))
+        .filter((e: any) => e.description && e.description.startsWith('قيد متزامن تجريبي'));
+
+      expect(entries2026.length).toBe(20);
+
+      const serialNumbers = entries2026.map((e: any) => e.serialNumber);
+      const entryNumbers = entries2026.map((e: any) => e.entryNumber);
+
+      // Verify no duplicates
+      const uniqueSerials = new Set(serialNumbers);
+      const uniqueNumbers = new Set(entryNumbers);
+      expect(uniqueSerials.size).toBe(20);
+      expect(uniqueNumbers.size).toBe(20);
+
+      // Verify format
+      for (const s of serialNumbers) {
+        expect(s).toMatch(/^JV-2026-\d{4}$/);
+      }
+    });
+
+    it('entries in two different years receive independent JV numbers', async () => {
+      const entryYear1 = 2024;
+      const entryYear2 = 2025;
+
+      const id1 = `jv-year-2024-${Date.now()}`;
+      const payload1 = {
+        date: `${entryYear1}-06-01`,
+        fiscalYear: entryYear1,
+        description: 'قيد سنة 2024',
+        status: 'DRAFT',
+        lines: [
+          { accountId: 'acc-1', accountCode: '101', debit: 100, credit: 0 },
+          { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 100 },
+        ],
+      };
+
+      const res1 = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({ id: id1, data: payload1 });
+      expect(res1.status).toBe(200);
+
+      const id2 = `jv-year-2025-${Date.now()}`;
+      const payload2 = {
+        date: `${entryYear2}-07-15`,
+        fiscalYear: entryYear2,
+        description: 'قيد سنة 2025',
+        status: 'DRAFT',
+        lines: [
+          { accountId: 'acc-1', accountCode: '101', debit: 200, credit: 0 },
+          { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 200 },
+        ],
+      };
+
+      const res2 = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({ id: id2, data: payload2 });
+      expect(res2.status).toBe(200);
+
+      const activeDb = (app as any).db || db;
+      const row1 = activeDb.prepare("SELECT data FROM journalEntries WHERE id = ?").get(id1) as any;
+      const row2 = activeDb.prepare("SELECT data FROM journalEntries WHERE id = ?").get(id2) as any;
+
+      const parsed1 = JSON.parse(row1.data);
+      const parsed2 = JSON.parse(row2.data);
+
+      expect(parsed1.serialNumber).toMatch(/^JV-2024-\d{4}$/);
+      expect(parsed2.serialNumber).toMatch(/^JV-2025-\d{4}$/);
+      expect(parsed1.entryNumber).toBe(1);
+      expect(parsed2.entryNumber).toBe(1);
+    });
+
+    it('deletion then addition does not repeat a JV number', async () => {
+      const year = 2029; // Use unique isolated year
+
+      // 1. Add entry 1
+      const id1 = `jv-del-1-${Date.now()}`;
+      const res1 = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({
+          id: id1,
+          data: {
+            date: `${year}-01-10`,
+            fiscalYear: year,
+            description: 'قيد أول 2029',
+            status: 'DRAFT',
+            lines: [
+              { accountId: 'acc-1', accountCode: '101', debit: 300, credit: 0 },
+              { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 300 },
+            ],
+          },
+        });
+      expect(res1.status).toBe(200);
+
+      // 2. Add entry 2
+      const id2 = `jv-del-2-${Date.now()}`;
+      const res2 = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({
+          id: id2,
+          data: {
+            date: `${year}-02-10`,
+            fiscalYear: year,
+            description: 'قيد ثان 2029',
+            status: 'DRAFT',
+            lines: [
+              { accountId: 'acc-1', accountCode: '101', debit: 400, credit: 0 },
+              { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 400 },
+            ],
+          },
+        });
+      expect(res2.status).toBe(200);
+
+      const activeDb = (app as any).db || db;
+      const row2 = activeDb.prepare("SELECT data FROM journalEntries WHERE id = ?").get(id2) as any;
+      const parsed2 = JSON.parse(row2.data);
+      expect(parsed2.entryNumber).toBe(2);
+      expect(parsed2.serialNumber).toBe(`JV-${year}-0002`);
+
+      // 3. Delete entry 2
+      const delRes = await request(app)
+        .delete(`/api/data/journalEntries/${id2}`)
+        .set('Cookie', [`session_token=${adminToken}`]);
+      expect(delRes.status).toBe(200);
+
+      // 4. Add entry 3
+      const id3 = `jv-del-3-${Date.now()}`;
+      const res3 = await request(app)
+        .post('/api/data/journalEntries')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({
+          id: id3,
+          data: {
+            date: `${year}-03-10`,
+            fiscalYear: year,
+            description: 'قيد ثالث 2029',
+            status: 'DRAFT',
+            lines: [
+              { accountId: 'acc-1', accountCode: '101', debit: 500, credit: 0 },
+              { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 500 },
+            ],
+          },
+        });
+      expect(res3.status).toBe(200);
+
+      // 5. Verify entry 3 has number 3 (NOT 2)
+      const row3 = activeDb.prepare("SELECT data FROM journalEntries WHERE id = ?").get(id3) as any;
+      const parsed3 = JSON.parse(row3.data);
+      expect(parsed3.entryNumber).toBe(3);
+      expect(parsed3.serialNumber).toBe(`JV-${year}-0003`);
+    });
+  });
 });
 
 

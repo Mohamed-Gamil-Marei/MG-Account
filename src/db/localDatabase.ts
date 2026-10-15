@@ -3419,6 +3419,62 @@ export class LocalDatabase {
     this.notify();
   }
 
+  public clearLocalAccountingData(): void {
+    if (typeof localStorage !== 'undefined') {
+      const keysToRemove = [
+        STORAGE_KEYS.ACCOUNTS,
+        STORAGE_KEYS.JOURNAL,
+        STORAGE_KEYS.CLIENTS,
+        STORAGE_KEYS.TREASURY,
+        STORAGE_KEYS.TAXES,
+        STORAGE_KEYS.TAX_MANDATES,
+        STORAGE_KEYS.CERTIFICATES,
+        STORAGE_KEYS.INVOICES,
+        STORAGE_KEYS.FEASIBILITY,
+        STORAGE_KEYS.CREDIT_SIM,
+        STORAGE_KEYS.FIXED_ASSETS,
+        STORAGE_KEYS.FEE_ESTIMATES,
+        STORAGE_KEYS.CUSTOMS_SHIPMENTS,
+        STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS,
+        STORAGE_KEYS.CLOSING_CHECKLISTS,
+        STORAGE_KEYS.CLIENT_DEADLINES,
+        STORAGE_KEYS.OPEN_ITEMS,
+        STORAGE_KEYS.APPROVED_STATEMENTS,
+        STORAGE_KEYS.FEE_AGREEMENTS,
+        STORAGE_KEYS.FEE_COLLECTIONS,
+        STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT,
+      ];
+      keysToRemove.forEach((k) => {
+        try {
+          localStorage.removeItem(k);
+        } catch {}
+      });
+    }
+
+    this.state.accounts = [];
+    this.state.journalEntries = [];
+    this.state.clients = [];
+    this.state.treasuryTransactions = [];
+    this.state.taxDeclarations = [];
+    this.state.taxMandates = [];
+    this.state.certificates = [];
+    this.state.invoices = [];
+    this.state.feasibilityStudies = [];
+    this.state.creditSimulations = [];
+    this.state.fixedAssets = [];
+    this.state.feeEstimates = [];
+    this.state.customsShipments = [];
+    this.state.financialActivityLogs = [];
+    this.state.closingChecklists = {};
+    this.state.clientDeadlines = [];
+    this.state.openItems = [];
+    this.state.approvedStatements = [];
+    this.state.feeAgreements = [];
+    this.state.feeCollections = [];
+    this.state.currentUserId = '';
+    this.notify();
+  }
+
   public setCurrentUserId(userId: string) {
     this.state.currentUserId = userId;
     this.saveState('CURRENT_USER_ID');

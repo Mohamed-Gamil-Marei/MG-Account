@@ -1,5 +1,5 @@
 
-import { checkEntityAccess } from "./src/server/access";
+import { checkEntityAccess } from "./src/server/access.ts";
 
 
 
@@ -84,7 +84,7 @@ export async function createApp(): Promise<express.Express> {
   const app = express();
 
   app.set("trust proxy", 1);
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // 50MB body parser for specific endpoints that require large payloads (OCR, Server Backups Restore, Data Migration)
   const bodyParser50mbJson = express.json({
@@ -303,7 +303,7 @@ export async function createApp(): Promise<express.Express> {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS tombstones (entity_type TEXT, record_id TEXT, deleted_at TEXT, PRIMARY KEY(entity_type, record_id));
-  CREATE TABLE IF NOT EXISTS documents (
+    CREATE TABLE IF NOT EXISTS documents (
       id TEXT PRIMARY KEY,
       client_id TEXT NOT NULL,
       year TEXT NOT NULL,
@@ -313,6 +313,10 @@ export async function createApp(): Promise<express.Express> {
       file_path TEXT NOT NULL,
       uploaded_by TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS jv_sequences (
+      year INTEGER PRIMARY KEY,
+      last_number INTEGER NOT NULL DEFAULT 0
     );
   `);
 
@@ -1422,6 +1426,38 @@ export async function createApp(): Promise<express.Express> {
     }
   }
 
+  const generateNextJVNumber = (entryYear: number) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS jv_sequences (year INTEGER PRIMARY KEY, last_number INTEGER NOT NULL DEFAULT 0);`);
+    return db.transaction(() => {
+      const seqRow = db.prepare("SELECT last_number FROM jv_sequences WHERE year = ?").get(entryYear) as { last_number: number } | undefined;
+
+      let maxExisting = 0;
+      const allRows = db.prepare("SELECT data FROM journalEntries").all() as any[];
+      for (const r of allRows) {
+        try {
+          const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          const dYear = d.date ? new Date(d.date).getFullYear() : entryYear;
+          if (dYear === entryYear && (d.entryNumber || 0) > maxExisting) {
+            maxExisting = d.entryNumber;
+          }
+        } catch {}
+      }
+
+      const currentMax = Math.max(seqRow?.last_number || 0, maxExisting);
+      const nextNum = currentMax + 1;
+
+      db.prepare(`
+        INSERT INTO jv_sequences (year, last_number) VALUES (?, ?)
+        ON CONFLICT(year) DO UPDATE SET last_number = ?
+      `).run(entryYear, nextNum, nextNum);
+
+      return {
+        entryNumber: nextNum,
+        serialNumber: `JV-${entryYear}-${String(nextNum).padStart(4, '0')}`,
+      };
+    })();
+  };
+
   function validateAndProcessJournalEntryOnServer(id: string, data: any, existingRow: any, user: any) {
     const parsedData = typeof data === "string" ? JSON.parse(data) : data;
     const lines = parsedData?.lines || [];
@@ -1456,23 +1492,12 @@ export async function createApp(): Promise<express.Express> {
       throw new Error("عذراً، لا يمكن إلغاء ترحيل قيد في فترة مالية مقفولة.");
     }
 
-    // 5. JV numbering on server based on entry's own year
+    // 5. JV numbering on server based on entry's own year inside atomic transaction
     if (!existingRow || !parsedData.serialNumber) {
       const entryYear = new Date(entryDate).getFullYear() || new Date().getFullYear();
-      const allRows = db.prepare("SELECT data FROM journalEntries").all() as any[];
-      let maxNum = 0;
-      for (const r of allRows) {
-        try {
-          const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-          const dYear = d.date ? new Date(d.date).getFullYear() : entryYear;
-          if (dYear === entryYear && (d.entryNumber || 0) > maxNum) {
-            maxNum = d.entryNumber;
-          }
-        } catch {}
-      }
-      const nextNum = maxNum + 1;
-      parsedData.entryNumber = nextNum;
-      parsedData.serialNumber = `JV-${entryYear}-${String(nextNum).padStart(4, '0')}`;
+      const generated = generateNextJVNumber(entryYear);
+      parsedData.entryNumber = generated.entryNumber;
+      parsedData.serialNumber = generated.serialNumber;
     }
 
     return JSON.stringify(parsedData);
@@ -1602,7 +1627,15 @@ export async function createApp(): Promise<express.Express> {
         recordServerAuditLog(auditAction, entityType, id, updatedBy, auditDetails, updatedAt);
       }
 
-      res.json({ success: true, version: newVersion, updatedAt });
+      const responsePayload: any = { success: true, version: newVersion, updatedAt };
+      if (entityType === "journalEntries") {
+        try {
+          const entryJson = typeof data === "string" ? JSON.parse(data) : data;
+          responsePayload.entryNumber = entryJson?.entryNumber;
+          responsePayload.serialNumber = entryJson?.serialNumber;
+        } catch {}
+      }
+      res.json(responsePayload);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -1838,52 +1871,6 @@ export async function createApp(): Promise<express.Express> {
     }
   });
 
-    app.post("/api/data/migrate-local-six", (req, res) => {
-      try {
-        const user = (req as any).user;
-        if (!user || !['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
-          return res.status(403).json({ success: false, error: "غير مصرح." });
-        }
-
-        const bodyData = req.body || {};
-        const sixEntities = ['closingChecklists', 'clientDeadlines', 'openItems', 'approvedStatements', 'feeAgreements', 'feeCollections'];
-
-        for (const key of Object.keys(bodyData)) {
-          if (!sixEntities.includes(key)) continue;
-          if (!checkEntityAccess(user, key, 'WRITE')) {
-            return res.status(403).json({ success: false, error: `ليس لديك صلاحية ترحيل ${key}` });
-          }
-        }
-
-        const migrateTx = db.transaction((data: any) => {
-          let summary: Record<string, number> = {};
-          for (const key of sixEntities) {
-            if (!data[key] || !entityTypes.includes(key)) continue;
-            const records = Array.isArray(data[key]) ? data[key] : [data[key]];
-            summary[key] = records.length;
-
-            const insertStmt = db.prepare(`
-              INSERT OR IGNORE INTO ${key} (id, data, updated_at, version, updated_by)
-              VALUES (?, ?, ?, 1, ?)
-            `);
-
-            for (const rec of records) {
-              const recId = rec.id || Math.random().toString(36).substring(2);
-              const dataStr = JSON.stringify(rec);
-              const now = new Date().toISOString();
-              insertStmt.run(recId, dataStr, now, user.name);
-            }
-          }
-          return summary;
-        });
-
-        const summary = migrateTx(bodyData);
-
-        res.json({ success: true, summary, message: "تم ترحيل الكيانات الستة بنجاح." });
-      } catch (err: any) {
-        res.status(500).json({ success: false, error: err.message });
-      }
-    });
 
     app.post("/api/data/migrate-all", (req, res) => {
     try {
@@ -3594,6 +3581,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       // Reopen db for test environment and memory preservation
       if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
         db = new Database(currentDbPath);
+        db.exec(`CREATE TABLE IF NOT EXISTS jv_sequences (year INTEGER PRIMARY KEY, last_number INTEGER NOT NULL DEFAULT 0);`);
         app.locals.db = db;
         (app as any).db = db;
       }
@@ -3674,7 +3662,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
 
 export async function startServer() {
   const app = await createApp();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Office Accounting & Auditing System running on http://localhost:${PORT}`);
   });

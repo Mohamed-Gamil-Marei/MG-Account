@@ -5,3 +5,8 @@ coverage/
 .whatsapp_session/
 .env*
 !.env.example
+data/
+*.db
+*.db-wal
+*.db-shm
+dist/

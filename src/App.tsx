@@ -195,115 +195,90 @@ export default function App() {
   const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(false);
   const [isMobileMoreSheetOpen, setIsMobileMoreSheetOpen] = useState<boolean>(false);
 
-  const [firebaseProfile, setFirebaseProfile] = useState<FirebaseUserProfile | null>(() => firebaseAuth.getCurrentProfile());
+  const [firebaseProfile, setFirebaseProfile] = useState<FirebaseUserProfile | null>(null);
   const [authResolved, setAuthResolved] = useState<boolean>(false);
+  const [connectionError, setConnectionError] = useState<boolean>(false);
+  const [isConnectionLostLocked, setIsConnectionLostLocked] = useState<boolean>(false);
+  const disconnectedSinceRef = React.useRef<number | null>(null);
+
+  const roleTitleMap: Record<string, string> = {
+    ADMIN: 'مدير المنظومة والشريك المسؤول',
+    AUDITOR: 'مراقب حسابات ومراجع قانوني',
+    ACCOUNTANT: 'محاسب مالي ومدخل قيود',
+    SECRETARY: 'سكرتارية وإدارة ملفات',
+    PENDING: 'حساب جديد قيد الانتظار',
+  };
+
+  const checkServerSession = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch('/api/auth/me', { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          // Check if user account is suspended
+          if (data.user.isActive === false || data.user.is_active === 0) {
+            db.clearLocalAccountingData();
+            await firebaseAuth.signOut();
+            setFirebaseProfile(null);
+            setConnectionError(false);
+            setAuthResolved(true);
+            return;
+          }
+
+          const profile: FirebaseUserProfile = {
+            uid: String(data.user.id),
+            email: data.user.email,
+            name: data.user.name || data.user.email,
+            role: data.user.role,
+            roleTitleArabic: roleTitleMap[data.user.role] || 'مستخدم النظام',
+            canAccessTreasury: !!data.user.canAccessTreasury,
+            canAccessAuditTrail: !!data.user.canAccessAuditTrail,
+            canAccessCreditFiles: !!data.user.canAccessCreditFiles,
+            canAccessTaxReports: !!data.user.canAccessTaxReports,
+            canManageUsers: !!data.user.canManageUsers,
+            canPostEntries: !!data.user.canPostEntries,
+            canEditPostedEntries: !!data.user.canEditPostedEntries,
+            canDeleteRecords: !!data.user.canDeleteRecords,
+          };
+          db.syncLoggedInUser(profile);
+          setFirebaseProfile(profile);
+          setConnectionError(false);
+          setIsConnectionLostLocked(false);
+          disconnectedSinceRef.current = null;
+          setAuthResolved(true);
+          return;
+        }
+      }
+
+      // Server returned 401 (Session invalid and server available)
+      if (res.status === 401) {
+        db.clearCurrentUser();
+        setFirebaseProfile(null);
+        setConnectionError(false);
+        setIsConnectionLostLocked(false);
+        disconnectedSinceRef.current = null;
+        setAuthResolved(true);
+        return;
+      }
+
+      // Server returned 500/502/503/504 or other server error: connection failure
+      setFirebaseProfile(null);
+      setConnectionError(true);
+      setAuthResolved(true);
+    } catch (networkErr) {
+      console.warn('Server /api/auth/me unreachable (connection failure):', networkErr);
+      setFirebaseProfile(null);
+      setConnectionError(true);
+      setAuthResolved(true);
+    }
+  };
 
   // Mandatory Session & Firebase Authentication Sync
   useEffect(() => {
-    let isMounted = true;
-
-    const roleTitleMap: Record<string, string> = {
-      ADMIN: 'مدير المنظومة والشريك المسؤول',
-      AUDITOR: 'مراقب حسابات ومراجع قانوني',
-      ACCOUNTANT: 'محاسب مالي ومدخل قيود',
-      SECRETARY: 'سكرتارية وإدارة ملفات',
-      PENDING: 'حساب جديد قيد الانتظار',
-    };
-
-    const checkServerSession = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch('/api/auth/me', { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.user) {
-            const profile: FirebaseUserProfile = {
-              uid: String(data.user.id),
-              email: data.user.email,
-              name: data.user.name || data.user.email,
-              role: data.user.role,
-              roleTitleArabic: roleTitleMap[data.user.role] || 'مستخدم النظام',
-              canAccessTreasury: !!data.user.canAccessTreasury,
-              canAccessAuditTrail: !!data.user.canAccessAuditTrail,
-              canAccessCreditFiles: !!data.user.canAccessCreditFiles,
-              canAccessTaxReports: !!data.user.canAccessTaxReports,
-              canManageUsers: !!data.user.canManageUsers,
-              canPostEntries: !!data.user.canPostEntries,
-              canEditPostedEntries: !!data.user.canEditPostedEntries,
-              canDeleteRecords: !!data.user.canDeleteRecords,
-              isOffline: false,
-            };
-            db.syncLoggedInUser(profile);
-            if (isMounted) {
-              setFirebaseProfile(profile);
-              setAuthResolved(true);
-            }
-            return;
-          }
-        }
-
-        // Server returned 401 (Session invalid and server available): clear offline cache
-        if (res.status === 401) {
-          const localProfile = firebaseAuth.getCurrentProfile();
-          if (localProfile?.email) {
-            const { clearOfflineAuthCache } = await import('./services/offlineAuthService');
-            clearOfflineAuthCache(localProfile.email);
-          }
-          if (isMounted) {
-            setFirebaseProfile(null);
-            setAuthResolved(true);
-          }
-          return;
-        }
-
-        // Server returned 500/502/503/504 or status 0 (Server unavailable): allow offline fallback without clearing cache
-        if (res.status >= 500 && res.status <= 504) {
-          const localProfile = firebaseAuth.getCurrentProfile();
-          if (localProfile && isMounted) {
-            const offlineProfile = { ...localProfile, isOffline: true };
-            db.syncLoggedInUser(offlineProfile);
-            setFirebaseProfile(offlineProfile);
-          } else if (isMounted) {
-            setFirebaseProfile(null);
-          }
-          if (isMounted) {
-            setAuthResolved(true);
-          }
-          return;
-        }
-
-        // Other errors (e.g. 403, 429): keep local session offline if available
-        if (isMounted) {
-          const localProfile = firebaseAuth.getCurrentProfile();
-          if (localProfile) {
-            const offlineProfile = { ...localProfile, isOffline: true };
-            db.syncLoggedInUser(offlineProfile);
-            setFirebaseProfile(offlineProfile);
-          } else {
-            setFirebaseProfile(null);
-          }
-          setAuthResolved(true);
-        }
-      } catch (networkErr) {
-        // Timeout or network error / status 0 -> Server unavailable (Offline mode)
-        console.warn('Server /api/auth/me unreachable (offline mode or timeout):', networkErr);
-        const localProfile = firebaseAuth.getCurrentProfile();
-        if (localProfile && isMounted) {
-          const offlineProfile = { ...localProfile, isOffline: true };
-          db.syncLoggedInUser(offlineProfile);
-          setFirebaseProfile(offlineProfile);
-        } else if (isMounted) {
-          setFirebaseProfile(null);
-        }
-        if (isMounted) {
-          setAuthResolved(true);
-        }
-      }
-    };
-
     checkServerSession();
 
     const unsubAuth = firebaseAuth.subscribe((profile) => {
@@ -322,10 +297,64 @@ export default function App() {
     });
 
     return () => {
-      isMounted = false;
       unsubAuth();
     };
   }, []);
+
+  // Periodic session and connection check every 60 seconds
+  useEffect(() => {
+    if (!firebaseProfile) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch('/api/auth/me', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.status === 401) {
+          db.clearLocalAccountingData();
+          await firebaseAuth.signOut();
+          setFirebaseProfile(null);
+          return;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.success || data.user?.isActive === false || data.user?.is_active === 0) {
+            db.clearLocalAccountingData();
+            await firebaseAuth.signOut();
+            setFirebaseProfile(null);
+            return;
+          }
+          // Connection confirmed
+          disconnectedSinceRef.current = null;
+          setIsConnectionLostLocked(false);
+          return;
+        }
+
+        // Response not ok (500, 502, 503, etc.)
+        handleDisconnect();
+      } catch (err) {
+        // Fetch error / offline
+        handleDisconnect();
+      }
+    }, 60000);
+
+    const handleDisconnect = () => {
+      const now = Date.now();
+      if (!disconnectedSinceRef.current) {
+        disconnectedSinceRef.current = now;
+      } else if (now - disconnectedSinceRef.current >= 5 * 60 * 1000) {
+        // Disconnected > 5 minutes -> lock screen
+        setIsConnectionLostLocked(true);
+      }
+    };
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [firebaseProfile]);
 
   // Persist activeTab to localStorage including DASHBOARD
   useEffect(() => {
@@ -1081,7 +1110,40 @@ export default function App() {
     );
   }
 
-  // 2. If auth not resolved yet, show loading
+  // 2. If connection failed or connection lost for > 5 mins
+  if (connectionError || isConnectionLostLocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-white" dir="rtl">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+          <div className="w-14 h-14 bg-red-500/20 border border-red-500/30 rounded-2xl flex items-center justify-center mx-auto text-red-400">
+            <ShieldCheck className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-black text-white">يلزم اتصال بالإنترنت للدخول</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            {isConnectionLostLocked
+              ? 'تم قفل الشاشة لانقطاع الاتصال لأكثر من 5 دقائق. يلزم اتصال نشط بالإنترنت للاستمرار.'
+              : 'تعذر الاتصال بالخادم. لأسباب أمنية وحماية البيانات المحاسبية، يلزم اتصال بالإنترنت للدخول للتحقق من هويتك وصلاحياتك.'}
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                setConnectionError(false);
+                setIsConnectionLostLocked(false);
+                setAuthResolved(false);
+                checkServerSession();
+              }}
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors cursor-pointer text-xs flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              إعادة المحاولة
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. If auth not resolved yet, show loading
   if (!authResolved) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white" dir="rtl">
