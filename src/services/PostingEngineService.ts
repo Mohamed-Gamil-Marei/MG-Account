@@ -21,6 +21,8 @@ export interface BatchPostResult {
   postedEntries: JournalEntry[];
 }
 
+export const JOURNAL_ENTRY_BALANCE_TOLERANCE = 0.005;
+
 export class PostingEngineService {
   /**
    * البحث عن معرف الحساب أو الكود المناسب من الدليل
@@ -225,10 +227,10 @@ export class PostingEngineService {
       const entryDraft = this.buildInvoiceJournalEntry(invoice, state.accounts, undefined, userCanPost);
       const diff = Math.abs(entryDraft.totalDebit - entryDraft.totalCredit);
 
-      if (diff > 0.005) {
+      if (diff > JOURNAL_ENTRY_BALANCE_TOLERANCE) {
         return {
           success: false,
-          error: `القيد غير متوازن، الفرق بين المدين والدائن: ${diff.toFixed(2)} ج.م`,
+          error: `القيد غير متوازن، الفرق بين المدين والدائن (${diff.toFixed(3)} ج.م) يتجاوز الحد الأقصى المسموح (${JOURNAL_ENTRY_BALANCE_TOLERANCE} ج.م)`,
         };
       }
 

@@ -3398,6 +3398,7 @@ export class LocalDatabase {
       canDeleteRecords: !!profile.canDeleteRecords,
       canAccessCreditFiles: !!profile.canAccessCreditFiles,
       canAccessTaxReports: !!profile.canAccessTaxReports,
+      mustChangePassword: !!profile.mustChangePassword,
       createdAt: profile.createdAt || new Date().toISOString(),
     };
 

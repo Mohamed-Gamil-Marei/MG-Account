@@ -112,6 +112,54 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
     }
   };
 
+  const handleDesktopSaveBackup = async () => {
+    if (typeof window !== 'undefined' && window.electronDesktop?.chooseBackupFolder && window.electronDesktop?.saveBackupToFile) {
+      try {
+        const targetPath = await window.electronDesktop.chooseBackupFolder();
+        if (!targetPath) return;
+        setIsProcessing(true);
+        setStatusMessage({ type: 'success', text: 'جاري إنشاء وحفظ النسخة الاحتياطية في المجلد المحدد...' });
+        const res = await window.electronDesktop.saveBackupToFile(targetPath);
+        if (res.success) {
+          setStatusMessage({ type: 'success', text: `تم حفظ النسخة الاحتياطية بنجاح في: ${targetPath}` });
+          loadServerBackups();
+        } else {
+          setStatusMessage({ type: 'error', text: res.error || 'فشل حفظ النسخة الاحتياطية.' });
+        }
+      } catch (err: any) {
+        setStatusMessage({ type: 'error', text: err.message });
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      window.open('/api/server-backups/download-full', '_blank');
+    }
+  };
+
+  const handleDesktopRestoreBackup = async () => {
+    if (typeof window !== 'undefined' && window.electronDesktop?.chooseRestoreFile && window.electronDesktop?.restoreFromFile) {
+      try {
+        const filePath = await window.electronDesktop.chooseRestoreFile();
+        if (!filePath) return;
+        const confirmMsg = window.confirm(`هل أنت متأكد من استعادة النسخة الاحتياطية من الملف:\n${filePath}\n\nسيتم استبدال البيانات الحالية وإعادة تشغيل التطبيق.`);
+        if (!confirmMsg) return;
+        setIsProcessing(true);
+        setStatusMessage({ type: 'success', text: 'جاري استعادة النسخة الاحتياطية وإعادة تشغيل السيرفر...' });
+        const res = await window.electronDesktop.restoreFromFile(filePath);
+        if (res.success) {
+          setStatusMessage({ type: 'success', text: 'تمت استعادة النسخة بنجاح! جاري تحديث التطبيق...' });
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          setStatusMessage({ type: 'error', text: res.error || 'فشل استعادة النسخة الاحتياطية.' });
+        }
+      } catch (err: any) {
+        setStatusMessage({ type: 'error', text: err.message });
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+  };
+
   const modelsList: { id: ModelType; name: string; icon: string; count: number; serialPrefix: string }[] = [
     { id: 'ALL_DATA', name: 'النسخة الكاملة الشاملة لكافة النماذج', icon: '🗄️', count: state.accounts.length + state.journalEntries.length + state.clients.length, serialPrefix: 'ALL' },
     { id: 'ACCOUNTS', name: 'شجرة الحسابات المصرية (COA)', icon: '🌳', count: state.accounts.length, serialPrefix: '1xxx / 2xxx' },
@@ -646,6 +694,39 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                   <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
                   <span>نسخة الآن</span>
                 </button>
+              </div>
+
+              {/* Desktop User Folder Backup & Restore (Item 7) */}
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-300 font-bold text-xs">
+                    <Database className="w-4 h-4 text-emerald-600" />
+                    <span>النسخ الاحتياطي في مسار مخصص واستعادة الملفات</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    احفظ نسخة ZIP كاملة وشاملة (قاعدة البيانات + المستندات) في مجلد من اختيارك (فلاشة / هارد خارجي)، أو استعد ملف نسخة سابقة.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDesktopSaveBackup}
+                    disabled={isProcessing}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>حفظ نسخة في مجلد تختاره...</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDesktopRestoreBackup}
+                    disabled={isProcessing}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>استعادة نسخة من ملف...</span>
+                  </button>
+                </div>
               </div>
 
               {isLoadingBackups ? (

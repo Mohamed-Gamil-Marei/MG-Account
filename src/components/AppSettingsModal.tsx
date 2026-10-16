@@ -9,6 +9,7 @@ import {
   Check,
   Shield,
   ShieldCheck,
+  AlertTriangle,
   Lock,
   KeyRound,
   FileCheck2,
@@ -139,6 +140,40 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
 
   const currentUser = db.getCurrentUser();
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  // Desktop Local Network LAN Setting (Item 5)
+  const [desktopLanEnabled, setDesktopLanEnabled] = useState<boolean>(false);
+  const [desktopNetworkInfo, setDesktopNetworkInfo] = useState<{ host: string; port: number; allowLan: boolean; lanUrl: string } | null>(null);
+
+  useEffect(() => {
+    if (isAdmin && isOpen) {
+      fetchWithAuth('/api/desktop/network-status')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success) {
+            setDesktopLanEnabled(data.allowLan);
+            setDesktopNetworkInfo(data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isAdmin, isOpen]);
+
+  const handleToggleDesktopLan = async (checked: boolean) => {
+    setDesktopLanEnabled(checked);
+    try {
+      await fetchWithAuth('/api/desktop/network-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowLan: checked }),
+      });
+      if (typeof window !== 'undefined' && window.electronDesktop?.setNetworkAccess) {
+        await window.electronDesktop.setNetworkAccess(checked);
+      }
+    } catch (err) {
+      console.error('Failed to update LAN access setting:', err);
+    }
+  };
 
   // Gemini AI Consent State (مطفأ افتراضياً: حظر إرسال اسم العميل وأرقامه للذكاء الاصطناعي)
   const [sendClientDataToGemini, setSendClientDataToGemini] = useState<boolean>(
@@ -728,6 +763,52 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 4. Desktop LAN Access Setting (Item 5 - ADMIN only) */}
+              {isAdmin && (
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Laptop className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {currentLang === 'ar' ? 'الوصول عبر شبكة المكتب المحلية (Desktop LAN)' : 'Office Local Network (LAN) Access'}
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={desktopLanEnabled}
+                        onChange={(e) => handleToggleDesktopLan(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    الوضع الافتراضي معطل (127.0.0.1) لتأمين البيانات داخل هذا الجهاز فقط. يمكنك تفعيله (0.0.0.0) للسماح لأجهزة المحاسبين والموظفين في نفس المكتب بفتح المنظومة عبر المتصفح.
+                  </p>
+
+                  {desktopLanEnabled && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl space-y-2 text-xs text-amber-900 dark:text-amber-200">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>تحذير أمني:</strong> سيتمكن أي جهاز على نفس شبكة Wi-Fi أو الكابل من الاتصال بهذا الجهاز. يرجى التأكد من تعيين كلمات مرور قوية لجميع المستخدمين.
+                        </div>
+                      </div>
+                      {desktopNetworkInfo?.lanUrl && (
+                        <div className="pt-1">
+                          <span className="text-[11px] block text-slate-600 dark:text-slate-400 mb-0.5">رابط وصول الأجهزة الأخرى:</span>
+                          <span className="font-mono font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-900 px-2 py-1 rounded border border-blue-200 select-all block">
+                            {desktopNetworkInfo.lanUrl}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 

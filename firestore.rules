@@ -27,14 +27,19 @@ service cloud.firestore {
       return isSignedIn() && (isAdmin() || getUserRole() == 'ACCOUNTANT');
     }
 
-    // 3. AUDITOR (مراجع ومراقب حسابات - قراءة وفحص وتدقيق فقط دون أي صلاحيات كتابة أو تعديل)
+    // 3. AUDITOR (مراجع ومراقب حسابات - قراءة وفحص وتدقيق فقط دون أي صلاحيات كتابة أو تعديل نهائياً)
     function isAuditor() {
       return isSignedIn() && getUserRole() == 'AUDITOR';
     }
 
-    // 4. SECRETARY (سكرتارية واستقبال - فواتير وموكلين وشهادات فقط)
+    // 4. SECRETARY (سكرتارية وأعمال إدارية - قراءة وإدخال مستندات وفواتير مصرح بها دون صلاحيات محاسبية أو إدارية)
     function isSecretary() {
       return isSignedIn() && getUserRole() == 'SECRETARY';
+    }
+
+    // صلاحية الكتابة أو التعديل (مقتصرة على المدير والمحاسب المخول، وممنوعة تماماً عن المراجع والسكرتير)
+    function canWriteStandard() {
+      return isSignedIn() && (isAdmin() || getUserRole() == 'ACCOUNTANT');
     }
 
     // صلاحية قراءة السجلات المحاسبية والمالية العامة (متاحة للمدير والمحاسب والمراجع القانوني)

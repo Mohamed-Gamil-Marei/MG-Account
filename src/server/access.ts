@@ -17,25 +17,64 @@ export interface AccessUser {
   canAccessTaxReports?: boolean;
 }
 
+export const KNOWN_ENTITIES: string[] = [
+  'clients',
+  'suppliers',
+  'accounts',
+  'journalEntries',
+  'treasury',
+  'taxDeclarations',
+  'taxAudits',
+  'invoices',
+  'certificates',
+  'officeProfile',
+  'auditLogs',
+  'taxMandates',
+  'fixedAssets',
+  'feeEstimates',
+  'whatsappMessages',
+  'whatsappBotSettings',
+  'exchangeRates',
+  'fiscalPeriodLocks',
+  'customsShipments',
+  'financialActivityLogs',
+  'preferences',
+  'systemUsers',
+  'closingChecklists',
+  'clientDeadlines',
+  'openItems',
+  'approvedStatements',
+  'feeAgreements',
+  'feeCollections',
+  'documents',
+  'workspaces',
+  'accounting_workspaces',
+  'issuedDocuments',
+  'financialStatements',
+  'whatsapp',
+];
+
 export function checkEntityAccess(user: AccessUser | null | undefined, entityType: string, action: 'READ' | 'WRITE' | 'DELETE'): boolean {
   if (!user || user.role === 'PENDING') return false;
   if (!VALID_ROLES.includes(user.role as UserRole)) return false;
+  if (!KNOWN_ENTITIES.includes(entityType)) return false;
 
   // 1. Audit logs: client cannot WRITE or DELETE auditLogs
   if (entityType === 'auditLogs') {
     if (action === 'WRITE' || action === 'DELETE') return false;
     if (action === 'READ') return !!user.canAccessAuditTrail || user.role === 'ADMIN';
+    return false;
   }
 
   // 3. WhatsApp entity: Allowed for ADMIN and ACCOUNTANT only. SECRETARY and PENDING are blocked.
-  if (entityType === 'whatsapp') {
+  if (entityType === 'whatsapp' || entityType === 'whatsappMessages' || entityType === 'whatsappBotSettings') {
     return ['ADMIN', 'ACCOUNTANT'].includes(user.role);
   }
 
   // 4. Treasury access
   if (entityType === 'treasury') {
     if (!user.canAccessTreasury && user.role !== 'ADMIN') return false;
-    return action === 'READ' || ['ADMIN', 'ACCOUNTANT'].includes(user.role);
+    return action === 'READ' && ['ADMIN', 'ACCOUNTANT', 'AUDITOR'].includes(user.role);
   }
 
   // User Preferences: personal settings allowed for all authenticated valid roles
@@ -45,18 +84,9 @@ export function checkEntityAccess(user: AccessUser | null | undefined, entityTyp
 
   if (user.role === 'ADMIN') return true;
 
-  const auditorReadOnlyEntities = [
-    'closingChecklists',
-    'clientDeadlines',
-    'openItems',
-    'approvedStatements',
-    'feeAgreements',
-    'feeCollections'
-  ];
-  if (auditorReadOnlyEntities.includes(entityType)) {
-    if (user.role === 'AUDITOR') {
-      return action === 'READ';
-    }
+  // AUDITOR role: strict Read-Only across all entities (never allow WRITE or DELETE)
+  if (user.role === 'AUDITOR') {
+    return action === 'READ';
   }
 
   // Secretary limits

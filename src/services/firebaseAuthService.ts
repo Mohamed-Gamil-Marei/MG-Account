@@ -26,6 +26,7 @@ export interface FirebaseUserProfile {
   canEditPostedEntries?: boolean;
   canDeleteRecords?: boolean;
   isOffline?: boolean;
+  mustChangePassword?: boolean;
   createdAt?: any;
 }
 

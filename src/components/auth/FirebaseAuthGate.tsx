@@ -240,6 +240,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             canPostEntries: !!serverUser.canPostEntries,
             canEditPostedEntries: !!serverUser.canEditPostedEntries,
             canDeleteRecords: !!serverUser.canDeleteRecords,
+            mustChangePassword: !!serverUser.mustChangePassword,
             isOffline: false,
           };
 

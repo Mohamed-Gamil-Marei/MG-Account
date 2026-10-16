@@ -113,6 +113,8 @@ import { I18nProvider, getTranslation } from './utils/i18n';
 import { parseVerificationFromUrl, VerificationPayloadData } from './utils/qrCodeGenerator';
 import { firebaseAuth, FirebaseUserProfile } from './services/firebaseAuthService';
 import { FirebaseAuthGate } from './components/auth/FirebaseAuthGate';
+import { InitialAdminModal } from './components/desktop/InitialAdminModal';
+import { ForceChangePasswordModal } from './components/desktop/ForceChangePasswordModal';
 import { cloudSync } from './lib/cloudSync';
 
 function HubLoadingFallback() {
@@ -243,6 +245,7 @@ export default function App() {
             canPostEntries: !!data.user.canPostEntries,
             canEditPostedEntries: !!data.user.canEditPostedEntries,
             canDeleteRecords: !!data.user.canDeleteRecords,
+            mustChangePassword: !!data.user.mustChangePassword,
           };
           db.syncLoggedInUser(profile);
           setFirebaseProfile(profile);
@@ -1089,6 +1092,21 @@ export default function App() {
           onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
           onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
           onOpenPromoModal={() => setIsMgPromoModalOpen(true)}
+        />
+      )}
+
+      {/* Desktop Initial Admin Setup Modal */}
+      <InitialAdminModal />
+
+      {/* Mandatory Change Password Modal for Desktop Auto-Admin or Enforced Reset */}
+      {currentUser?.mustChangePassword && (
+        <ForceChangePasswordModal
+          currentUser={currentUser}
+          onSuccess={() => {
+            if (firebaseProfile) {
+              setFirebaseProfile({ ...firebaseProfile, mustChangePassword: false });
+            }
+          }}
         />
       )}
     </Suspense>

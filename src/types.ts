@@ -1435,7 +1435,24 @@ export interface SystemUser {
   canIssueInvoices?: boolean;
   canModifySettings?: boolean;
   restrictedTabs?: NavigationTab[] | string[];
+  mustChangePassword?: boolean;
   createdAt: string;
+}
+
+declare global {
+  interface Window {
+    electronDesktop?: {
+      isDesktop: boolean;
+      getInitialAdminCredentials: () => Promise<{ name: string; email: string; password: string } | null>;
+      chooseBackupFolder: () => Promise<string | null>;
+      chooseRestoreFile: () => Promise<string | null>;
+      saveBackupToFile: (filePath: string) => Promise<{ success: boolean; size?: number; error?: string }>;
+      restoreFromFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+      getNetworkStatus: () => Promise<{ host: string; port: number; allowLan: boolean; localIps: string[]; lanUrl: string }>;
+      setNetworkAccess: (allowLan: boolean) => Promise<{ success: boolean; allowLan: boolean; restartRequired: boolean }>;
+      getUserDataPath: () => Promise<string>;
+    };
+  }
 }
 
 // OCR Smart Invoice & Paper Receipt Scanner Interfaces

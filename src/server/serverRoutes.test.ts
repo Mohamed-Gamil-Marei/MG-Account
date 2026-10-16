@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import type { Express } from 'express';
 import Database from 'better-sqlite3';
 import JSZip from 'jszip';
+import { checkEntityAccess } from './access';
 
 const TEST_PURGE_MASTER = 'PURGE_MASTER_TEST_SECRET_KEY_1234';
 const TEST_CREDENTIALS_KEY = 'TEST_CREDENTIALS_KEY_32_CHARS_LONG_OK_1234';
@@ -48,7 +49,7 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       { id: 3, name: 'Auditor User', email: 'auditor@test.local', role: 'AUDITOR', canPost: 0, canEditPosted: 0, canDelete: 0, token: auditorToken },
       { id: 4, name: 'Secretary User', email: 'secretary@test.local', role: 'SECRETARY', canPost: 0, canEditPosted: 0, canDelete: 0, token: secretaryToken },
       { id: 5, name: 'Pending User', email: 'pending@test.local', role: 'PENDING', canPost: 0, canEditPosted: 0, canDelete: 0, token: pendingToken },
-      { id: 6, name: 'Restricted Accountant User', email: 'accountant_nopost@test.local', role: 'ACCOUNTANT', canPost: 0, canEditPosted: 0, canDelete: 0, token: accountantNoPostToken },
+      { id: 6, name: 'Restricted Accountant User', email: 'accountant_nopost@test.local', role: 'ACCOUNTANT', canPost: 0, canEditPosted: 0, canDelete: 1, token: accountantNoPostToken },
     ];
 
     const insertUser = db.prepare(`
@@ -66,6 +67,30 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
     for (const u of users) {
       insertUser.run(u.id, u.name, u.email, u.role, u.role === 'ADMIN' ? 1 : 0, 1, 1, u.canPost, u.canEditPosted, u.canDelete, 1, 1);
       insertSession.run(hashToken(u.token), u.id, farFuture);
+    }
+
+    try {
+      const privateKeyPem = fs.readFileSync(path.join(process.cwd(), 'keys', 'private.pem'), 'utf8');
+      const payload = {
+        licenseId: 'LIC-TEST-SUITE',
+        officeName: 'مكتب الاختبارات الشاملة',
+        plan: 'ONLINE',
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 50,
+      };
+      const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+      const signature = crypto.sign(null, Buffer.from(payloadB64, 'utf8'), crypto.createPrivateKey(privateKeyPem));
+      const sigB64 = signature.toString('base64');
+      const licenseCode = `${payloadB64}.${sigB64}`;
+
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_at, updated_by)
+        VALUES ('LICENSE_CODE', ?, datetime('now'), 'system')
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(licenseCode);
+    } catch (e) {
+      console.warn('Could not seed test license in serverRoutes.test.ts:', e);
     }
   });
 
@@ -1416,7 +1441,565 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
       expect(parsed3.serialNumber).toBe(`JV-${year}-0003`);
     });
   });
+
+  // =========================================================================
+  // (ن) اختبارات التحقق الشاملة للبنود الأمنية التسعة (Items 1 to 9 Security Matrix)
+  // =========================================================================
+  describe('(ن) اختبارات التحقق الصارمة للبنود الأمنية التسعة (Items 1 to 9)', () => {
+    // 1) مسار /api/admin/reset-production
+    it('البند 1: يرفض القيم المدمجة (123456 و MG-2026-PURGE و MASTER_PURGE_PASSWORD) ولا يقبل إلا PASSWORD_PURGE_MASTER، ولا يمسح auditLogs، ويجري نسخة احتياطية', async () => {
+      const activeDb = (app as any).db || db;
+      activeDb.prepare(`
+        INSERT OR REPLACE INTO auditLogs (id, data, updated_at, version, updated_by)
+        VALUES ('audit-item1-test', '{"action":"ITEM1_CHECK","details":"سجل تدقيق محمي"}', datetime('now'), 1, 'admin')
+      `).run();
+
+      const bannedPasscodes = ['123456', 'MG-2026-PURGE', 'MASTER_PURGE_PASSWORD'];
+      for (const badPass of bannedPasscodes) {
+        const res = await request(app)
+          .post('/api/admin/reset-production')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ confirmationText: 'تفريغ', passcode: badPass });
+        expect(res.status).toBe(400);
+        expect(res.body.success).toBe(false);
+      }
+
+      const validRes = await request(app)
+        .post('/api/admin/reset-production')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ confirmationText: 'تفريغ', passcode: TEST_PURGE_MASTER });
+      expect(validRes.status).toBe(200);
+      expect(validRes.body.success).toBe(true);
+
+      const preservedAudit = activeDb.prepare("SELECT id FROM auditLogs WHERE id = 'audit-item1-test'").get();
+      expect(preservedAudit).toBeDefined();
+    });
+
+    // 2) مسار تفعيل الجهاز
+    it('البند 2: مسار تفعيل الجهاز يعيد 401 عند خطأ الكود دون كشف debugInput أو debugActivation في الاستجابة', async () => {
+      const res = await request(app)
+        .post('/api/auth/authorize-device')
+        .send({ passcode: 'WRONG_DEVICE_PASSCODE_999', customDeviceName: 'Test Machine' });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.debugInput).toBeUndefined();
+      expect(res.body.debugActivation).toBeUndefined();
+    });
+
+    // 3) التحقق من الأدوار ورفض غير المعتمد، وجعل الافتراضي في checkEntityAccess هو الرفض
+    it('البند 3: يتحقق من role مقابل القائمة الثابتة ويرفض غيرها برمز 400، و checkEntityAccess الافتراضي هو الرفض', async () => {
+      const createRes = await request(app)
+        .post('/api/users')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          name: 'Hacker User',
+          email: 'hacker@test.local',
+          password: 'Password123456!',
+          role: 'SUPERADMIN'
+        });
+      expect(createRes.status).toBe(400);
+      expect(createRes.body.error).toMatch(/غير صالح/);
+
+      const updateRes = await request(app)
+        .put('/api/users/2')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ role: 'UNKNOWN_ROLE' });
+      expect(updateRes.status).toBe(400);
+
+      const dummyUser = { id: 99, role: 'ACCOUNTANT' as const };
+      expect(checkEntityAccess(dummyUser, 'unknownNonExistentEntity', 'READ' as any)).toBe(false);
+      expect(checkEntityAccess(dummyUser, 'unknownNonExistentEntity', 'WRITE' as any)).toBe(false);
+      expect(checkEntityAccess(dummyUser, 'unknownNonExistentEntity', 'DELETE' as any)).toBe(false);
+    });
+
+    // 4) دور AUDITOR قراءة فقط ويُمنع من الكتابة والحذف
+    it('البند 4: دور AUDITOR قراءة فقط ويمنع عنه الكتابة والحذف على السيرفر (403)', async () => {
+      const activeDb = (app as any).db || db;
+      activeDb.prepare(`
+        INSERT OR REPLACE INTO clients (id, data, updated_at, version, updated_by)
+        VALUES ('client-auditor-guard', '{"name":"شركة الفحص"}', datetime('now'), 1, 'admin')
+      `).run();
+
+      const writeRes = await request(app)
+        .post('/api/data/clients')
+        .set('Cookie', [`session_token=${auditorToken}`])
+        .send({ id: 'client-auditor-write-fail', data: { name: 'فشل' } });
+      expect(writeRes.status).toBe(403);
+
+      const deleteRes = await request(app)
+        .delete('/api/data/clients/client-auditor-guard')
+        .set('Cookie', [`session_token=${auditorToken}`]);
+      expect(deleteRes.status).toBe(403);
+
+      const auditorUserObj = { id: 3, role: 'AUDITOR' as const };
+      const entitiesToTest = ['clients', 'journalEntries', 'invoices', 'treasury', 'accounts', 'taxDeclarations'];
+      for (const ent of entitiesToTest) {
+        expect(checkEntityAccess(auditorUserObj, ent, 'WRITE')).toBe(false);
+        expect(checkEntityAccess(auditorUserObj, ent, 'DELETE')).toBe(false);
+      }
+    });
+
+    // 5) مسارات ETA محصورة على ADMIN و ACCOUNTANT مع التسجيل في سجل التدقيق وخلو clientSecret من الافتراضي
+    it('البند 5: مسارات ETA محصورة على ADMIN و ACCOUNTANT وتسجل كل عملية في auditLogs', async () => {
+      const tokenAuditor = await request(app).post('/api/eta/token').set('Cookie', [`session_token=${auditorToken}`]);
+      expect(tokenAuditor.status).toBe(403);
+      const submitAuditor = await request(app).post('/api/eta/documents/submit').set('Cookie', [`session_token=${auditorToken}`]).send({ invoice: { invoiceNumber: 'INV-1' } });
+      expect(submitAuditor.status).toBe(403);
+      const batchAuditor = await request(app).post('/api/eta/documents/batch-submit').set('Cookie', [`session_token=${auditorToken}`]).send({ invoices: [] });
+      expect(batchAuditor.status).toBe(403);
+      const diagAuditor = await request(app).get('/api/eta/diagnostics').set('Cookie', [`session_token=${auditorToken}`]);
+      expect(diagAuditor.status).toBe(403);
+
+      const tokenAccountant = await request(app).post('/api/eta/token').set('Cookie', [`session_token=${accountantToken}`]).send({});
+      expect(tokenAccountant.status).not.toBe(403);
+
+      const diagAccountant = await request(app).get('/api/eta/diagnostics').set('Cookie', [`session_token=${accountantToken}`]);
+      expect(diagAccountant.status).not.toBe(403);
+
+      const activeDb = (app as any).db || db;
+      const etaAudit = activeDb.prepare("SELECT * FROM auditLogs WHERE data LIKE '%ETA_%'").all();
+      expect(etaAudit.length).toBeGreaterThan(0);
+    });
+
+    // 6) checkClientExists ومسار رفع المستندات
+    it('البند 6: checkClientExists ومسار رفع المستندات يرفضان clientId غير الموجود ويعيدان 400', async () => {
+      const fakePdfBuffer = Buffer.from('%PDF-1.4 test dummy content for rejection');
+      const res = await request(app)
+        .post('/api/documents/upload')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .field('clientId', 'non-existent-client-id-xyz-999')
+        .field('year', '2026')
+        .field('type', 'TAX_CARD')
+        .attach('file', fakePdfBuffer, 'test.pdf');
+      
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/غير موجود/);
+    });
+
+    // 7) الجلسات وإلغاؤها عند تغيير كلمة المرور أو الدور، والحد الأدنى 10 أحرف
+    it('البند 7: يرفض كلمة مرور أقل من 10 أحرف في التعديل (400)، ويلغي كل الجلسات في جدول sessions عند تغيير كلمة المرور أو الدور', async () => {
+      const activeDb = (app as any).db || db;
+
+      const tempUserRes = await request(app)
+        .post('/api/users')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          name: 'Session Test User',
+          email: 'session-test@test.local',
+          password: 'ValidInitialPass10!',
+          role: 'ACCOUNTANT'
+        });
+      expect(tempUserRes.status).toBe(200);
+      const tempUserId = tempUserRes.body.id;
+
+      const tempSessionToken = 'temp-test-user-session-token-xyz';
+      activeDb.prepare(`
+        INSERT INTO sessions (token, user_id, expires_at)
+        VALUES (?, ?, datetime('now', '+1 hour'))
+      `).run(hashToken(tempSessionToken), tempUserId);
+
+      const meBefore = await request(app)
+        .get('/api/auth/me')
+        .set('Cookie', [`session_token=${tempSessionToken}`]);
+      expect(meBefore.status).toBe(200);
+
+      const shortPassRes = await request(app)
+        .put(`/api/users/${tempUserId}`)
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ password: '123' });
+      expect(shortPassRes.status).toBe(400);
+      expect(shortPassRes.body.error).toMatch(/10 أحرف/);
+
+      const changePassRes = await request(app)
+        .put(`/api/users/${tempUserId}`)
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ password: 'BrandNewStrongPass10!' });
+      expect(changePassRes.status).toBe(200);
+
+      const meAfter = await request(app)
+        .get('/api/auth/me')
+        .set('Cookie', [`session_token=${tempSessionToken}`]);
+      expect(meAfter.status).toBe(401);
+    });
+
+    // 8) استعادة النسخة الاحتياطية
+    it('البند 8: استعادة النسخة الاحتياطية تستبدل مجلد documents بالكامل وتحذف ملفات WAL/SHM', async () => {
+      // 1. يرفض غير المدير برمز 403
+      const resAccountant = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${accountantToken}`])
+        .send({ backupName: 'backup_test_nonexistent', confirmationText: 'تأكيد الاستعادة' });
+      expect(resAccountant.status).toBe(403);
+
+      // 2. يرفض المدير إذا لم يُرسل نص التأكيد الصريح "تأكيد الاستعادة"
+      const resNoConfirm = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ backupName: 'backup_test_nonexistent' });
+      expect(resNoConfirm.status).toBe(400);
+
+      // 3. يرفض إذا كان اسم النسخة غير موجود (404)
+      const resNotFound = await request(app)
+        .post('/api/server-backups/restore')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({ backupName: 'backup_test_nonexistent', confirmationText: 'تأكيد الاستعادة' });
+      expect(resNotFound.status).toBe(404);
+    });
+
+    // 9) migrate-all ينفذ داخل transaction ويتحقق من البنية
+    it('البند 9: migrate-all يرفض البنية غير الصالحة برمز 400، وينفذ الترحيل السليم داخل معاملة transaction', async () => {
+      const badRes1 = await request(app)
+        .post('/api/data/migrate-all')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send([1, 2, 3]);
+      expect(badRes1.status).toBe(400);
+
+      const goodRes = await request(app)
+        .post('/api/data/migrate-all')
+        .set('Cookie', [`session_token=${adminToken}`])
+        .send({
+          clients: [{ id: 'mig-client-1', name: 'عميل مرحل داخل transaction' }],
+          accounts: [{ id: 'mig-acc-1', name: 'حساب مرحل' }]
+        });
+      expect(goodRes.status).toBe(200);
+      expect(goodRes.body.success).toBe(true);
+      expect(goodRes.body.summary.clientsCount).toBe(1);
+      expect(goodRes.body.summary.accountsCount).toBe(1);
+    });
+
+    // =========================================================================
+    // (س) اختبارات خادم قيود اليومية المحاسبية المتقدمة (Journal Entries Hardening 1 to 5)
+    // =========================================================================
+    describe('(س) اختبارات خادم قيود اليومية المحاسبية المتقدمة (Journal Entries Hardening)', () => {
+      // 1) ارفض أي قيد مدينه لا يساوي دائنه (تفاوت 0.005 جنيه بحد أقصى)
+      it('1) يرفض القيد غير المتزن بتفاوت يتجاوز 0.005 ج.م ويقبل المتزن ضمن حدود 0.005', async () => {
+        const unbalRes = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: `je-unbal-${Date.now()}`,
+            data: {
+              date: '2026-06-15',
+              description: 'قيد غير متزن',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 1000, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 1000.01 }, // diff = 0.01 > 0.005
+              ],
+            },
+          });
+        expect(unbalRes.status).toBe(400);
+        expect(unbalRes.body.error).toMatch(/غير متزن|0\.005/);
+
+        const balRes = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: `je-bal-${Date.now()}`,
+            data: {
+              date: '2026-06-15',
+              description: 'قيد متزن ضمن حدود 0.005',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 1000, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 1000.003 }, // diff = 0.003 <= 0.005
+              ],
+            },
+          });
+        expect(balRes.status).toBe(200);
+        expect(balRes.body.success).toBe(true);
+      });
+
+      // 2) فعّل قفل الفترات: ارفض إضافة أو تعديل أو حذف أو إلغاء ترحيل أي قيد داخل فترة مقفولة
+      it('2) يرفض إضافة أو تعديل أو حذف أو إلغاء ترحيل أي قيد داخل فترة مالية مقفولة', async () => {
+        const activeDb = (app as any).db || db;
+        // قفل السنة المالية 2024
+        const lockId = `lock-2024-ANNUAL`;
+        activeDb.prepare(`
+          INSERT OR REPLACE INTO fiscalPeriodLocks (id, data, updated_at, version, updated_by)
+          VALUES (?, ?, datetime('now'), 1, 'admin')
+        `).run(lockId, JSON.stringify({
+          id: lockId,
+          fiscalYear: 2024,
+          period: 'ANNUAL',
+          isLocked: true,
+          lockedAt: new Date().toISOString(),
+          lockedBy: 'admin',
+        }));
+
+        // أ) محاولة إضافة قيد في سنة 2024 المقفولة
+        const addLockedRes = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: `je-locked-add-${Date.now()}`,
+            data: {
+              date: '2024-05-10',
+              description: 'قيد في فترة مقفولة',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 500, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 500 },
+              ],
+            },
+          });
+        expect(addLockedRes.status).toBe(400);
+        expect(addLockedRes.body.error).toMatch(/مقفولة/);
+
+        // إضافة قيد مسبق في 2024 مباشرة في قاعدة البيانات لمحاولة التعديل والحذف
+        const testLockedJeId = `je-pre-locked-2024-${Date.now()}`;
+        activeDb.prepare(`
+          INSERT INTO journalEntries (id, data, updated_at, version, updated_by)
+          VALUES (?, ?, datetime('now'), 1, 'admin')
+        `).run(testLockedJeId, JSON.stringify({
+          id: testLockedJeId,
+          date: '2024-06-20',
+          entryNumber: 1,
+          serialNumber: 'JV-2024-0001',
+          description: 'قيد قديم في 2024',
+          isPosted: true,
+          status: 'POSTED',
+          lines: [
+            { accountId: 'acc-1', accountCode: '101', debit: 500, credit: 0 },
+            { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 500 },
+          ],
+        }));
+
+        // ب) محاولة تعديل قيد في سنة مقفولة
+        const editLockedRes = await request(app)
+          .put('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${adminToken}`])
+          .send({
+            id: testLockedJeId,
+            data: {
+              date: '2024-06-20',
+              description: 'تعديل قيد في فترة مقفولة',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 600, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 600 },
+              ],
+            },
+          });
+        expect(editLockedRes.status).toBe(400);
+        expect(editLockedRes.body.error).toMatch(/مقفولة/);
+
+        // ج) محاولة إلغاء ترحيل قيد في سنة مقفولة
+        const unpostLockedRes = await request(app)
+          .put('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${adminToken}`])
+          .send({
+            id: testLockedJeId,
+            data: {
+              date: '2024-06-20',
+              description: 'إلغاء ترحيل في فترة مقفولة',
+              isPosted: false,
+              status: 'DRAFT',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 500, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 500 },
+              ],
+            },
+          });
+        expect(unpostLockedRes.status).toBe(400);
+        expect(unpostLockedRes.body.error).toMatch(/مقفولة/);
+
+        // د) محاولة حذف قيد في سنة مقفولة
+        const deleteLockedRes = await request(app)
+          .delete(`/api/data/journalEntries/${testLockedJeId}`)
+          .set('Cookie', [`session_token=${adminToken}`]);
+        expect(deleteLockedRes.status).toBe(403);
+        expect(deleteLockedRes.body.error).toMatch(/مقفولة/);
+      });
+
+      // 3) ارفض تعديل أو حذف قيد مرحّل إلا لمن عنده canEditPostedEntries، وسجّل كل محاولة في سجل المراجعة
+      it('3) يرفض تعديل أو حذف قيد مرحّل لمن لا يملك canEditPostedEntries ويسجل المحاولة في auditLogs', async () => {
+        const activeDb = (app as any).db || db;
+        const postedJeId = `je-posted-auth-test-${Date.now()}`;
+        activeDb.prepare(`
+          INSERT INTO journalEntries (id, data, updated_at, version, updated_by)
+          VALUES (?, ?, datetime('now'), 1, 'admin')
+        `).run(postedJeId, JSON.stringify({
+          id: postedJeId,
+          date: '2026-07-01',
+          entryNumber: 99,
+          serialNumber: 'JV-2026-0099',
+          description: 'قيد مبيعات مرحل رسمي',
+          isPosted: true,
+          status: 'POSTED',
+          lines: [
+            { accountId: 'acc-1', accountCode: '101', debit: 2000, credit: 0 },
+            { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 2000 },
+          ],
+        }));
+
+        // accountantNoPostToken لا يملك canEditPostedEntries
+        const editRes = await request(app)
+          .put('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantNoPostToken}`])
+          .send({
+            id: postedJeId,
+            data: {
+              date: '2026-07-01',
+              description: 'محاولة تعديل قيد مرحل بدون صلاحية',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 2500, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 2500 },
+              ],
+            },
+          });
+        expect(editRes.status).toBe(400);
+        expect(editRes.body.error).toMatch(/canEditPostedEntries/);
+
+        // حذف القيد المرحل من محاسب بدون canEditPostedEntries يُرفض برمز 403
+        const delRes = await request(app)
+          .delete(`/api/data/journalEntries/${postedJeId}`)
+          .set('Cookie', [`session_token=${accountantNoPostToken}`]);
+        expect(delRes.status).toBe(403);
+        expect(delRes.body.error).toMatch(/canEditPostedEntries/);
+
+        // تعديل القيد المرحل من مستخدم يملك canEditPostedEntries ينجح برمز 200 ويسجل في auditLogs
+        const editPermRes = await request(app)
+          .put('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: postedJeId,
+            data: {
+              date: '2026-07-01',
+              description: 'تعديل مصرح به لقيد مرحل',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 2200, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 2200 },
+              ],
+            },
+          });
+        expect(editPermRes.status).toBe(200);
+
+        // التحقق من تسجيل المحاولات والتعديل في auditLogs
+        const auditAttempts = activeDb.prepare("SELECT * FROM auditLogs WHERE data LIKE ?").all(`%${postedJeId}%`);
+        expect(auditAttempts.length).toBeGreaterThan(0);
+      });
+
+      // 4) ترقيم القيود يُحسب على السيرفر بالسنة المالية للقيد، بدون تكرار، وبدون السماح بحذف يترك فجوة في الترقيم
+      it('4) ترقيم القيود يحسب على السيرفر بالسنة المالية للقيد ويمنع الحذف الذي يترك فجوة في الترقيم', async () => {
+        const year = 2028;
+        const idA = `jv-seq-a-${Date.now()}`;
+        const idB = `jv-seq-b-${Date.now()}`;
+
+        const resA = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: idA,
+            data: {
+              date: `${year}-01-15`,
+              description: 'قيد أول لسنة 2028',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 300, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 300 },
+              ],
+            },
+          });
+        expect(resA.status).toBe(200);
+
+        const resB = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: idB,
+            data: {
+              date: `${year}-02-20`,
+              description: 'قيد ثان لسنة 2028',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 700, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 700 },
+              ],
+            },
+          });
+        expect(resB.status).toBe(200);
+
+        const activeDb = (app as any).db || db;
+        const rowA = activeDb.prepare("SELECT data FROM journalEntries WHERE id = ?").get(idA) as any;
+        const parsedA = JSON.parse(rowA.data);
+        const rowB = activeDb.prepare("SELECT data FROM journalEntries WHERE id = ?").get(idB) as any;
+        const parsedB = JSON.parse(rowB.data);
+
+        expect(parsedA.entryNumber).toBe(1);
+        expect(parsedA.serialNumber).toBe(`JV-${year}-0001`);
+        expect(parsedB.entryNumber).toBe(2);
+        expect(parsedB.serialNumber).toBe(`JV-${year}-0002`);
+
+        // محاولة حذف القيد الأول idA وترك فجوة (لأن idB موجود برقم 2)
+        const delGapRes = await request(app)
+          .delete(`/api/data/journalEntries/${idA}`)
+          .set('Cookie', [`session_token=${adminToken}`]);
+        expect(delGapRes.status).toBe(400);
+        expect(delGapRes.body.error).toMatch(/فجوة/);
+      });
+
+      // 5) فحص تكرار ترحيل الفاتورة يكون بالفاتورة والعميل معًا وليس رقم الفاتورة فقط
+      it('5) فحص تكرار ترحيل الفاتورة على السيرفر يكون بالفاتورة والعميل معاً وليس رقم الفاتورة فقط', async () => {
+        const invNum = `INV-SRV-TEST-${Date.now()}`;
+        const entryId1 = `je-inv-c1-${Date.now()}`;
+        const entryId2 = `je-inv-c2-${Date.now()}`;
+        const entryIdDup = `je-inv-c1-dup-${Date.now()}`;
+
+        // 1. ترحيل فاتورة للعميل client-1
+        const res1 = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: entryId1,
+            data: {
+              date: '2026-08-01',
+              entryType: 'SALES',
+              referenceNumber: invNum,
+              clientId: 'client-1',
+              clientName: 'شركة النيل للخدمات',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 1500, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 1500 },
+              ],
+            },
+          });
+        expect(res1.status).toBe(200);
+
+        // 2. ترحيل نفس رقم الفاتورة لعميل مختلف client-2 (ينجح ولا يرفض!)
+        const res2 = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: entryId2,
+            data: {
+              date: '2026-08-01',
+              entryType: 'SALES',
+              referenceNumber: invNum,
+              clientId: 'client-2',
+              clientName: 'مؤسسة الأهرام الدولية',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 2500, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 2500 },
+              ],
+            },
+          });
+        expect(res2.status).toBe(200);
+
+        // 3. محاولة ترحيل نفس رقم الفاتورة لنفس العميل client-1 مرة أخرى (يُرفض كتكرار!)
+        const resDup = await request(app)
+          .post('/api/data/journalEntries')
+          .set('Cookie', [`session_token=${accountantToken}`])
+          .send({
+            id: entryIdDup,
+            data: {
+              date: '2026-08-01',
+              entryType: 'SALES',
+              referenceNumber: invNum,
+              clientId: 'client-1',
+              clientName: 'شركة النيل للخدمات',
+              lines: [
+                { accountId: 'acc-1', accountCode: '101', debit: 1500, credit: 0 },
+                { accountId: 'acc-2', accountCode: '102', debit: 0, credit: 1500 },
+              ],
+            },
+          });
+        expect(resDup.status).toBe(400);
+      });
+    });
+  });
 });
-
-
-

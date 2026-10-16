@@ -26,6 +26,7 @@ import JSZip from "jszip";
 import express from "express";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import crypto from "crypto";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
@@ -63,14 +64,44 @@ function getAI(): GoogleGenAI | null {
 }
 
 export async function createApp(): Promise<express.Express> {
+  // Support aliases for backward compatibility
+  if (!process.env.PASSWORD_PURGE_MASTER && process.env.MASTER_PURGE_PASSWORD) {
+    process.env.PASSWORD_PURGE_MASTER = process.env.MASTER_PURGE_PASSWORD;
+  }
+  if (!process.env.SETUP_TOKEN && process.env.TOKEN_SETUP) {
+    process.env.SETUP_TOKEN = process.env.TOKEN_SETUP;
+  }
+  if (!process.env.ETA_TOKEN_PIN && process.env.PIN_TOKEN_ETA) {
+    process.env.ETA_TOKEN_PIN = process.env.PIN_TOKEN_ETA;
+  }
+
+  const isEtaEnabled = Boolean(process.env.ETA_CLIENT_ID && process.env.ETA_CLIENT_ID.trim().length > 0);
+
   if (process.env.NODE_ENV === 'production') {
-    const missingProdVars = [];
-    if (!process.env.PASSWORD_PURGE_MASTER || process.env.PASSWORD_PURGE_MASTER.length < 16) missingProdVars.push('PASSWORD_PURGE_MASTER (min 16 chars)');
-    if (!process.env.DEVICE_ACTIVATION_CODE || process.env.DEVICE_ACTIVATION_CODE.length < 12) missingProdVars.push('DEVICE_ACTIVATION_CODE (min 12 chars)');
-    if (!process.env.SETUP_TOKEN && !process.env.TOKEN_SETUP) missingProdVars.push('SETUP_TOKEN / TOKEN_SETUP');
-    if (!process.env.ETA_CLIENT_SECRET) missingProdVars.push('ETA_CLIENT_SECRET');
-    if (!process.env.PIN_TOKEN_ETA && !process.env.ETA_TOKEN_PIN) missingProdVars.push('PIN_TOKEN_ETA / ETA_TOKEN_PIN');
-    if (!process.env.CREDENTIALS_KEY || process.env.CREDENTIALS_KEY.length < 32) missingProdVars.push('CREDENTIALS_KEY (min 32 chars)');
+    const missingProdVars: string[] = [];
+    if (!process.env.PASSWORD_PURGE_MASTER || process.env.PASSWORD_PURGE_MASTER.length < 16) {
+      missingProdVars.push('PASSWORD_PURGE_MASTER (min 16 chars)');
+    }
+    if (!process.env.DEVICE_ACTIVATION_CODE || process.env.DEVICE_ACTIVATION_CODE.length < 12) {
+      missingProdVars.push('DEVICE_ACTIVATION_CODE (min 12 chars)');
+    }
+    if (!process.env.SETUP_TOKEN) {
+      missingProdVars.push('SETUP_TOKEN / TOKEN_SETUP');
+    }
+    if (!process.env.CREDENTIALS_KEY || process.env.CREDENTIALS_KEY.length < 32) {
+      missingProdVars.push('CREDENTIALS_KEY (min 32 chars)');
+    }
+
+    if (isEtaEnabled) {
+      if (!process.env.ETA_CLIENT_SECRET) {
+        missingProdVars.push('ETA_CLIENT_SECRET');
+      }
+      if (!process.env.ETA_TOKEN_PIN) {
+        missingProdVars.push('PIN_TOKEN_ETA / ETA_TOKEN_PIN');
+      }
+    } else {
+      console.log('[ETA Module]: ميزة التكامل المباشر مع مصلحة الضرائب المصرية (ETA) معطلة (ETA_CLIENT_ID غير معرّف). لن يتوقف الخادم وستعمل بقية وظائف المنظومة بصورة طبيعية.');
+    }
 
     if (missingProdVars.length > 0) {
       console.error(`FATAL SECURITY ERROR: Missing or invalid required production environment variables: ${missingProdVars.join(', ')}`);
@@ -79,6 +110,11 @@ export async function createApp(): Promise<express.Express> {
   } else {
     if (!process.env.PASSWORD_PURGE_MASTER) process.env.PASSWORD_PURGE_MASTER = 'DEFAULT_PURGE_MASTER_16_CHARS';
     if (!process.env.DEVICE_ACTIVATION_CODE) process.env.DEVICE_ACTIVATION_CODE = 'MG-MASTER-ACTIVATION-2026-CODE';
+    if (!process.env.CREDENTIALS_KEY) process.env.CREDENTIALS_KEY = 'DEV_CREDENTIALS_KEY_32_CHARS_LONG_MG_2026';
+    if (!process.env.SETUP_TOKEN) process.env.SETUP_TOKEN = 'DEV_SETUP_TOKEN_2026';
+    if (!isEtaEnabled) {
+      console.log('[ETA Module]: ميزة التكامل مع مصلحة الضرائب المصرية (ETA) غير مفعلة في بيئة التطوير.');
+    }
   }
 
   const app = express();
@@ -157,11 +193,20 @@ export async function createApp(): Promise<express.Express> {
   }
 
   
-  // --- SQLite Database & Local Auth Setup ---
+  // --- SQLite Database, Documents & Backups Setup ---
   const dataDir = process.env.DATA_DIR || path.join(process.cwd(), "data");
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
+
+  // Warning when using ephemeral container storage
+  const isEphemeralPath = !process.env.DATA_DIR || dataDir.startsWith('/tmp') || dataDir.startsWith('/var/tmp') || dataDir === path.join(process.cwd(), "data");
+  if (isEphemeralPath) {
+    console.warn(`[Storage Warning]: المسار الحالي لتخزين البيانات (${dataDir}) مسار مؤقت داخل الحاوية. في بيئات التشغيل السحابية (مثل Cloud Run / Container)، ستُفقد قاعدة بيانات SQLite والمستندات والنسخ الاحتياطية عند إعادة تشغيل الحاوية ما لم يتم ربط DATA_DIR بمساحة تخزين دائمة (Persistent Volume).`);
+  } else {
+    console.log(`[Storage Info]: تم ضبط مسار التخزين الدائم بنجاح: DATA_DIR = ${dataDir}`);
+  }
+
   const dbPath = process.env.DB_PATH || path.join(dataDir, "app.db");
   if (dbPath !== ":memory:" && !fs.existsSync(path.dirname(dbPath))) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -186,8 +231,16 @@ export async function createApp(): Promise<express.Express> {
       can_delete_records INTEGER DEFAULT 0,
       can_access_credit_files INTEGER DEFAULT 0,
       can_access_tax_reports INTEGER DEFAULT 0,
+      must_change_password INTEGER DEFAULT 0,
       created_at TEXT NOT NULL
     );
+  `);
+
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;");
+  } catch {}
+
+  db.exec(`
 
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
@@ -321,21 +374,13 @@ export async function createApp(): Promise<express.Express> {
   `);
 
   function checkClientExists(clientId: string): boolean {
-    if (!clientId || clientId === "general") return false;
+    if (!clientId || clientId === "general" || clientId === "undefined" || clientId === "null") return false;
     try {
       const clientRow = db.prepare("SELECT id FROM clients WHERE id = ?").get(String(clientId));
-      if (clientRow) return true;
-      const storeRow = db.prepare("SELECT data FROM dataStores WHERE key = 'clients'").get() as any;
-      if (storeRow && storeRow.data) {
-        const clientList = JSON.parse(storeRow.data);
-        if (Array.isArray(clientList) && clientList.some((c: any) => String(c.id) === String(clientId))) {
-          return true;
-        }
-      }
+      return Boolean(clientRow);
     } catch {
       return false;
     }
-    return false;
   }
 
   const storage = multer.diskStorage({
@@ -347,7 +392,10 @@ export async function createApp(): Promise<express.Express> {
       // Verify client exists before creating any target folder on disk
       const clientExists = checkClientExists(clientId);
       if (!clientExists) {
-        return cb(new Error("العميل غير موجود أو جدول العملاء غير متوفر. تم رفض رفع المستند."), "");
+        const notFoundErr: any = new Error("العميل غير موجود أو جدول العملاء غير متوفر. تم رفض رفع المستند.");
+        notFoundErr.status = 400;
+        notFoundErr.statusCode = 400;
+        return cb(notFoundErr, "");
       }
 
       const targetDir = path.join(documentsDir, clientId, year);
@@ -570,6 +618,181 @@ export async function createApp(): Promise<express.Express> {
     next();
   }
 
+  // --- Offline Signed License Verification (Ed25519) ---
+  const ED25519_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAoXzVK5LK+sq2GmSqIMJleA4Bmx5yrUr7WzM8OMKJFwE=
+-----END PUBLIC KEY-----`;
+
+  function verifyAndParseLicense(licenseCode: string): { valid: boolean; payload?: any; error?: string } {
+    if (!licenseCode || typeof licenseCode !== 'string' || !licenseCode.includes('.')) {
+      return { valid: false, error: 'كود الترخيص غير صالح (فارغ أو بتنسيق خاطئ).' };
+    }
+    const parts = licenseCode.trim().split('.');
+    if (parts.length !== 2) {
+      return { valid: false, error: 'تنسيق كود الترخيص غير صالح.' };
+    }
+    const [payloadB64, sigB64] = parts;
+    try {
+      const payloadJson = Buffer.from(payloadB64, 'base64').toString('utf8');
+      const payload = JSON.parse(payloadJson);
+
+      const sigBuf = Buffer.from(sigB64, 'base64');
+      const isVerified = crypto.verify(
+        null,
+        Buffer.from(payloadB64, 'utf8'),
+        crypto.createPublicKey(ED25519_PUBLIC_KEY),
+        sigBuf
+      );
+
+      if (!isVerified) {
+        return { valid: false, error: 'توقيع الترخيص غير مصرح به أو تم التلاعب به.' };
+      }
+
+      return { valid: true, payload };
+    } catch (err: any) {
+      return { valid: false, error: `فشل فك تشفير وتوقيع الترخيص: ${err.message}` };
+    }
+  }
+
+  function getSystemLicenseStatus(dbInstance: Database.Database): {
+    status: 'VALID' | 'EXPIRING' | 'GRACE' | 'EXPIRED' | 'MISSING_OR_INVALID';
+    payload?: any;
+    message: string;
+    daysRemaining?: number;
+    maxUsers?: number;
+    currentUsers?: number;
+    requestId: string;
+  } {
+    const reqId = crypto.createHash('sha256').update(os.hostname() + '-' + os.platform() + '-' + os.release()).digest('hex').substring(0, 16).toUpperCase();
+
+    const now = Date.now();
+    const lastTimeRow = dbInstance.prepare("SELECT value FROM settings WHERE key = 'LICENSE_LAST_TIME'").get() as { value: string } | undefined;
+    if (lastTimeRow) {
+      const lastTime = parseInt(lastTimeRow.value, 10);
+      if (now < lastTime - (24 * 60 * 60 * 1000)) {
+        return {
+          status: 'EXPIRED',
+          message: 'تم اكتشاف تلاعب بساعة النظام (تم إرجاع التاريخ للوراء). تم قفل الكتابة لحماية أمان المنظومة.',
+          requestId: reqId,
+        };
+      }
+    }
+    dbInstance.prepare(`
+      INSERT INTO settings (key, value, updated_at, updated_by)
+      VALUES ('LICENSE_LAST_TIME', ?, datetime('now'), 'system')
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(String(Math.max(now, lastTimeRow ? parseInt(lastTimeRow.value, 10) : 0)));
+
+    const licRow = dbInstance.prepare("SELECT value FROM settings WHERE key = 'LICENSE_CODE'").get() as { value: string } | undefined;
+    if (!licRow || !licRow.value) {
+      return {
+        status: 'MISSING_OR_INVALID',
+        message: 'لا يوجد ترخيص مفعل على النظام. يرجى إدخال كود الترخيص الرسمي.',
+        requestId: reqId,
+      };
+    }
+
+    const verified = verifyAndParseLicense(licRow.value);
+    if (!verified.valid || !verified.payload) {
+      return {
+        status: 'MISSING_OR_INVALID',
+        message: verified.error || 'كود الترخيص غير صالح أو تالف.',
+        requestId: reqId,
+      };
+    }
+
+    const p = verified.payload;
+    const expiresAtMs = new Date(p.expiresAt).getTime();
+    const diffMs = expiresAtMs - now;
+    const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    const userCountRow = dbInstance.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+    const currentUsers = userCountRow ? userCountRow.count : 0;
+
+    if (diffMs < 0) {
+      const graceMs = 7 * 24 * 60 * 60 * 1000;
+      if (Math.abs(diffMs) <= graceMs) {
+        return {
+          status: 'GRACE',
+          payload: p,
+          message: `انتهت صلاحية الترخيص منذ ${Math.abs(daysRemaining)} يوم (فترة سماح 7 أيام). يرجى تجديد الترخيص قريباً.`,
+          daysRemaining: 0,
+          maxUsers: p.maxUsers,
+          currentUsers,
+          requestId: reqId,
+        };
+      } else {
+        return {
+          status: 'EXPIRED',
+          payload: p,
+          message: 'انتهت صلاحية الترخيص وانقضت فترة السماح. المنظومة في وضع القراءة والتصدير فقط.',
+          daysRemaining: -Math.abs(daysRemaining),
+          maxUsers: p.maxUsers,
+          currentUsers,
+          requestId: reqId,
+        };
+      }
+    }
+
+    if (daysRemaining <= 14) {
+      return {
+        status: 'EXPIRING',
+        payload: p,
+        message: `الترخيص سينتهي خلال ${daysRemaining} يوم. يرجى التواصل لتجديد الترخيص.`,
+        daysRemaining,
+        maxUsers: p.maxUsers,
+        currentUsers,
+        requestId: reqId,
+      };
+    }
+
+    return {
+      status: 'VALID',
+      payload: p,
+      message: 'الترخيص ساري ومفعل بكفاءة كاملة.',
+      daysRemaining,
+      maxUsers: p.maxUsers,
+      currentUsers,
+      requestId: reqId,
+    };
+  }
+
+  function requireValidLicenseForWriting(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const method = req.method.toUpperCase();
+    const isWriteMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+
+    if (!isWriteMethod) {
+      return next();
+    }
+
+    const fullPath = req.originalUrl ? req.originalUrl.split('?')[0] : ((req.baseUrl || "") + req.path);
+
+    const allowedMutationPaths = [
+      '/api/auth/login',
+      '/api/auth/logout',
+      '/api/auth/change-password',
+      '/api/license/activate',
+      '/api/server-backups/restore',
+      '/api/desktop/network-access',
+    ];
+
+    if (allowedMutationPaths.some(p => fullPath.endsWith(p))) {
+      return next();
+    }
+
+    const licStatus = getSystemLicenseStatus(db);
+    if (['EXPIRED', 'MISSING_OR_INVALID'].includes(licStatus.status)) {
+      return res.status(403).json({
+        success: false,
+        licenseError: true,
+        status: licStatus.status,
+        error: `تم رفض عملية الكتابة (${method} ${fullPath}): ${licStatus.message}. الترخيص منتهي أو غير صالح. المنظومة في وضع القراءة والتصدير فقط.`
+      });
+    }
+
+    next();
+  }
+
   // --- Local SQLite Auth Middleware for all /api/* routes ---
   function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
     const fullPath = req.originalUrl ? req.originalUrl.split('?')[0] : ((req.baseUrl || "") + req.path);
@@ -653,6 +876,7 @@ export async function createApp(): Promise<express.Express> {
 
   // Apply middlewares
   app.use("/api", requireAuth);
+  app.use("/api", requireValidLicenseForWriting);
   app.use("/api/ai", aiRateLimiter);
   app.use("/api/ocr", aiRateLimiter);
 
@@ -836,6 +1060,7 @@ export async function createApp(): Promise<express.Express> {
         canDeleteRecords: !!user.can_delete_records,
         canAccessCreditFiles: !!user.can_access_credit_files,
         canAccessTaxReports: !!user.can_access_tax_reports,
+        mustChangePassword: Boolean(user.must_change_password),
         createdAt: user.created_at,
       };
 
@@ -894,10 +1119,102 @@ export async function createApp(): Promise<express.Express> {
       canDeleteRecords: !!user.can_delete_records,
       canAccessCreditFiles: !!user.can_access_credit_files,
       canAccessTaxReports: !!user.can_access_tax_reports,
+      mustChangePassword: Boolean(user.must_change_password),
       createdAt: user.created_at,
     };
 
     res.json({ success: true, user: userProfile });
+  });
+
+  app.post("/api/auth/change-password", async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      if (!currentUser) {
+        return res.status(401).json({ success: false, error: "غير مصرح: يجب تسجيل الدخول أولاً." });
+      }
+      const { newPassword, currentPassword } = req.body;
+      if (!newPassword || newPassword.length < 10) {
+        return res.status(400).json({ success: false, error: "كلمة المرور الجديدة يجب ألا تقل عن 10 أحرف." });
+      }
+
+      const existingUser = db.prepare("SELECT * FROM users WHERE id = ?").get(currentUser.id) as any;
+      if (!existingUser) {
+        return res.status(404).json({ success: false, error: "المستخدم غير موجود." });
+      }
+
+      // If user doesn't have must_change_password flag set, check current password if provided
+      if (!existingUser.must_change_password && currentPassword) {
+        const match = await bcrypt.compare(currentPassword, existingUser.password_hash);
+        if (!match) {
+          return res.status(400).json({ success: false, error: "كلمة المرور الحالية غير صحيحة." });
+        }
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(newPassword, salt);
+      db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hash, currentUser.id);
+
+      recordServerAuditLog(
+        "PASSWORD_CHANGED",
+        "users",
+        String(currentUser.id),
+        currentUser.name || currentUser.email,
+        `تم تغيير كلمة المرور للمستخدم (${currentUser.name || currentUser.email}) بنجاح وتحديث حالة الإلزام.`
+      );
+
+      res.json({ success: true, message: "تم تغيير كلمة المرور بنجاح." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- License Management Endpoints ---
+  app.get("/api/license/status", requireAuth, (req, res) => {
+    try {
+      const status = getSystemLicenseStatus(db);
+      res.json({ success: true, ...status });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/license/activate", requireAuth, (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      if (!currentUser || currentUser.role !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: "صلاحية مرفوضة: تفعيل الترخيص مقتصر على مدير النظام (ADMIN)." });
+      }
+
+      const { licenseCode } = req.body;
+      if (!licenseCode || typeof licenseCode !== 'string') {
+        return res.status(400).json({ success: false, error: "يرجى إدخال كود الترخيص." });
+      }
+
+      const verification = verifyAndParseLicense(licenseCode);
+      if (!verification.valid || !verification.payload) {
+        return res.status(400).json({ success: false, error: verification.error || 'كود الترخيص غير صالح.' });
+      }
+
+      const nowStr = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_at, updated_by)
+        VALUES ('LICENSE_CODE', ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+      `).run(licenseCode.trim(), nowStr, currentUser.name || currentUser.email);
+
+      recordServerAuditLog(
+        "ACTIVATE_LICENSE",
+        "settings",
+        "LICENSE_CODE",
+        currentUser.name || currentUser.email,
+        `تم تفعيل ترخيص جديد للمكتب: ${verification.payload.officeName} (الباقة: ${verification.payload.plan}, ينتهي في: ${verification.payload.expiresAt})`
+      );
+
+      const status = getSystemLicenseStatus(db);
+      res.json({ success: true, message: "تم تفعيل الترخيص بنجاح وتطبيق الصلاحيات.", ...status });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // User Management Endpoints (ADMIN only)
@@ -932,6 +1249,14 @@ export async function createApp(): Promise<express.Express> {
     const currentUser = (req as any).user;
     if (!currentUser || currentUser.role !== 'ADMIN') {
       return res.status(403).json({ success: false, error: "صلاحية مرفوضة." });
+    }
+
+    const licStatus = getSystemLicenseStatus(db);
+    if (licStatus.payload && licStatus.payload.maxUsers) {
+      const userCountRow = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+      if (userCountRow.count >= licStatus.payload.maxUsers) {
+        return res.status(400).json({ success: false, error: `تم بلوغ الحد الأقصى للمستخدمين المسموح به في الترخيص الحالي (${licStatus.payload.maxUsers} مستخدم).` });
+      }
     }
 
     const { name, email, password, role, permissions } = req.body;
@@ -1154,18 +1479,20 @@ export async function createApp(): Promise<express.Express> {
         return res.status(500).json({ success: false, error: "فشل إنشاء النسخة الاحتياطية الإجبارية قبل التفريغ." });
       }
 
-      // Execute transaction to clear entity tables (excluding auditLogs), documents, tombstones while keeping users, sessions, settings
+      // Execute transaction to clear entity tables (excluding auditLogs & audit_logs), documents, tombstones while keeping users, sessions, settings
       const resetTx = db.transaction(() => {
         const tablesToPurge = entityTypes.filter(t => t !== 'auditLogs' && t !== 'audit_logs');
         for (const type of tablesToPurge) {
-          db.prepare(`DELETE FROM ${type}`).run();
+          try {
+            db.prepare(`DELETE FROM ${type}`).run();
+          } catch {}
         }
-        db.prepare("DELETE FROM documents").run();
-        db.prepare("DELETE FROM tombstones").run();
+        try { db.prepare("DELETE FROM documents").run(); } catch {}
+        try { db.prepare("DELETE FROM tombstones").run(); } catch {}
       });
       resetTx();
 
-      return res.json({ success: true, message: "تم تفريغ كافة البيانات التجريبية على الخادم مع الإبقاء على المستخدمين والإعدادات وسجل التدقيق." });
+      return res.json({ success: true, message: "تم تفريغ كافة البيانات التجريبية على الخادم مع الحفاظ التام على سجلات التدقيق (auditLogs) والمستخدمين والإعدادات." });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || String(err) });
     }
@@ -1403,19 +1730,25 @@ export async function createApp(): Promise<express.Express> {
       if (typeof dateOrYear === 'number') {
         year = dateOrYear;
       } else {
-        const parts = String(dateOrYear).split('-');
+        const str = String(dateOrYear).trim();
+        const parts = str.split('-');
         year = parseInt(parts[0], 10);
         if (parts.length > 1) {
-          month = parts[1];
+          month = parts[1].replace(/[^0-9]/g, '');
         }
       }
+      if (isNaN(year)) return false;
       return rows.some((row) => {
         try {
           const lock = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
           if (!lock || !lock.isLocked) return false;
-          if (lock.fiscalYear !== year) return false;
+          if (Number(lock.fiscalYear) !== year) return false;
           if (lock.period === 'ANNUAL') return true;
-          if (month && (lock.period === month || lock.period === `M${month}`)) return true;
+          if (month) {
+            const cleanMonth = month.padStart(2, '0');
+            const lockP = String(lock.period || '').trim();
+            if (lockP === cleanMonth || lockP === month || lockP === `M${cleanMonth}` || lockP === `M${parseInt(month, 10)}`) return true;
+          }
           return false;
         } catch {
           return false;
@@ -1463,41 +1796,94 @@ export async function createApp(): Promise<express.Express> {
     const lines = parsedData?.lines || [];
 
     // 1. Balance verification (difference > 0.005)
+    if (!Array.isArray(lines) || lines.length < 2) {
+      throw new Error("القيد المحاسبي غير مكتمل: يجب أن يحتوي القيد على طرفين على الأقل (مدين ودائن).");
+    }
     const calculatedDebit = Math.round(lines.reduce((sum: number, l: any) => sum + Number(l.debit || 0), 0) * 1000) / 1000;
     const calculatedCredit = Math.round(lines.reduce((sum: number, l: any) => sum + Number(l.credit || 0), 0) * 1000) / 1000;
+    if (calculatedDebit <= 0) {
+      throw new Error("إجمالي مبالغ القيد يجب أن تكون أكبر من الصفر.");
+    }
     const diff = Math.abs(calculatedDebit - calculatedCredit);
 
     if (diff > 0.005) {
-      throw new Error(`القيد غير متزن: إجمالي المدين (${calculatedDebit.toFixed(2)}) لا يساوي إجمالي الدائن (${calculatedCredit.toFixed(2)}) بدقة 0.005 (الفارق: ${diff.toFixed(2)})`);
+      throw new Error(`القيد غير متزن: إجمالي المدين (${calculatedDebit.toFixed(3)}) لا يساوي إجمالي الدائن (${calculatedCredit.toFixed(3)}) بتفاوت أقصى 0.005 (الفارق: ${diff.toFixed(3)})`);
     }
+
+    parsedData.totalDebit = Math.round(calculatedDebit * 100) / 100;
+    parsedData.totalCredit = Math.round(calculatedCredit * 100) / 100;
 
     // 2. Period Lock check
     const entryDate = parsedData.date || new Date().toISOString();
-    if (serverIsPeriodLocked(entryDate)) {
-      throw new Error("عذراً، الفترة المالية لهذا القيد مقفولة. ممنوع إضافة أو تعديل قيد في فترة مقفولة.");
-    }
-
-    // 3. canEditPostedEntries check
     const existingData = existingRow && existingRow.data ? (typeof existingRow.data === "string" ? JSON.parse(existingRow.data) : existingRow.data) : null;
     const wasPosted = existingData && (existingData.status === "POSTED" || existingData.isPosted === true);
+    const isNowDraft = parsedData && (parsedData.status === "DRAFT" || parsedData.isPosted === false);
+
+    if (!existingRow) {
+      if (serverIsPeriodLocked(entryDate)) {
+        throw new Error("عذراً، الفترة المالية لهذا القيد مقفولة. ممنوع إضافة قيد في فترة مقفولة.");
+      }
+    } else {
+      const oldDate = existingData?.date || entryDate;
+      if (serverIsPeriodLocked(oldDate)) {
+        throw new Error("عذراً، الفترة المالية السابقة لهذا القيد مقفولة. ممنوع تعديل أو تغيير قيد في فترة مقفولة.");
+      }
+      if (entryDate !== oldDate && serverIsPeriodLocked(entryDate)) {
+        throw new Error("عذراً، الفترة المالية المستهدفة مقفولة. ممنوع نقل قيد إلى فترة مقفولة.");
+      }
+      if (wasPosted && isNowDraft && (serverIsPeriodLocked(oldDate) || serverIsPeriodLocked(entryDate))) {
+        throw new Error("عذراً، لا يمكن إلغاء ترحيل قيد في فترة مالية مقفولة.");
+      }
+    }
+
+    // 3. canEditPostedEntries check & audit logging
     if (existingRow && wasPosted) {
-      const canEditPosted = user && (user.canEditPostedEntries || user.role === 'ADMIN');
+      const canEditPosted = Boolean(user && (user.canEditPostedEntries || user.can_edit_posted_entries || user.role === 'ADMIN'));
+      recordServerAuditLog(
+        canEditPosted ? "POSTED_JOURNAL_ENTRY_EDIT" : "SECURITY_UNAUTHORIZED_POSTED_EDIT_ATTEMPT",
+        "journalEntries",
+        id,
+        user ? (user.name || user.email) : "Unknown",
+        `محاولة تعديل قيد مرحّل رقم (${existingData?.serialNumber || id}) بواسطة (${user ? (user.name || user.email) : "Unknown"}) - الصلاحية: ${canEditPosted ? "مسموح" : "مرفوض"}`
+      );
+
       if (!canEditPosted) {
         throw new Error("غير مصرح: لا تملك صلاحية (canEditPostedEntries) لتعديل أو إلغاء ترحيل قيد مرحّل.");
       }
     }
 
-    const isNowDraft = parsedData && (parsedData.status === "DRAFT" || parsedData.isPosted === false);
-    if (wasPosted && isNowDraft && serverIsPeriodLocked(entryDate)) {
-      throw new Error("عذراً، لا يمكن إلغاء ترحيل قيد في فترة مالية مقفولة.");
+    // 4. Duplicate invoice posting check: verified by invoice reference AND client together
+    const invRef = String(parsedData.referenceNumber || parsedData.invoiceNumber || parsedData.invoiceId || '').trim();
+    if (invRef && (parsedData.entryType === 'SALES' || parsedData.invoiceId)) {
+      const invClientId = String(parsedData.clientId || parsedData.clientName || '').trim();
+      const allRows = db.prepare("SELECT id, data FROM journalEntries WHERE id != ?").all(id) as any[];
+      for (const r of allRows) {
+        try {
+          const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          const otherRef = String(d.referenceNumber || d.invoiceNumber || d.invoiceId || '').trim();
+          if (otherRef && otherRef === invRef && (d.entryType === 'SALES' || d.invoiceId)) {
+            const otherClientId = String(d.clientId || d.clientName || '').trim();
+            if (!invClientId || !otherClientId || invClientId === otherClientId) {
+              throw new Error(`تم ترحيل الفاتورة رقم [${invRef}] مسبقاً لهذا العميل بالقيد رقم [${d.serialNumber || d.entryNumber || r.id}].`);
+            }
+          }
+        } catch (e: any) {
+          if (e.message && e.message.includes("تم ترحيل الفاتورة رقم")) {
+            throw e;
+          }
+        }
+      }
     }
 
-    // 5. JV numbering on server based on entry's own year inside atomic transaction
-    if (!existingRow || !parsedData.serialNumber) {
-      const entryYear = new Date(entryDate).getFullYear() || new Date().getFullYear();
+    // 5. Sequential JV numbering on server based on entry's own fiscal year
+    const entryYear = new Date(entryDate).getFullYear() || new Date().getFullYear();
+    if (!existingRow) {
       const generated = generateNextJVNumber(entryYear);
       parsedData.entryNumber = generated.entryNumber;
       parsedData.serialNumber = generated.serialNumber;
+    } else if (existingData) {
+      if (existingData.entryNumber) parsedData.entryNumber = existingData.entryNumber;
+      if (existingData.serialNumber) parsedData.serialNumber = existingData.serialNumber;
     }
 
     return JSON.stringify(parsedData);
@@ -1688,7 +2074,7 @@ export async function createApp(): Promise<express.Express> {
       }
     });
 
-    app.post("/api/data/migrate-all", (req, res) => {
+  app.post("/api/data/migrate-all", (req, res) => {
     try {
       const user = (req as any).user;
       if (!user || user.role !== "ADMIN") {
@@ -1696,6 +2082,9 @@ export async function createApp(): Promise<express.Express> {
       }
 
       const allState = req.body;
+      if (!allState || typeof allState !== 'object' || Array.isArray(allState)) {
+        return res.status(400).json({ success: false, error: "بنية البيانات المرسلة غير صالحة للترحيل." });
+      }
 
       const migrateTx = db.transaction((stateData: any) => {
         let summary = { clientsCount: 0, journalEntriesCount: 0, accountsCount: 0 };
@@ -1714,6 +2103,7 @@ export async function createApp(): Promise<express.Express> {
           `);
 
           for (const rec of records) {
+            if (!rec || typeof rec !== 'object') continue;
             const recId = rec.id || (key === 'officeProfile' ? 'profile-main' : Math.random().toString(36).substring(2));
             const dataStr = JSON.stringify(rec);
             const now = new Date().toISOString();
@@ -1725,7 +2115,7 @@ export async function createApp(): Promise<express.Express> {
 
       const summary = migrateTx(allState);
 
-      res.json({ success: true, summary, message: "تم ترحيل البيانات إلى السيرفر بنجاح." });
+      res.json({ success: true, summary, message: "تم ترحيل البيانات إلى السيرفر بنجاح داخل معاملة آمنة (Transaction)." });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -1842,13 +2232,69 @@ export async function createApp(): Promise<express.Express> {
       if (entityType === "journalEntries") {
         const existingRow = db.prepare("SELECT data FROM journalEntries WHERE id = ?").get(id) as any;
         if (existingRow) {
-          try {
-            const entryData = typeof existingRow.data === "string" ? JSON.parse(existingRow.data) : existingRow.data;
-            const entryDate = entryData?.date || new Date().toISOString();
-            if (serverIsPeriodLocked(entryDate)) {
-              return res.status(403).json({ success: false, error: "عذراً، لا يمكن حذف قيد في فترة مالية مقفولة." });
+          const entryData = typeof existingRow.data === "string" ? JSON.parse(existingRow.data) : existingRow.data;
+          const entryDate = entryData?.date || new Date().toISOString();
+          const entryYear = new Date(entryDate).getFullYear() || new Date().getFullYear();
+          const entryNum = Number(entryData?.entryNumber || 0);
+
+          // 1. Period Lock check
+          if (serverIsPeriodLocked(entryDate)) {
+            recordServerAuditLog(
+              "SECURITY_LOCKED_PERIOD_DELETE_ATTEMPT",
+              "journalEntries",
+              id,
+              user ? (user.name || user.email) : "Unknown",
+              `محاولة حذف قيد في فترة مالية مقفولة (${entryDate}) للقيد رقم (${entryData?.serialNumber || id})`
+            );
+            return res.status(403).json({ success: false, error: "عذراً، لا يمكن حذف قيد في فترة مالية مقفولة." });
+          }
+
+          // 2. Posted entry check: requires canEditPostedEntries and records every attempt in auditLogs
+          const wasPosted = entryData?.status === "POSTED" || entryData?.isPosted === true;
+          if (wasPosted) {
+            const canEditPosted = Boolean(user && (user.canEditPostedEntries || user.can_edit_posted_entries || user.role === 'ADMIN'));
+            recordServerAuditLog(
+              canEditPosted ? "POSTED_JOURNAL_ENTRY_DELETE_ATTEMPT" : "SECURITY_UNAUTHORIZED_POSTED_DELETE_ATTEMPT",
+              "journalEntries",
+              id,
+              user ? (user.name || user.email) : "Unknown",
+              `محاولة حذف قيد مرحّل رقم (${entryData?.serialNumber || id}) بواسطة (${user ? (user.name || user.email) : "Unknown"}) - الصلاحية: ${canEditPosted ? "مسموح" : "مرفوض"}`
+            );
+
+            if (!canEditPosted) {
+              return res.status(403).json({
+                success: false,
+                error: "غير مصرح: لا تملك صلاحية (canEditPostedEntries) لحذف أو تعديل قيد مرحّل."
+              });
             }
-          } catch {}
+
+            // Deletion of posted entry leaves a numbering gap. Instead of physical delete, use reversal/cancellation!
+            return res.status(400).json({
+              success: false,
+              error: "لا يمكن حذف القيد المرحّل لمنع حدوث فجوة في الترقيم المحاسبي. يجب استخدام إلغاء أو عكس القيد بدلاً من الحذف."
+            });
+          }
+
+          // 3. Draft entries: cannot delete if it leaves a gap in the sequence
+          if (entryNum > 0) {
+            const allRows = db.prepare("SELECT data FROM journalEntries WHERE id != ?").all(id) as any[];
+            const hasLaterInSameYear = allRows.some((r) => {
+              try {
+                const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+                const dy = d.date ? new Date(d.date).getFullYear() : entryYear;
+                return dy === entryYear && Number(d.entryNumber || 0) > entryNum;
+              } catch {
+                return false;
+              }
+            });
+
+            if (hasLaterInSameYear) {
+              return res.status(400).json({
+                success: false,
+                error: `لا يمكن حذف هذا القيد لأنه يترك فجوة في تسلسل ترقيم القيود لسنة ${entryYear}. يرجى تعديل القيد أو عكسه.`
+              });
+            }
+          }
         }
       }
 
@@ -1871,49 +2317,6 @@ export async function createApp(): Promise<express.Express> {
     }
   });
 
-
-    app.post("/api/data/migrate-all", (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!user || user.role !== "ADMIN") {
-        return res.status(403).json({ success: false, error: "فقط المدير يمكنه ترحيل البيانات." });
-      }
-
-      const allState = req.body;
-
-      const migrateTx = db.transaction((stateData: any) => {
-        let summary = { clientsCount: 0, journalEntriesCount: 0, accountsCount: 0 };
-
-        for (const [key, value] of Object.entries(stateData)) {
-          if (!entityTypes.includes(key)) continue;
-          const records = Array.isArray(value) ? value : [value];
-          if (key === "clients") summary.clientsCount = records.length;
-          if (key === "journalEntries") summary.journalEntriesCount = records.length;
-          if (key === "accounts") summary.accountsCount = records.length;
-
-          const insertStmt = db.prepare(`
-            INSERT INTO ${key} (id, data, updated_at, version, updated_by)
-            VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT(id) DO UPDATE SET data = ?, updated_at = ?, version = version + 1, updated_by = ?
-          `);
-
-          for (const rec of records) {
-            const recId = rec.id || (key === 'officeProfile' ? 'profile-main' : Math.random().toString(36).substring(2));
-            const dataStr = JSON.stringify(rec);
-            const now = new Date().toISOString();
-            insertStmt.run(recId, dataStr, now, user.name, dataStr, now, user.name);
-          }
-        }
-        return summary;
-      });
-
-      const summary = migrateTx(allState);
-
-      res.json({ success: true, summary, message: "تم ترحيل البيانات إلى السيرفر بنجاح." });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
 
   // --- Rate Limiter for Master Verification ---
   const MAX_RATE_LIMIT_KEYS = 5000;
@@ -2035,7 +2438,6 @@ export async function createApp(): Promise<express.Express> {
 
       const activationCode = process.env.DEVICE_ACTIVATION_CODE || 'MG-MASTER-ACTIVATION-2026-CODE';
       const normalizedInput = String(passcode || '').trim();
-      console.log("DEBUG DEVICE AUTH -> passcode:", passcode, "activationCode:", activationCode);
       let authorized = false;
       try {
         const bufA = Buffer.from(normalizedInput);
@@ -2054,8 +2456,6 @@ export async function createApp(): Promise<express.Express> {
           success: false,
           error: "رمز الماستر كود غير صحيح! يرجى إدخال كود الترخيص المعتمد.",
           message: "رمز الماستر كود غير صحيح! يرجى إدخال كود الترخيص المعتمد.",
-          debugInput: normalizedInput,
-          debugActivation: activationCode,
         });
       }
 
@@ -3216,23 +3616,7 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       }
 
       // Verify that clientId exists in the database
-      let clientExists = false;
-      try {
-        const clientRow = db.prepare("SELECT id FROM clients WHERE id = ?").get(String(clientId));
-        if (clientRow) {
-          clientExists = true;
-        } else {
-          const storeRow = db.prepare("SELECT data FROM dataStores WHERE key = 'clients'").get() as any;
-          if (storeRow && storeRow.data) {
-            const clientList = JSON.parse(storeRow.data);
-            if (Array.isArray(clientList) && clientList.some((c: any) => String(c.id) === String(clientId))) {
-              clientExists = true;
-            }
-          }
-        }
-      } catch {
-        clientExists = false;
-      }
+      const clientExists = checkClientExists(String(clientId));
 
       if (!clientExists) {
         if (fs.existsSync(req.file.path)) { try { fs.unlinkSync(req.file.path); } catch {} }
@@ -3620,7 +4004,8 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       });
     }
     console.error("[ServerError]", err);
-    res.status(err?.status || 500).json({
+    const statusCode = err?.status || err?.statusCode || (err?.message && err.message.includes("العميل غير موجود") ? 400 : 500);
+    res.status(statusCode).json({
       success: false,
       error: err?.message || "حدث خطأ غير متوقع في الخادم."
     });
@@ -3640,14 +4025,88 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = process.env.DIST_PATH || path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  if (process.env.NODE_ENV === "production") {
+  // --- Desktop Network Configuration Endpoints (ADMIN only) ---
+  app.get("/api/desktop/network-status", (req: any, res) => {
+    let user = req.user;
+    if (!user) {
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+      const token = req.cookies?.session_token || bearerToken;
+      if (token) {
+        const tokenHash = hashToken(token);
+        const session = db.prepare("SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')").get(tokenHash) as any;
+        if (session) {
+          user = db.prepare("SELECT * FROM users WHERE id = ?").get(session.user_id);
+        }
+      }
+    }
+    if (!user || user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "غير مصرح: للمدير فقط." });
+    }
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'DESKTOP_LAN_ACCESS'").get() as { value: string } | undefined;
+    const allowLan = row ? row.value === 'true' : false;
+    res.json({
+      success: true,
+      allowLan,
+      host: process.env.HOST || (allowLan ? "0.0.0.0" : "127.0.0.1"),
+      port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
+      isDesktop: Boolean(process.env.DESKTOP_ENV),
+    });
+  });
+
+  app.post("/api/desktop/network-access", (req: any, res) => {
+    let user = req.user;
+    console.log("DEBUG POST /api/desktop/network-access cookies:", req.cookies, "body:", req.body, "authHeader:", req.headers.authorization);
+    if (!user) {
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+      const token = req.cookies?.session_token || bearerToken;
+      if (token) {
+        const tokenHash = hashToken(token);
+        const session = db.prepare("SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')").get(tokenHash) as any;
+        if (session) {
+          user = db.prepare("SELECT * FROM users WHERE id = ?").get(session.user_id);
+        }
+      }
+    }
+    console.log("DEBUG resolved user for POST:", user);
+    if (!user || user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: "غير مصرح: للمدير فقط." });
+    }
+    const { allowLan } = req.body;
+    const val = allowLan ? 'true' : 'false';
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at, updated_by)
+      VALUES ('DESKTOP_LAN_ACCESS', ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+    `).run(val, now, user.name || user.email);
+
+    recordServerAuditLog(
+      "DESKTOP_NETWORK_CONFIG",
+      "settings",
+      "DESKTOP_LAN_ACCESS",
+      user.name || user.email,
+      `تم ${allowLan ? 'تمكين' : 'تعطيل'} الوصول من الشبكة المحلية (LAN Access) بواسطة المدير.`
+    );
+
+    res.json({
+      success: true,
+      allowLan: Boolean(allowLan),
+      message: allowLan
+        ? "تم تفعيل الوصول من شبكة المكتب. سيتم تطبيقه عند إعادة تشغيل التطبيق."
+        : "تم تعطيل الوصول من شبكة المكتب وحصره على 127.0.0.1 محلياً."
+    });
+  });
+
+  if (process.env.NODE_ENV === "production" && !process.env.DESKTOP_ENV) {
     const userCountRow = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
     if (userCountRow.count === 0 && !process.env.SETUP_TOKEN) {
       console.error("==========================================================================================");
@@ -3660,15 +4119,17 @@ ${JSON.stringify(benfordStats || [], null, 2)}
   return app;
 }
 
-export async function startServer() {
+export async function startServer(portOverride?: number, hostOverride?: string) {
   const app = await createApp();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Office Accounting & Auditing System running on http://localhost:${PORT}`);
+  const PORT = portOverride || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+  const HOST = hostOverride || process.env.HOST || (process.env.DESKTOP_ENV ? "127.0.0.1" : "0.0.0.0");
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`Office Accounting & Auditing System running on http://${HOST}:${PORT}`);
   });
+  (app as any).server = server;
   return app;
 }
 
-if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST && !process.env.DESKTOP_ENV) {
   startServer();
 }
