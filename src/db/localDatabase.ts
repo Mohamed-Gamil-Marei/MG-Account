@@ -2548,7 +2548,24 @@ export class LocalDatabase {
 
   // --- Merge Remote State ---
   public mergeRemoteState(remote: Partial<DatabaseState>) {
+    const prevMustChangeMap = new Map<string, boolean>();
+    (this.state.users || []).forEach((u) => {
+      if (u.mustChangePassword) {
+        prevMustChangeMap.set(u.id, true);
+        if (u.email) prevMustChangeMap.set(u.email.toLowerCase(), true);
+      }
+    });
+
     Object.assign(this.state, remote);
+
+    if (this.state.users && prevMustChangeMap.size > 0) {
+      this.state.users = this.state.users.map((u) => {
+        if (prevMustChangeMap.get(u.id) || (u.email && prevMustChangeMap.get(u.email.toLowerCase()))) {
+          return { ...u, mustChangePassword: true };
+        }
+        return u;
+      });
+    }
     this.saveState();
   }
 
@@ -3371,19 +3388,35 @@ export class LocalDatabase {
       return SAFE_FALLBACK_USER;
     }
     const users = this.getUsers();
-    const user = users.find((u) => u.id === this.state.currentUserId);
+    const user = users.find(
+      (u) => u.id === this.state.currentUserId || (u.email && u.email.toLowerCase() === this.state.currentUserId.toLowerCase())
+    );
     return user || SAFE_FALLBACK_USER;
   }
 
-  public syncLoggedInUser(profile: FirebaseUserProfile): SystemUser {
+  public syncLoggedInUser(profile: FirebaseUserProfile, source: 'SERVER_AUTH' | 'OTHER' = 'OTHER'): SystemUser {
     if (!profile) return this.getCurrentUser();
     const userId = profile.uid || profile.email;
     if (!this.state.users) {
       this.state.users = [];
     }
     const existingIndex = this.state.users.findIndex(
-      (u) => u.id === userId || (u.email && u.email.toLowerCase() === profile.email.toLowerCase())
+      (u) => u.id === userId || (u.email && profile.email && u.email.toLowerCase() === profile.email.toLowerCase())
     );
+    const existingUser = existingIndex >= 0 ? this.state.users[existingIndex] : null;
+
+    // The authoritative source of mustChangePassword is the server response (/api/auth/me or /api/auth/login).
+    // Never allow any other synchronization (source !== 'SERVER_AUTH') to overwrite mustChangePassword with false.
+    let mustChangePassword = false;
+    if (source === 'SERVER_AUTH') {
+      mustChangePassword = Boolean(profile.mustChangePassword);
+    } else {
+      mustChangePassword = Boolean(
+        existingUser?.mustChangePassword ||
+        (this.state.currentUserId && this.getCurrentUser()?.mustChangePassword) ||
+        profile.mustChangePassword
+      );
+    }
 
     const mappedUser: SystemUser = {
       id: userId,
@@ -3400,7 +3433,7 @@ export class LocalDatabase {
       canDeleteRecords: !!profile.canDeleteRecords,
       canAccessCreditFiles: !!profile.canAccessCreditFiles,
       canAccessTaxReports: !!profile.canAccessTaxReports,
-      mustChangePassword: !!profile.mustChangePassword,
+      mustChangePassword,
       createdAt: profile.createdAt || new Date().toISOString(),
     };
 
@@ -3412,8 +3445,20 @@ export class LocalDatabase {
 
     this.state.currentUserId = userId;
     this.saveState('SYSTEM_USERS');
+    this.saveState('CURRENT_USER_ID');
     this.notify();
     return mappedUser;
+  }
+
+  public setMustChangePassword(userId: string, mustChange: boolean): void {
+    if (!this.state.users) this.state.users = [];
+    this.state.users = this.state.users.map((u) =>
+      u.id === userId || (u.email && u.email.toLowerCase() === userId.toLowerCase())
+        ? { ...u, mustChangePassword: mustChange }
+        : u
+    );
+    this.saveState('SYSTEM_USERS');
+    this.notify();
   }
 
   public clearCurrentUser(): void {

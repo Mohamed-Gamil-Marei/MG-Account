@@ -201,6 +201,7 @@ export default function App() {
   const [authResolved, setAuthResolved] = useState<boolean>(false);
   const [connectionError, setConnectionError] = useState<boolean>(false);
   const [isConnectionLostLocked, setIsConnectionLostLocked] = useState<boolean>(false);
+  const [enforcePasswordChange, setEnforcePasswordChange] = useState<boolean>(false);
   const disconnectedSinceRef = React.useRef<number | null>(null);
 
   const roleTitleMap: Record<string, string> = {
@@ -245,10 +246,11 @@ export default function App() {
             canPostEntries: !!data.user.canPostEntries,
             canEditPostedEntries: !!data.user.canEditPostedEntries,
             canDeleteRecords: !!data.user.canDeleteRecords,
-            mustChangePassword: !!data.user.mustChangePassword,
+            mustChangePassword: Boolean(data.user.mustChangePassword ?? data.user.must_change_password),
           };
-          db.syncLoggedInUser(profile);
+          db.syncLoggedInUser(profile, 'SERVER_AUTH');
           setFirebaseProfile(profile);
+          setEnforcePasswordChange(Boolean(data.user.mustChangePassword ?? data.user.must_change_password));
           setConnectionError(false);
           setIsConnectionLostLocked(false);
           disconnectedSinceRef.current = null;
@@ -286,13 +288,28 @@ export default function App() {
 
     const unsubAuth = firebaseAuth.subscribe((profile) => {
       if (profile) {
-        db.syncLoggedInUser(profile);
-        setFirebaseProfile(profile);
+        // Authoritative source of mustChangePassword is /api/auth/me or login
+        // Never overwrite mustChangePassword with false during general sync!
+        setFirebaseProfile((prev) => {
+          const mustChange = prev?.mustChangePassword || enforcePasswordChange || db.getCurrentUser()?.mustChangePassword || false;
+          return {
+            ...profile,
+            mustChangePassword: mustChange,
+          };
+        });
+        db.syncLoggedInUser({
+          ...profile,
+          mustChangePassword: db.getCurrentUser()?.mustChangePassword || enforcePasswordChange || false,
+        }, 'OTHER');
         cloudSync.initRealtimeSync((remote) => {
           db.mergeRemoteState(remote);
         });
       } else {
-        setFirebaseProfile(null);
+        // Only clear if no server session is active
+        const cur = db.getCurrentUser();
+        if (!cur || cur.id === 'guest-pending-user') {
+          setFirebaseProfile(null);
+        }
       }
       if (!authResolved) {
         setAuthResolved(true);
@@ -476,6 +493,9 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.key) return;
+      if (enforcePasswordChange || db.getCurrentUser()?.mustChangePassword || firebaseProfile?.mustChangePassword) {
+        return;
+      }
       const isModifier = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
@@ -672,6 +692,11 @@ export default function App() {
   };
 
   const currentUser: SystemUser = db.getCurrentUser();
+  const isPasswordChangeMandatory = Boolean(
+    enforcePasswordChange ||
+    currentUser?.mustChangePassword ||
+    firebaseProfile?.mustChangePassword
+  );
 
   const handleUnlockTab = (tabId: string) => {
     if (!unlockedTabs.includes(tabId)) {
@@ -719,6 +744,7 @@ export default function App() {
     }
 
     const handleNavigate = (tab: string) => {
+      if (isPasswordChangeMandatory) return;
       setActiveTab(tab);
     };
 
@@ -1099,13 +1125,16 @@ export default function App() {
       <InitialAdminModal />
 
       {/* Mandatory Change Password Modal for Desktop Auto-Admin or Enforced Reset */}
-      {currentUser?.mustChangePassword && (
+      {isPasswordChangeMandatory && (
         <ForceChangePasswordModal
           currentUser={currentUser}
-          onSuccess={() => {
+          onSuccess={async () => {
+            setEnforcePasswordChange(false);
+            db.setMustChangePassword(currentUser.id, false);
             if (firebaseProfile) {
               setFirebaseProfile({ ...firebaseProfile, mustChangePassword: false });
             }
+            await checkServerSession();
           }}
         />
       )}
@@ -1175,7 +1204,14 @@ export default function App() {
 
   // 3. If not logged in, show FirebaseAuthGate
   if (!firebaseProfile) {
-    return <FirebaseAuthGate onAuthenticated={(profile) => setFirebaseProfile(profile)} />;
+    return (
+      <FirebaseAuthGate
+        onAuthenticated={(profile) => {
+          setFirebaseProfile(profile);
+          setEnforcePasswordChange(Boolean(profile.mustChangePassword));
+        }}
+      />
+    );
   }
 
   // 4. If logged in but role is PENDING

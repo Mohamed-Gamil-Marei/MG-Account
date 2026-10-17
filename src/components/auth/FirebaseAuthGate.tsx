@@ -246,12 +246,12 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
             canPostEntries: !!serverUser.canPostEntries,
             canEditPostedEntries: !!serverUser.canEditPostedEntries,
             canDeleteRecords: !!serverUser.canDeleteRecords,
-            mustChangePassword: !!serverUser.mustChangePassword,
+            mustChangePassword: Boolean(serverUser.mustChangePassword ?? serverUser.must_change_password),
             isOffline: false,
           };
 
           await saveOfflineAuthCache(userProfile.email, password, userProfile);
-          db.syncLoggedInUser(userProfile);
+          db.syncLoggedInUser(userProfile, 'SERVER_AUTH');
           onAuthenticated(userProfile);
         } catch (fetchErr: any) {
           const isNetworkError =

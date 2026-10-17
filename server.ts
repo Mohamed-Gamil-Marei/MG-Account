@@ -894,8 +894,24 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
       canDeleteRecords: !!user.can_delete_records,
       canAccessCreditFiles: !!user.can_access_credit_files,
       canAccessTaxReports: !!user.can_access_tax_reports,
+      mustChangePassword: Boolean(user.must_change_password),
       createdAt: user.created_at,
     };
+
+    if (user.must_change_password === 1) {
+      const allowedMustChangePaths = [
+        "/api/auth/me",
+        "/api/auth/logout",
+        "/api/auth/change-password",
+      ];
+      if (!allowedMustChangePaths.includes(fullPath)) {
+        return res.status(403).json({
+          success: false,
+          mustChangePassword: true,
+          error: "يلزم تغيير كلمة المرور المؤقتة أولاً قبل الوصول لأي من خدمات المنظومة.",
+        });
+      }
+    }
 
     if (user.role === 'PENDING') {
       const allowedPendingPaths = ["/api/auth/me", "/api/auth/logout"];

@@ -32,9 +32,10 @@ describe('Desktop Features Integration Tests (src/server/desktopIntegration.test
     const hash = crypto.createHash('sha256').update(adminToken).digest('hex');
     const accHash = crypto.createHash('sha256').update(accountantToken).digest('hex');
 
+    // Standard Admin (must_change_password = 0)
     const insertAdmin = db.prepare(`
       INSERT INTO users (name, email, password_hash, role, is_active, can_manage_users, can_access_treasury, can_access_audit_trail, can_post_entries, can_edit_posted_entries, can_delete_records, can_access_credit_files, can_access_tax_reports, must_change_password, created_at)
-      VALUES ('Admin Test', 'admin@desktop.test', '$2a$10$dummyHashMustChange1234567890', 'ADMIN', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, datetime('now'))
+      VALUES ('Admin Test', 'admin@desktop.test', '$2a$10$dummyHashMustChange1234567890', 'ADMIN', 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, datetime('now'))
     `);
     const info = insertAdmin.run();
     adminUserId = Number(info.lastInsertRowid);
@@ -97,11 +98,40 @@ describe('Desktop Features Integration Tests (src/server/desktopIntegration.test
     });
   });
 
-  describe('2. Direct Admin & Password Change Enforcement (Item 4)', () => {
-    it('يعيد mustChangePassword: true في بيانات المستخدم /api/auth/me عند وجود علامة الإلزام', async () => {
+  describe('2. Direct Admin & Password Change Enforcement (Item 4 & Requirement 3/5)', () => {
+    const tempAdminToken = 'desktop-temp-admin-token-99999';
+    let tempAdminId: number;
+
+    beforeAll(() => {
+      const tempHash = crypto.createHash('sha256').update(tempAdminToken).digest('hex');
+      const insertTemp = db.prepare(`
+        INSERT INTO users (name, email, password_hash, role, is_active, can_manage_users, can_access_treasury, can_access_audit_trail, can_post_entries, can_edit_posted_entries, can_delete_records, can_access_credit_files, can_access_tax_reports, must_change_password, created_at)
+        VALUES ('Temp Admin', 'tempadmin@desktop.test', '$2a$10$dummyHashMustChange1234567890', 'ADMIN', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, datetime('now'))
+      `);
+      const tempInfo = insertTemp.run();
+      tempAdminId = Number(tempInfo.lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO sessions (token, user_id, expires_at)
+        VALUES (?, ?, datetime('now', '+7 days'))
+      `).run(tempHash, tempAdminId);
+    });
+
+    it('يمنع السيرفر المسارات الأخرى (مثل /api/desktop/network-status) مع خطأ 403 ورسالة عربية واضحة طالما must_change_password=1', async () => {
+      const blockedRes = await request(app)
+        .get('/api/desktop/network-status')
+        .set('Cookie', [`session_token=${tempAdminToken}`]);
+
+      expect(blockedRes.status).toBe(403);
+      expect(blockedRes.body.success).toBe(false);
+      expect(blockedRes.body.mustChangePassword).toBe(true);
+      expect(blockedRes.body.error).toBe('يلزم تغيير كلمة المرور المؤقتة أولاً قبل الوصول لأي من خدمات المنظومة.');
+    });
+
+    it('يسمح بمسار /api/auth/me ويعيد mustChangePassword: true في بيانات المستخدم', async () => {
       const res = await request(app)
         .get('/api/auth/me')
-        .set('Cookie', [`session_token=${adminToken}`]);
+        .set('Cookie', [`session_token=${tempAdminToken}`]);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -111,32 +141,38 @@ describe('Desktop Features Integration Tests (src/server/desktopIntegration.test
     it('يرفض تغيير كلمة المرور إذا كانت أقل من 10 أحرف', async () => {
       const res = await request(app)
         .post('/api/auth/change-password')
-        .set('Cookie', [`session_token=${adminToken}`])
+        .set('Cookie', [`session_token=${tempAdminToken}`])
         .send({ newPassword: 'short' });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('10');
     });
 
-    it('يقبل تغيير كلمة المرور بـ 10 أحرف فأكثر ويلغي علامة must_change_password', async () => {
+    it('يقبل تغيير كلمة المرور بـ 10 أحرف فأكثر، ويلغي علامة must_change_password، ويرفع الحظر عن المسارات الأخرى', async () => {
       const res = await request(app)
         .post('/api/auth/change-password')
-        .set('Cookie', [`session_token=${adminToken}`])
+        .set('Cookie', [`session_token=${tempAdminToken}`])
         .send({ newPassword: 'NewStrongPassword2026!' });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
 
-      // Verify in DB that must_change_password became 0
-      const updatedUser = db.prepare("SELECT must_change_password FROM users WHERE id = ?").get(adminUserId) as any;
+      // 1. Verify in DB that must_change_password became 0
+      const updatedUser = db.prepare("SELECT must_change_password FROM users WHERE id = ?").get(tempAdminId) as any;
       expect(updatedUser.must_change_password).toBe(0);
 
-      // Verify /api/auth/me now reflects mustChangePassword: false
+      // 2. Verify /api/auth/me now reflects mustChangePassword: false
       const meRes = await request(app)
         .get('/api/auth/me')
-        .set('Cookie', [`session_token=${adminToken}`]);
-
+        .set('Cookie', [`session_token=${tempAdminToken}`]);
       expect(meRes.body.user.mustChangePassword).toBe(false);
+
+      // 3. Verify that previously blocked endpoints now succeed with 200 (block lifted!)
+      const unblockedRes = await request(app)
+        .get('/api/desktop/network-status')
+        .set('Cookie', [`session_token=${tempAdminToken}`]);
+      expect(unblockedRes.status).toBe(200);
+      expect(unblockedRes.body.success).toBe(true);
     });
   });
 
