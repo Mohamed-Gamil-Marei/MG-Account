@@ -9,7 +9,7 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 const __filenameSafe = typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : process.cwd());
 const _require = createRequire(__filenameSafe);
-let signIntegrity: (data: string) => string;
+let signIntegrity: (projectPath: string, keyStorePath: string, password: string) => { jsonPath: string, sigPath: string, filesCount: number };
 try {
   const toolsPath = path.join(process.cwd(), 'tools', 'sign-integrity.cjs');
   signIntegrity = _require(toolsPath).signIntegrity;
@@ -17,7 +17,7 @@ try {
   try {
     signIntegrity = _require('../../tools/sign-integrity.cjs').signIntegrity;
   } catch {
-    signIntegrity = (d: string) => d;
+    signIntegrity = () => ({ jsonPath: '', sigPath: '', filesCount: 0 });
   }
 }
 
