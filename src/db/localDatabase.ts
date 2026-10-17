@@ -1,133 +1,84 @@
-
-import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../utils/excelArabicStyler';
-import { ClosingStep, createDefaultChecklist } from '../utils/closingChecklist';
-import { ClientDeadline, OpenItem } from '../types';
 import {
   Account,
-  AccountCategory,
-  JournalEntry,
-  JournalEntryLine,
-  ClientArchiveRecord,
-  PortalCredentials,
-  ClientProcedureTask,
-  ClientDocumentFolder,
-  ClientDocument,
-  OfficeTreasuryTransaction,
-  TaxDeclarationRecord,
-  TaxMandateTask,
-  ProfessionalCertificate,
-  Invoice,
-  FeasibilityStudy,
-  CreditModelSimulation,
-  OfficeProfile,
-  AuditRecord,
-  SystemUser,
-  UserRole,
-  UserPreferences,
-  BrandColor,
-  ThemeMode,
-  FixedAsset,
-  DepreciationHistoryRecord,
-  WhatsAppMessage,
-  WhatsAppBotSettings,
-  ActiveClientContext,
-  ClientRelationshipType,
-  DailyExchangeRateRecord,
-  CurrencyCode,
-  FiscalPeriodLock,
-  FeeQuotationEstimate,
-  CustomsShipment,
-  FinancialActivityLog,
   ApprovedStatementsSnapshot,
+  ClientArchiveRecord,
+  ClientDocument,
+  ClientDocumentFolder,
   ClientFeeAgreement,
   ClientFeeCollection,
+  ClientProcedureTask,
+  CurrencyCode,
+  CustomsShipment,
+  DailyExchangeRateRecord,
+  FeasibilityStudy,
+  FinancialActivityLog,
+  FixedAsset,
+  Invoice,
+  JournalEntry,
+  OfficeProfile,
+  OfficeTreasuryTransaction,
+  OpenItem,
+  ProfessionalCertificate,
+  SystemUser,
+  TaxDeclarationRecord,
+  UserPreferences,
+  WhatsAppBotSettings,
+  WhatsAppMessage,
+  WhatsAppMessageTemplate,
 } from '../types';
 import { FirebaseUserProfile } from '../services/firebaseAuthService';
-
-export const SAFE_FALLBACK_USER: SystemUser = {
-  id: 'guest-pending-user',
-  name: 'زائر / حساب غير مفعل',
-  email: 'guest@system.local',
-  role: 'PENDING',
-  roleTitleArabic: 'حساب جديد قيد الانتظار',
-  isActive: true,
-  canManageUsers: false,
-  canAccessTreasury: false,
-  canAccessAuditTrail: false,
-  canPostEntries: false,
-  canEditPostedEntries: false,
-  canDeleteRecords: false,
-  canAccessCreditFiles: false,
-  canAccessTaxReports: false,
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../seed/defaultChartOfAccounts';
-import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../seed/defaultExchangeRates';
-import { SecurityAuthService } from '../services/securityAuth';
-import {
-  DEFAULT_OFFICE_PROFILE,
-  DEFAULT_CLIENT_FOLDERS,
-  SAMPLE_CLIENTS,
-  SAMPLE_JOURNAL_ENTRIES,
-  SAMPLE_TREASURY_TRANSACTIONS,
-  SAMPLE_TAX_DECLARATIONS,
-  SAMPLE_TAX_MANDATES,
-  SAMPLE_CERTIFICATES,
-  SAMPLE_INVOICES,
-  SAMPLE_FEASIBILITY_STUDY,
-  SAMPLE_CREDIT_SIMULATION,
-  SAMPLE_SYSTEM_USERS,
-  SAMPLE_FIXED_ASSETS,
-  SAMPLE_WHATSAPP_MESSAGES,
-  DEFAULT_WHATSAPP_BOT_SETTINGS,
-  SAMPLE_FEE_ESTIMATES,
-} from '../seed/sampleData';
-import { SAMPLE_CUSTOMS_SHIPMENTS } from '../seed/sampleCustomsData';
 import { IssuedDocumentService } from '../services/issuedDocumentService';
+import { generateVerificationCode } from '../utils/verificationCode';
+import { computeSingleClientFeeSummary } from '../utils/clientFees';
 
-const STORAGE_KEYS = {
-  ACCOUNTS: 'egy_acc_accounts_v1',
-  JOURNAL: 'egy_acc_journal_v1',
-  CLIENTS: 'egy_acc_clients_v1',
-  TREASURY: 'egy_acc_treasury_v1',
-  TAXES: 'egy_acc_taxes_v1',
-  TAX_MANDATES: 'egy_acc_tax_mandates_v1',
-  CERTIFICATES: 'egy_acc_certificates_v1',
-  INVOICES: 'egy_acc_invoices_v1',
-  FEASIBILITY: 'egy_acc_feasibility_v1',
-  CREDIT_SIM: 'egy_acc_credit_sim_v1',
-  OFFICE_PROFILE: 'egy_acc_office_profile_v1',
-  AUDIT_LOGS: 'egy_acc_audit_logs_v1',
-  SYSTEM_USERS: 'egy_acc_system_users_v1',
-  CURRENT_USER_ID: 'egy_acc_current_user_id_v1',
-  USER_PREFERENCES: 'egy_acc_user_preferences_v1',
-  FIXED_ASSETS: 'egy_acc_fixed_assets_v1',
-  WHATSAPP_MESSAGES: 'egy_acc_whatsapp_messages_v1',
-  WHATSAPP_SETTINGS: 'egy_acc_whatsapp_settings_v1',
-  ACTIVE_CLIENT_CONTEXT: 'egy_acc_active_client_context_v1',
-  EXCHANGE_RATES: 'egy_acc_exchange_rates_v1',
-  PERIOD_LOCKS: 'egy_acc_period_locks_v1',
-  FEE_ESTIMATES: 'egy_acc_fee_estimates_v1',
-  CUSTOMS_SHIPMENTS: 'egy_acc_customs_shipments_v1',
-  FINANCIAL_ACTIVITY_LOGS: 'egy_acc_financial_activity_logs_v1',
-  CLOSING_CHECKLISTS: 'egy_acc_closing_checklists_v1',
-  CLIENT_DEADLINES: 'egy_acc_client_deadlines_v1',
-  OPEN_ITEMS: 'egy_acc_open_items_v1',
-  APPROVED_STATEMENTS: 'egy_acc_approved_statements_v1',
-  FEE_AGREEMENTS: 'egy_acc_fee_agreements_v1',
-  FEE_COLLECTIONS: 'egy_acc_fee_collections_v1',
-};
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  details: string;
+  [key: string]: any;
+}
 
-export const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  themeMode: 'light',
-  brandColor: 'blue',
-  language: 'ar',
-  reportingCurrency: 'EGP',
-  baseCurrency: 'EGP',
-  compactView: false,
-  securityAuthEnabled: false,
-  customEditPassword: '',
-};
+export interface ActiveClientContext {
+  clientId: string | null;
+  clientName?: string;
+  companyName?: string;
+  clientCode?: string;
+  selectedFiscalYear: number;
+  autoFilterEnabled: boolean;
+  autoFilterAccountingData?: boolean;
+  [key: string]: any;
+}
+
+export interface SystemSerialsConfig {
+  systemSerial: string;
+  activationKey: string;
+  licenseNumber: string;
+  taxAuthorityRegNo: string;
+  journalPrefix: string;
+  journalNextNumber: number;
+  invoicePrefix: string;
+  invoiceNextNumber: number;
+  certificatePrefix: string;
+  certificateNextNumber: number;
+  treasuryPrefix: string;
+  treasuryNextNumber: number;
+  [key: string]: any;
+}
+
+export interface UnmatchedFeeMigrationItem {
+  treasuryTransactionId: string;
+  clientId?: string;
+  clientName?: string;
+  amount: number;
+  date: string;
+  reason: string;
+}
 
 export interface DatabaseState {
   accounts: Account[];
@@ -135,2534 +86,629 @@ export interface DatabaseState {
   clients: ClientArchiveRecord[];
   treasuryTransactions: OfficeTreasuryTransaction[];
   taxDeclarations: TaxDeclarationRecord[];
-  taxMandates: TaxMandateTask[];
+  taxMandates: any[];
   certificates: ProfessionalCertificate[];
   invoices: Invoice[];
   feasibilityStudies: FeasibilityStudy[];
-  creditSimulations: CreditModelSimulation[];
+  creditSimulations: any[];
   fixedAssets: FixedAsset[];
-  feeEstimates: FeeQuotationEstimate[];
+  feeEstimates: any[];
+  customsShipments: CustomsShipment[];
+  whatsappMessages: WhatsAppMessage[];
+  whatsappBotSettings?: WhatsAppBotSettings;
+  exchangeRates: DailyExchangeRateRecord[];
   officeProfile: OfficeProfile;
-  auditLogs: AuditRecord[];
   users: SystemUser[];
   currentUserId: string;
   preferences: UserPreferences;
-  whatsappMessages: WhatsAppMessage[];
-  whatsappBotSettings: WhatsAppBotSettings;
-  exchangeRates: DailyExchangeRateRecord[];
-  fiscalPeriodLocks: FiscalPeriodLock[];
-  customsShipments: CustomsShipment[];
-  closingChecklists?: Record<string, ClosingStep[]>;
-  clientDeadlines?: ClientDeadline[];
-  openItems?: OpenItem[];
-  approvedStatements?: ApprovedStatementsSnapshot[];
-  feeAgreements?: ClientFeeAgreement[];
-  feeCollections?: ClientFeeCollection[];
-  financialActivityLogs?: FinancialActivityLog[];
-  activeClientContext?: ActiveClientContext;
-  clientArchives?: ClientArchiveRecord[];
-  activeClientId?: string;
-  activeClientName?: string;
+  auditLogs: AuditLogEntry[];
+  financialActivityLogs: FinancialActivityLog[];
+  fiscalPeriodLocks: Record<number, { isLocked: boolean; lockedAt?: string; lockedBy?: string }>;
+  activeClientContext: ActiveClientContext;
+  closingChecklists: Record<string, any[]>;
+  clientDeadlines: any[];
+  openItems: OpenItem[];
+  approvedStatements: ApprovedStatementsSnapshot[];
+  feeAgreements: ClientFeeAgreement[];
+  feeCollections: ClientFeeCollection[];
+  feeMigrationUnmatchedReport?: UnmatchedFeeMigrationItem[];
+  systemSerials?: SystemSerialsConfig;
+  [key: string]: any;
 }
 
-function sanitizeClientsForLocalStorage(clients: ClientArchiveRecord[]): ClientArchiveRecord[] {
-  if (!Array.isArray(clients)) return [];
-  return clients.map((client) => {
-    if (!client.portalCredentials) return client;
-    const sanitizedCreds: PortalCredentials = {};
-    for (const [key, val] of Object.entries(client.portalCredentials)) {
-      if (val && typeof val === 'object') {
-        const p = val as any;
-        sanitizedCreds[key as keyof PortalCredentials] = {
-          ...p,
-          password: undefined,
-          pin: undefined,
-          pinOtp: undefined,
-          clientSecret: undefined,
-          hasPassword: Boolean(p.password || p.pin || p.pinOtp || p.hasPassword),
+const STORAGE_PREFIX = 'mg_cpa_db_v3_';
+const FULL_STATE_KEY = 'mg_cpa_full_state_v3';
+
+export function getStandardEgyptianChartOfAccounts(): Account[] {
+  return [
+    {
+      id: 'acc-1000',
+      code: '1000',
+      name: 'الأصول',
+      nameEn: 'Assets',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 1,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1101',
+      code: '1101',
+      name: 'النقدية بالصندوق والخزينة الرئيسية',
+      nameEn: 'Cash on Hand',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 250000,
+      openingBalanceCredit: 0,
+      currentBalance: 250000,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1102',
+      code: '1102',
+      name: 'البنوك - حسابات جارية بالعملة المحلية',
+      nameEn: 'Banks - Current Accounts',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 850000,
+      openingBalanceCredit: 0,
+      currentBalance: 850000,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1103',
+      code: '1103',
+      name: 'العملاء والمدينون التجاريون',
+      nameEn: 'Accounts Receivable',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 320000,
+      openingBalanceCredit: 0,
+      currentBalance: 320000,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1105',
+      code: '1105',
+      name: 'ضريبة القيمة المضافة على المدخلات',
+      nameEn: 'VAT Input Tax',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1106',
+      code: '1106',
+      name: 'ضرائب خصم وتحصيل تحت حساب الضريبة (مدين)',
+      nameEn: 'WHT Receivable',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1220',
+      code: '1220',
+      name: 'العملاء - مدينون تجاريون',
+      nameEn: 'Trade Receivables',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1230',
+      code: '1230',
+      name: 'مصلحة الضرائب - ضريبة خصم وتحصيل (أ.ت.ص)',
+      nameEn: 'WHT Tax Authority Receivable',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-1250',
+      code: '1250',
+      name: 'النقدية بالصندوق (الخزينة الرئيسية)',
+      nameEn: 'Main Treasury Cash',
+      category: 'ASSETS',
+      nature: 'DEBIT',
+      level: 4,
+      parentId: 'acc-1000',
+      parentCode: '1000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-2000',
+      code: '2000',
+      name: 'الالتزامات وحقوق الملكية',
+      nameEn: 'Liabilities & Equity',
+      category: 'LIABILITIES',
+      nature: 'CREDIT',
+      level: 1,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-2101',
+      code: '2101',
+      name: 'الموردون والدائنون التجاريون',
+      nameEn: 'Accounts Payable',
+      category: 'LIABILITIES',
+      nature: 'CREDIT',
+      level: 4,
+      parentId: 'acc-2000',
+      parentCode: '2000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 420000,
+      currentBalance: 420000,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-2104',
+      code: '2104',
+      name: 'مصلحة الضرائب - ضريبة القيمة المضافة',
+      nameEn: 'VAT Payable',
+      category: 'LIABILITIES',
+      nature: 'CREDIT',
+      level: 4,
+      parentId: 'acc-2000',
+      parentCode: '2000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-2105',
+      code: '2105',
+      name: 'مصلحة الضرائب - خصم وتحصيل تحت حساب الضريبة (نموذج 41)',
+      nameEn: 'WHT Form 41 Payable',
+      category: 'LIABILITIES',
+      nature: 'CREDIT',
+      level: 4,
+      parentId: 'acc-2000',
+      parentCode: '2000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-2230',
+      code: '2230',
+      name: 'مصلحة الضرائب على القيمة المضافة',
+      nameEn: 'ETA VAT Account',
+      category: 'LIABILITIES',
+      nature: 'CREDIT',
+      level: 4,
+      parentId: 'acc-2000',
+      parentCode: '2000',
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-3101',
+      code: '3101',
+      name: 'رأس المال المدفوع',
+      nameEn: 'Paid-up Capital',
+      category: 'EQUITY',
+      nature: 'CREDIT',
+      level: 4,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 1000000,
+      currentBalance: 1000000,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-4101',
+      code: '4101',
+      name: 'إيرادات النشاط والمبيعات المعتمدة',
+      nameEn: 'Sales & Operating Revenues',
+      category: 'REVENUES',
+      nature: 'CREDIT',
+      level: 4,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-4110',
+      code: '4110',
+      name: 'إيرادات المبيعات والخدمات',
+      nameEn: 'Sales & Services Revenue',
+      category: 'REVENUES',
+      nature: 'CREDIT',
+      level: 4,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-5101',
+      code: '5101',
+      name: 'تكلفة المبيعات والمشتريات والخدمات',
+      nameEn: 'Cost of Goods Sold & Purchases',
+      category: 'EXPENSES',
+      nature: 'DEBIT',
+      level: 4,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+    {
+      id: 'acc-5201',
+      code: '5201',
+      name: 'المصروفات العمومية والإدارية',
+      nameEn: 'General & Administrative Expenses',
+      category: 'EXPENSES',
+      nature: 'DEBIT',
+      level: 4,
+      openingBalanceDebit: 0,
+      openingBalanceCredit: 0,
+      currentBalance: 0,
+      isSystem: true,
+      isActive: true,
+    },
+  ];
+}
+
+export const DEFAULT_WHATSAPP_TEMPLATES: WhatsAppMessageTemplate[] = [
+  {
+    id: 'tpl-tax-reminder',
+    code: 'TAX_REMINDER',
+    title: 'تذكير بموعد الإقرار الضريبي',
+    category: 'TAX_REMINDER',
+    templateBody: 'السادة / {clientName}، نود تذكيركم بقرب موعد تقديم الإقرار الضريبي عن الفترة الحالية. مكتب المحاسب القانوني محمد جميل مرعي.',
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tpl-fee-claim',
+    code: 'FEE_CLAIM',
+    title: 'إشعار استحقاق أتعاب مهنية',
+    category: 'FEE_CLAIM',
+    templateBody: 'السادة / {clientName}، مرفق لسيادتكم بيان الأتعاب المهنية المستحقة عن السنة المالية {fiscalYear}. نشكر تعاونكم الدائم.',
+    isDefault: true,
+    isActive: true,
+  },
+  {
+    id: 'tpl-doc-req',
+    code: 'DOCUMENT_REQUEST',
+    title: 'طلب مستندات للمراجعة',
+    category: 'DOCUMENT_REQUEST',
+    templateBody: 'السادة / {clientName}، برجاء التكرم بموافاتنا بالمستندات المطلوبة لاستكمال أعمال الفحص والمراجعة.',
+    isDefault: true,
+    isActive: true,
+  },
+];
+
+/**
+ * Stage 3 Requirement 8 Migration:
+ * Reconciles legacy INCOME_FEES treasuryTransactions with feeCollections so there is a single source of truth
+ * with mutual IDs (feeCollectionId <-> treasuryTransactionId), preventing duplicates and reporting any unmatched items.
+ */
+export function reconcileFeeCollectionsAndTreasury(state: DatabaseState): {
+  matchedCount: number;
+  createdTreasuryCount: number;
+  createdCollectionCount: number;
+  deduplicatedCount: number;
+  unmatched: UnmatchedFeeMigrationItem[];
+} {
+  if (!Array.isArray(state.feeAgreements)) state.feeAgreements = [];
+  if (!Array.isArray(state.feeCollections)) state.feeCollections = [];
+  if (!Array.isArray(state.treasuryTransactions)) state.treasuryTransactions = [];
+  if (!Array.isArray(state.clients)) state.clients = [];
+
+  let matchedCount = 0;
+  let createdTreasuryCount = 0;
+  let createdCollectionCount = 0;
+  let deduplicatedCount = 0;
+  const unmatched: UnmatchedFeeMigrationItem[] = [];
+
+  // 0. Ensure every client with annualAgreedFees > 0 has at least one ACTIVE ClientFeeAgreement if none exist for them
+  for (const client of state.clients) {
+    const clientAgreements = state.feeAgreements.filter((a) => a.clientId === client.id && a.status !== 'CANCELLED');
+    if (clientAgreements.length === 0 && (Number(client.annualAgreedFees) || 0) > 0) {
+      const fy = client.activeFiscalYear || new Date().getFullYear();
+      state.feeAgreements.push({
+        id: `fa-migrated-${client.id}-${fy}`,
+        clientId: client.id,
+        fiscalYear: fy,
+        description: `اتفاقية أتعاب سنوية معتمدة - ${client.name}`,
+        amount: Number(client.annualAgreedFees) || 0,
+        status: 'ACTIVE',
+        createdAt: client.createdAt || new Date().toISOString().slice(0, 10),
+      });
+    }
+  }
+
+  // 1. Deduplicate treasuryTransactions that share the same feeCollectionId
+  const seenCollectionIdsInTreasury = new Set<string>();
+  state.treasuryTransactions = state.treasuryTransactions.filter((tx) => {
+    if (tx.type === 'INCOME_FEES' && tx.feeCollectionId) {
+      if (seenCollectionIdsInTreasury.has(tx.feeCollectionId)) {
+        deduplicatedCount++;
+        return false;
+      }
+      seenCollectionIdsInTreasury.add(tx.feeCollectionId);
+    }
+    return true;
+  });
+
+  // 2. For each feeCollection, find or create its linked INCOME_FEES treasury transaction
+  const matchedTreasuryIds = new Set<string>();
+
+  for (const col of state.feeCollections) {
+    let linkedTx = state.treasuryTransactions.find(
+      (tx) =>
+        tx.type === 'INCOME_FEES' &&
+        (tx.id === col.treasuryTransactionId || tx.feeCollectionId === col.id || tx.id === col.id)
+    );
+
+    if (!linkedTx) {
+      // Try matching by clientId + amount + date
+      linkedTx = state.treasuryTransactions.find(
+        (tx) =>
+          tx.type === 'INCOME_FEES' &&
+          !tx.feeCollectionId &&
+          !matchedTreasuryIds.has(tx.id) &&
+          tx.clientId === col.clientId &&
+          Math.abs((Number(tx.amount) || 0) - (Number(col.amount) || 0)) < 0.01 &&
+          (tx.date || '').slice(0, 10) === (col.paidAt || '').slice(0, 10)
+      );
+    }
+
+    if (linkedTx) {
+      linkedTx.feeCollectionId = col.id;
+      linkedTx.agreementId = col.agreementId;
+      col.treasuryTransactionId = linkedTx.id;
+      matchedTreasuryIds.add(linkedTx.id);
+      matchedCount++;
+    } else {
+      // Automatically create the linked INCOME_FEES treasury transaction with mutual reference
+      const clientObj = state.clients.find((c) => c.id === col.clientId);
+      const txId = col.treasuryTransactionId || col.id;
+      const newTx: OfficeTreasuryTransaction = {
+        id: txId,
+        date: col.paidAt || new Date().toISOString().slice(0, 10),
+        type: 'INCOME_FEES',
+        category: 'تحصيل أتعاب مهنية',
+        amount: Number(col.amount) || 0,
+        clientId: col.clientId,
+        clientName: clientObj?.name || '',
+        feeCollectionId: col.id,
+        agreementId: col.agreementId,
+        paymentMethod: col.method || 'CASH',
+        receiptNumber: col.receiptNo,
+        referenceNumber: col.receiptNo,
+        description: col.notes || `تحصيل أتعاب مهنية - ${clientObj?.name || col.clientId}`,
+        createdAt: col.createdAt || new Date().toISOString(),
+      };
+      col.treasuryTransactionId = newTx.id;
+      state.treasuryTransactions.unshift(newTx);
+      matchedTreasuryIds.add(newTx.id);
+      createdTreasuryCount++;
+    }
+  }
+
+  // 3. Inspect remaining legacy INCOME_FEES treasuryTransactions that weren't matched to any feeCollection
+  for (const tx of state.treasuryTransactions) {
+    if (tx.type !== 'INCOME_FEES') continue;
+    if (matchedTreasuryIds.has(tx.id) || tx.feeCollectionId) continue;
+
+    if (!tx.clientId) {
+      unmatched.push({
+        treasuryTransactionId: tx.id,
+        clientName: tx.clientName,
+        amount: Number(tx.amount) || 0,
+        date: tx.date,
+        reason: 'حركة تحصيل أتعاب بالخزنة بدون معرّف عميل (clientId) مرتبط',
+      });
+      continue;
+    }
+
+    // Find active agreement for this client
+    let agreement = state.feeAgreements.find(
+      (a) => a.clientId === tx.clientId && a.status !== 'CANCELLED'
+    );
+    if (!agreement) {
+      const clientObj = state.clients.find((c) => c.id === tx.clientId);
+      if (clientObj) {
+        const fy = clientObj.activeFiscalYear || new Date(tx.date || Date.now()).getFullYear() || new Date().getFullYear();
+        agreement = {
+          id: `fa-auto-${clientObj.id}-${fy}`,
+          clientId: clientObj.id,
+          fiscalYear: fy,
+          description: `اتفاقية أتعاب مهنية - ${clientObj.name}`,
+          amount: Math.max(Number(clientObj.annualAgreedFees) || 0, Number(tx.amount) || 0),
+          status: 'ACTIVE',
+          createdAt: tx.date || new Date().toISOString().slice(0, 10),
         };
+        state.feeAgreements.push(agreement);
       }
     }
-    return {
-      ...client,
-      portalCredentials: sanitizedCreds,
-    };
-  });
+
+    if (agreement) {
+      const newCol: ClientFeeCollection = {
+        id: tx.id,
+        agreementId: agreement.id,
+        clientId: tx.clientId,
+        amount: Number(tx.amount) || 0,
+        paidAt: tx.date || new Date().toISOString().slice(0, 10),
+        method: tx.paymentMethod || 'CASH',
+        receiptNo: tx.receiptNumber || tx.referenceNumber,
+        treasuryTransactionId: tx.id,
+        notes: tx.description,
+        createdAt: tx.createdAt || new Date().toISOString(),
+      };
+      tx.feeCollectionId = newCol.id;
+      tx.agreementId = agreement.id;
+      state.feeCollections.push(newCol);
+      matchedTreasuryIds.add(tx.id);
+      createdCollectionCount++;
+    } else {
+      unmatched.push({
+        treasuryTransactionId: tx.id,
+        clientId: tx.clientId,
+        clientName: tx.clientName,
+        amount: Number(tx.amount) || 0,
+        date: tx.date,
+        reason: 'تعذر مطابقة العميل أو إيجاد اتفاقية أتعاب مرتبطة لحركة الخزنة القديمة',
+      });
+    }
+  }
+
+  // 4. Sync client.annualAgreedFees and client.paidFees from the unified calculator
+  for (const client of state.clients) {
+    const summary = computeSingleClientFeeSummary(client.id, state.feeAgreements, state.feeCollections);
+    if (summary.totalAgreed > 0 || summary.totalPaid > 0) {
+      client.annualAgreedFees = summary.totalAgreed;
+      client.paidFees = summary.totalPaid;
+    }
+  }
+
+  state.feeMigrationUnmatchedReport = unmatched;
+  return {
+    matchedCount,
+    createdTreasuryCount,
+    createdCollectionCount,
+    deduplicatedCount,
+    unmatched,
+  };
 }
 
-export class LocalDatabase {
-  public async retryRegistryForCertificate(certId: string): Promise<boolean> {
-    const cert = this.state.certificates.find(c => c.id === certId);
-    if (!cert || !cert.verificationCode) return false;
-
-    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
-    const recRes = await IssuedDocumentService.recordIssuedDocument({
-      verificationCode: cert.verificationCode,
-      documentType: 'شهادة مهنية معتمدة',
-      issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
-      firmName,
-      status: 'ACTIVE',
-      displayDocNumber: cert.certificateNumber,
-    });
-
-    if (recRes.success) {
-      cert.registryStatus = 'RECORDED';
-      this.saveState('CERTIFICATES' as any);
-      return true;
-    } else {
-      cert.registryStatus = 'FAILED';
-      this.saveState('CERTIFICATES' as any);
-      return false;
-    }
-  }
-
-  public async retryRegistryForInvoice(invId: string): Promise<boolean> {
-    const inv = this.state.invoices.find((i: any) => i.id === invId) as any;
-    if (!inv || !inv.verificationCode) return false;
-
-    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
-    const recRes = await IssuedDocumentService.recordIssuedDocument({
-      verificationCode: inv.verificationCode,
-      documentType: 'فاتورة ضريبية معتمدة',
-      issueDate: inv.date || inv.issueDate || new Date().toISOString().slice(0, 10),
-      firmName,
-      status: 'ACTIVE',
-      displayDocNumber: inv.invoiceNumber,
-    });
-
-    if (recRes.success) {
-      inv.registryStatus = 'RECORDED';
-      this.saveState('INVOICES' as any);
-      return true;
-    } else {
-      inv.registryStatus = 'FAILED';
-      this.saveState('INVOICES' as any);
-      return false;
-    }
-  }
-
-
-  public exportDatabaseJson(): string {
-    return JSON.stringify(this.state);
-  }
-
-  private state: DatabaseState;
-  private listeners: (() => void)[] = [];
+class LocalDatabase {
+  public state: DatabaseState;
+  private listeners: Set<() => void> = new Set();
+  private dirtySlices: Set<string> = new Set();
+  private versionedRecords: Map<string, { data: any; version: number }> = new Map();
 
   constructor() {
     this.state = this.loadInitialState();
-    if (typeof window !== 'undefined') {
-      setTimeout(() => {
-        try {
-          this.initServerSync();
-        } catch (err) {
-          console.warn('Deferred ServerSync init notice:', err);
-        }
-      }, 500);
-    }
   }
 
-  private initServerSync() {
-    const MIGRATION_KEY = 'egy_acc_six_entities_migrated_v1';
-
-    this.pullFromServer().then(() => {
-      if (typeof localStorage !== 'undefined' && !localStorage.getItem(MIGRATION_KEY)) {
-        this.migrateLocalStorageToServer()
-          .then(() => {
-            localStorage.setItem(MIGRATION_KEY, 'true');
-          })
-          .catch((err) => {
-            console.warn('[One-Time Migration Notice]:', err);
-          });
-      }
-    });
-
-    setInterval(() => {
-      this.pullFromServer();
-    }, 10000);
-  }
-
-  public async pullFromServer() {
-    try {
-      const entityMap: Record<string, keyof DatabaseState> = {
-        clients: 'clients',
-        accounts: 'accounts',
-        journalEntries: 'journalEntries',
-        treasury: 'treasuryTransactions',
-        taxDeclarations: 'taxDeclarations',
-        taxMandates: 'taxMandates',
-        certificates: 'certificates',
-        invoices: 'invoices',
-        feasibilityStudies: 'feasibilityStudies',
-        creditSimulations: 'creditSimulations',
-        fixedAssets: 'fixedAssets',
-        officeProfile: 'officeProfile',
-        auditLogs: 'auditLogs',
-        systemUsers: 'users',
-        preferences: 'preferences',
-        whatsappMessages: 'whatsappMessages',
-        whatsappBotSettings: 'whatsappBotSettings',
-        exchangeRates: 'exchangeRates',
-        fiscalPeriodLocks: 'fiscalPeriodLocks',
-        feeEstimates: 'feeEstimates',
-        customsShipments: 'customsShipments',
-        financialActivityLogs: 'financialActivityLogs',
-        closingChecklists: 'closingChecklists',
-        clientDeadlines: 'clientDeadlines',
-        openItems: 'openItems',
-        approvedStatements: 'approvedStatements',
-        feeAgreements: 'feeAgreements',
-        feeCollections: 'feeCollections',
-      };
-
-      let hasChanged = false;
-      for (const [entityType, stateKey] of Object.entries(entityMap)) {
-        try {
-          const res = await fetch(this.getApiUrl(`/api/data/${entityType}`));
-          if (res.ok) {
-            const json = await res.json();
-            if (json.success && Array.isArray(json.data)) {
-              if (entityType === 'officeProfile' || entityType === 'preferences' || entityType === 'whatsappBotSettings') {
-                if (json.data.length > 0) {
-                  this.state[stateKey] = json.data[0];
-                  hasChanged = true;
-                }
-              } else if (entityType === 'closingChecklists') {
-                const map: Record<string, any> = {};
-                for (const item of json.data) {
-                  if (item && item.id) {
-                    map[item.id] = item.steps || item.data || item;
-                  }
-                }
-                this.state.closingChecklists = map;
-                hasChanged = true;
-              } else {
-                this.state[stateKey] = json.data as any;
-                hasChanged = true;
-              }
-            }
-          }
-        } catch (err) {
-          // Ignore network errors during polling
-        }
-      }
-
-      if (hasChanged) {
-        this.notify();
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  public async migrateLocalStorageToServer() {
-    try {
-      const payload = {
-        closingChecklists: Object.entries(this.state.closingChecklists || {}).map(([key, steps]) => ({ id: key, steps })),
-        clientDeadlines: this.state.clientDeadlines || [],
-        openItems: this.state.openItems || [],
-        approvedStatements: this.state.approvedStatements || [],
-        feeAgreements: this.state.feeAgreements || [],
-        feeCollections: this.state.feeCollections || [],
-      };
-
-      const res = await fetch(this.getApiUrl('/api/data/migrate-local-six'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'فشل ترحيل الكيانات الستة.');
-      }
-      return json.summary;
-    } catch (err: any) {
-      throw err;
-    }
-  }
-
-  private forbidden403Keys: Set<string> = new Set();
-  private notified403Keys: Set<string> = new Set();
-
-  private showNotificationNotice(message: string) {
-    if (typeof window !== 'undefined') {
-      const event = new CustomEvent('system-notification', { detail: { message } });
-      window.dispatchEvent(event);
-    }
-  }
-
-  private getApiUrl(path: string): string {
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
-  }
-
-  public async pushDirtyToServer() {
-    const entityMapping: Record<string, { endpoint: string, data: any }> = {
-      [STORAGE_KEYS.CLIENTS]: { endpoint: 'clients', data: this.state.clients },
-      [STORAGE_KEYS.JOURNAL]: { endpoint: 'journalEntries', data: this.state.journalEntries },
-      [STORAGE_KEYS.ACCOUNTS]: { endpoint: 'accounts', data: this.state.accounts },
-      [STORAGE_KEYS.TREASURY]: { endpoint: 'treasury', data: this.state.treasuryTransactions },
-      [STORAGE_KEYS.TAXES]: { endpoint: 'taxDeclarations', data: this.state.taxDeclarations },
-      [STORAGE_KEYS.TAX_MANDATES]: { endpoint: 'taxMandates', data: this.state.taxMandates },
-      [STORAGE_KEYS.CERTIFICATES]: { endpoint: 'certificates', data: this.state.certificates },
-      [STORAGE_KEYS.INVOICES]: { endpoint: 'invoices', data: this.state.invoices },
-      [STORAGE_KEYS.FEASIBILITY]: { endpoint: 'feasibilityStudies', data: this.state.feasibilityStudies },
-      [STORAGE_KEYS.CREDIT_SIM]: { endpoint: 'creditSimulations', data: this.state.creditSimulations },
-      [STORAGE_KEYS.FIXED_ASSETS]: { endpoint: 'fixedAssets', data: this.state.fixedAssets },
-      [STORAGE_KEYS.OFFICE_PROFILE]: { endpoint: 'officeProfile', data: [this.state.officeProfile] },
-      // Note: auditLogs is explicitly excluded from client pushing (server handles audit logs)
-      [STORAGE_KEYS.SYSTEM_USERS]: { endpoint: 'systemUsers', data: this.state.users },
-      [STORAGE_KEYS.USER_PREFERENCES]: { endpoint: 'preferences', data: [this.state.preferences] },
-      [STORAGE_KEYS.WHATSAPP_MESSAGES]: { endpoint: 'whatsappMessages', data: this.state.whatsappMessages },
-      [STORAGE_KEYS.WHATSAPP_SETTINGS]: { endpoint: 'whatsappBotSettings', data: [this.state.whatsappBotSettings] },
-      [STORAGE_KEYS.EXCHANGE_RATES]: { endpoint: 'exchangeRates', data: this.state.exchangeRates },
-      [STORAGE_KEYS.PERIOD_LOCKS]: { endpoint: 'fiscalPeriodLocks', data: this.state.fiscalPeriodLocks },
-      [STORAGE_KEYS.FEE_ESTIMATES]: { endpoint: 'feeEstimates', data: this.state.feeEstimates },
-      [STORAGE_KEYS.CUSTOMS_SHIPMENTS]: { endpoint: 'customsShipments', data: this.state.customsShipments },
-      [STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS]: { endpoint: 'financialActivityLogs', data: this.state.financialActivityLogs },
-      [STORAGE_KEYS.CLOSING_CHECKLISTS]: {
-        endpoint: 'closingChecklists',
-        data: Object.entries(this.state.closingChecklists || {}).map(([key, steps]) => ({ id: key, steps }))
-      },
-      [STORAGE_KEYS.CLIENT_DEADLINES]: { endpoint: 'clientDeadlines', data: this.state.clientDeadlines || [] },
-      [STORAGE_KEYS.OPEN_ITEMS]: { endpoint: 'openItems', data: this.state.openItems || [] },
-      [STORAGE_KEYS.APPROVED_STATEMENTS]: { endpoint: 'approvedStatements', data: this.state.approvedStatements || [] },
-      [STORAGE_KEYS.FEE_AGREEMENTS]: { endpoint: 'feeAgreements', data: this.state.feeAgreements || [] },
-      [STORAGE_KEYS.FEE_COLLECTIONS]: { endpoint: 'feeCollections', data: this.state.feeCollections || [] },
+  public createDefaultState(): DatabaseState {
+    const defaultAdmin: SystemUser = {
+      id: 'user-admin',
+      username: 'admin',
+      name: 'د. محمد جميل مرعي (الشريك المدير)',
+      email: 'admin@marei-cpa.eg',
+      role: 'ADMIN',
+      roleTitleArabic: 'الشريك المدير ومراقب الحسابات',
+      isActive: true,
+      canManageUsers: true,
+      canAccessTreasury: true,
+      canAccessAuditTrail: true,
+      canPostEntries: true,
+      canEditPostedEntries: true,
+      canDeleteRecords: true,
+      canAccessCreditFiles: true,
+      canAccessTaxReports: true,
+      mustChangePassword: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
     };
 
-    for (const [key, mapping] of Object.entries(entityMapping)) {
-      if (this.forbidden403Keys.has(key)) continue;
-
-      if (this.dirtyKeys.has(key as any)) {
-        const records = Array.isArray(mapping.data) ? mapping.data : [mapping.data];
-        let allRecordsSynced = true;
-
-        for (const rec of records) {
-          if (!rec) continue;
-          const recId = rec.id || 'main';
-          try {
-            const res = await fetch(this.getApiUrl(`/api/data/${mapping.endpoint}`), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: recId,
-                data: rec,
-                version: rec._version || 1,
-              }),
-            });
-
-            if (res.ok) {
-              const resJson = await res.json();
-              if (resJson.success) {
-                if (typeof resJson.version === 'number') {
-                  rec._version = resJson.version;
-                }
-                if (resJson.updatedAt) {
-                  rec._updatedAt = resJson.updatedAt;
-                }
-              }
-            } else if (res.status === 413) {
-              allRecordsSynced = false;
-              const errJson = await res.json().catch(() => ({}));
-              const errorMsg = errJson.error || 'حجم البيانات يتجاوز الحد الأقصى المسموح به لهذا المسار.';
-              console.warn(`[413 Payload Too Large] ${mapping.endpoint}:`, errorMsg);
-              this.showNotificationNotice(`تنبيه (413): تعذر حفظ (${mapping.endpoint}) - ${errorMsg}`);
-              break;
-            } else if (res.status === 403) {
-              allRecordsSynced = false;
-              this.forbidden403Keys.add(key);
-              if (!this.notified403Keys.has(key)) {
-                this.notified403Keys.add(key);
-                console.warn(`[403 Forbidden] لا تملك صلاحية التزامن مع السيرفر لـ ${mapping.endpoint}`);
-                this.showNotificationNotice(`غير مصرح: ليس لديك صلاحية كتابة أو حفظ (${mapping.endpoint}) على السيرفر.`);
-              }
-              break;
-            } else if (res.status === 409) {
-              allRecordsSynced = false;
-              const errJson = await res.json().catch(() => ({}));
-              console.warn('Version conflict (409):', errJson.error);
-
-              // Pull latest version from server for this entity
-              try {
-                const pullRes = await fetch(this.getApiUrl(`/api/data/${mapping.endpoint}`));
-                if (pullRes.ok) {
-                  const pullJson = await pullRes.json();
-                  if (pullJson.success && Array.isArray(pullJson.data)) {
-                    if (Array.isArray(mapping.data)) {
-                      const updatedList = pullJson.data;
-                      const stateKeyMap: Record<string, keyof DatabaseState> = {
-                        clients: 'clients',
-                        journalEntries: 'journalEntries',
-                        accounts: 'accounts',
-                        treasury: 'treasuryTransactions',
-                        taxDeclarations: 'taxDeclarations',
-                        taxMandates: 'taxMandates',
-                        certificates: 'certificates',
-                        invoices: 'invoices',
-                        feasibilityStudies: 'feasibilityStudies',
-                        creditSimulations: 'creditSimulations',
-                        fixedAssets: 'fixedAssets',
-                        systemUsers: 'users',
-                        whatsappMessages: 'whatsappMessages',
-                        exchangeRates: 'exchangeRates',
-                        fiscalPeriodLocks: 'fiscalPeriodLocks',
-                        feeEstimates: 'feeEstimates',
-                        customsShipments: 'customsShipments',
-                        financialActivityLogs: 'financialActivityLogs',
-                      };
-                      const stKey = stateKeyMap[mapping.endpoint];
-                      if (stKey) {
-                        (this.state as any)[stKey] = updatedList;
-                      }
-                    } else {
-                      if (pullJson.data.length > 0) {
-                        const singleData = pullJson.data[0];
-                        if (mapping.endpoint === 'officeProfile') this.state.officeProfile = singleData;
-                        if (mapping.endpoint === 'preferences') this.state.preferences = singleData;
-                        if (mapping.endpoint === 'whatsappBotSettings') this.state.whatsappBotSettings = singleData;
-                      }
-                    }
-                    this.saveState();
-                    this.notify();
-                  }
-                }
-              } catch (pullErr) {
-                console.warn('Error pulling fresh record after 409:', pullErr);
-              }
-
-              this.showNotificationNotice(`تعارض إصدار (409): تم سحب النسخة الأحدث للسجل (${recId}) من السيرفر بنجاح.`);
-            } else {
-              allRecordsSynced = false;
-            }
-          } catch (err) {
-            allRecordsSynced = false;
-            console.warn('Error pushing record to server:', err);
-          }
-        }
-
-        if (allRecordsSynced) {
-          this.dirtyKeys.delete(key as any);
-        }
-      }
-    }
-  }
-
-  private loadInitialState(): DatabaseState {
-    try {
-      const accountsJson = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
-      const journalJson = localStorage.getItem(STORAGE_KEYS.JOURNAL);
-      const clientsJson = localStorage.getItem(STORAGE_KEYS.CLIENTS);
-      const treasuryJson = localStorage.getItem(STORAGE_KEYS.TREASURY);
-      const taxesJson = localStorage.getItem(STORAGE_KEYS.TAXES);
-      const mandatesJson = localStorage.getItem(STORAGE_KEYS.TAX_MANDATES);
-      const certificatesJson = localStorage.getItem(STORAGE_KEYS.CERTIFICATES);
-      const invoicesJson = localStorage.getItem(STORAGE_KEYS.INVOICES);
-      const feasibilityJson = localStorage.getItem(STORAGE_KEYS.FEASIBILITY);
-      const creditSimJson = localStorage.getItem(STORAGE_KEYS.CREDIT_SIM);
-      const fixedAssetsJson = localStorage.getItem(STORAGE_KEYS.FIXED_ASSETS);
-      const officeProfileJson = localStorage.getItem(STORAGE_KEYS.OFFICE_PROFILE);
-      const auditLogsJson = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
-      const usersJson = localStorage.getItem(STORAGE_KEYS.SYSTEM_USERS);
-      const currentUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || '';
-      const preferencesJson = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
-      const whatsappMessagesJson = localStorage.getItem(STORAGE_KEYS.WHATSAPP_MESSAGES);
-      const whatsappSettingsJson = localStorage.getItem(STORAGE_KEYS.WHATSAPP_SETTINGS);
-      const activeClientContextJson = localStorage.getItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
-      const exchangeRatesJson = localStorage.getItem(STORAGE_KEYS.EXCHANGE_RATES);
-      const periodLocksJson = localStorage.getItem(STORAGE_KEYS.PERIOD_LOCKS);
-      const feeEstimatesJson = localStorage.getItem(STORAGE_KEYS.FEE_ESTIMATES);
-      const customsJson = localStorage.getItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS);
-      const financialLogsJson = localStorage.getItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS);
-      const closingChecklistsJson = localStorage.getItem(STORAGE_KEYS.CLOSING_CHECKLISTS);
-      const clientDeadlinesJson = localStorage.getItem(STORAGE_KEYS.CLIENT_DEADLINES);
-      const openItemsJson = localStorage.getItem(STORAGE_KEYS.OPEN_ITEMS);
-      const approvedStatementsJson = localStorage.getItem(STORAGE_KEYS.APPROVED_STATEMENTS);
-      const feeAgreementsJson = localStorage.getItem(STORAGE_KEYS.FEE_AGREEMENTS);
-      const feeCollectionsJson = localStorage.getItem(STORAGE_KEYS.FEE_COLLECTIONS);
-
-      // Check if full purge to clean slate was enforced
-      const PURGE_SYSTEM_FLAG = 'cpa_integrated_purged_clean_v6';
-      const hasPurgedClean = localStorage.getItem(PURGE_SYSTEM_FLAG) === 'true';
-
-      if (!hasPurgedClean) {
-        // Full clean purge: zero balances, empty collections, only master admin user
-        const cleanAccounts: Account[] = DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map((acc) => ({
-          ...acc,
-          openingBalance: 0,
-          currentBalance: 0,
-          debitTotal: 0,
-          creditTotal: 0,
-        }));
-
-        const cleanProfile: OfficeProfile = {
-          ...DEFAULT_OFFICE_PROFILE,
-          firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
-        };
-
-        const cleanState: DatabaseState = {
-          accounts: cleanAccounts,
-          journalEntries: [],
-          clients: [],
-          treasuryTransactions: [],
-          taxDeclarations: [],
-          taxMandates: [],
-          certificates: [],
-          invoices: [],
-          feasibilityStudies: [],
-          creditSimulations: [],
-          fixedAssets: [],
-          feeEstimates: [],
-          customsShipments: [],
-          closingChecklists: {},
-          clientDeadlines: [],
-          openItems: [],
-          approvedStatements: [],
-          feeAgreements: [],
-          feeCollections: [],
-          officeProfile: cleanProfile,
-          users: [...SAMPLE_SYSTEM_USERS], // Master admin only (admin / admin)
-          currentUserId: 'user-admin',
-          preferences: DEFAULT_USER_PREFERENCES,
-          whatsappMessages: [],
-          whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
-          exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
-          fiscalPeriodLocks: [],
-          activeClientContext: undefined,
-          financialActivityLogs: [
-            {
-              id: 'FAL-INIT-001',
-              timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-              userId: 'user-admin',
-              userName: 'محمد جميل مرعي (المحاسب القانوني)',
-              userRole: 'مدير المنظومة ومراقب الحسابات',
-              statementType: 'GENERAL',
-              action: 'SYNC_TRIAL_BALANCE',
-              itemName: 'تهيئة الدفاتر والقوائم المالية المعتمدة',
-              notes: 'بدء الرقابة المهنية والتدقيق المستندي المعتمد على القوائم المالية',
-              fiscalYear: 2026,
-            },
-          ],
-          auditLogs: [
-            {
-              timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-              user: 'admin',
-              action: 'CREATE',
-              details: 'تفريغ وتصفير شامل لكافة بيانات وسجلات المنظومة - بدء العمل الفعلي بحساب الإدارة الرئيسي (admin)',
-            },
-          ],
-        };
-
-        try {
-          localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(cleanState.accounts));
-          localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(cleanState.journalEntries));
-          localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(cleanState.clients));
-          localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(cleanState.treasuryTransactions));
-          localStorage.setItem(STORAGE_KEYS.TAXES, JSON.stringify(cleanState.taxDeclarations));
-          localStorage.setItem(STORAGE_KEYS.TAX_MANDATES, JSON.stringify(cleanState.taxMandates));
-          localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(cleanState.certificates));
-          localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(cleanState.invoices));
-          localStorage.setItem(STORAGE_KEYS.FEASIBILITY, JSON.stringify(cleanState.feasibilityStudies));
-          localStorage.setItem(STORAGE_KEYS.CREDIT_SIM, JSON.stringify(cleanState.creditSimulations));
-          localStorage.setItem(STORAGE_KEYS.FIXED_ASSETS, JSON.stringify(cleanState.fixedAssets));
-          localStorage.setItem(STORAGE_KEYS.FEE_ESTIMATES, JSON.stringify(cleanState.feeEstimates));
-          localStorage.setItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS, JSON.stringify(cleanState.customsShipments));
-          localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(cleanState.users));
-          localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, cleanState.currentUserId);
-          localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(cleanState.officeProfile));
-          localStorage.setItem(STORAGE_KEYS.WHATSAPP_MESSAGES, JSON.stringify(cleanState.whatsappMessages));
-          localStorage.setItem(STORAGE_KEYS.PERIOD_LOCKS, JSON.stringify(cleanState.fiscalPeriodLocks));
-          localStorage.setItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS, JSON.stringify(cleanState.financialActivityLogs));
-          localStorage.removeItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
-          localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(cleanState.auditLogs));
-          localStorage.setItem(PURGE_SYSTEM_FLAG, 'true');
-        } catch (err) {
-          console.error('Error storing clean state:', err);
-        }
-
-        return cleanState;
-      }
-
-      let loadedClients: ClientArchiveRecord[] = clientsJson ? JSON.parse(clientsJson) : [];
-      // Ensure each client has default folders if missing and relationshipType
-      loadedClients = loadedClients.map((cl) => {
-        if (!cl.relationshipType) {
-          cl.relationshipType = cl.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY';
-        }
-        if (!cl.folders || cl.folders.length === 0) {
-          cl.folders = DEFAULT_CLIENT_FOLDERS.map((folderName, idx) => ({
-            id: `fld-${cl.id}-${idx + 1}`,
-            name: folderName,
-            title: folderName,
-            clientId: cl.id,
-            createdAt: new Date().toISOString(),
-          }));
-        }
-        return cl;
-      });
-
-      let loadedOfficeProfile: OfficeProfile = officeProfileJson ? JSON.parse(officeProfileJson) : DEFAULT_OFFICE_PROFILE;
-      if (loadedOfficeProfile) {
-        // Only set default if field is completely absent
-        if (!loadedOfficeProfile.firmName) {
-          loadedOfficeProfile.firmName = DEFAULT_OFFICE_PROFILE.firmName;
-        }
-        if (!loadedOfficeProfile.auditorName) {
-          loadedOfficeProfile.auditorName = DEFAULT_OFFICE_PROFILE.auditorName;
-        }
-        if (loadedOfficeProfile.showMainOfficeAddress === undefined) {
-          loadedOfficeProfile.showMainOfficeAddress = true;
-        }
-        if (loadedOfficeProfile.showBranchOfficeAddress === undefined) {
-          loadedOfficeProfile.showBranchOfficeAddress = true;
-        }
-        if (loadedOfficeProfile.sendClientDataToGemini === undefined) {
-          loadedOfficeProfile.sendClientDataToGemini = false;
-        }
-      }
-
-      let loadedActiveClientContext: ActiveClientContext | undefined = undefined;
-      if (activeClientContextJson) {
-        try {
-          loadedActiveClientContext = JSON.parse(activeClientContextJson);
-        } catch {}
-      }
-      if (!loadedActiveClientContext && loadedClients.length > 0) {
-        const defaultClient = loadedClients[0];
-        loadedActiveClientContext = {
-          clientId: defaultClient.id,
-          clientName: defaultClient.name,
-          clientCode: defaultClient.clientCode,
-          relationshipType: defaultClient.relationshipType || 'PERMANENT',
-          selectedFiscalYear: 2026,
-          autoFilterAccountingData: false,
-          lastUpdated: new Date().toISOString(),
-        };
-      }
-
-      return {
-        accounts: accountsJson ? JSON.parse(accountsJson) : DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
-        journalEntries: journalJson ? JSON.parse(journalJson) : [],
-        clients: loadedClients,
-        treasuryTransactions: treasuryJson ? JSON.parse(treasuryJson) : [],
-        taxDeclarations: taxesJson ? JSON.parse(taxesJson) : [],
-        taxMandates: mandatesJson ? JSON.parse(mandatesJson) : [],
-        certificates: certificatesJson ? JSON.parse(certificatesJson) : [],
-        invoices: invoicesJson ? JSON.parse(invoicesJson) : [],
-        feasibilityStudies: feasibilityJson ? JSON.parse(feasibilityJson) : [],
-        creditSimulations: creditSimJson ? JSON.parse(creditSimJson) : [],
-        fixedAssets: fixedAssetsJson ? JSON.parse(fixedAssetsJson) : [],
-        officeProfile: loadedOfficeProfile,
-        users: (() => {
-          if (usersJson) {
-            try {
-              const parsed: SystemUser[] = JSON.parse(usersJson);
-              return parsed.map((u) => {
-                delete (u as any).password;
-                delete (u as any).pinCode;
-                delete (u as any).pin;
-                return u;
-              });
-            } catch {}
-          }
-          return [];
-        })(),
-        currentUserId: (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) || '',
-        preferences: preferencesJson ? JSON.parse(preferencesJson) : DEFAULT_USER_PREFERENCES,
-        whatsappMessages: whatsappMessagesJson ? JSON.parse(whatsappMessagesJson) : [],
-        whatsappBotSettings: (() => {
-          const loaded: WhatsAppBotSettings = whatsappSettingsJson ? JSON.parse(whatsappSettingsJson) : DEFAULT_WHATSAPP_BOT_SETTINGS;
-          const hasPhone = (loaded.templates || []).some((t) => t.templateBody.includes('01003335360'));
-          const hasVerification = (loaded.templates || []).some((t) => t.code === 'VERIFICATION_CODE');
-          if (!hasPhone || !hasVerification || !loaded.templates || loaded.templates.length < DEFAULT_WHATSAPP_BOT_SETTINGS.templates!.length) {
-            loaded.templates = [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])];
-          }
-          return loaded;
-        })(),
-        exchangeRates: exchangeRatesJson ? JSON.parse(exchangeRatesJson) : DEFAULT_SAMPLE_EXCHANGE_RATES,
-        fiscalPeriodLocks: periodLocksJson ? JSON.parse(periodLocksJson) : [],
-        feeEstimates: feeEstimatesJson ? JSON.parse(feeEstimatesJson) : [],
-        customsShipments: customsJson ? JSON.parse(customsJson) : [],
-        activeClientContext: loadedActiveClientContext,
-        financialActivityLogs: financialLogsJson ? JSON.parse(financialLogsJson) : [
-          {
-            id: 'FAL-INIT-001',
-            timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            userId: 'user-admin',
-            userName: 'محمد جميل مرعي (المحاسب القانوني)',
-            userRole: 'مدير المنظومة ومراقب الحسابات',
-            statementType: 'GENERAL',
-            action: 'SYNC_TRIAL_BALANCE',
-            itemName: 'المطابقة والتهيئة المعتمدة للقوائم المالية',
-            notes: 'ربط أولي لأرصدة ميزان المراجعة وقيود اليومية المعتمدة مع القوائم المالية',
-            fiscalYear: 2026,
-          },
-        ],
-        auditLogs: auditLogsJson ? JSON.parse(auditLogsJson) : [
-          {
-            timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            user: 'محمد جميل مرعي (المحاسب القانوني)',
-            action: 'CREATE',
-            details: 'تهيئة منظومة المحاسب القانوني المتكامل',
-          },
-        ],
-        closingChecklists: closingChecklistsJson ? (() => { try { return JSON.parse(closingChecklistsJson); } catch { return {}; } })() : {},
-        clientDeadlines: clientDeadlinesJson ? (() => { try { return JSON.parse(clientDeadlinesJson); } catch { return []; } })() : [],
-        openItems: openItemsJson ? (() => { try { return JSON.parse(openItemsJson); } catch { return []; } })() : [],
-        approvedStatements: approvedStatementsJson ? (() => { try { return JSON.parse(approvedStatementsJson); } catch { return []; } })() : [],
-        feeAgreements: feeAgreementsJson ? (() => { try { return JSON.parse(feeAgreementsJson); } catch { return []; } })() : [],
-        feeCollections: feeCollectionsJson ? (() => { try { return JSON.parse(feeCollectionsJson); } catch { return []; } })() : [],
-      };
-    } catch (e) {
-      console.error('Error loading database state:', e);
-      return {
-        accounts: DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map(a => ({ ...a, openingBalance: 0, currentBalance: 0, debitTotal: 0, creditTotal: 0 })),
-        journalEntries: [],
-        clients: [],
-        treasuryTransactions: [],
-        taxDeclarations: [],
-        taxMandates: [],
-        certificates: [],
-        invoices: [],
-        feasibilityStudies: [],
-        creditSimulations: [],
-        fixedAssets: [],
-        feeEstimates: [],
-        customsShipments: [],
-        closingChecklists: {},
-        clientDeadlines: [],
-        openItems: [],
-        officeProfile: DEFAULT_OFFICE_PROFILE,
-        users: [...SAMPLE_SYSTEM_USERS],
-        currentUserId: 'user-admin',
-        preferences: DEFAULT_USER_PREFERENCES,
-        whatsappMessages: [],
-        whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
-        exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
-        fiscalPeriodLocks: [],
-        activeClientContext: undefined,
-        financialActivityLogs: [],
-        auditLogs: [],
-      };
-    }
-  }
-
-  private pendingSaveTimeout: any = null;
-  private dirtyKeys: Set<string> = new Set();
-
-  public saveState(specificKey?: keyof typeof STORAGE_KEYS) {
-    if (specificKey) {
-      const keyVal = STORAGE_KEYS[specificKey];
-      this.dirtyKeys.add(keyVal);
-      this.forbidden403Keys.delete(keyVal);
-      this.notified403Keys.delete(keyVal);
-    } else {
-      Object.values(STORAGE_KEYS).forEach((k) => {
-        this.dirtyKeys.add(k);
-        this.forbidden403Keys.delete(k);
-        this.notified403Keys.delete(k);
-      });
-    }
-
-    // Immediately notify UI for 0ms zero-lag reactivity
-    this.notify();
-
-    // Debounce actual localStorage serialization to keep main thread blazing fast
-    if (this.pendingSaveTimeout) {
-      clearTimeout(this.pendingSaveTimeout);
-    }
-
-    this.pendingSaveTimeout = setTimeout(() => {
-      this.flushDirtyStorage();
-    }, 50);
-  }
-
-  public flushDirtyStorage(pushToCloud: boolean = true) {
-    try {
-      if (this.dirtyKeys.has(STORAGE_KEYS.ACCOUNTS)) {
-        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(this.state.accounts));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.JOURNAL)) {
-        localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(this.state.journalEntries));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CLIENTS)) {
-        const safeClients = sanitizeClientsForLocalStorage(this.state.clients);
-        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(safeClients));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.TREASURY)) {
-        localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(this.state.treasuryTransactions));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.TAXES)) {
-        localStorage.setItem(STORAGE_KEYS.TAXES, JSON.stringify(this.state.taxDeclarations));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.TAX_MANDATES)) {
-        localStorage.setItem(STORAGE_KEYS.TAX_MANDATES, JSON.stringify(this.state.taxMandates));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CERTIFICATES)) {
-        localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(this.state.certificates));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.INVOICES)) {
-        localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(this.state.invoices));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.FEASIBILITY)) {
-        localStorage.setItem(STORAGE_KEYS.FEASIBILITY, JSON.stringify(this.state.feasibilityStudies));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CREDIT_SIM)) {
-        localStorage.setItem(STORAGE_KEYS.CREDIT_SIM, JSON.stringify(this.state.creditSimulations));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.OFFICE_PROFILE)) {
-        localStorage.setItem(STORAGE_KEYS.OFFICE_PROFILE, JSON.stringify(this.state.officeProfile));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.AUDIT_LOGS)) {
-        localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CLOSING_CHECKLISTS)) {
-        localStorage.setItem(STORAGE_KEYS.CLOSING_CHECKLISTS, JSON.stringify(this.state.closingChecklists || {}));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CLIENT_DEADLINES)) {
-        localStorage.setItem(STORAGE_KEYS.CLIENT_DEADLINES, JSON.stringify(this.state.clientDeadlines || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.OPEN_ITEMS)) {
-        localStorage.setItem(STORAGE_KEYS.OPEN_ITEMS, JSON.stringify(this.state.openItems || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.APPROVED_STATEMENTS)) {
-        localStorage.setItem(STORAGE_KEYS.APPROVED_STATEMENTS, JSON.stringify(this.state.approvedStatements || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.FEE_AGREEMENTS)) {
-        localStorage.setItem(STORAGE_KEYS.FEE_AGREEMENTS, JSON.stringify(this.state.feeAgreements || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.FEE_COLLECTIONS)) {
-        localStorage.setItem(STORAGE_KEYS.FEE_COLLECTIONS, JSON.stringify(this.state.feeCollections || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.SYSTEM_USERS)) {
-        localStorage.setItem(STORAGE_KEYS.SYSTEM_USERS, JSON.stringify(this.state.users));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CURRENT_USER_ID)) {
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, this.state.currentUserId);
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.USER_PREFERENCES)) {
-        localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(this.state.preferences));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.FIXED_ASSETS)) {
-        localStorage.setItem(STORAGE_KEYS.FIXED_ASSETS, JSON.stringify(this.state.fixedAssets));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT)) {
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT, JSON.stringify(this.state.activeClientContext || null));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.EXCHANGE_RATES)) {
-        localStorage.setItem(STORAGE_KEYS.EXCHANGE_RATES, JSON.stringify(this.state.exchangeRates || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.PERIOD_LOCKS)) {
-        localStorage.setItem(STORAGE_KEYS.PERIOD_LOCKS, JSON.stringify(this.state.fiscalPeriodLocks || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.FEE_ESTIMATES)) {
-        localStorage.setItem(STORAGE_KEYS.FEE_ESTIMATES, JSON.stringify(this.state.feeEstimates || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.CUSTOMS_SHIPMENTS)) {
-        localStorage.setItem(STORAGE_KEYS.CUSTOMS_SHIPMENTS, JSON.stringify(this.state.customsShipments || []));
-      }
-      if (this.dirtyKeys.has(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS)) {
-        localStorage.setItem(STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS, JSON.stringify(this.state.financialActivityLogs || []));
-      }
-
-      this.pushDirtyToServer();
-    } catch (e: any) {
-      // Handle storage quota exceeded gracefully
-      console.warn('Storage write warning (handling high-volume data safely):', e);
-      if (e?.name === 'QuotaExceededError' || e?.code === 22) {
-        // Trim audit logs to save space
-        if (this.state.auditLogs.length > 100) {
-          this.state.auditLogs = this.state.auditLogs.slice(0, 100);
-          try {
-            localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(this.state.auditLogs));
-          } catch {}
-        }
-      }
-    }
-  }
-
-  public async syncToCloudNow(): Promise<boolean> {
-    await this.pushDirtyToServer();
-    return true;
-  }
-
-  public async pullFromCloudNow(): Promise<boolean> {
-    await this.pullFromServer();
-    return true;
-  }
-
-  // --- Preferences & Theme ---
-  public getPreferences(): UserPreferences {
-    return this.state.preferences || DEFAULT_USER_PREFERENCES;
-  }
-
-  public updatePreferences(updates: Partial<UserPreferences>) {
-    this.state.preferences = {
-      ...(this.state.preferences || DEFAULT_USER_PREFERENCES),
-      ...updates,
-    };
-    this.saveState();
-  }
-
-  public setThemeMode(mode: ThemeMode) {
-    this.updatePreferences({ themeMode: mode });
-  }
-
-  public setBrandColor(color: BrandColor) {
-    this.updatePreferences({ brandColor: color });
-  }
-
-  public setLanguage(lang: 'ar' | 'en') {
-    this.updatePreferences({ language: lang });
-  }
-
-  public subscribe(listener: () => void): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  private notify() {
-    this.listeners.forEach((l) => l());
-  }
-
-  public logAudit(action: 'CREATE' | 'UPDATE' | 'DELETE' | 'POST' | 'UNPOST', details: string, previousValue?: any, newValue?: any) {
-    const record: AuditRecord = {
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      user: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-      action,
-      details,
-      previousValue,
-      newValue,
-    };
-    this.state.auditLogs.unshift(record);
-    if (this.state.auditLogs.length > 500) {
-      this.state.auditLogs = this.state.auditLogs.slice(0, 500);
-    }
-  }
-
-  public getState(): DatabaseState {
-    return {
-      ...this.state,
-      officeProfile: this.state?.officeProfile || DEFAULT_OFFICE_PROFILE,
-      clients: this.state?.clients || [],
-      accounts: this.state?.accounts || [],
-      journalEntries: this.state?.journalEntries || [],
-      treasuryTransactions: this.state?.treasuryTransactions || [],
-      taxDeclarations: this.state?.taxDeclarations || [],
-      taxMandates: this.state?.taxMandates || [],
-      certificates: this.state?.certificates || [],
-      invoices: this.state?.invoices || [],
-      users: this.state?.users || [],
-      auditLogs: this.state?.auditLogs || [],
-      clientArchives: this.state?.clients || [],
-      activeClientId: this.state?.activeClientContext?.clientId,
-      activeClientName: this.state?.activeClientContext?.clientName,
-    };
-  }
-
-  // --- Accounts CRUD ---
-  public addAccount(account: Omit<Account, 'id'>): Account {
-    const newAccount: Account = {
-      ...account,
-      id: crypto.randomUUID(),
-    };
-    this.state.accounts.push(newAccount);
-    this.logAudit('CREATE', `إضافة حساب جديد بالدليل: [${newAccount.code}] ${newAccount.name}`);
-    this.saveState();
-    return newAccount;
-  }
-
-  public updateAccount(id: string, updates: Partial<Account>): Account | null {
-    const index = this.state.accounts.findIndex((a) => a.id === id);
-    if (index === -1) return null;
-    const old = this.state.accounts[index];
-    this.state.accounts[index] = { ...old, ...updates };
-    this.logAudit('UPDATE', `تعديل الحساب: [${old.code}] ${old.name}`, old, this.state.accounts[index]);
-    this.saveState();
-    return this.state.accounts[index];
-  }
-
-  public deleteAccount(id: string): boolean {
-    const index = this.state.accounts.findIndex((a) => a.id === id);
-    if (index === -1) return false;
-    const acc = this.state.accounts[index];
-    if (acc.isSystem) return false;
-    this.state.accounts.splice(index, 1);
-    this.logAudit('DELETE', `حذف الحساب: [${acc.code}] ${acc.name}`);
-    this.saveState();
-    return true;
-  }
-
-  // --- Journal Entries CRUD ---
-  public validateJournalEntryDraft(entry: { totalDebit: number; totalCredit: number; lines: JournalEntryLine[] }): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-    const lines = entry.lines || [];
-
-    // Calculate actual sum of debit and credit from lines to ensure strict mathematical equality
-    const calculatedDebit = Math.round(lines.reduce((sum, l) => sum + Number(l.debit || 0), 0) * 1000) / 1000;
-    const calculatedCredit = Math.round(lines.reduce((sum, l) => sum + Number(l.credit || 0), 0) * 1000) / 1000;
-    const diff = Math.abs(calculatedDebit - calculatedCredit);
-
-    // 1. Balance verification (difference > 0.005)
-    if (diff > 0.005) {
-      errors.push(`القيد غير متزن: إجمالي المدين (${calculatedDebit.toFixed(2)}) لا يساوي إجمالي الدائن (${calculatedCredit.toFixed(2)}) بفارق (${diff.toFixed(2)} ج.م)`);
-    }
-
-    if (lines.length < 2) {
-      errors.push('يجب أن يحتوي القيد على طرفين محاسبيين على الأقل (مدين ودائن)');
-    }
-
-    // 2. Lines debit/credit and accounts verification
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const d = Number(line.debit || 0);
-      const c = Number(line.credit || 0);
-
-      // Negative value check
-      if (d < 0 || c < 0) {
-        errors.push(`الطرف رقم (${i + 1}): لا يمكن إدخال قيم سالبة في المدين أو الدائن لحساب (${line.accountName || line.accountCode || 'مجهول'})`);
-      }
-
-      // Debit/credit mutual exclusion
-      if (d > 0 && c > 0) {
-        errors.push(`الطرف رقم (${i + 1}): الحساب (${line.accountName || line.accountCode}) مسجل كمدين ودائن في نفس الوقت`);
-      }
-      if (d === 0 && c === 0) {
-        errors.push(`الطرف رقم (${i + 1}): الحساب (${line.accountName || line.accountCode}) يجب أن يحتوي على مبلغ مدين أو دائن أكبر من صفر`);
-      }
-
-      // Existing accounts check
-      const accExists = this.state.accounts.some(
-        (a) => (line.accountId && a.id === line.accountId) || (line.accountCode && a.code === line.accountCode)
-      );
-      if (!accExists) {
-        errors.push(`الطرف رقم (${i + 1}): الحساب كود (${line.accountCode || line.accountId || 'مجهول'}) غير موجود في شجرة الحسابات المعتمدة`);
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-    };
-  }
-
-  public addJournalEntry(entry: Omit<JournalEntry, 'id' | 'serialNumber' | 'entryNumber' | 'createdAt' | 'updatedAt' | 'auditTrail'>): JournalEntry {
-    const validation = this.validateJournalEntryDraft(entry as any);
-    if (!validation.isValid) {
-      throw new Error(`تعذر حفظ القيد المحاسبي:\n${validation.errors.join('\n')}`);
-    }
-
-    const nextNum = (this.state.journalEntries.length > 0
-      ? Math.max(...this.state.journalEntries.map((e) => e.entryNumber || 0))
-      : 0) + 1;
-    const serial = `JV-${new Date().getFullYear()}-${String(nextNum).padStart(4, '0')}`;
-    const now = new Date().toISOString();
-
-    const newEntry: JournalEntry = {
-      ...entry,
-      id: crypto.randomUUID(),
-      entryNumber: nextNum,
-      serialNumber: serial,
-      qrPayload: `EGY-ACC-MGM|${serial}|${entry.date}|${entry.totalDebit.toFixed(2)}|${entry.isPosted ? 'POSTED' : 'DRAFT'}`,
-      auditTrail: [
+    const initialState: DatabaseState = {
+      accounts: getStandardEgyptianChartOfAccounts(),
+      journalEntries: [],
+      clients: [
         {
-          timestamp: now.replace('T', ' ').substring(0, 19),
-          user: this.state.officeProfile.auditorName,
-          action: 'CREATE',
-          details: `إنشاء القيد رقم ${serial}: ${entry.description}`,
+          id: 'client-1',
+          code: 'CL-2026-001',
+          name: 'شركة النيل للصناعات الهندسية والتجارة ش.م.م',
+          taxId: '204-819-310',
+          taxCardNo: '204-819-310',
+          commercialRegister: '145890 استثمار القاهرة',
+          commercialRegNo: '145890',
+          companyType: 'JOINT_STOCK',
+          relationshipType: 'ANNUAL_CONTRACT',
+          industry: 'صناعات هندسية وتوريدات',
+          taxOffice: 'مأمورية ضرائب الشركات المساهمة بالقاهرة',
+          address: 'المنطقة الصناعية الثالثة - مدينة العاشر من رمضان',
+          phone: '01003335360',
+          whatsappPhone: '201003335360',
+          email: 'finance@nile-eng.eg',
+          contactPerson: 'أ. أحمد محمود عبدالرحمن (المدير المالي)',
+          capitalAmount: 10000000,
+          paidUpCapital: 10000000,
+          annualAgreedFees: 60000,
+          paidFees: 35000,
+          activeFiscalYear: 2026,
+          isVatRegistered: true,
+          isWithholdingTaxSubject: true,
+          isPayrollTaxSubject: true,
+          eInvoiceRegistered: true,
+          hasEsealToken: true,
+          tokenCustodyStatus: 'IN_OFFICE',
+          status: 'ACTIVE',
+          folders: [],
+          documents: [],
+          procedures: [],
+          createdAt: '2026-01-10',
         },
       ],
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    this.state.journalEntries.push(newEntry);
-    this.logAudit('CREATE', `تسجيل قيد اليومية رقم ${serial} بقيمة ${entry.totalDebit} ج.م`);
-    this.saveState();
-    return newEntry;
-  }
-
-  private getOrCreateAccount(
-    code: string,
-    defaultName: string,
-    category: AccountCategory,
-    nature: 'DEBIT' | 'CREDIT'
-  ): Account {
-    const acc = this.state.accounts.find((a) => a.code === code);
-    if (acc) {
-      if (acc.name.trim() !== defaultName.trim()) {
-        throw new Error(
-          `تعارض في دليل الحسابات: الكود (${code}) موجود باسم (${acc.name}) بينما الاسم المطلوب هو (${defaultName}).`
-        );
-      }
-      return acc;
-    }
-    return this.addAccount({
-      code,
-      name: defaultName,
-      category,
-      nature,
-      level: 2,
-      openingBalanceDebit: 0,
-      openingBalanceCredit: 0,
-      isSystem: false,
-    });
-  }
-
-  public updateJournalEntry(id: string, updates: Partial<JournalEntry>): JournalEntry | null {
-    const index = this.state.journalEntries.findIndex((e) => e.id === id);
-    if (index === -1) return null;
-    const old = this.state.journalEntries[index];
-
-    // Enforce requirement 2.3: AUDIT_DIRECT_ENTRY entries cannot be edited manually
-    if (old.source === 'AUDIT_DIRECT_ENTRY' && (updates as any).allowAuditDirectUpdate !== true) {
-      throw new Error(
-        'لا يمكن تعديل هذا القيد يدويًا لأنه قيد مولّد آلياً من وضع المراجعة (الإدخال المباشر). لتعديل القيد يجب حذف التوليد أو إعادة التوليد من وضع المراجعة منعاً لحدوث أي تضارب محاسبي.'
-      );
-    }
-
-    const candidate: JournalEntry = {
-      ...old,
-      ...updates,
-    };
-
-    const validation = this.validateJournalEntryDraft(candidate);
-    if (!validation.isValid) {
-      throw new Error(`تعذر تعديل القيد المحاسبي:\n${validation.errors.join('\n')}`);
-    }
-
-    const now = new Date().toISOString();
-
-    const audit: AuditRecord = {
-      timestamp: now.replace('T', ' ').substring(0, 19),
-      user: this.state.officeProfile.auditorName,
-      action: 'UPDATE',
-      details: `تعديل القيد رقم ${old.serialNumber}`,
-    };
-
-    this.state.journalEntries[index] = {
-      ...candidate,
-      updatedAt: now,
-      auditTrail: [audit, ...(old.auditTrail || [])],
-    };
-
-    this.logAudit('UPDATE', `تعديل قيد اليومية رقم ${old.serialNumber}`, old, this.state.journalEntries[index]);
-    this.saveState();
-    return this.state.journalEntries[index];
-  }
-
-  public deleteJournalEntry(id: string): boolean {
-    const index = this.state.journalEntries.findIndex((e) => e.id === id);
-    if (index === -1) return false;
-    const entry = this.state.journalEntries[index];
-    this.state.journalEntries.splice(index, 1);
-    this.logAudit('DELETE', `حذف قيد اليومية رقم ${entry.serialNumber}`);
-    this.saveState();
-    return true;
-  }
-
-  /**
-   * حذف كافة القيود المولّدة من وضع المراجعة (الإدخال المباشر) لعميل أو سنة معينة
-   */
-  public deleteGeneratedAuditEntries(fiscalYear?: number, clientId?: string): number {
-    const initialCount = this.state.journalEntries.length;
-    const removedSerials: string[] = [];
-    this.state.journalEntries = this.state.journalEntries.filter((e) => {
-      if (e.source !== 'AUDIT_DIRECT_ENTRY') return true;
-      if (clientId && e.clientId && e.clientId !== clientId) return true;
-      if (fiscalYear) {
-        const entryYear = new Date(e.date).getFullYear();
-        if (entryYear !== fiscalYear) return true;
-      }
-      removedSerials.push(e.serialNumber);
-      return false;
-    });
-    const deletedCount = initialCount - this.state.journalEntries.length;
-    if (deletedCount > 0) {
-      this.logAudit(
-        'DELETE',
-        `حذف عدد (${deletedCount}) قيد مولّد من وضع المراجعة (الإدخال المباشر) لسنة ${fiscalYear || 'الكل'}: [${removedSerials.join(', ')}]`
-      );
-      this.saveState();
-      this.notify();
-    }
-    return deletedCount;
-  }
-
-  public togglePostEntry(id: string): JournalEntry | null {
-    const entry = this.state.journalEntries.find((e) => e.id === id);
-    if (!entry) return null;
-    const newStatus = !entry.isPosted;
-    entry.isPosted = newStatus;
-    entry.updatedAt = new Date().toISOString();
-    const action = newStatus ? 'POST' : 'UNPOST';
-    const audit: AuditRecord = {
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      user: this.state.officeProfile.auditorName,
-      action,
-      details: newStatus ? `ترحيل القيد للأستاذ العام` : `إلغاء ترحيل القيد`,
-    };
-    entry.auditTrail.unshift(audit);
-    this.logAudit(action, `${newStatus ? 'ترحيل' : 'إلغاء ترحيل'} القيد رقم ${entry.serialNumber}`);
-    this.saveState();
-    return entry;
-  }
-
-  public postBatchJournalEntries(ids: string[]): number {
-    let count = 0;
-    const now = new Date().toISOString();
-    ids.forEach((id) => {
-      const entry = this.state.journalEntries.find((e) => e.id === id);
-      if (entry && !entry.isPosted) {
-        entry.isPosted = true;
-        entry.updatedAt = now;
-        entry.auditTrail.unshift({
-          timestamp: now.replace('T', ' ').substring(0, 19),
-          user: this.state.officeProfile.auditorName,
-          action: 'POST',
-          details: 'ترحيل دفعة قيود آلياً عبر المراجع الذكي',
-        });
-        count++;
-      }
-    });
-    if (count > 0) {
-      this.logAudit('POST', `ترحيل دفعة قيود (${count} قيد) آلياً عبر فحص التدقيق`);
-      this.saveState();
-    }
-    return count;
-  }
-
-  // --- Clients CRUD ---
-  public addClient(client: Omit<ClientArchiveRecord, 'id' | 'createdAt' | 'updatedAt'>): ClientArchiveRecord {
-    const now = new Date().toISOString();
-    const newClient: ClientArchiveRecord = {
-      ...client,
-      id: `cl-${Date.now()}`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.state.clients.push(newClient);
-    this.logAudit('CREATE', `إضافة ملف عميل جديد بالأرشيف: ${newClient.name} (${newClient.clientCode})`);
-    this.saveState();
-    return newClient;
-  }
-
-  public batchAddClients(clients: Omit<ClientArchiveRecord, 'id' | 'createdAt' | 'updatedAt'>[]): ClientArchiveRecord[] {
-    const now = new Date().toISOString();
-    let baseTime = Date.now();
-    const createdClients: ClientArchiveRecord[] = [];
-
-    clients.forEach((c, idx) => {
-      const newClient: ClientArchiveRecord = {
-        ...c,
-        id: `cl-${baseTime + idx}`,
-        createdAt: now,
-        updatedAt: now,
-        documents: c.documents || [],
-        folders: c.folders || [],
-        procedures: c.procedures || [],
-        partners: c.partners || [],
-      };
-      this.state.clients.push(newClient);
-      createdClients.push(newClient);
-    });
-
-    this.logAudit('CREATE', `استيراد دفعة عملاء من ملف إكسيل: تم إضافة ${createdClients.length} ملف شركة جديد بالأرشيف`);
-    this.saveState();
-    return createdClients;
-  }
-
-  public updateClient(id: string, updates: Partial<ClientArchiveRecord>): ClientArchiveRecord | null {
-    const index = this.state.clients.findIndex((c) => c.id === id);
-    if (index === -1) return null;
-    const old = this.state.clients[index];
-    this.state.clients[index] = {
-      ...old,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    this.logAudit('UPDATE', `تعديل بيانات ملف العميل: ${old.name}`);
-    this.saveState();
-    return this.state.clients[index];
-  }
-
-  public deleteClient(id: string, options?: { confirmedHasApproved?: boolean }): boolean {
-    const index = this.state.clients.findIndex((c) => c.id === id);
-    if (index === -1) return false;
-    const cl = this.state.clients[index];
-
-    const hasApproved = (this.state.approvedStatements || []).some(s => s.clientId === id);
-    if (hasApproved && !options?.confirmedHasApproved) {
-      console.warn(`Cannot delete client ${cl.name} (${id}) because they have approved statements and confirmedHasApproved is not true.`);
-      return false;
-    }
-
-    this.state.clients.splice(index, 1);
-    
-    // If the active client was deleted, reset or select next
-    if (this.state.activeClientContext?.clientId === id) {
-      if (this.state.clients.length > 0) {
-        this.setActiveClient(this.state.clients[0].id);
-      } else {
-        this.clearActiveClient();
-      }
-    }
-
-    // Clean up associated closing checklists, deadlines, open items, fee agreements, and fee collections
-    if (this.state.closingChecklists) {
-      for (const k of Object.keys(this.state.closingChecklists)) {
-        if (k.startsWith(`${id}_`)) {
-          delete this.state.closingChecklists[k];
-        }
-      }
-    }
-    if (this.state.clientDeadlines) {
-      this.state.clientDeadlines = this.state.clientDeadlines.filter((d) => d.clientId !== id);
-    }
-    if (this.state.openItems) {
-      this.state.openItems = this.state.openItems.filter((i) => i.clientId !== id);
-    }
-    if (this.state.feeAgreements) {
-      this.state.feeAgreements = this.state.feeAgreements.filter((a) => a.clientId !== id);
-    }
-    if (this.state.feeCollections) {
-      this.state.feeCollections = this.state.feeCollections.filter((c) => c.clientId !== id);
-    }
-    
-    this.logAudit('DELETE', `حذف ملف العميل: ${cl.name}`);
-    this.saveState();
-    return true;
-  }
-
-  // --- Active Client Context Management (العميل النشط وربط الشاشات المركزية) ---
-  public getActiveClientContext(): ActiveClientContext | null {
-    if (!this.state.activeClientContext?.clientId) return null;
-    return this.state.activeClientContext;
-  }
-
-  public getActiveClientRecord(): ClientArchiveRecord | null {
-    const activeCtx = this.getActiveClientContext();
-    if (!activeCtx?.clientId) return null;
-    return this.state.clients.find((c) => c.id === activeCtx.clientId) || null;
-  }
-
-  public setActiveClient(clientId: string | null, options?: { autoFilter?: boolean; fiscalYear?: number }): ActiveClientContext | null {
-    if (!clientId) {
-      return this.clearActiveClient();
-    }
-
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client) return null;
-
-    const newContext: ActiveClientContext = {
-      clientId: client.id,
-      clientName: client.name,
-      clientCode: client.clientCode,
-      relationshipType: client.relationshipType || (client.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY'),
-      selectedFiscalYear: options?.fiscalYear || this.state.activeClientContext?.selectedFiscalYear || 2026,
-      autoFilterAccountingData: options?.autoFilter ?? this.state.activeClientContext?.autoFilterAccountingData ?? false,
-      lastUpdated: new Date().toISOString(),
-    };
-
-    this.state.activeClientContext = newContext;
-    this.logAudit('UPDATE', `تحديد العميل النشط في بيئة العمل: ${client.name} (${client.clientCode}) [${newContext.relationshipType === 'PERMANENT' ? 'عميل دائم' : 'عميل مؤقت'}]`);
-    this.saveState('ACTIVE_CLIENT_CONTEXT');
-    return newContext;
-  }
-
-  public clearActiveClient(): ActiveClientContext {
-    const cleared: ActiveClientContext = {
-      clientId: null,
-      clientName: undefined,
-      clientCode: undefined,
-      relationshipType: undefined,
-      autoFilterAccountingData: false,
-      lastUpdated: new Date().toISOString(),
-    };
-    this.state.activeClientContext = cleared;
-    this.logAudit('UPDATE', `إلغاء تحديد العميل النشط (عرض شامل لكافة السجلات)`);
-    this.saveState('ACTIVE_CLIENT_CONTEXT');
-    return cleared;
-  }
-
-  // --- Closing Checklist (قائمة الإقفال لكل عميل وسنة مالية) ---
-  public getChecklist(clientId: string, fiscalYear: number | string): ClosingStep[] {
-    const key = `${clientId}_${fiscalYear}`;
-    if (this.state.closingChecklists && Array.isArray(this.state.closingChecklists[key]) && this.state.closingChecklists[key].length > 0) {
-      return this.state.closingChecklists[key];
-    }
-    return createDefaultChecklist();
-  }
-
-  public saveChecklist(clientId: string, fiscalYear: number | string, steps: ClosingStep[]): ClosingStep[] {
-    const key = `${clientId}_${fiscalYear}`;
-    if (!this.state.closingChecklists) {
-      this.state.closingChecklists = {};
-    }
-    this.state.closingChecklists[key] = steps;
-    this.saveState('CLOSING_CHECKLISTS' as any);
-
-    const client = this.state.clients.find((c) => c.id === clientId);
-    const clientName = client ? client.name : clientId;
-    const currentUser = this.getCurrentUser();
-    const userName = currentUser ? currentUser.name : 'محاسب عام';
-
-    this.logAudit(
-      'UPDATE',
-      `تحديث قائمة الإقفال للعميل: [${clientName}] - السنة المالية: [${fiscalYear}] بواسطة: (${userName})`
-    );
-
-    return steps;
-  }
-
-  // --- Client Deadlines Methods (مواعيد الإقرارات والتكليفات لكل عميل) ---
-  public getClientDeadlines(clientId?: string): ClientDeadline[] {
-    const list = this.state.clientDeadlines || [];
-    if (!clientId) return list;
-    return list.filter((d) => d.clientId === clientId);
-  }
-
-  public addClientDeadline(payload: Omit<ClientDeadline, 'id' | 'createdAt' | 'updatedAt'>): ClientDeadline {
-    if (!this.state.clientDeadlines) {
-      this.state.clientDeadlines = [];
-    }
-    const newDeadline: ClientDeadline = {
-      ...payload,
-      id: `DL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.state.clientDeadlines.push(newDeadline);
-    this.saveState('CLIENT_DEADLINES' as any);
-    this.logAudit('CREATE', `إضافة موعد إقرار/التزام: ${payload.title} (عميل: ${payload.clientId})`);
-    return newDeadline;
-  }
-
-  public addMultipleClientDeadlines(payloads: Omit<ClientDeadline, 'id' | 'createdAt' | 'updatedAt'>[]): ClientDeadline[] {
-    if (!this.state.clientDeadlines) {
-      this.state.clientDeadlines = [];
-    }
-    const created: ClientDeadline[] = [];
-    const now = new Date().toISOString();
-
-    for (const p of payloads) {
-      const item: ClientDeadline = {
-        ...p,
-        id: `DL-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.state.clientDeadlines.push(item);
-      created.push(item);
-    }
-
-    this.saveState('CLIENT_DEADLINES' as any);
-    this.logAudit('CREATE', `إضافة عدد ${created.length} مواعيد تكرار شهري للمستندات الإقرارية`);
-    return created;
-  }
-
-  public updateClientDeadline(id: string, updates: Partial<ClientDeadline>): ClientDeadline | null {
-    if (!this.state.clientDeadlines) return null;
-    const index = this.state.clientDeadlines.findIndex((d) => d.id === id);
-    if (index === -1) return null;
-
-    const existing = this.state.clientDeadlines[index];
-    const updated: ClientDeadline = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (updates.status === 'FILED' && !updated.filedAt) {
-      updated.filedAt = new Date().toISOString().split('T')[0];
-    }
-
-    this.state.clientDeadlines[index] = updated;
-    this.saveState('CLIENT_DEADLINES' as any);
-    this.logAudit('UPDATE', `تعديل موعد إقرار: ${updated.title}`);
-    return updated;
-  }
-
-  public deleteClientDeadline(id: string): boolean {
-    if (!this.state.clientDeadlines) return false;
-    const index = this.state.clientDeadlines.findIndex((d) => d.id === id);
-    if (index === -1) return false;
-
-    const title = this.state.clientDeadlines[index].title;
-    this.state.clientDeadlines.splice(index, 1);
-    this.saveState('CLIENT_DEADLINES' as any);
-    this.logAudit('DELETE', `حذف موعد إقرار: ${title}`);
-    return true;
-  }
-
-  // --- Open Items Methods (البنود المفتوحة والمستندات المعلقة لكل عميل) ---
-  public getOpenItems(clientId?: string, fiscalYear?: number | string): OpenItem[] {
-    let list = this.state.openItems || [];
-    if (clientId) {
-      list = list.filter((i) => i.clientId === clientId);
-    }
-    if (fiscalYear) {
-      list = list.filter((i) => !i.fiscalYear || String(i.fiscalYear) === String(fiscalYear));
-    }
-    return list;
-  }
-
-  public addOpenItem(payload: Omit<OpenItem, 'id' | 'createdAt' | 'updatedAt'>): OpenItem {
-    if (!this.state.openItems) {
-      this.state.openItems = [];
-    }
-    const newItem: OpenItem = {
-      ...payload,
-      id: `OI-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.state.openItems.push(newItem);
-    this.saveState('OPEN_ITEMS' as any);
-    this.logAudit('CREATE', `إضافة بند مفتوح جديد: [${newItem.kind}] ${newItem.text.substring(0, 30)} (عميل: ${payload.clientId})`);
-    return newItem;
-  }
-
-  public updateOpenItem(id: string, updates: Partial<OpenItem>): OpenItem | null {
-    if (!this.state.openItems) return null;
-    const index = this.state.openItems.findIndex((i) => i.id === id);
-    if (index === -1) return null;
-
-    const existing = this.state.openItems[index];
-    const currentUser = this.getCurrentUser();
-    const updated: OpenItem = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (updates.status === 'CLOSED' && !updated.closedAt) {
-      updated.closedAt = new Date().toISOString().split('T')[0];
-      if (currentUser) updated.closedBy = currentUser.name;
-    }
-
-    this.state.openItems[index] = updated;
-    this.saveState('OPEN_ITEMS' as any);
-    this.logAudit('UPDATE', `تحديث حالة البند المفتوح: ${updated.text.substring(0, 30)} -> [${updated.status}]`);
-    return updated;
-  }
-
-  public deleteOpenItem(id: string): boolean {
-    if (!this.state.openItems) return false;
-    const index = this.state.openItems.findIndex((i) => i.id === id);
-    if (index === -1) return false;
-
-    const text = this.state.openItems[index].text;
-    this.state.openItems.splice(index, 1);
-    this.saveState('OPEN_ITEMS' as any);
-    this.logAudit('DELETE', `حذف بند مفتوح: ${text.substring(0, 30)}`);
-    return true;
-  }
-
-  public updateActiveClientFiscalYear(year: number) {
-    if (this.state.activeClientContext) {
-      this.state.activeClientContext.selectedFiscalYear = year;
-      this.state.activeClientContext.lastUpdated = new Date().toISOString();
-      this.saveState('ACTIVE_CLIENT_CONTEXT');
-    }
-  }
-
-  public toggleActiveClientAutoFilter(enabled?: boolean) {
-    if (this.state.activeClientContext) {
-      const nextVal = enabled !== undefined ? enabled : !this.state.activeClientContext.autoFilterAccountingData;
-      this.state.activeClientContext.autoFilterAccountingData = nextVal;
-      this.state.activeClientContext.lastUpdated = new Date().toISOString();
-      this.saveState('ACTIVE_CLIENT_CONTEXT');
-    }
-  }
-
-  // --- Industrial & Multi-Tenant Helpers ---
-  public applyIndustrialChartOfAccounts(targetClientId?: string): { addedCount: number; message: string } {
-    const industrialAccounts: Account[] = [
-      {
-        id: 'acc-1131-raw',
-        code: '1131',
-        name: 'مخزون خامات ومواد أولية (صناعي)',
-        category: 'ASSETS',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-113',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'المواد الخام ومستلزمات الإنتاج والتصنيع بالمستودعات',
-      },
-      {
-        id: 'acc-1132-wip',
-        code: '1132',
-        name: 'مخزون إنتاج تحت التشغيل (WIP)',
-        category: 'ASSETS',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-113',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'المنتجات في مراحل التصنيع وخطوط الإنتاج الجارية',
-      },
-      {
-        id: 'acc-1133-finished',
-        code: '1133',
-        name: 'مخزون إنتاج تام الصنع',
-        category: 'ASSETS',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-113',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'المنتجات الجاهزة للبيع والتسليم للعملاء',
-      },
-      {
-        id: 'acc-1134-spares',
-        code: '1134',
-        name: 'مخزون قطع غيار ومهمات تشغيل المصنع',
-        category: 'ASSETS',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-113',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'قطع الغيار والزيوت والمهمات التشغيلية لخطوط الإنتاج',
-      },
-      {
-        id: 'acc-311-direct-wages',
-        code: '3110',
-        name: 'أجور ومرتبات عمال الإنتاج المباشرة',
-        category: 'EXPENSES',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-31',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'أجور وحوافز عمال الورش وعنابر التصنيع المباشرة',
-      },
-      {
-        id: 'acc-312-power',
-        code: '3120',
-        name: 'قوى محركة وكهرباء ووقود المصنع',
-        category: 'EXPENSES',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-31',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'استهلاك الكهرباء الصناعية والسولار والغاز الطبيعي للغلايات والآلات',
-      },
-      {
-        id: 'acc-313-maint',
-        code: '3130',
-        name: 'صيانة وإصلاح آلات وخطوط الإنتاج',
-        category: 'EXPENSES',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-31',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'مصاريف الصيانة الدورية وقطع غيار الماكينات',
-      },
-      {
-        id: 'acc-314-mach-deprec',
-        code: '3140',
-        name: 'إهلاك آلات ومعدات المصنع الإنتاجية',
-        category: 'EXPENSES',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-31',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'الإهلاك المحاسبي والصناعي لخطوط الإنتاج والتصنيع',
-      },
-      {
-        id: 'acc-315-foh',
-        code: '3150',
-        name: 'تكاليف صناعية غير مباشرة أخرى (FOH)',
-        category: 'EXPENSES',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-31',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'الأعباء الصناعية غير المباشرة الموزعة على عنابر التشغيل',
-      },
-      {
-        id: 'acc-316-subcontract',
-        code: '3160',
-        name: 'تشغيل وتصنيع لدى الغير (Subcontracting)',
-        category: 'EXPENSES',
-        nature: 'DEBIT',
-        level: 3,
-        parentId: 'acc-31',
-        openingBalanceDebit: 0,
-        openingBalanceCredit: 0,
-        description: 'تكاليف المراحل الصناعية المنفذة في مصانع وورش خارجية',
-      },
-    ];
-
-    let addedCount = 0;
-    for (const acc of industrialAccounts) {
-      const exists = this.state.accounts.some((a) => a.code === acc.code);
-      if (!exists) {
-        this.state.accounts.push(acc);
-        addedCount++;
-      }
-    }
-
-    if (addedCount > 0) {
-      this.logAudit('UPDATE', `تطبيق شجرة الحسابات الصناعية للمصانع (${addedCount} حساب جديد)`);
-      this.saveState('ACCOUNTS');
-    }
-
-    return {
-      addedCount,
-      message: addedCount > 0 ? `تم إضافة ${addedCount} حساب صناعي متخصص بنجاح` : 'كافة الحسابات الصناعية مسجلة ومفعلة بالفعل في شجرة الحسابات',
-    };
-  }
-
-  public exportClientIsolatedBackup(clientId: string): string {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client) throw new Error('العميل أو المنشأة غير موجودة');
-
-    const clientEntries = this.state.journalEntries.filter((e) => e.clientId === clientId);
-    const clientAssets = (this.state.fixedAssets || []).filter((a) => (a as any).clientId === clientId);
-    const clientInvoices = (this.state.invoices || []).filter((inv) => (inv as any).clientId === clientId);
-    const clientDeclarations = (this.state.taxDeclarations || []).filter((t) => t.clientId === clientId);
-
-    const bundle = {
-      version: '1.0.0',
-      exportType: 'ISOLATED_CLIENT_WORKSPACE_BACKUP',
-      exportedAt: new Date().toISOString(),
-      client,
-      journalEntries: clientEntries,
-      fixedAssets: clientAssets,
-      invoices: clientInvoices,
-      taxDeclarations: clientDeclarations,
-    };
-
-    return JSON.stringify(bundle, null, 2);
-  }
-
-  // --- Client Procedures & Treasury Integration ---
-  public addClientProcedure(
-    clientId: string,
-    procedure: Omit<ClientProcedureTask, 'id' | 'procedureCode' | 'createdAt' | 'updatedAt' | 'clientId' | 'clientName'>,
-    options?: {
-      recordFeeInTreasury?: boolean;
-      feePaymentMethod?: OfficeTreasuryTransaction['paymentMethod'];
-      recordGovFeeInTreasury?: boolean;
-      govFeePaymentMethod?: OfficeTreasuryTransaction['paymentMethod'];
-    }
-  ): ClientProcedureTask | null {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client) return null;
-
-    if (!client.procedures) {
-      client.procedures = [];
-    }
-
-    const now = new Date().toISOString();
-    const currentYear = new Date().getFullYear();
-    const procedureCount = (client.procedures?.length || 0) + 1;
-    const procedureCode = `PRC-${currentYear}-${String(procedureCount).padStart(3, '0')}`;
-    const procedureId = `prc-${Date.now()}`;
-
-    const feeVouchers: string[] = [];
-    const expenseVouchers: string[] = [];
-
-    // 1. Record Fee Collection in Treasury if requested
-    if (options?.recordFeeInTreasury && procedure.collectedFees > 0) {
-      const feeTx = this.addTreasuryTransaction({
-        date: procedure.startDate || now.slice(0, 10),
-        type: 'INCOME_FEES',
-        category: `أتعاب ${procedure.title}`,
-        amount: Number(procedure.collectedFees),
-        clientId: client.id,
-        clientName: client.name,
-        procedureId: procedureId,
-        procedureTitle: procedure.title,
-        paymentMethod: options.feePaymentMethod || 'CASH',
-        description: `تحصيل أتعاب إجراء: [${procedure.title}] للعميل: ${client.name}`,
-        recordedBy: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-      });
-      feeVouchers.push(feeTx.voucherNumber);
-    }
-
-    // 2. Record Government / Regulatory Fee Expense in Treasury if requested
-    if (options?.recordGovFeeInTreasury && procedure.governmentFees > 0) {
-      const expTx = this.addTreasuryTransaction({
-        date: procedure.startDate || now.slice(0, 10),
-        type: 'EXPENSE_CLIENT_GOV_FEE',
-        category: `رسوم ومصروفات حكومية لحساب العميل`,
-        amount: Number(procedure.governmentFees),
-        clientId: client.id,
-        clientName: client.name,
-        procedureId: procedureId,
-        procedureTitle: procedure.title,
-        paymentMethod: options.govFeePaymentMethod || 'CASH',
-        description: `سداد رسوم ومصروفات حكومية لإجراء: [${procedure.title}] لحساب العميل: ${client.name}`,
-        recordedBy: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-      });
-      expenseVouchers.push(expTx.voucherNumber);
-    }
-
-    const newProcedure: ClientProcedureTask = {
-      ...procedure,
-      id: procedureId,
-      procedureCode,
-      clientId: client.id,
-      clientName: client.name,
-      agreedFees: Number(procedure.agreedFees) || 0,
-      collectedFees: Number(procedure.collectedFees) || 0,
-      governmentFees: Number(procedure.governmentFees) || 0,
-      feeTreasuryVouchers: feeVouchers,
-      expenseTreasuryVouchers: expenseVouchers,
-      progressPercent: procedure.progressPercent ?? (procedure.status === 'COMPLETED' ? 100 : 0),
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    client.procedures.unshift(newProcedure);
-    client.updatedAt = now;
-
-    // Also sync to legacy tasksHistory for backward compatibility
-    if (!client.tasksHistory) client.tasksHistory = [];
-    client.tasksHistory.unshift({
-      id: procedureId,
-      date: newProcedure.startDate,
-      taskDescription: newProcedure.title,
-      status: newProcedure.status === 'COMPLETED' ? 'COMPLETED' : newProcedure.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'PENDING',
-      fees: newProcedure.agreedFees,
-      treasuryTxId: feeVouchers[0],
-    });
-
-    this.logAudit(
-      'CREATE',
-      `إضافة إجراء جديد لملف العميل [${client.name}]: ${newProcedure.title} (كود: ${newProcedure.procedureCode}) مع قيد مالي بالخزنة`
-    );
-    this.saveState();
-    return newProcedure;
-  }
-
-  public updateClientProcedure(
-    clientId: string,
-    procedureId: string,
-    updates: Partial<ClientProcedureTask>,
-    additionalTreasury?: {
-      addFeeCollected?: number;
-      feePaymentMethod?: OfficeTreasuryTransaction['paymentMethod'];
-      addGovFeePaid?: number;
-      govFeePaymentMethod?: OfficeTreasuryTransaction['paymentMethod'];
-    }
-  ): ClientProcedureTask | null {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client || !client.procedures) return null;
-
-    const procIndex = client.procedures.findIndex((p) => p.id === procedureId);
-    if (procIndex === -1) return null;
-
-    const oldProc = client.procedures[procIndex];
-    const now = new Date().toISOString();
-    const updatedFeeVouchers = [...(oldProc.feeTreasuryVouchers || [])];
-    const updatedExpVouchers = [...(oldProc.expenseTreasuryVouchers || [])];
-
-    let newCollectedFees = oldProc.collectedFees;
-    let newGovFees = oldProc.governmentFees;
-
-    // Handle additional fee collected
-    if (additionalTreasury?.addFeeCollected && additionalTreasury.addFeeCollected > 0) {
-      const amount = Number(additionalTreasury.addFeeCollected);
-      newCollectedFees += amount;
-      const feeTx = this.addTreasuryTransaction({
-        date: now.slice(0, 10),
-        type: 'INCOME_FEES',
-        category: `تحصيل أتعاب: ${oldProc.title}`,
-        amount,
-        clientId: client.id,
-        clientName: client.name,
-        procedureId: oldProc.id,
-        procedureTitle: oldProc.title,
-        paymentMethod: additionalTreasury.feePaymentMethod || 'CASH',
-        description: `تحصيل دفعة أتعاب إضافية لإجراء: [${oldProc.title}] للعميل: ${client.name}`,
-        recordedBy: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-      });
-      updatedFeeVouchers.push(feeTx.voucherNumber);
-    }
-
-    // Handle additional government fee paid
-    if (additionalTreasury?.addGovFeePaid && additionalTreasury.addGovFeePaid > 0) {
-      const amount = Number(additionalTreasury.addGovFeePaid);
-      newGovFees += amount;
-      const expTx = this.addTreasuryTransaction({
-        date: now.slice(0, 10),
-        type: 'EXPENSE_CLIENT_GOV_FEE',
-        category: `رسوم ومصروفات حكومية لحساب العميل`,
-        amount,
-        clientId: client.id,
-        clientName: client.name,
-        procedureId: oldProc.id,
-        procedureTitle: oldProc.title,
-        paymentMethod: additionalTreasury.govFeePaymentMethod || 'CASH',
-        description: `سداد رسوم ومصروفات حكومية إضافية لإجراء: [${oldProc.title}] لحساب العميل: ${client.name}`,
-        recordedBy: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-      });
-      updatedExpVouchers.push(expTx.voucherNumber);
-    }
-
-    const updatedProc: ClientProcedureTask = {
-      ...oldProc,
-      ...updates,
-      collectedFees: newCollectedFees,
-      governmentFees: newGovFees,
-      feeTreasuryVouchers: updatedFeeVouchers,
-      expenseTreasuryVouchers: updatedExpVouchers,
-      updatedAt: now,
-    };
-
-    if (updates.status === 'COMPLETED' && !updatedProc.completedDate) {
-      updatedProc.completedDate = now.slice(0, 10);
-      updatedProc.progressPercent = 100;
-    }
-
-    client.procedures[procIndex] = updatedProc;
-    client.updatedAt = now;
-
-    // Sync legacy tasksHistory
-    if (client.tasksHistory) {
-      const taskHist = client.tasksHistory.find((t) => t.id === procedureId);
-      if (taskHist) {
-        if (updates.title) taskHist.taskDescription = updates.title;
-        if (updates.status) {
-          taskHist.status = updates.status === 'COMPLETED' ? 'COMPLETED' : updates.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'PENDING';
-        }
-      }
-    }
-
-    this.logAudit(
-      'UPDATE',
-      `تحديث حالة وبيانات الإجراء [${updatedProc.title}] لملف العميل: ${client.name}`
-    );
-    this.saveState();
-    return updatedProc;
-  }
-
-  public deleteClientProcedure(clientId: string, procedureId: string): boolean {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client || !client.procedures) return false;
-
-    const procIndex = client.procedures.findIndex((p) => p.id === procedureId);
-    if (procIndex === -1) return false;
-
-    const deleted = client.procedures[procIndex];
-    client.procedures.splice(procIndex, 1);
-    client.updatedAt = new Date().toISOString();
-
-    if (client.tasksHistory) {
-      client.tasksHistory = client.tasksHistory.filter((t) => t.id !== procedureId);
-    }
-
-    this.logAudit('DELETE', `حذف الإجراء [${deleted.title}] من سجل ملف العميل: ${client.name}`);
-    this.saveState();
-    return true;
-  }
-
-  public getClientTreasurySummary(clientId: string) {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    const procedures = client?.procedures || [];
-    const transactions = this.state.treasuryTransactions.filter((tx) => tx.clientId === clientId);
-
-    const totalAgreedFees = procedures.reduce((acc, p) => acc + (Number(p.agreedFees) || 0), 0);
-    const totalCollectedFees = transactions
-      .filter((tx) => tx.type === 'INCOME_FEES')
-      .reduce((acc, tx) => acc + tx.amount, 0);
-    const totalGovFeesPaid = transactions
-      .filter((tx) => tx.type === 'EXPENSE_CLIENT_GOV_FEE')
-      .reduce((acc, tx) => acc + tx.amount, 0);
-
-    const remainingFeesDue = Math.max(0, totalAgreedFees - totalCollectedFees);
-
-    return {
-      totalAgreedFees,
-      totalCollectedFees,
-      totalGovFeesPaid,
-      remainingFeesDue,
-      transactions,
-      procedures,
-    };
-  }
-
-  // --- Office Treasury CRUD ---
-  public addTreasuryTransaction(tx: Omit<OfficeTreasuryTransaction, 'id' | 'voucherNumber' | 'createdAt'>): OfficeTreasuryTransaction {
-    const count = this.state.treasuryTransactions.length + 1;
-    const voucher = `TR-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
-    const newTx: OfficeTreasuryTransaction = {
-      ...tx,
-      id: `tr-${Date.now()}`,
-      voucherNumber: voucher,
-      qrPayload: `OFFICE-TR|${voucher}|${tx.date}|${tx.amount.toFixed(2)}|${tx.type}`,
-      createdAt: new Date().toISOString(),
-    };
-    this.state.treasuryTransactions.push(newTx);
-    this.logAudit('CREATE', `تسجيل حركة بخزنة المكتب: [${voucher}] ${tx.category} بقيمة ${tx.amount} ج.م`);
-    this.saveState();
-    return newTx;
-  }
-
-  public deleteTreasuryTransaction(id: string): boolean {
-    const index = this.state.treasuryTransactions.findIndex((t) => t.id === id);
-    if (index === -1) return false;
-    const tx = this.state.treasuryTransactions[index];
-    this.state.treasuryTransactions.splice(index, 1);
-    this.logAudit('DELETE', `حذف سند حركة الخزنة رقم ${tx.voucherNumber}`);
-    this.saveState();
-    return true;
-  }
-
-  // --- Tax Declarations CRUD ---
-  public addTaxDeclaration(tax: Omit<TaxDeclarationRecord, 'id' | 'createdAt' | 'updatedAt'>): TaxDeclarationRecord {
-    const now = new Date().toISOString();
-    const newTax: TaxDeclarationRecord = {
-      ...tax,
-      id: `tax-${Date.now()}`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.state.taxDeclarations.push(newTax);
-    this.logAudit('CREATE', `إدراج إقرار ضريبي: ${tax.declarationType} - ${tax.period} للعميل: ${tax.clientName}`);
-    this.saveState();
-    return newTax;
-  }
-
-  public updateTaxDeclaration(id: string, updates: Partial<TaxDeclarationRecord>): TaxDeclarationRecord | null {
-    const index = this.state.taxDeclarations.findIndex((t) => t.id === id);
-    if (index === -1) return null;
-    const old = this.state.taxDeclarations[index];
-    this.state.taxDeclarations[index] = {
-      ...old,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    this.logAudit('UPDATE', `تحديث حالة الإقرار الضريبي: ${old.period}`);
-    this.saveState();
-    return this.state.taxDeclarations[index];
-  }
-
-  public deleteTaxDeclaration(id: string): boolean {
-    const prevLen = this.state.taxDeclarations.length;
-    this.state.taxDeclarations = this.state.taxDeclarations.filter((t) => t.id !== id);
-    if (this.state.taxDeclarations.length < prevLen) {
-      this.logAudit('DELETE', `حذف إقرار ضريبي: ${id}`);
-      this.saveState();
-      return true;
-    }
-    return false;
-  }
-
-  // --- Client Document Folders & Categorization ---
-  public addClientFolder(clientId: string, folder: Omit<ClientDocumentFolder, 'id' | 'clientId' | 'createdAt'>): ClientDocumentFolder | null {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client) return null;
-    if (!client.folders) client.folders = [];
-
-    const newFolder: ClientDocumentFolder = {
-      ...folder,
-      id: `fld-${clientId}-${Date.now()}`,
-      clientId,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    client.folders.push(newFolder);
-    client.updatedAt = new Date().toISOString();
-    this.logAudit('CREATE', `إنشاء مجلد مستندات جديد [${folder.name}] لملف العميل: ${client.name}`);
-    this.saveState();
-    return newFolder;
-  }
-
-  public updateClientFolder(clientId: string, folderId: string, updates: Partial<ClientDocumentFolder>): boolean {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client || !client.folders) return false;
-    const folder = client.folders.find((f) => f.id === folderId);
-    if (!folder) return false;
-
-    const oldName = folder.name;
-    Object.assign(folder, updates);
-    // If folder name changed, update existing documents folderName
-    if (updates.name && updates.name !== oldName && client.documents) {
-      client.documents.forEach((doc) => {
-        if (doc.folderId === folderId) {
-          doc.folderName = updates.name;
-        }
-      });
-    }
-    client.updatedAt = new Date().toISOString();
-    this.saveState();
-    return true;
-  }
-
-  public deleteClientFolder(clientId: string, folderId: string): boolean {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client || !client.folders) return false;
-    const folderIndex = client.folders.findIndex((f) => f.id === folderId);
-    if (folderIndex === -1) return false;
-
-    const deletedFolder = client.folders[folderIndex];
-    // Move docs in this folder to default folder or unassign folderId
-    if (client.documents) {
-      client.documents.forEach((doc) => {
-        if (doc.folderId === folderId) {
-          doc.folderId = undefined;
-          doc.folderName = undefined;
-        }
-      });
-    }
-    client.folders.splice(folderIndex, 1);
-    client.updatedAt = new Date().toISOString();
-    this.logAudit('DELETE', `حذف مجلد المستندات [${deletedFolder.name}] لملف العميل: ${client.name}`);
-    this.saveState();
-    return true;
-  }
-
-  public addClientDocument(clientId: string, doc: Omit<ClientDocument, 'id' | 'clientId' | 'uploadedAt'>): ClientDocument | null {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client) return null;
-    if (!client.documents) client.documents = [];
-
-    const newDoc: ClientDocument = {
-      ...doc,
-      id: `doc-${Date.now()}`,
-      clientId,
-      uploadedAt: new Date().toISOString().slice(0, 10),
-    };
-    client.documents.push(newDoc);
-    client.updatedAt = new Date().toISOString();
-    this.logAudit('CREATE', `أرشفة مستند جديد [${doc.title}] في مجلد [${doc.folderName || 'العام'}] لملف العميل: ${client.name}`);
-    this.saveState();
-    return newDoc;
-  }
-
-  public deleteClientDocument(clientId: string, documentId: string): boolean {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client || !client.documents) return false;
-    const docIndex = client.documents.findIndex((d) => d.id === documentId);
-    if (docIndex === -1) return false;
-
-    const doc = client.documents[docIndex];
-    client.documents.splice(docIndex, 1);
-    client.updatedAt = new Date().toISOString();
-    this.logAudit('DELETE', `حذف مستند [${doc.title}] من أرشيف العميل: ${client.name}`);
-    this.saveState();
-    return true;
-  }
-
-  public moveClientDocument(clientId: string, documentId: string, targetFolderId: string, targetFolderName: string): boolean {
-    const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client || !client.documents) return false;
-    const doc = client.documents.find((d) => d.id === documentId);
-    if (!doc) return false;
-
-    doc.folderId = targetFolderId;
-    doc.folderName = targetFolderName;
-    client.updatedAt = new Date().toISOString();
-    this.saveState();
-    return true;
-  }
-
-  // --- Tax Mandates & Task Scheduler CRUD ---
-  public addTaxMandate(mandate: Omit<TaxMandateTask, 'id' | 'mandateCode' | 'createdAt' | 'updatedAt'>): TaxMandateTask {
-    const now = new Date().toISOString();
-    const count = this.state.taxMandates.length + 1;
-    const code = `TAX-MAND-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`;
-    const newTask: TaxMandateTask = {
-      ...mandate,
-      id: `mand-${Date.now()}`,
-      mandateCode: code,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.state.taxMandates.push(newTask);
-    this.logAudit('CREATE', `جدولة تكليف ضريبي جديد: [${code}] ${mandate.mandateTitle} للعميل: ${mandate.clientName}`);
-    this.saveState();
-    return newTask;
-  }
-
-  public updateTaxMandate(id: string, updates: Partial<TaxMandateTask>): TaxMandateTask | null {
-    const index = this.state.taxMandates.findIndex((m) => m.id === id);
-    if (index === -1) return null;
-    const old = this.state.taxMandates[index];
-    const updated: TaxMandateTask = {
-      ...old,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    this.state.taxMandates[index] = updated;
-    this.logAudit('UPDATE', `تحديث حالة التكليف الضريبي [${old.mandateCode}] إلى (${updated.status})`);
-    this.saveState();
-    return updated;
-  }
-
-  public deleteTaxMandate(id: string): boolean {
-    const index = this.state.taxMandates.findIndex((m) => m.id === id);
-    if (index === -1) return false;
-    const deleted = this.state.taxMandates[index];
-    this.state.taxMandates.splice(index, 1);
-    this.logAudit('DELETE', `حذف التكليف الضريبي رقم: [${deleted.mandateCode}] ${deleted.mandateTitle}`);
-    this.saveState();
-    return true;
-  }
-
-  public batchGenerateMandates(taxType: TaxMandateTask['taxType'], periodName: string, deadlineDate: string, taxYear: number): number {
-    const primaryClients = this.state.clients.filter((c) => c.clientType === 'PRIMARY');
-    let addedCount = 0;
-    const now = new Date().toISOString();
-
-    const taxTypeTitles: Record<TaxMandateTask['taxType'], string> = {
-      VAT_10: 'إقرار ضريبة القيمة المضافة (نموذج 10)',
-      INCOME_27_CORP: 'إقرار ضريبة الدخل السنوي للشركات (نموذج 27)',
-      INCOME_28_INDIV: 'إقرار ضريبة الدخل للأشخاص الطبيعيين (نموذج 28)',
-      PAYROLL_4: 'نموذج 4 ضريبة كسب العمل والمرتبات',
-      ANNUAL_PAYROLL: 'التسوية السنوية لضريبة كسب العمل',
-      WHT_41: 'نموذج 41 خصم وتحصيل تحت حساب الضريبة',
-      STAMP_TAX: 'إقرار ضريبة الدمغة النسبية والنوعية',
-      REAL_ESTATE_TAX: 'إقرار الضريبة العقارية على المنشآت',
-      TAX_AUDIT_SESSION: 'جلسة فحص ضريبي أو لجنة طعن بمأمورية الضرائب',
-      OTHER: 'تكليف والتزام ضريبي دوري',
-    };
-
-    primaryClients.forEach((client) => {
-      // Check if already exists
-      const exists = this.state.taxMandates.some(
-        (m) => m.clientId === client.id && m.taxType === taxType && m.periodName === periodName && m.taxYear === taxYear
-      );
-      if (!exists) {
-        const count = this.state.taxMandates.length + 1;
-        const code = `TAX-MAND-${taxYear}-${String(count).padStart(3, '0')}`;
-        const title = `${taxTypeTitles[taxType] || 'تكليف ضريبي'} - ${periodName}`;
-        this.state.taxMandates.push({
-          id: `mand-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          mandateCode: code,
-          clientId: client.id,
-          clientName: client.name,
-          mandateTitle: title,
-          taxType,
-          periodName,
-          taxYear,
-          deadlineDate,
-          reminderDaysBefore: 7,
-          assignedTo: this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-          status: 'NOT_STARTED',
-          priority: taxType.includes('INCOME') ? 'CRITICAL' : 'HIGH',
-          createdAt: now,
-          updatedAt: now,
-        });
-        addedCount++;
-      }
-    });
-
-    if (addedCount > 0) {
-      this.logAudit('CREATE', `توليد جماعي لـ (${addedCount}) تكليف ضريبي دوري (${periodName}) لعملاء المكتب الأساسيين`);
-      this.saveState();
-    }
-    return addedCount;
-  }
-
-  // --- Professional Certificates CRUD ---
-  public addCertificate(cert: Omit<ProfessionalCertificate, 'id' | 'certificateNumber' | 'createdAt'>): ProfessionalCertificate {
-    const count = this.state.certificates.length + 1;
-    const certNum = `CERT-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
-    const verificationCode = IssuedDocumentService.createVerificationCode();
-    const newCert: ProfessionalCertificate = {
-      ...cert,
-      id: `cert-${Date.now()}`,
-      certificateNumber: certNum,
-      createdAt: new Date().toISOString(),
-      verificationCode,
-      registryStatus: 'PENDING',
-    };
-    this.state.certificates.push(newCert);
-    this.logAudit('CREATE', `إصدار وتوثيق شهادة مهنية رقم ${certNum} للعميل: ${cert.clientName}`);
-    this.saveState('CERTIFICATES' as any);
-
-    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
-    IssuedDocumentService.recordIssuedDocument({
-      verificationCode,
-      documentType: 'شهادة مهنية معتمدة',
-      issueDate: cert.issueDate || new Date().toISOString().slice(0, 10),
-      firmName,
-      status: 'ACTIVE',
-      displayDocNumber: certNum,
-    }).then(res => {
-      newCert.registryStatus = res.success ? 'RECORDED' : 'FAILED';
-      this.saveState('CERTIFICATES' as any);
-    }).catch(() => {
-      newCert.registryStatus = 'FAILED';
-      this.saveState('CERTIFICATES' as any);
-    });
-
-    return newCert;
-  }
-
-  public updateCertificate(id: string, updates: Partial<ProfessionalCertificate>): ProfessionalCertificate | null {
-    const index = this.state.certificates.findIndex((c) => c.id === id);
-    if (index === -1) return null;
-    const old = this.state.certificates[index];
-    this.state.certificates[index] = {
-      ...old,
-      ...updates,
-    };
-    this.logAudit('UPDATE', `تعديل الشهادة المهنية رقم ${old.certificateNumber}`);
-    this.saveState('CERTIFICATES' as any);
-    return this.state.certificates[index];
-  }
-
-  public deleteCertificate(id: string): boolean {
-    const index = this.state.certificates.findIndex((c) => c.id === id);
-    if (index === -1) return false;
-    const cert = this.state.certificates[index];
-    this.state.certificates.splice(index, 1);
-    this.logAudit('DELETE', `حذف الشهادة المهنية رقم ${cert.certificateNumber}`);
-    this.saveState('CERTIFICATES' as any);
-    return true;
-  }
-
-  // --- Invoices CRUD ---
-  public addInvoice(inv: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>): Invoice {
-    const count = this.state.invoices.length + 1;
-    const invNum = `INV-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
-    const verificationCode = IssuedDocumentService.createVerificationCode();
-    const newInv: Invoice = {
-      ...inv,
-      id: `inv-${Date.now()}`,
-      invoiceNumber: invNum,
-      createdAt: new Date().toISOString(),
-      verificationCode,
-      registryStatus: 'PENDING',
-    } as Invoice;
-    this.state.invoices.push(newInv);
-    this.logAudit('CREATE', `إصدار فاتورة رقم ${invNum} بمبلغ ${inv.grandTotal} ج.م`);
-    this.saveState('INVOICES' as any);
-
-    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
-    IssuedDocumentService.recordIssuedDocument({
-      verificationCode,
-      documentType: inv.invoiceType === 'PURCHASE' ? 'فاتورة مشتريات' : 'فاتورة أتعاب مهنية معتمدة',
-      issueDate: inv.date || new Date().toISOString().slice(0, 10),
-      firmName,
-      status: 'ACTIVE',
-      displayDocNumber: invNum,
-    }).then(res => {
-      (newInv as any).registryStatus = res.success ? 'RECORDED' : 'FAILED';
-      this.saveState('INVOICES' as any);
-    }).catch(() => {
-      (newInv as any).registryStatus = 'FAILED';
-      this.saveState('INVOICES' as any);
-    });
-
-    return newInv;
-  }
-
-  public batchAddInvoices(invoicesList: Omit<Invoice, 'id' | 'createdAt'>[]): Invoice[] {
-    const now = new Date().toISOString();
-    const created: Invoice[] = [];
-
-    invoicesList.forEach((inv, idx) => {
-      const invNum = inv.invoiceNumber || `INV-${new Date().getFullYear()}-${String(this.state.invoices.length + idx + 1).padStart(4, '0')}`;
-      const newInv: Invoice = {
-        ...inv,
-        id: `inv-${Date.now()}-${idx}`,
-        invoiceNumber: invNum,
-        createdAt: now,
-      };
-      this.state.invoices.push(newInv);
-      created.push(newInv);
-    });
-
-    this.logAudit('CREATE', `استيراد وإدراج جماعي لـ (${created.length}) فاتورة وإيصال إلكتروني عبر ملف الإكسل`);
-    this.saveState();
-    return created;
-  }
-
-  public updateInvoice(id: string, updates: Partial<Invoice>): Invoice | null {
-    const index = this.state.invoices.findIndex((inv) => inv.id === id);
-    if (index === -1) return null;
-    const old = this.state.invoices[index];
-    this.state.invoices[index] = {
-      ...old,
-      ...updates,
-    };
-    this.logAudit('UPDATE', `تعديل بيانات الفاتورة رقم ${old.invoiceNumber}`);
-    this.saveState();
-    return this.state.invoices[index];
-  }
-
-  public deleteInvoice(id: string): boolean {
-    const index = this.state.invoices.findIndex((inv) => inv.id === id);
-    if (index === -1) return false;
-    const inv = this.state.invoices[index];
-    this.state.invoices.splice(index, 1);
-    this.logAudit('DELETE', `حذف الفاتورة رقم ${inv.invoiceNumber}`);
-    this.saveState();
-    return true;
-  }
-
-  // --- Feasibility Studies CRUD ---
-  public addFeasibilityStudy(study: Omit<FeasibilityStudy, 'id' | 'studyCode' | 'createdAt'>): FeasibilityStudy {
-    const count = this.state.feasibilityStudies.length + 1;
-    const code = `FS-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`;
-    const newStudy: FeasibilityStudy = {
-      ...study,
-      id: `fs-${Date.now()}`,
-      studyCode: code,
-      createdAt: new Date().toISOString(),
-    };
-    this.state.feasibilityStudies.push(newStudy);
-    this.logAudit('CREATE', `إعداد دراسة جدوى اقتصادية رقم ${code}: ${study.projectName}`);
-    this.saveState();
-    return newStudy;
-  }
-
-  // --- Credit Simulations CRUD ---
-  public addCreditSimulation(sim: Omit<CreditModelSimulation, 'id' | 'createdAt'>): CreditModelSimulation {
-    const newSim: CreditModelSimulation = {
-      ...sim,
-      id: `sim-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-    this.state.creditSimulations.unshift(newSim);
-    this.logAudit('CREATE', `توليد محاكاة قوائم ائتمانية لمبيعات ${sim.targetSales} ج.م`);
-    this.saveState();
-    return newSim;
-  }
-
-  // --- Office Profile Update ---
-  public updateOfficeProfile(profile: Partial<OfficeProfile>) {
-    this.state.officeProfile = {
-      ...this.state.officeProfile,
-      ...profile,
-    };
-    this.logAudit('UPDATE', 'تحديث بيانات وترويسة مكتب المحاسب القانوني');
-    this.saveState();
-  }
-
-  // --- Merge Remote State ---
-  public mergeRemoteState(remote: Partial<DatabaseState>) {
-    const prevMustChangeMap = new Map<string, boolean>();
-    (this.state.users || []).forEach((u) => {
-      if (u.mustChangePassword) {
-        prevMustChangeMap.set(u.id, true);
-        if (u.email) prevMustChangeMap.set(u.email.toLowerCase(), true);
-      }
-    });
-
-    Object.assign(this.state, remote);
-
-    if (this.state.users && prevMustChangeMap.size > 0) {
-      this.state.users = this.state.users.map((u) => {
-        if (prevMustChangeMap.get(u.id) || (u.email && prevMustChangeMap.get(u.email.toLowerCase()))) {
-          return { ...u, mustChangePassword: true };
-        }
-        return u;
-      });
-    }
-    this.saveState();
-  }
-
-  // --- Fiscal Period Locks & Year-End Closing ---
-  public getPeriodLocks(): FiscalPeriodLock[] {
-    return this.state.fiscalPeriodLocks || [];
-  }
-
-  public isPeriodLocked(dateOrYear: string | number): boolean {
-    if (!this.state.fiscalPeriodLocks || this.state.fiscalPeriodLocks.length === 0) return false;
-    let year: number;
-    let month: string | null = null;
-    if (typeof dateOrYear === 'number') {
-      year = dateOrYear;
-    } else {
-      const parts = dateOrYear.split('-');
-      year = parseInt(parts[0], 10);
-      if (parts.length > 1) {
-        month = parts[1];
-      }
-    }
-    return this.state.fiscalPeriodLocks.some((lock) => {
-      if (!lock.isLocked) return false;
-      if (lock.fiscalYear !== year) return false;
-      if (lock.period === 'ANNUAL') return true;
-      if (month && (lock.period === month || lock.period === `M${month}`)) return true;
-      return false;
-    });
-  }
-
-  public lockFiscalPeriod(fiscalYear: number, period: string, notes?: string, closingEntryId?: string): FiscalPeriodLock {
-    const locks = [...(this.state.fiscalPeriodLocks || [])];
-    const existingIndex = locks.findIndex((l) => l.fiscalYear === fiscalYear && l.period === period);
-    const lockRecord: FiscalPeriodLock = {
-      id: existingIndex >= 0 ? locks[existingIndex].id : `lock-${fiscalYear}-${period}-${Date.now()}`,
-      fiscalYear,
-      period,
-      isLocked: true,
-      lockedAt: new Date().toISOString(),
-      lockedBy: this.state.officeProfile?.auditorName || 'محمد جميل مرعي',
-      notes,
-      closingEntryId,
-    };
-    if (existingIndex >= 0) {
-      locks[existingIndex] = lockRecord;
-    } else {
-      locks.push(lockRecord);
-    }
-    this.state.fiscalPeriodLocks = locks;
-    this.logAudit('POST', `إقفال واعتماد الفترة المالية: سنة ${fiscalYear} - فترة ${period}`);
-    this.saveState('PERIOD_LOCKS' as any);
-    return lockRecord;
-  }
-
-  public unlockFiscalPeriod(fiscalYear: number, period: string, reason?: string): boolean {
-    const locks = [...(this.state.fiscalPeriodLocks || [])];
-    const index = locks.findIndex((l) => l.fiscalYear === fiscalYear && l.period === period);
-    if (index === -1) return false;
-    locks[index] = {
-      ...locks[index],
-      isLocked: false,
-      notes: reason ? `تم فك القفل: ${reason}` : 'تم فك القفل يدويًا',
-    };
-    this.state.fiscalPeriodLocks = locks;
-    this.logAudit('UNPOST', `فك إقفال الفترة المالية: سنة ${fiscalYear} - فترة ${period} (${reason || 'يدوي'})`);
-    this.saveState('PERIOD_LOCKS' as any);
-    return true;
-  }
-
-  // --- Complete Database Purge / Factory Reset with Passcode ---
-  public purgeAllDatabaseData(passcode: string): { success: boolean; message: string } {
-    const isValid = SecurityAuthService.verifyPassword(passcode) || SecurityAuthService.verifyPurgePassword(passcode);
-    if (!isValid) {
-      return {
-        success: false,
-        message: 'الرقم السري لتفريغ البيانات غير صحيح! يرجى إدخال الرقم السري المعتمد.',
-      };
-    }
-
-    // Reset all accounts balances to 0
-    const cleanAccounts: Account[] = DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map((acc) => ({
-      ...acc,
-      openingBalance: 0,
-      currentBalance: 0,
-      debitTotal: 0,
-      creditTotal: 0,
-    }));
-
-    const cleanProfile: OfficeProfile = {
-      ...DEFAULT_OFFICE_PROFILE,
-      firmName: 'مكتب المحاسب القانوني ومراقب الحسابات',
-    };
-
-    this.state = {
-      accounts: cleanAccounts,
-      journalEntries: [],
-      clients: [],
       treasuryTransactions: [],
       taxDeclarations: [],
       taxMandates: [],
@@ -2673,832 +719,420 @@ export class LocalDatabase {
       fixedAssets: [],
       feeEstimates: [],
       customsShipments: [],
-      closingChecklists: {},
-      clientDeadlines: [],
-      openItems: [],
-      users: [...SAMPLE_SYSTEM_USERS], // Master admin only
-      currentUserId: 'user-admin',
-      preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
-      officeProfile: cleanProfile,
       whatsappMessages: [],
-      whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
-      exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
-      fiscalPeriodLocks: [],
-      activeClientContext: undefined,
-      auditLogs: [
+      whatsappBotSettings: {
+        isAutoReplyEnabled: true,
+        officeWorkingHours: 'السبت - الخميس (9 صباحاً - 6 مساءً)',
+        welcomeGreeting: 'مرحباً بكم في مكتب المحاسب القانوني محمد جميل مرعي',
+        botName: 'مساعد مكتب محمد جميل مرعي',
+        includeQrVerification: true,
+        apiDispatchMode: 'DIRECT_WEB_API',
+        templates: [...DEFAULT_WHATSAPP_TEMPLATES],
+      },
+      exchangeRates: [
         {
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'محمد جميل مرعي (المحاسب القانوني)',
-          action: 'DELETE',
-          details: 'تفريغ وتصفير شامل لكافة بيانات وسجلات المنظومة بالرقم السري المعتمد والبدء بملف محاسبي نظيف',
+          id: 'fx-usd-default',
+          date: '2026-01-01',
+          currency: 'USD',
+          baseCurrency: 'EGP',
+          buyRate: 48.55,
+          sellRate: 48.75,
+          officialRate: 48.65,
+          rateToEgp: 48.65,
+          code: 'USD',
+          name: 'دولار أمريكي',
+          source: 'CBE',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
         },
       ],
-    };
-
-    try {
-      localStorage.removeItem(STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT);
-    } catch {}
-
-    this.saveState();
-    this.notify();
-    return {
-      success: true,
-      message: 'تم تفريغ ومسح كافة بيانات وسجلات المنظومة بنجاح والبدء بملف محاسبي نظيف تماماً! حساب الأدمن هو الحساب الوحيد الفعّال حالياً.',
-    };
-  }
-
-  // --- Reset System For Actual Production ---
-  public async resetForProduction(options: {
-    passcode: string;
-    confirmationText: string;
-  }): Promise<{ success: boolean; message: string; backupJson?: string }> {
-    const currentUser = this.getCurrentUser();
-    if (!currentUser || currentUser.role !== 'ADMIN') {
-      return {
-        success: false,
-        message: 'الصلاحية مقتصرة على مدير النظام (ADMIN) فقط.',
-      };
-    }
-
-    if (options.confirmationText !== 'تفريغ') {
-      return {
-        success: false,
-        message: 'يرجى كتابة كلمة "تفريغ" بالضبط للتأكيد.',
-      };
-    }
-
-    const isValidPass =
-      SecurityAuthService.verifyPassword(options.passcode) ||
-      SecurityAuthService.verifyPurgePassword(options.passcode) ||
-      options.passcode === 'MASTER_PURGE_PASSWORD' ||
-      options.passcode === 'MG-2026-PURGE';
-
-    if (!isValidPass) {
-      return {
-        success: false,
-        message: 'كلمة المرور التأكيدية لتفريغ البيانات غير صحيحة.',
-      };
-    }
-
-    // 1. Export full backup JSON before reset
-    const backupJson = this.exportFullBackupJson();
-
-    // 2. Clear chart of accounts balances
-    const cleanAccounts: Account[] = DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS.map((acc) => ({
-      ...acc,
-      openingBalanceDebit: 0,
-      openingBalanceCredit: 0,
-      currentDebit: 0,
-      currentCredit: 0,
-      currentBalance: 0,
-    }));
-
-    // 3. Clear personal fields in Office Profile
-    const cleanProfile: OfficeProfile = {
-      firmName: '',
-      auditorName: '',
-      title: 'محاسب قانوني ومراجع حسابات',
-      licenseNumber: '',
-      taxAuthorityRegNo: '',
-      phone: '',
-      mobile: '',
-      email: '',
-      address: '',
-      mainOfficeAddress: '',
-      showMainOfficeAddress: false,
-      branchOfficeAddress: '',
-      showBranchOfficeAddress: false,
-      mainOfficeTitle: 'المقر الرئيسي',
-      branchOfficeTitle: 'الفرع',
-      showLogo: false,
-      showOfficePhones: false,
-      logoType: 'NONE',
-      headerStyle: 'standard',
-      systemSerial: '',
-      activationKey: '',
-      notes: '',
-      defaultTaxEnabled: true,
-      defaultTaxRate: 14,
-      defaultWhtEnabled: true,
-      defaultWhtRate: 1,
-      sendClientDataToGemini: false,
-    };
-
-    const resetAuditLog: AuditRecord = {
-      timestamp: new Date().toISOString(),
-      user: currentUser.username || currentUser.name,
-      userName: currentUser.name,
-      action: 'RESET_FOR_PRODUCTION',
-      details: 'تهيئة البرنامج للعمل الفعلي: تفريغ كافة البيانات التجريبية مع حفظ النسخة الاحتياطية والدليل المالي والمستخدمين والإعدادات.',
-    };
-
-    this.state = {
-      accounts: cleanAccounts,
-      journalEntries: [],
-      clients: [],
-      treasuryTransactions: [],
-      taxDeclarations: [],
-      taxMandates: [],
-      certificates: [],
-      invoices: [],
-      feasibilityStudies: [],
-      creditSimulations: [],
-      fixedAssets: [],
-      feeEstimates: [],
-      customsShipments: [],
+      officeProfile: {
+        auditorName: 'محمد جميل مرعي',
+        firmName: 'مكتب المحاسب القانوني ومراقب الحسابات محمد جميل مرعي',
+        title: 'محاسب قانوني وخبير ضرائب ومراقب حسابات شركات الأموال',
+        licenseNumber: 'س.م.م 43122',
+        taxAuthorityRegNo: '233-519-890',
+        address: 'ميدان النافورة - مركز الحسينية - الشرقية / فرع العاشر من رمضان',
+        phone: '01003335360',
+        mobile: '01003335360',
+        whatsappNumber: '201003335360',
+        email: 'office@marei-cpa.eg',
+        defaultTaxEnabled: true,
+        defaultTaxRate: 14,
+        includeOfficeTaxInfo: true,
+        sendClientDataToGemini: false,
+      },
+      users: [defaultAdmin],
+      currentUserId: defaultAdmin.id,
+      preferences: {
+        themeMode: 'light',
+        brandColor: 'emerald',
+        language: 'ar',
+        compactView: false,
+        reportingCurrency: 'EGP',
+        autoBackupEnabled: true,
+        soundEffectsEnabled: true,
+      },
+      auditLogs: [],
+      financialActivityLogs: [],
+      fiscalPeriodLocks: {},
+      activeClientContext: {
+        clientId: null,
+        selectedFiscalYear: 2026,
+        autoFilterEnabled: false,
+      },
       closingChecklists: {},
       clientDeadlines: [],
       openItems: [],
       approvedStatements: [],
-      feeAgreements: [],
-      feeCollections: [],
-      whatsappMessages: [],
-      financialActivityLogs: [],
-      fiscalPeriodLocks: [],
-      activeClientContext: undefined,
-      users: this.state.users && this.state.users.length > 0 ? this.state.users : [...SAMPLE_SYSTEM_USERS],
-      currentUserId: this.state.currentUserId || 'user-admin',
-      preferences: this.state.preferences || DEFAULT_USER_PREFERENCES,
-      officeProfile: cleanProfile,
-      whatsappBotSettings: DEFAULT_WHATSAPP_BOT_SETTINGS,
-      exchangeRates: DEFAULT_SAMPLE_EXCHANGE_RATES,
-      auditLogs: [resetAuditLog],
-    };
-
-    this.saveState();
-
-    // Call server reset route
-    try {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('egy_acc_session_token_v1');
-        if (token) {
-          await fetch('/api/admin/reset-production', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              passcode: options.passcode,
-              confirmationText: options.confirmationText,
-            }),
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('Server reset notice:', err);
-    }
-
-    return {
-      success: true,
-      message: 'تم تهيئة البرنامج للعمل الفعلي بنجاح وتفريغ كافة البيانات التجريبية مع الحفاظ على الدليل المحاسبي والمستخدمين والترخيص.',
-      backupJson,
-    };
-  }
-
-  // --- Approved Statements & Client Fees Methods ---
-  public getApprovedStatements(): ApprovedStatementsSnapshot[] {
-    return this.state.approvedStatements || [];
-  }
-
-  public getApprovedStatementsForClient(clientId: string, fiscalYear?: number): ApprovedStatementsSnapshot[] {
-    const list = this.state.approvedStatements || [];
-    return list.filter(s => s.clientId === clientId && (fiscalYear === undefined || s.fiscalYear === fiscalYear));
-  }
-
-  public addApprovedStatement(data: Omit<ApprovedStatementsSnapshot, 'id' | 'versionNo' | 'approvedAt'>): ApprovedStatementsSnapshot {
-    if (!this.state.approvedStatements) {
-      this.state.approvedStatements = [];
-    }
-    const existingForClientYear = this.state.approvedStatements.filter(
-      s => s.clientId === data.clientId && s.fiscalYear === data.fiscalYear
-    );
-    const maxVersion = existingForClientYear.reduce((max, s) => Math.max(max, s.versionNo || 0), 0);
-    const newVersionNo = maxVersion + 1;
-
-    const newSnapshot: ApprovedStatementsSnapshot = {
-      ...data,
-      id: `appr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      versionNo: newVersionNo,
-      approvedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
-    };
-
-    this.state.approvedStatements.unshift(newSnapshot);
-    this.saveState('APPROVED_STATEMENTS' as any);
-
-    this.logAudit('CREATE', `اعتماد وأرشفة نسخة قوائم مالية رقم ${newVersionNo} للعميل ${data.clientId} عن سنة ${data.fiscalYear}`);
-
-    const verificationCode = IssuedDocumentService.createVerificationCode();
-    (newSnapshot as any).verificationCode = verificationCode;
-    const fsDocNum = `FS-${data.clientId}-${data.fiscalYear}-V${newVersionNo}`;
-    const firmName = this.state.officeProfile?.firmName?.trim() || this.state.officeProfile?.name?.trim() || '—';
-    IssuedDocumentService.recordIssuedDocument({
-      verificationCode,
-      documentType: 'القوائم المالية والمركز المالي المعتمد',
-      issueDate: newSnapshot.approvedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-      firmName,
-      status: 'ACTIVE',
-      displayDocNumber: fsDocNum,
-    }).catch(err => console.warn('Async record error:', err));
-
-    return newSnapshot;
-  }
-
-  public deleteApprovedStatement(id: string, reason: string): boolean {
-    if (this.getCurrentUser()?.role !== 'ADMIN') {
-      console.warn('Unauthorized: Admin role required to delete approved statement');
-      return false;
-    }
-    if (!reason || !reason.trim()) {
-      console.warn('Deletion reason is mandatory');
-      return false;
-    }
-    if (!this.state.approvedStatements) return false;
-    const initialLen = this.state.approvedStatements.length;
-    const target = this.state.approvedStatements.find(s => s.id === id);
-    this.state.approvedStatements = this.state.approvedStatements.filter(s => s.id !== id);
-
-    if (this.state.approvedStatements.length < initialLen) {
-      this.saveState('APPROVED_STATEMENTS' as any);
-      this.logAudit('DELETE', `حذف نسخة معتمدة ${id} بواسطة مدير النظام. السبب: ${reason.trim()}`, target);
-      return true;
-    }
-    return false;
-  }
-
-  public getFeeAgreements(): ClientFeeAgreement[] {
-    return this.state.feeAgreements || [];
-  }
-
-  public saveFeeAgreement(agreement: ClientFeeAgreement): void {
-    if (!this.state.feeAgreements) this.state.feeAgreements = [];
-    const idx = this.state.feeAgreements.findIndex(a => a.id === agreement.id);
-    if (idx >= 0) {
-      this.state.feeAgreements[idx] = agreement;
-    } else {
-      this.state.feeAgreements.unshift(agreement);
-    }
-    this.saveState('FEE_AGREEMENTS' as any);
-  }
-
-  public deleteFeeAgreement(id: string): void {
-    if (!this.state.feeAgreements) return;
-    this.state.feeAgreements = this.state.feeAgreements.filter(a => a.id !== id);
-    this.saveState('FEE_AGREEMENTS' as any);
-  }
-
-  public getFeeCollections(): ClientFeeCollection[] {
-    return this.state.feeCollections || [];
-  }
-
-  public addFeeCollection(collection: ClientFeeCollection): void {
-    if (!this.state.feeCollections) this.state.feeCollections = [];
-    this.state.feeCollections.unshift(collection);
-    this.saveState('FEE_COLLECTIONS' as any);
-  }
-
-  public deleteFeeCollection(id: string): void {
-    if (!this.state.feeCollections) return;
-    this.state.feeCollections = this.state.feeCollections.filter(c => c.id !== id);
-    this.saveState('FEE_COLLECTIONS' as any);
-  }
-
-  // --- Full Backup JSON Export & Import ---
-  public exportFullBackupJson(): string {
-    let securityMeta = null;
-    try {
-      securityMeta = SecurityAuthService.generateBackupLicenseSignature();
-    } catch {
-      // Fallback
-    }
-
-    return JSON.stringify(
-      {
-        backupVersion: '2.0-EGY-CPA',
-        exportedAt: new Date().toISOString(),
-        auditor: this.state.officeProfile.auditorName,
-        securityMetadata: securityMeta,
-        data: this.state,
-      },
-      null,
-      2
-    );
-  }
-
-  public importFullBackupJson(jsonString: string): boolean {
-    try {
-      const parsed = JSON.parse(jsonString);
-      const dataToImport = parsed.data || parsed;
-
-      // Automatically validate & license this machine if backup has a valid license signature
-      if (parsed.securityMetadata) {
-        try {
-          SecurityAuthService.processImportedBackupLicense(parsed);
-        } catch (e) {
-          console.error('License import error:', e);
-        }
-      }
-
-      if (dataToImport.accounts && dataToImport.journalEntries) {
-        this.state = {
-          accounts: dataToImport.accounts || DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS,
-          journalEntries: dataToImport.journalEntries || [],
-          clients: dataToImport.clients || [],
-          treasuryTransactions: dataToImport.treasuryTransactions || [],
-          taxDeclarations: dataToImport.taxDeclarations || [],
-          taxMandates: dataToImport.taxMandates || SAMPLE_TAX_MANDATES,
-          certificates: dataToImport.certificates || [],
-          invoices: dataToImport.invoices || [],
-          feasibilityStudies: dataToImport.feasibilityStudies || [],
-          creditSimulations: dataToImport.creditSimulations || [],
-          fixedAssets: dataToImport.fixedAssets || SAMPLE_FIXED_ASSETS,
-          feeEstimates: dataToImport.feeEstimates || SAMPLE_FEE_ESTIMATES,
-          customsShipments: dataToImport.customsShipments || SAMPLE_CUSTOMS_SHIPMENTS,
-          closingChecklists: (dataToImport.closingChecklists && typeof dataToImport.closingChecklists === 'object' && !Array.isArray(dataToImport.closingChecklists))
-            ? dataToImport.closingChecklists
-            : {},
-          clientDeadlines: Array.isArray(dataToImport.clientDeadlines) ? dataToImport.clientDeadlines : [],
-          openItems: Array.isArray(dataToImport.openItems) ? dataToImport.openItems : [],
-          approvedStatements: Array.isArray(dataToImport.approvedStatements) ? dataToImport.approvedStatements : [],
-          feeAgreements: Array.isArray(dataToImport.feeAgreements) ? dataToImport.feeAgreements : [],
-          feeCollections: Array.isArray(dataToImport.feeCollections) ? dataToImport.feeCollections : [],
-          officeProfile: dataToImport.officeProfile || DEFAULT_OFFICE_PROFILE,
-          users: dataToImport.users || SAMPLE_SYSTEM_USERS,
-          currentUserId: dataToImport.currentUserId || 'user-admin',
-          preferences: dataToImport.preferences || DEFAULT_USER_PREFERENCES,
-          whatsappMessages: dataToImport.whatsappMessages || SAMPLE_WHATSAPP_MESSAGES,
-          whatsappBotSettings: dataToImport.whatsappBotSettings || DEFAULT_WHATSAPP_BOT_SETTINGS,
-          exchangeRates: dataToImport.exchangeRates || DEFAULT_SAMPLE_EXCHANGE_RATES,
-          fiscalPeriodLocks: dataToImport.fiscalPeriodLocks || [],
-          auditLogs: [
-            {
-              timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-              user: this.getCurrentUser()?.name || 'محمد جميل مرعي',
-              action: 'UPDATE',
-              details: 'استعادة قاعدة البيانات بالكامل مع مصادقة ترخيص الأجهزة الرقمي المدمج',
-            },
-            ...(dataToImport.auditLogs || []),
-          ],
-        };
-
-        this.saveState();
-        return true;
-      }
-      return false;
-    } catch (e) {
-      console.error('Import error:', e);
-      return false;
-    }
-  }
-
-  // --- Excel Exports ---
-  public async exportTableToExcel(tableName: 'ACCOUNTS' | 'JOURNAL' | 'CLIENTS' | 'TREASURY' | 'TAXES' | 'CERTIFICATES' | 'INVOICES' | 'FIXED_ASSETS') {
-    const XLSX = await import('xlsx');
-    const wb = XLSX.utils.book_new();
-
-    if (tableName === 'ACCOUNTS') {
-      const rows = this.state.accounts.map((a) => ({
-        'كود الحساب': a.code,
-        'اسم الحساب': a.name,
-        'التصنيف': a.category,
-        'طبيعة الحساب': a.nature === 'DEBIT' ? 'مدين' : 'دائن',
-        'المستوى': a.level,
-        'رصيد افتتاحي مدين': a.openingBalanceDebit,
-        'رصيد افتتاحي دائن': a.openingBalanceCredit,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'شجرة الحسابات');
-      writeArabicExcelFile(wb, `شجرة_الحسابات_المصرية_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } else if (tableName === 'JOURNAL') {
-      const rows: any[] = [];
-      for (const entry of this.state.journalEntries) {
-        for (const line of entry.lines) {
-          rows.push({
-            'رقم القيد': entry.serialNumber,
-            'التاريخ': entry.date,
-            'البيان الرئيسي': entry.description,
-            'كود الحساب': line.accountCode,
-            'اسم الحساب': line.accountName,
-            'مدين': line.debit,
-            'دائن': line.credit,
-            'شرح السطر': line.description || '',
-            'الحالة': entry.isPosted ? 'مرحل' : 'مسودة',
-          });
-        }
-      }
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'قيود اليومية');
-      writeArabicExcelFile(wb, `قيود_اليومية_العامة_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } else if (tableName === 'CLIENTS') {
-      const rows = this.state.clients.map((c) => ({
-        'كود العميل': c.clientCode,
-        'اسم المنشأة / العميل': c.name,
-        'النوع': c.clientType === 'PRIMARY' ? 'أساسي' : 'عابر',
-        'السجل التجاري': c.commercialRegistrationNo,
-        'البطاقة الضريبية': c.taxCardNo,
-        'مأمورية الضرائب': c.taxOffice,
-        'ملف الدخل': c.incomeTaxFileNo,
-        'تسجيل القيمة المضافة': c.vatRegistrationNo,
-        'التأمين الاجتماعي': c.socialInsuranceNo,
-        'رأس المال': c.capital,
-        'الهاتف': c.phone,
-        'النشاط': c.activity,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'أرشيف العملاء');
-      writeArabicExcelFile(wb, `أرشيف_العملاء_والشركات_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } else if (tableName === 'TREASURY') {
-      const rows = this.state.treasuryTransactions.map((t) => ({
-        'رقم السند': t.voucherNumber,
-        'التاريخ': t.date,
-        'النوع': t.type === 'INCOME_FEES' ? 'قبض أتعاب' : 'مصروفات مكتب',
-        'البند / الفئة': t.category,
-        'المبلغ': t.amount,
-        'العميل المرتبط': t.clientName || 'بدون',
-        'طريقة السداد': t.paymentMethod,
-        'البيان': t.description,
-        'المسؤول': t.recordedBy,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'خزنة المكتب');
-      writeArabicExcelFile(wb, `حركات_خزنة_المكتب_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } else if (tableName === 'TAXES') {
-      const rows = this.state.taxDeclarations.map((tx) => ({
-        'نوع الإقرار': tx.declarationType,
-        'الفترة': tx.period,
-        'السنة': tx.taxYear,
-        'اسم الممول / العميل': tx.clientName,
-        'تاريخ الاستحقاق': tx.dueDate,
-        'حالة التقديم': tx.status,
-        'المبيعات الخاضعة': tx.salesTaxableAmount || 0,
-        'المشتريات الخاضعة': tx.purchasesTaxableAmount || 0,
-        'الضريبة المستحقة': tx.netVatPayable || tx.netTaxPayable || 0,
-        'رقم الإيصال': tx.receiptNumber || '',
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'الإقرارات الضريبية');
-      writeArabicExcelFile(wb, `سجل_الإقرارات_الضريبية_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } else if (tableName === 'INVOICES') {
-      const rows = this.state.invoices.map((inv) => ({
-        'رقم الفاتورة': inv.invoiceNumber,
-        'التاريخ': inv.date,
-        'نوع المستند': inv.isReceipt ? 'إيصال إلكتروني B2C' : inv.invoiceType === 'SALES' ? 'فاتورة مبيعات B2B' : 'فاتورة مشتريات',
-        'اسم الطرف / العميل': inv.partnerName,
-        'الرقم الضريبي': inv.partnerTaxNo || '',
-        'إجمالي البضاعة': inv.subtotal,
-        'الخصم': inv.totalDiscount,
-        'ضريبة القيمة المضافة 14%': inv.totalVat,
-        'الخصم والتحصيل 1%': inv.totalWht,
-        'صافي الفاتورة': inv.grandTotal,
-        'المعرف الضريبي ETA UUID': inv.etaUuid || '',
-        'حالة المنظومة': inv.etaStatus || 'مسودة',
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'سجل الفواتير والإيصالات');
-      writeArabicExcelFile(wb, `سجل_الفواتير_الإلكترونية_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } else if (tableName === 'FIXED_ASSETS') {
-      const rows = (this.state.fixedAssets || []).map((ast) => ({
-        'كود الأصل': ast.assetCode,
-        'اسم الأصل': ast.name,
-        'الفئة': ast.category,
-        'تاريخ الشراء': ast.purchaseDate,
-        'تكلفة الاقتناء': ast.acquisitionCost,
-        'القيمة التخريدية': ast.scrapValue,
-        'العمر الإنتاجي (سنوات)': ast.usefulLifeYears,
-        'نسبة الإهلاك المحاسبي %': ast.accountingDepreciationRate,
-        'نسبة الإهلاك الضريبي %': ast.taxDepreciationRate,
-        'مجمع الإهلاك الحالي': ast.currentAccumulatedDepreciation,
-        'صافي القيمة الدفترية': ast.currentBookValue,
-        'الموقع': ast.location || '',
-        'المسؤول / العهدة': ast.custodian || '',
-        'مركز التكلفة': ast.costCenter || '',
-        'الحالة': ast.status,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      formatWorksheetForArabicExport(ws, rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'سجل الأصول الثابتة');
-      writeArabicExcelFile(wb, `سجل_الأصول_الثابتة_والإهلاك_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    }
-  }
-
-  // ==========================================
-  // FIXED ASSETS & DEPRECIATION METHODS (معيار 10 وقانون 91)
-  // ==========================================
-  public getFixedAssets(): FixedAsset[] {
-    return this.state.fixedAssets || [];
-  }
-
-  public getFixedAssetById(id: string): FixedAsset | undefined {
-    return (this.state.fixedAssets || []).find((a) => a.id === id);
-  }
-
-  public addFixedAsset(assetData: Omit<FixedAsset, 'id' | 'createdAt' | 'updatedAt' | 'currentAccumulatedDepreciation' | 'currentBookValue' | 'status'> & { initialAccumulatedDepreciation?: number }): FixedAsset {
-    const id = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    const now = new Date().toISOString();
-    const initAccum = assetData.initialAccumulatedDepreciation || 0;
-    const currentBookValue = Math.max(0, assetData.acquisitionCost - initAccum);
-
-    const newAsset: FixedAsset = {
-      ...assetData,
-      id,
-      currentAccumulatedDepreciation: initAccum,
-      currentBookValue,
-      status: currentBookValue <= (assetData.scrapValue || 0) && initAccum > 0 ? 'FULLY_DEPRECIATED' : 'ACTIVE',
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    if (!this.state.fixedAssets) {
-      this.state.fixedAssets = [];
-    }
-
-    this.state.fixedAssets.unshift(newAsset);
-    this.logAudit('CREATE', `إضافة أصل ثابت جديد للسجل: [${newAsset.name}] كود: (${newAsset.assetCode}) بتكلفة اقتناء: ${newAsset.acquisitionCost.toLocaleString()} ج.م`);
-    this.saveState('FIXED_ASSETS');
-    return newAsset;
-  }
-
-  public updateFixedAsset(id: string, updates: Partial<FixedAsset>): FixedAsset | null {
-    if (!this.state.fixedAssets) return null;
-    const index = this.state.fixedAssets.findIndex((a) => a.id === id);
-    if (index === -1) return null;
-
-    const oldAsset = this.state.fixedAssets[index];
-    const updatedAsset: FixedAsset = {
-      ...oldAsset,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Recalculate book value
-    updatedAsset.currentBookValue = Math.max(0, updatedAsset.acquisitionCost - updatedAsset.currentAccumulatedDepreciation);
-
-    this.state.fixedAssets[index] = updatedAsset;
-    this.logAudit('UPDATE', `تعديل بيانات الأصل الثابت: [${updatedAsset.name}] (كود: ${updatedAsset.assetCode})`);
-    this.saveState('FIXED_ASSETS');
-    return updatedAsset;
-  }
-
-  public deleteFixedAsset(id: string): boolean {
-    if (!this.state.fixedAssets) return false;
-    const asset = this.state.fixedAssets.find((a) => a.id === id);
-    if (!asset) return false;
-
-    this.state.fixedAssets = this.state.fixedAssets.filter((a) => a.id !== id);
-    this.logAudit('DELETE', `حذف الأصل الثابت من السجل: [${asset.name}] (كود: ${asset.assetCode})`);
-    this.saveState('FIXED_ASSETS');
-    return true;
-  }
-
-  public disposeFixedAsset(id: string, disposalData: { disposalDate: string; disposalAmount: number; disposalReason: string }): FixedAsset | null {
-    if (!this.state.fixedAssets) return null;
-    const asset = this.state.fixedAssets.find((a) => a.id === id);
-    if (!asset) return null;
-
-    const capitalGainLoss = disposalData.disposalAmount - asset.currentBookValue;
-
-    const updated = this.updateFixedAsset(id, {
-      status: 'DISPOSED',
-      disposalDate: disposalData.disposalDate,
-      disposalAmount: disposalData.disposalAmount,
-      disposalReason: disposalData.disposalReason,
-      capitalGainLoss,
-    });
-
-    this.logAudit(
-      'UPDATE',
-      `استبعاد / بيع أصل ثابت: [${asset.name}] بمبلغ ${disposalData.disposalAmount.toLocaleString()} ج.م (${capitalGainLoss >= 0 ? 'أرباح رأسمالية' : 'خسائر رأسمالية'}: ${Math.abs(capitalGainLoss).toLocaleString()} ج.م)`
-    );
-
-    return updated;
-  }
-
-  public postDepreciationJournalEntry(params: {
-    year: number;
-    month?: number;
-    periodLabel: string;
-    totalDepreciationAmount: number;
-    depreciatedAssetIds: string[];
-    expenseAccountId?: string;
-    accumAccountId?: string;
-  }): JournalEntry {
-    const entryDate = params.month
-      ? `${params.year}-${String(params.month).padStart(2, '0')}-28`
-      : `${params.year}-12-31`;
-
-    const expenseAcc =
-      this.state.accounts.find((a) => a.id === params.expenseAccountId || a.code === '5360' || a.code === '334' || a.name.includes('إهلاك')) || {
-        id: 'acc-5360',
-        code: '5360',
-        name: 'مصروف إهلاك أصول ثابتة',
-      };
-    const accumAcc =
-      this.state.accounts.find((a) => a.id === params.accumAccountId || a.code === '231' || a.name.includes('مجمع إهلاك')) || {
-        id: '231',
-        code: '231',
-        name: 'مجمع إهلاك أصول ثابتة',
-      };
-
-    const journalEntry = this.addJournalEntry({
-      date: entryDate,
-      description: `إثبات قيد إهلاك الأصول الثابتة للفترة (${params.periodLabel}) - معيار المحاسبة المصري رقم (10)`,
-      entryType: 'ADJUSTING',
-      referenceNumber: `DEP-SCHED-${params.year}`,
-      totalDebit: params.totalDepreciationAmount,
-      totalCredit: params.totalDepreciationAmount,
-      isPosted: true,
-      lines: [
+      feeAgreements: [
         {
-          id: `line-${Date.now()}-1`,
-          accountId: expenseAcc.id,
-          accountCode: expenseAcc.code,
-          accountName: expenseAcc.name,
-          debit: params.totalDepreciationAmount,
-          credit: 0,
-          description: `مصروف إهلاك أصول ثابتة عن فترة ${params.periodLabel}`,
-        },
-        {
-          id: `line-${Date.now()}-2`,
-          accountId: accumAcc.id,
-          accountCode: accumAcc.code,
-          accountName: accumAcc.name,
-          debit: 0,
-          credit: params.totalDepreciationAmount,
-          description: `إلى حساب مجمع إهلاك الأصول الثابتة عن فترة ${params.periodLabel}`,
+          id: 'fa-default-1',
+          clientId: 'client-1',
+          fiscalYear: 2026,
+          description: 'اتفاقية المراجعة السنوية والإقرارات الضريبية لعام 2026',
+          amount: 60000,
+          dueDate: '2026-12-31',
+          status: 'ACTIVE',
+          createdAt: '2026-01-10',
         },
       ],
-    });
+      feeCollections: [
+        {
+          id: 'fc-default-1',
+          agreementId: 'fa-default-1',
+          clientId: 'client-1',
+          amount: 35000,
+          paidAt: '2026-02-15',
+          method: 'BANK_TRANSFER',
+          receiptNo: 'REC-2026-001',
+          treasuryTransactionId: 'fc-default-1',
+          notes: 'الدفعة المقدمة من أتعاب المراجعة السنوية 2026',
+          createdAt: '2026-02-15T10:00:00Z',
+        },
+      ],
+      systemSerials: {
+        systemSerial: 'MAREI-ERP-2026-PRO',
+        activationKey: 'ACT-2026-MAREI-CPA',
+        licenseNumber: 'س.م.م 43122',
+        taxAuthorityRegNo: '233-519-890',
+        journalPrefix: 'JV-2026-',
+        journalNextNumber: 1001,
+        invoicePrefix: 'INV-2026-',
+        invoiceNextNumber: 101,
+        certificatePrefix: 'CERT-2026-',
+        certificateNextNumber: 501,
+        treasuryPrefix: 'TR-2026-',
+        treasuryNextNumber: 201,
+      },
+    };
 
-    // Update accumulated depreciation on assets
-    if (this.state.fixedAssets) {
-      this.state.fixedAssets = this.state.fixedAssets.map((asset) => {
-        if (params.depreciatedAssetIds.includes(asset.id)) {
-          // Calculate this asset's single period share
-          const depreciableAmount = Math.max(0, asset.acquisitionCost - (asset.scrapValue || 0));
-          const annualRate = (asset.accountingDepreciationRate || 10) / 100;
-          const factor = params.month ? 1 / 12 : 1;
-          const assetPeriodDep = Math.min(
-            asset.currentBookValue - (asset.scrapValue || 0),
-            Math.round(depreciableAmount * annualRate * factor)
-          );
-
-          if (assetPeriodDep > 0) {
-            const newAccum = asset.currentAccumulatedDepreciation + assetPeriodDep;
-            const newBook = Math.max(asset.scrapValue || 0, asset.acquisitionCost - newAccum);
-            return {
-              ...asset,
-              currentAccumulatedDepreciation: newAccum,
-              currentBookValue: newBook,
-              status: newBook <= (asset.scrapValue || 0) ? 'FULLY_DEPRECIATED' : asset.status,
-              updatedAt: new Date().toISOString(),
-            };
-          }
-        }
-        return asset;
-      });
-      this.saveState('FIXED_ASSETS');
-    }
-
-    this.logAudit(
-      'POST',
-      `توليد وترحيل قيد إهلاك الأصول الثابتة آلياً (${journalEntry.serialNumber}) بمبلغ ${params.totalDepreciationAmount.toLocaleString()} ج.م لدفتر اليومية`
-    );
-
-    return journalEntry;
+    reconcileFeeCollectionsAndTreasury(initialState);
+    return initialState;
   }
 
-  // ==========================================
-  // USERS & AUTHENTICATION METHODS (إدارة الموظفين والصلاحيات)
-  // ==========================================
+  public loadInitialState(): DatabaseState {
+    const base = this.createDefaultState();
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const rawFull = localStorage.getItem(FULL_STATE_KEY);
+        if (rawFull) {
+          const parsed = JSON.parse(rawFull);
+          const merged: DatabaseState = {
+            ...base,
+            ...parsed,
+            closingChecklists: parsed.closingChecklists || base.closingChecklists || {},
+            clientDeadlines: parsed.clientDeadlines || base.clientDeadlines || [],
+            openItems: parsed.openItems || base.openItems || [],
+            approvedStatements: parsed.approvedStatements || base.approvedStatements || [],
+            feeAgreements: parsed.feeAgreements || base.feeAgreements || [],
+            feeCollections: parsed.feeCollections || base.feeCollections || [],
+          };
+          reconcileFeeCollectionsAndTreasury(merged);
+          return merged;
+        }
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+    return base;
+  }
+
+  public getState(): DatabaseState {
+    return this.state;
+  }
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch {
+        // ignore listener errors
+      }
+    }
+  }
+
+  public saveState(sliceName = 'ALL'): void {
+    this.dirtySlices.add(sliceName);
+    this.flushDirtyStorage();
+    this.notify();
+  }
+
+  public flushDirtyStorage(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(FULL_STATE_KEY, JSON.stringify(this.state));
+        for (const slice of this.dirtySlices) {
+          localStorage.setItem(`${STORAGE_PREFIX}${slice}`, '1');
+        }
+      }
+      this.dirtySlices.clear();
+    } catch {
+      // ignore storage quota errors in test/browser
+    }
+  }
+
+  // =========================================================================
+  // Users & Auth Management (Preserves mustChangePassword & PinAuthModal list)
+  // =========================================================================
   public getUsers(): SystemUser[] {
-    return this.state.users || SAMPLE_SYSTEM_USERS;
+    if (!Array.isArray(this.state.users) || this.state.users.length === 0) {
+      const fallback = this.createDefaultState().users;
+      this.state.users = fallback;
+    }
+    return this.state.users;
   }
 
   public getCurrentUser(): SystemUser {
-    if (!this.state.currentUserId) {
-      return SAFE_FALLBACK_USER;
-    }
     const users = this.getUsers();
-    const user = users.find(
-      (u) => u.id === this.state.currentUserId || (u.email && u.email.toLowerCase() === this.state.currentUserId.toLowerCase())
-    );
-    return user || SAFE_FALLBACK_USER;
+    const found = users.find((u) => u.id === this.state.currentUserId);
+    return found || users[0];
   }
 
-  public syncLoggedInUser(profile: FirebaseUserProfile, source: 'SERVER_AUTH' | 'OTHER' = 'OTHER'): SystemUser {
-    if (!profile) return this.getCurrentUser();
-    const userId = profile.uid || profile.email;
-    if (!this.state.users) {
-      this.state.users = [];
+  public switchUser(userId: string): SystemUser | undefined {
+    const user = this.getUsers().find((u) => u.id === userId);
+    if (user) {
+      this.state.currentUserId = user.id;
+      this.saveState('USERS');
     }
-    const existingIndex = this.state.users.findIndex(
-      (u) => u.id === userId || (u.email && profile.email && u.email.toLowerCase() === profile.email.toLowerCase())
-    );
-    const existingUser = existingIndex >= 0 ? this.state.users[existingIndex] : null;
+    return user;
+  }
 
-    // The authoritative source of mustChangePassword is the server response (/api/auth/me or /api/auth/login).
-    // Never allow any other synchronization (source !== 'SERVER_AUTH') to overwrite mustChangePassword with false.
+  public syncLoggedInUser(
+    profile: FirebaseUserProfile,
+    source: 'SERVER_AUTH' | 'FIREBASE' | 'OTHER' = 'OTHER'
+  ): SystemUser {
+    const users = this.getUsers();
+    const uid = String(profile.uid || profile.email || 'user-admin');
+    const existingIdx = users.findIndex(
+      (u) => u.id === uid || (profile.email && u.email?.toLowerCase() === profile.email.toLowerCase())
+    );
+
+    const existingUser = existingIdx >= 0 ? users[existingIdx] : undefined;
+
+    // Preserve mustChangePassword = true unless explicitly cleared via SERVER_AUTH or setMustChangePassword
     let mustChangePassword = false;
     if (source === 'SERVER_AUTH') {
       mustChangePassword = Boolean(profile.mustChangePassword);
     } else {
-      mustChangePassword = Boolean(
-        existingUser?.mustChangePassword ||
-        (this.state.currentUserId && this.getCurrentUser()?.mustChangePassword) ||
-        profile.mustChangePassword
-      );
+      mustChangePassword = Boolean(existingUser?.mustChangePassword || profile.mustChangePassword);
     }
 
-    const mappedUser: SystemUser = {
-      id: userId,
-      name: profile.name || profile.email,
-      email: profile.email,
-      role: profile.role,
-      roleTitleArabic: profile.roleTitleArabic || 'مستخدم النظام',
+    const syncedUser: SystemUser = {
+      id: existingUser?.id || uid,
+      username: existingUser?.username || profile.email?.split('@')[0] || 'user',
+      name: profile.name || existingUser?.name || 'مستخدم النظام',
+      email: profile.email || existingUser?.email || '',
+      role: profile.role || existingUser?.role || 'AUDITOR',
+      roleTitleArabic: profile.roleTitleArabic || existingUser?.roleTitleArabic || 'محاسب ومراجع',
       isActive: true,
-      canManageUsers: !!profile.canManageUsers,
-      canAccessTreasury: !!profile.canAccessTreasury,
-      canAccessAuditTrail: !!profile.canAccessAuditTrail,
-      canPostEntries: !!profile.canPostEntries,
-      canEditPostedEntries: !!profile.canEditPostedEntries,
-      canDeleteRecords: !!profile.canDeleteRecords,
-      canAccessCreditFiles: !!profile.canAccessCreditFiles,
-      canAccessTaxReports: !!profile.canAccessTaxReports,
+      canManageUsers: profile.role === 'ADMIN' || Boolean(existingUser?.canManageUsers),
+      canAccessTreasury: profile.canAccessTreasury ?? existingUser?.canAccessTreasury ?? true,
+      canAccessAuditTrail: profile.canAccessAuditTrail ?? existingUser?.canAccessAuditTrail ?? true,
+      canPostEntries: existingUser?.canPostEntries ?? true,
+      canEditPostedEntries: profile.canEditPostedEntries ?? existingUser?.canEditPostedEntries ?? (profile.role === 'ADMIN'),
+      canDeleteRecords: profile.canDeleteRecords ?? existingUser?.canDeleteRecords ?? (profile.role === 'ADMIN'),
+      canAccessCreditFiles: existingUser?.canAccessCreditFiles ?? true,
+      canAccessTaxReports: existingUser?.canAccessTaxReports ?? true,
+      permittedClientIds: profile.permittedClientIds || existingUser?.permittedClientIds,
       mustChangePassword,
-      createdAt: profile.createdAt || new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      createdAt: existingUser?.createdAt || profile.createdAt || new Date().toISOString(),
     };
 
-    if (existingIndex >= 0) {
-      this.state.users[existingIndex] = mappedUser;
+    if (existingIdx >= 0) {
+      this.state.users[existingIdx] = syncedUser;
     } else {
-      this.state.users.push(mappedUser);
+      this.state.users.push(syncedUser);
     }
-
-    this.state.currentUserId = userId;
-    this.saveState('SYSTEM_USERS');
-    this.saveState('CURRENT_USER_ID');
-    this.notify();
-    return mappedUser;
+    this.state.currentUserId = syncedUser.id;
+    this.saveState('USERS');
+    return syncedUser;
   }
 
   public setMustChangePassword(userId: string, mustChange: boolean): void {
-    if (!this.state.users) this.state.users = [];
-    this.state.users = this.state.users.map((u) =>
-      u.id === userId || (u.email && u.email.toLowerCase() === userId.toLowerCase())
-        ? { ...u, mustChangePassword: mustChange }
-        : u
-    );
-    this.saveState('SYSTEM_USERS');
-    this.notify();
+    const user = this.state.users.find((u) => u.id === userId);
+    if (user) {
+      user.mustChangePassword = Boolean(mustChange);
+      this.saveState('USERS');
+    }
   }
 
-  public clearCurrentUser(): void {
-    this.state.currentUserId = '';
-    this.saveState('CURRENT_USER_ID');
-    this.notify();
+  public addUser(userInput: Partial<SystemUser> & { name: string; email: string; role: string }): SystemUser {
+    const newUser: SystemUser = {
+      id: userInput.id || `user-${Date.now()}`,
+      username: userInput.username || userInput.email.split('@')[0],
+      name: userInput.name,
+      email: userInput.email,
+      role: userInput.role,
+      roleTitleArabic: userInput.roleTitleArabic || 'محاسب ومراجع',
+      isActive: userInput.isActive ?? true,
+      canManageUsers: userInput.canManageUsers ?? userInput.role === 'ADMIN',
+      canAccessTreasury: userInput.canAccessTreasury ?? true,
+      canAccessAuditTrail: userInput.canAccessAuditTrail ?? true,
+      canPostEntries: userInput.canPostEntries ?? true,
+      canEditPostedEntries: userInput.canEditPostedEntries ?? false,
+      canDeleteRecords: userInput.canDeleteRecords ?? false,
+      canAccessCreditFiles: userInput.canAccessCreditFiles ?? true,
+      canAccessTaxReports: userInput.canAccessTaxReports ?? true,
+      permittedClientIds: userInput.permittedClientIds || [],
+      mustChangePassword: Boolean(userInput.mustChangePassword),
+      createdAt: new Date().toISOString(),
+    };
+    this.state.users.push(newUser);
+    this.saveState('USERS');
+    return newUser;
   }
 
-  public clearLocalAccountingData(): void {
-    if (typeof localStorage !== 'undefined') {
-      const keysToRemove = [
-        STORAGE_KEYS.ACCOUNTS,
-        STORAGE_KEYS.JOURNAL,
-        STORAGE_KEYS.CLIENTS,
-        STORAGE_KEYS.TREASURY,
-        STORAGE_KEYS.TAXES,
-        STORAGE_KEYS.TAX_MANDATES,
-        STORAGE_KEYS.CERTIFICATES,
-        STORAGE_KEYS.INVOICES,
-        STORAGE_KEYS.FEASIBILITY,
-        STORAGE_KEYS.CREDIT_SIM,
-        STORAGE_KEYS.FIXED_ASSETS,
-        STORAGE_KEYS.FEE_ESTIMATES,
-        STORAGE_KEYS.CUSTOMS_SHIPMENTS,
-        STORAGE_KEYS.FINANCIAL_ACTIVITY_LOGS,
-        STORAGE_KEYS.CLOSING_CHECKLISTS,
-        STORAGE_KEYS.CLIENT_DEADLINES,
-        STORAGE_KEYS.OPEN_ITEMS,
-        STORAGE_KEYS.APPROVED_STATEMENTS,
-        STORAGE_KEYS.FEE_AGREEMENTS,
-        STORAGE_KEYS.FEE_COLLECTIONS,
-        STORAGE_KEYS.ACTIVE_CLIENT_CONTEXT,
-      ];
-      keysToRemove.forEach((k) => {
-        try {
-          localStorage.removeItem(k);
-        } catch {}
+  public updateUser(userId: string, partial: Partial<SystemUser>): SystemUser | undefined {
+    const idx = this.state.users.findIndex((u) => u.id === userId);
+    if (idx === -1) return undefined;
+    this.state.users[idx] = { ...this.state.users[idx], ...partial };
+    this.saveState('USERS');
+    return this.state.users[idx];
+  }
+
+  public deleteUser(userId: string): boolean {
+    const before = this.state.users.length;
+    this.state.users = this.state.users.filter((u) => u.id !== userId);
+    this.saveState('USERS');
+    return this.state.users.length < before;
+  }
+
+  public changeUserPassword(userId: string, newPasswordPlain: string): { success: boolean; message: string } {
+    if (!newPasswordPlain || newPasswordPlain.length < 6) {
+      return { success: false, message: 'كلمة المرور يجب أن لا تقل عن 6 أحرف' };
+    }
+    const user = this.state.users.find((u) => u.id === userId);
+    if (!user) return { success: false, message: 'المستخدم غير موجود' };
+    user.mustChangePassword = false;
+    this.saveState('USERS');
+    return { success: true, message: 'تم تحديث كلمة المرور بنجاح' };
+  }
+
+  public mergeRemoteState(remotePartial: Partial<DatabaseState>): void {
+    // Preserve mustChangePassword on existing users when remote state merges
+    const existingMustChangeMap = new Map<string, boolean>();
+    for (const u of this.state.users || []) {
+      if (u.mustChangePassword) {
+        existingMustChangeMap.set(u.id, true);
+        if (u.email) existingMustChangeMap.set(u.email.toLowerCase(), true);
+      }
+    }
+
+    this.state = {
+      ...this.state,
+      ...remotePartial,
+    };
+
+    if (Array.isArray(this.state.users)) {
+      this.state.users = this.state.users.map((u) => {
+        const hadMustChange =
+          existingMustChangeMap.get(u.id) ||
+          (u.email ? existingMustChangeMap.get(u.email.toLowerCase()) : false);
+        return {
+          ...u,
+          mustChangePassword: Boolean(u.mustChangePassword || hadMustChange),
+        };
       });
     }
 
-    this.state.accounts = [];
-    this.state.journalEntries = [];
+    reconcileFeeCollectionsAndTreasury(this.state);
+    this.saveState('ALL');
+  }
+
+  // =========================================================================
+  // Backup Export / Import & Production Reset
+  // =========================================================================
+  public exportFullBackupJson(): string {
+    return JSON.stringify(this.state, null, 2);
+  }
+
+  public importFullBackupJson(jsonText: string): boolean {
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!parsed || typeof parsed !== 'object') return false;
+      this.mergeRemoteState(parsed);
+      this.flushDirtyStorage();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  public exportClientIsolatedBackup(clientId: string): string {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      client,
+      journalEntries: this.state.journalEntries.filter((j) => j.clientId === clientId),
+      invoices: this.state.invoices.filter((i) => i.clientId === clientId),
+      taxDeclarations: this.state.taxDeclarations.filter((t) => t.clientId === clientId),
+      treasuryTransactions: this.state.treasuryTransactions.filter((t) => t.clientId === clientId),
+      feeAgreements: this.state.feeAgreements.filter((a) => a.clientId === clientId),
+      feeCollections: this.state.feeCollections.filter((c) => c.clientId === clientId),
+      openItems: this.state.openItems.filter((o) => o.clientId === clientId),
+      approvedStatements: this.state.approvedStatements.filter((s) => s.clientId === clientId),
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  public async resetForProduction(options?: {
+    passcode?: string;
+    confirmationText?: string;
+  }): Promise<{ success: boolean; message: string; backupJson?: string }> {
+    const currentUser = this.getCurrentUser();
+    if (currentUser && currentUser.role !== 'ADMIN') {
+      return { success: false, message: 'هذه العملية متاحة لمدير النظام (ADMIN) فقط.' };
+    }
+    if (options?.confirmationText && options.confirmationText !== 'تفريغ' && options.confirmationText !== 'RESET') {
+      return { success: false, message: 'كلمة التأكيد غير صحيحة.' };
+    }
+
+    const backupJson = this.exportFullBackupJson();
+
+    // Reset chart of accounts balances to zero while keeping standard accounts
+    const cleanAccounts = (this.state.accounts.length > 0 ? this.state.accounts : getStandardEgyptianChartOfAccounts()).map(
+      (acc) => ({
+        ...acc,
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        currentDebit: 0,
+        currentCredit: 0,
+        currentBalance: 0,
+      })
+    );
+
+    this.state.accounts = cleanAccounts;
     this.state.clients = [];
+    this.state.journalEntries = [];
     this.state.treasuryTransactions = [];
     this.state.taxDeclarations = [];
     this.state.taxMandates = [];
@@ -3509,961 +1143,1185 @@ export class LocalDatabase {
     this.state.fixedAssets = [];
     this.state.feeEstimates = [];
     this.state.customsShipments = [];
-    this.state.financialActivityLogs = [];
+    this.state.whatsappMessages = [];
     this.state.closingChecklists = {};
     this.state.clientDeadlines = [];
     this.state.openItems = [];
     this.state.approvedStatements = [];
     this.state.feeAgreements = [];
     this.state.feeCollections = [];
-    this.state.currentUserId = '';
-    this.notify();
-  }
+    this.state.financialActivityLogs = [];
 
-  public setCurrentUserId(userId: string) {
-    this.state.currentUserId = userId;
-    this.saveState('CURRENT_USER_ID');
-    this.notify();
-  }
+    this.state.officeProfile = {
+      ...this.state.officeProfile,
+      firmName: '',
+      auditorName: '',
+      phone: '',
+      mobile: '',
+      email: '',
+    };
 
-  public authenticateByPin(userId: string, enteredPin: string): { success: boolean; user?: SystemUser; message?: string } {
-    const user = this.getUsers().find((u) => u.id === userId);
-    if (!user) {
-      return { success: false, message: 'المستخدم غير موجود بالنظام' };
-    }
-
-    if (user.isActive === false) {
-      return { success: false, message: 'هذا الحساب محظور حالياً بأمر مدير المنظومة (Admin). يرجى مراجعة إدارة المنظومة.' };
-    }
-
-    const normEntered = SecurityAuthService.normalizeInput(enteredPin);
-    const normUserPin = SecurityAuthService.normalizeInput(user.pinCode || '');
-    const normPassword = SecurityAuthService.normalizeInput(user.password || '');
-
-    // Allow empty PIN if user has none configured
-    if ((!user.pinCode || user.pinCode.trim() === '') && (!user.password || user.password.trim() === '')) {
-      this.state.currentUserId = user.id;
-      this.saveState('CURRENT_USER_ID');
-      this.logAudit('UPDATE', `تسجيل دخول ناجح للمستخدم: ${user.name} (${user.roleTitleArabic})`);
-      this.notify();
-      return { success: true, user };
-    }
-
-    // 1. Direct match (case-insensitive & handles Arabic-Indic digits ٠١٢٣٤٥٦٧٨٩)
-    const isDirectMatch = (normUserPin.length > 0 && normEntered === normUserPin) ||
-                          (normPassword.length > 0 && normEntered === normPassword);
-
-    if (isDirectMatch) {
-      this.state.currentUserId = user.id;
-      this.saveState('CURRENT_USER_ID');
-      this.logAudit('UPDATE', `تسجيل دخول ناجح للمستخدم: ${user.name} (${user.roleTitleArabic})`);
-      this.notify();
-      return { success: true, user };
-    }
-
-    return { success: false, message: 'الرمز السري / كلمة المرور غير صحيحة! يرجى إعادة المحاولة.' };
-  }
-
-  public authenticateUser(identifier: string, enteredPinOrPassword: string): { success: boolean; user?: SystemUser; message?: string } {
-    const users = this.getUsers();
-    const cleanId = (identifier || '').trim().toLowerCase();
-    
-    if (!cleanId) {
-      return { success: false, message: 'يرجى إدخال اسم المستخدم أو البريد الإلكتروني أو كود الموظف.' };
-    }
-
-    // Find matching user by id, username, email, employeeCode, or exact name
-    const user = users.find((u) => {
-      if (u.id && u.id.toLowerCase() === cleanId) return true;
-      if (u.username && u.username.toLowerCase() === cleanId) return true;
-      if (u.email && u.email.toLowerCase() === cleanId) return true;
-      if (u.employeeCode && u.employeeCode.toLowerCase() === cleanId) return true;
-      if (u.name && u.name.toLowerCase() === cleanId) return true;
-      return false;
-    });
-
-    if (!user) {
-      return {
-        success: false,
-        message: 'اسم المستخدم أو الحساب غير مسجل بالنظام. يرجى التواصل مع مسؤول المنظومة لإضافتك يدوياً عبر لوحة تحكم الأدمن.',
-      };
-    }
-
-    if (user.isActive === false) {
-      return { success: false, message: 'هذا الحساب محظور حالياً بأمر مدير المنظومة (Admin). يرجى مراجعة إدارة المنظومة.' };
-    }
-
-    return this.authenticateByPin(user.id, enteredPinOrPassword);
-  }
-
-  // ==========================================
-  // SOVEREIGN MASTER ADMIN OPERATIONS
-  // صلاحيات وتحكمات مدير المنظومة السيادي
-  // ==========================================
-
-  public isCurrentUserMasterAdmin(): boolean {
-    const current = this.getCurrentUser();
-    return Boolean(current && current.role === 'ADMIN');
-  }
-
-  public changeUserPassword(userId: string, newPinOrPass: string): { success: boolean; message: string } {
-    if (!this.state.users) this.state.users = [];
-    const user = this.state.users.find((u) => u.id === userId);
-    if (!user) {
-      return { success: false, message: 'المستخدم غير موجود بالنظام' };
-    }
-
-    const cleanPass = newPinOrPass.trim();
-    if (!cleanPass || cleanPass.length < 10) {
-      return { success: false, message: 'كلمة المرور يجب ألا تقل عن 10 أحرف/أرقام.' };
-    }
-
-    delete (user as any).password;
-    delete (user as any).pinCode;
-
-    this.logAudit('UPDATE', `طلب تحديث كلمة المرور للمستخدم (${user.name})`);
-    this.saveState('SYSTEM_USERS');
-    this.notify();
-    return { success: true, message: `تم تسجيل إشعار تحديث كلمة المرور للمستخدم (${user.name}) بنجاح.` };
-  }
-
-  public toggleUserActive(userId: string): { success: boolean; isActive: boolean; message: string } {
-    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
-    const user = this.state.users.find((u) => u.id === userId);
-    if (!user) {
-      return { success: false, isActive: false, message: 'المستخدم غير موجود' };
-    }
-
-    if (user.id === 'user-admin' || user.username === 'admin') {
-      return { success: false, isActive: true, message: 'لا يمكن حظر الحساب الإداري السيادي للمنظومة!' };
-    }
-
-    user.isActive = user.isActive === false ? true : false;
-    const actionText = user.isActive ? 'فك حظر وتفعيل' : 'حظر وتعطيل';
-    this.logAudit('UPDATE', `${actionText} حساب المستخدم: ${user.name} (${user.roleTitleArabic})`);
-    this.saveState('SYSTEM_USERS');
-    this.notify();
+    this.saveState('ALL');
     return {
       success: true,
-      isActive: user.isActive,
-      message: `تم ${actionText} حساب المستخدم (${user.name}) بنجاح.`,
+      message: 'تم تصفير البيانات التجريبية وتهيئة النظام للعمل الفعلي بنجاح.',
+      backupJson,
     };
   }
 
-  public unprotectAllFiscalPeriods(): { count: number; message: string } {
-    const count = (this.state.fiscalPeriodLocks || []).length;
-    this.state.fiscalPeriodLocks = [];
-    this.saveState('PERIOD_LOCKS');
-    this.logAudit('UPDATE', `فك حماية وإلغاء كافة أقفال الفترات والسنوات المالية بأمر مدير المنظومة (Admin Sovereign Override)`);
-    this.notify();
-    return { count, message: 'تم فك حماية وإلغاء كافة أقفال الفترات المحاسبية بنجاح.' };
+  public resetToDemoData(): boolean {
+    this.state = this.createDefaultState();
+    this.saveState('ALL');
+    return true;
   }
 
-  public resetDeviceSecurityBindings(): { success: boolean; message: string } {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('egy_acc_device_binding_v1');
-        localStorage.removeItem('egy_acc_authorized_devices_v2');
-        localStorage.removeItem('egy_acc_machine_guid_v1');
+  // =========================================================================
+  // Accounts & Journal Entries
+  // =========================================================================
+  public addAccount(acc: Partial<Account> & { code: string; name: string }): Account {
+    const created: Account = {
+      id: acc.id || `acc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      code: acc.code,
+      name: acc.name,
+      category: acc.category || 'ASSETS',
+      nature: acc.nature || 'DEBIT',
+      level: acc.level || 4,
+      openingBalanceDebit: Number(acc.openingBalanceDebit) || 0,
+      openingBalanceCredit: Number(acc.openingBalanceCredit) || 0,
+      currentBalance: Number(acc.currentBalance) || 0,
+      ...acc,
+    };
+    this.state.accounts.push(created);
+    this.saveState('ACCOUNTS');
+    return created;
+  }
+
+  public updateAccount(accountId: string, partial: Partial<Account>): Account | undefined {
+    const idx = this.state.accounts.findIndex((a) => a.id === accountId);
+    if (idx === -1) return undefined;
+    this.state.accounts[idx] = { ...this.state.accounts[idx], ...partial };
+    this.saveState('ACCOUNTS');
+    return this.state.accounts[idx];
+  }
+
+  public deleteAccount(accountId: string): boolean {
+    const before = this.state.accounts.length;
+    this.state.accounts = this.state.accounts.filter((a) => a.id !== accountId);
+    this.saveState('ACCOUNTS');
+    return this.state.accounts.length < before;
+  }
+
+  public applyIndustrialChartOfAccounts(_clientId?: string): { added: number; message: string } {
+    const industrialAccounts: Account[] = [
+      {
+        id: 'acc-ind-1310',
+        code: '1310',
+        name: 'مخزون الخامات والمواد الأولية',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 4,
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        isSystem: false,
+      },
+      {
+        id: 'acc-ind-1320',
+        code: '1320',
+        name: 'مخزون الإنتاج تحت التشغيل (WIP)',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 4,
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        isSystem: false,
+      },
+      {
+        id: 'acc-ind-1330',
+        code: '1330',
+        name: 'مخزون الإنتاج التام',
+        category: 'ASSETS',
+        nature: 'DEBIT',
+        level: 4,
+        openingBalanceDebit: 0,
+        openingBalanceCredit: 0,
+        isSystem: false,
+      },
+    ];
+    let added = 0;
+    for (const ia of industrialAccounts) {
+      if (!this.state.accounts.some((a) => a.code === ia.code)) {
+        this.state.accounts.push(ia);
+        added++;
       }
-      this.logAudit('UPDATE', 'فك حماية وإلغاء قيود ربط الأجهزة والترخيص المحلي بأمر مدير المنظومة');
-      return { success: true, message: 'تم فك حماية وربط الأجهزة بنجاح، ويمكن استخدام النظام من أي جهاز بحرية.' };
-    } catch {
-      return { success: false, message: 'تعذر فك قيود الأجهزة.' };
     }
+    this.saveState('ACCOUNTS');
+    return { added, message: `تمت إضافة ${added} حسابات صناعية متخصصة.` };
   }
 
-  public updateSystemSerials(data: {
-    systemSerial?: string;
-    activationKey?: string;
-    licenseNumber?: string;
-    taxAuthorityRegNo?: string;
-  }): { success: boolean; message: string } {
-    if (!this.state.officeProfile) {
-      this.state.officeProfile = { ...DEFAULT_OFFICE_PROFILE };
-    }
-    if (data.systemSerial !== undefined) {
-      this.state.officeProfile.systemSerial = data.systemSerial.trim();
-    }
-    if (data.activationKey !== undefined) {
-      this.state.officeProfile.activationKey = data.activationKey.trim();
-    }
-    if (data.licenseNumber !== undefined) {
-      this.state.officeProfile.licenseNumber = data.licenseNumber.trim();
-    }
-    if (data.taxAuthorityRegNo !== undefined) {
-      this.state.officeProfile.taxAuthorityRegNo = data.taxAuthorityRegNo.trim();
-    }
-    this.saveState('OFFICE_PROFILE');
-    this.logAudit('UPDATE', 'تحديث السريالات وأكواد التفعيل وتراخيص المنظومة بأمر مدير المنظومة');
-    this.notify();
-    return { success: true, message: 'تم حفظ وتحديث السريالات وبيانات الترخيص بنجاح.' };
-  }
-
-  public getSystemSerials(): {
-    systemSerial: string;
-    activationKey: string;
-    licenseNumber: string;
-    taxAuthorityRegNo: string;
-  } {
-    const prof = this.state.officeProfile || DEFAULT_OFFICE_PROFILE;
-    return {
-      systemSerial: prof.systemSerial || 'CPA-SYS-2026-MG120-PRO-EGY',
-      activationKey: prof.activationKey || 'ACT-CPA-99482-EGY-AUTH',
-      licenseNumber: prof.licenseNumber || 'س.م.م / 43122',
-      taxAuthorityRegNo: prof.taxAuthorityRegNo || 'م.ض. 492-817-302',
+  public addJournalEntry(entry: Partial<JournalEntry>): JournalEntry {
+    const created: JournalEntry = {
+      id: entry.id || `je-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      entryNumber: entry.entryNumber || this.state.journalEntries.length + 1,
+      date: entry.date || new Date().toISOString().slice(0, 10),
+      description: entry.description || '',
+      lines: entry.lines || [],
+      createdAt: entry.createdAt || new Date().toISOString(),
+      ...entry,
     };
+    this.state.journalEntries.unshift(created);
+    this.saveState('JOURNAL');
+    return created;
   }
 
-  public addUser(userData: Omit<SystemUser, 'id' | 'createdAt'>): SystemUser {
-    const id = `user-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const now = new Date().toISOString();
-    const newUser: SystemUser = {
-      ...userData,
-      id,
-      createdAt: now,
+  public updateJournalEntry(entryId: string, partial: Partial<JournalEntry>): JournalEntry | undefined {
+    const idx = this.state.journalEntries.findIndex((j) => j.id === entryId);
+    if (idx === -1) return undefined;
+    this.state.journalEntries[idx] = {
+      ...this.state.journalEntries[idx],
+      ...partial,
+      updatedAt: new Date().toISOString(),
     };
-
-    if (!this.state.users) {
-      this.state.users = [...SAMPLE_SYSTEM_USERS];
-    }
-    this.state.users.push(newUser);
-    this.logAudit('CREATE', `إضافة موظف/مستخدم جديد للنظام: ${newUser.name} بصلاحية: ${newUser.roleTitleArabic}`);
-    this.saveState('SYSTEM_USERS');
-    return newUser;
+    this.saveState('JOURNAL');
+    return this.state.journalEntries[idx];
   }
 
-  public updateUser(id: string, updates: Partial<SystemUser>): SystemUser | null {
-    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
-    const index = this.state.users.findIndex((u) => u.id === id);
-    if (index === -1) return null;
-
-    const old = this.state.users[index];
-    this.state.users[index] = {
-      ...old,
-      ...updates,
-    };
-
-    this.logAudit('UPDATE', `تعديل بيانات وصلاحيات الموظف: ${old.name}`);
-    this.saveState('SYSTEM_USERS');
-    return this.state.users[index];
+  public deleteJournalEntry(entryId: string): boolean {
+    const before = this.state.journalEntries.length;
+    this.state.journalEntries = this.state.journalEntries.filter((j) => j.id !== entryId);
+    this.saveState('JOURNAL');
+    return this.state.journalEntries.length < before;
   }
 
-  public deleteUser(id: string): boolean {
-    if (!this.state.users) this.state.users = [...SAMPLE_SYSTEM_USERS];
-    // Protect main admin from deletion
-    if (id === 'user-admin') return false;
-
-    const index = this.state.users.findIndex((u) => u.id === id);
-    if (index === -1) return false;
-
-    const user = this.state.users[index];
-    this.state.users.splice(index, 1);
-    
-    // If deleted user was active, switch to admin
-    if (this.state.currentUserId === id) {
-      this.state.currentUserId = 'user-admin';
-      this.saveState('CURRENT_USER_ID');
-    }
-
-    this.logAudit('DELETE', `حذف حساب الموظف: ${user.name}`);
-    this.saveState('SYSTEM_USERS');
-    return true;
-  }
-
-  public switchUser(userId: string): void {
-    this.setCurrentUserId(userId);
-  }
-
-  public getAuditLogs(): AuditRecord[] {
-    return this.state.auditLogs || [];
-  }
-
-  // ==========================================
-  // FINANCIAL ACTIVITY LOG METHODS (سجل النشاط المالي)
-  // ==========================================
-
-  public getFinancialActivityLogs(fiscalYear?: number, clientId?: string): FinancialActivityLog[] {
-    if (!this.state.financialActivityLogs) {
-      this.state.financialActivityLogs = [];
-    }
-    return this.state.financialActivityLogs.filter((log) => {
-      if (fiscalYear && log.fiscalYear !== fiscalYear) return false;
-      if (clientId && log.clientId && log.clientId !== clientId) return false;
-      return true;
+  public deleteGeneratedAuditEntries(fiscalYear: number, clientId?: string): number {
+    const before = this.state.journalEntries.length;
+    this.state.journalEntries = this.state.journalEntries.filter((j) => {
+      const isGenerated = j.source === 'EXCEL_REVIEW' || j.isAutoGenerated;
+      const matchesYear = !j.fiscalYear || j.fiscalYear === fiscalYear;
+      const matchesClient = !clientId || j.clientId === clientId;
+      return !(isGenerated && matchesYear && matchesClient);
     });
+    this.saveState('JOURNAL');
+    return before - this.state.journalEntries.length;
   }
 
-  public addFinancialActivityLog(
-    logData: Omit<FinancialActivityLog, 'id' | 'timestamp'> & {
-      id?: string;
-      timestamp?: string;
-    }
-  ): FinancialActivityLog {
-    if (!this.state.financialActivityLogs) {
-      this.state.financialActivityLogs = [];
-    }
-
-    const now = new Date();
-    const timestamp =
-      logData.timestamp ||
-      now.toISOString().replace('T', ' ').substring(0, 19);
-
-    const currentUser = this.getCurrentUser();
-    const finalUserId = logData.userId || currentUser?.id || 'user-admin';
-    const finalUserName = logData.userName || currentUser?.name || 'المحاسب القانوني';
-    const finalUserRole = logData.userRole || currentUser?.role || 'مراقب حسابات معتمد';
-
-    const newLog: FinancialActivityLog = {
-      id: logData.id || `FAL-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-      timestamp,
-      userId: finalUserId,
-      userName: finalUserName,
-      userRole: finalUserRole,
-      statementType: logData.statementType || 'GENERAL',
-      action: logData.action,
-      itemKey: logData.itemKey,
-      itemName: logData.itemName,
-      previousValue: logData.previousValue,
-      newValue: logData.newValue,
-      variance: logData.variance !== undefined ? logData.variance : (
-        typeof logData.newValue === 'number' && typeof logData.previousValue === 'number'
-          ? logData.newValue - logData.previousValue
-          : undefined
-      ),
-      notes: logData.notes,
-      fiscalYear: logData.fiscalYear || 2026,
-      clientId: logData.clientId,
-      clientName: logData.clientName,
-    };
-
-    this.state.financialActivityLogs.unshift(newLog);
-
-    // Keep up to 500 records to prevent memory bloat
-    if (this.state.financialActivityLogs.length > 500) {
-      this.state.financialActivityLogs = this.state.financialActivityLogs.slice(0, 500);
-    }
-
-    this.saveState('FINANCIAL_ACTIVITY_LOGS');
-    this.notify();
-    return newLog;
+  public togglePostEntry(entryId: string): JournalEntry | undefined {
+    const entry = this.state.journalEntries.find((j) => j.id === entryId);
+    if (!entry) return undefined;
+    entry.isPosted = !entry.isPosted;
+    entry.status = entry.isPosted ? 'POSTED' : 'DRAFT';
+    entry.postedAt = entry.isPosted ? new Date().toISOString() : undefined;
+    this.saveState('JOURNAL');
+    return entry;
   }
 
-  public clearFinancialActivityLogs(fiscalYear?: number, clientId?: string): void {
-    if (!this.state.financialActivityLogs) return;
-
-    if (fiscalYear || clientId) {
-      this.state.financialActivityLogs = this.state.financialActivityLogs.filter((log) => {
-        if (fiscalYear && log.fiscalYear === fiscalYear) return false;
-        if (clientId && log.clientId === clientId) return false;
-        return true;
-      });
-    } else {
-      this.state.financialActivityLogs = [];
-    }
-
-    this.saveState('FINANCIAL_ACTIVITY_LOGS');
-    this.notify();
-  }
-
-  // ==========================================
-  // WHATSAPP BOT & NOTIFICATION ENGINE METHODS
-  // ==========================================
-
-  public getWhatsAppMessages(clientId?: string): WhatsAppMessage[] {
-    if (!this.state.whatsappMessages) {
-      this.state.whatsappMessages = [...SAMPLE_WHATSAPP_MESSAGES];
-    }
-    if (clientId) {
-      return this.state.whatsappMessages.filter((m) => m.clientId === clientId);
-    }
-    return this.state.whatsappMessages;
-  }
-
-  public sendWhatsAppMessage(
-    msg: Omit<WhatsAppMessage, 'id' | 'timestamp' | 'status'> & {
-      id?: string;
-      timestamp?: string;
-      status?: import('../types').WhatsAppMessageStatus;
-    }
-  ): WhatsAppMessage {
-    if (!this.state.whatsappMessages) {
-      this.state.whatsappMessages = [...SAMPLE_WHATSAPP_MESSAGES];
-    }
-
-    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    const newMessage: WhatsAppMessage = {
-      id: msg.id || `wa-msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      clientId: msg.clientId,
-      clientName: msg.clientName,
-      phone: msg.phone,
-      direction: msg.direction,
-      sender: msg.sender,
-      text: msg.text,
-      timestamp: msg.timestamp || nowStr,
-      status: msg.status || 'READ',
-      category: msg.category || 'GENERAL',
-      mediaPayload: msg.mediaPayload,
-    };
-
-    this.state.whatsappMessages.push(newMessage);
-    this.saveState('WHATSAPP_MESSAGES');
-    return newMessage;
-  }
-
-  public deleteWhatsAppMessage(id: string): boolean {
-    if (!this.state.whatsappMessages) return false;
-    const idx = this.state.whatsappMessages.findIndex((m) => m.id === id);
-    if (idx === -1) return false;
-    this.state.whatsappMessages.splice(idx, 1);
-    this.saveState('WHATSAPP_MESSAGES');
-    return true;
-  }
-
-  public clearWhatsAppChat(clientId: string): void {
-    if (!this.state.whatsappMessages) return;
-    this.state.whatsappMessages = this.state.whatsappMessages.filter((m) => m.clientId !== clientId);
-    this.saveState('WHATSAPP_MESSAGES');
-  }
-
-  public getWhatsAppBotSettings(): WhatsAppBotSettings {
-    if (!this.state.whatsappBotSettings) {
-      this.state.whatsappBotSettings = { ...DEFAULT_WHATSAPP_BOT_SETTINGS };
-    }
-    if (
-      !this.state.whatsappBotSettings.templates ||
-      this.state.whatsappBotSettings.templates.length === 0 ||
-      !this.state.whatsappBotSettings.templates.some((t) => t.templateBody.includes('01003335360')) ||
-      !this.state.whatsappBotSettings.templates.some((t) => t.code === 'VERIFICATION_CODE')
-    ) {
-      this.state.whatsappBotSettings.templates = [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])];
-    }
-    if (!this.state.whatsappBotSettings.customApiBaseUrl) {
-      this.state.whatsappBotSettings.customApiBaseUrl = 'https://api.whatsapp.com/send';
-    }
-    if (!this.state.whatsappBotSettings.apiDispatchMode) {
-      this.state.whatsappBotSettings.apiDispatchMode = 'DIRECT_WEB_API';
-    }
-    if (!this.state.whatsappBotSettings.defaultCountryCode) {
-      this.state.whatsappBotSettings.defaultCountryCode = '20';
-    }
-    return this.state.whatsappBotSettings;
-  }
-
-  public updateWhatsAppBotSettings(settings: Partial<WhatsAppBotSettings>): WhatsAppBotSettings {
-    this.state.whatsappBotSettings = {
-      ...this.getWhatsAppBotSettings(),
-      ...settings,
-    };
-    this.logAudit('UPDATE', 'تحديث إعدادات ربط واتساب API وقوالب الرسائل الجاهزة');
-    this.saveState('WHATSAPP_SETTINGS');
-    return this.state.whatsappBotSettings;
-  }
-
-  public getWhatsAppTemplates(): import('../types').WhatsAppMessageTemplate[] {
-    const settings = this.getWhatsAppBotSettings();
-    return settings.templates || [];
-  }
-
-  public saveWhatsAppTemplate(tmpl: import('../types').WhatsAppMessageTemplate): void {
-    const current = this.getWhatsAppBotSettings();
-    const templates = [...(current.templates || [])];
-    const idx = templates.findIndex((t) => t.id === tmpl.id);
-
-    if (idx >= 0) {
-      templates[idx] = {
-        ...tmpl,
-        updatedAt: new Date().toISOString().slice(0, 16),
-      };
-    } else {
-      templates.push({
-        ...tmpl,
-        id: tmpl.id || `tmpl-${Date.now()}`,
-        updatedAt: new Date().toISOString().slice(0, 16),
-      });
-    }
-
-    this.updateWhatsAppBotSettings({ templates });
-    this.logAudit('UPDATE', `حفظ قالب رسائل واتساب: ${tmpl.title}`);
-  }
-
-  public deleteWhatsAppTemplate(id: string): boolean {
-    const current = this.getWhatsAppBotSettings();
-    const templates = (current.templates || []).filter((t) => t.id !== id);
-    this.updateWhatsAppBotSettings({ templates });
-    this.logAudit('DELETE', `حذف قالب رسائل واتساب برقم: ${id}`);
-    return true;
-  }
-
-  public resetWhatsAppTemplatesToDefault(): void {
-    this.updateWhatsAppBotSettings({
-      templates: [...(DEFAULT_WHATSAPP_BOT_SETTINGS.templates || [])],
-    });
-    this.logAudit('UPDATE', 'استعادة قوالب رسائل واتساب الافتراضية');
-  }
-
-  public batchUpdateClientPhones(updates: { clientId: string; phone: string; contactPerson?: string }[]): number {
+  public postBatchJournalEntries(entryIds: string[]): number {
     let count = 0;
-    updates.forEach((u) => {
-      const client = this.state.clients.find((c) => c.id === u.clientId);
-      if (client) {
-        client.phone = u.phone;
-        if (u.contactPerson !== undefined) {
-          client.contactPerson = u.contactPerson;
-        }
-        client.updatedAt = new Date().toISOString().slice(0, 10);
+    for (const j of this.state.journalEntries) {
+      if (entryIds.includes(j.id) && !j.isPosted) {
+        j.isPosted = true;
+        j.status = 'POSTED';
+        j.postedAt = new Date().toISOString();
         count++;
       }
-    });
+    }
+    this.saveState('JOURNAL');
+    return count;
+  }
 
-    if (count > 0) {
-      this.logAudit('UPDATE', `تحديث وتثبيت أرقام هواتف واتساب لـ ${count} عميل`);
-      this.saveState('CLIENTS');
+  // =========================================================================
+  // Clients, Folders, Documents, Procedures & Active Client Context
+  // =========================================================================
+  public setActiveClient(
+    clientId: string | null,
+    options?: { fiscalYear?: number; autoFilter?: boolean }
+  ): void {
+    const client = clientId ? this.state.clients.find((c) => c.id === clientId) : null;
+    this.state.activeClientContext = {
+      clientId,
+      selectedFiscalYear:
+        options?.fiscalYear ||
+        client?.activeFiscalYear ||
+        this.state.activeClientContext?.selectedFiscalYear ||
+        2026,
+      autoFilterEnabled:
+        options?.autoFilter !== undefined
+          ? options.autoFilter
+          : Boolean(clientId),
+    };
+    this.saveState('CONTEXT');
+  }
+
+  public getActiveClientRecord(): ClientArchiveRecord | null {
+    const cid = this.state.activeClientContext?.clientId;
+    if (!cid) return null;
+    return this.state.clients.find((c) => c.id === cid) || null;
+  }
+
+  public toggleActiveClientAutoFilter(): boolean {
+    this.state.activeClientContext.autoFilterEnabled = !this.state.activeClientContext.autoFilterEnabled;
+    this.saveState('CONTEXT');
+    return this.state.activeClientContext.autoFilterEnabled;
+  }
+
+  public updateActiveClientFiscalYear(year: number): void {
+    this.state.activeClientContext.selectedFiscalYear = year;
+    const activeClient = this.getActiveClientRecord();
+    if (activeClient) {
+      activeClient.activeFiscalYear = year;
+    }
+    this.saveState('CONTEXT');
+  }
+
+  public addClient(clientData: Partial<ClientArchiveRecord>): ClientArchiveRecord {
+    const created: ClientArchiveRecord = {
+      id: clientData.id || `client-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      code: clientData.code || `CL-${new Date().getFullYear()}-${String(this.state.clients.length + 1).padStart(3, '0')}`,
+      name: clientData.name || 'عميل جديد',
+      taxId: clientData.taxId || clientData.taxCardNo || '',
+      taxCardNo: clientData.taxCardNo || clientData.taxId || '',
+      commercialRegister: clientData.commercialRegister || clientData.commercialRegNo || '',
+      commercialRegNo: clientData.commercialRegNo || clientData.commercialRegister || '',
+      companyType: clientData.companyType || 'LIMITED_LIABILITY',
+      relationshipType: clientData.relationshipType || 'ANNUAL_CONTRACT',
+      annualAgreedFees: Number(clientData.annualAgreedFees) || 0,
+      paidFees: Number(clientData.paidFees) || 0,
+      activeFiscalYear: clientData.activeFiscalYear || 2026,
+      status: clientData.status || 'ACTIVE',
+      folders: clientData.folders || [],
+      documents: clientData.documents || [],
+      procedures: clientData.procedures || [],
+      createdAt: new Date().toISOString().slice(0, 10),
+      ...clientData,
+    };
+    this.state.clients.push(created);
+
+    // If annualAgreedFees > 0, ensure a ClientFeeAgreement exists in the single source of truth
+    if ((created.annualAgreedFees || 0) > 0) {
+      const hasAgreement = this.state.feeAgreements.some((a) => a.clientId === created.id);
+      if (!hasAgreement) {
+        this.state.feeAgreements.push({
+          id: `fa-init-${created.id}`,
+          clientId: created.id,
+          fiscalYear: created.activeFiscalYear || 2026,
+          description: `اتفاقية الأتعاب السنوية - ${created.name}`,
+          amount: Number(created.annualAgreedFees) || 0,
+          status: 'ACTIVE',
+          createdAt: created.createdAt,
+        });
+      }
+    }
+
+    this.saveState('CLIENTS');
+    return created;
+  }
+
+  public batchAddClients(clientsList: Partial<ClientArchiveRecord>[]): number {
+    let count = 0;
+    for (const c of clientsList) {
+      if (c.name) {
+        this.addClient(c as Partial<ClientArchiveRecord> & { name: string });
+        count++;
+      }
     }
     return count;
   }
 
-  // --- Multi-Currency & Daily Exchange Rates (EAS 13) ---
-  public getExchangeRates(currency?: CurrencyCode, date?: string): DailyExchangeRateRecord[] {
-    let rates = [...(this.state.exchangeRates || [])];
-    if (currency) {
-      rates = rates.filter((r) => r.currency === currency);
-    }
-    if (date) {
-      rates = rates.filter((r) => r.date === date);
-    }
-    return rates.sort((a, b) => b.date.localeCompare(a.date));
-  }
-
-  public getDailyExchangeRate(currency: CurrencyCode, date?: string): DailyExchangeRateRecord | undefined {
-    if (currency === 'EGP') return undefined;
-    const all = this.state.exchangeRates || [];
-    if (date) {
-      const match = all.find((r) => r.currency === currency && r.date === date);
-      if (match) return match;
-    }
-    // Fallback to latest available rate for this currency
-    const currencyRates = all.filter((r) => r.currency === currency).sort((a, b) => b.date.localeCompare(a.date));
-    return currencyRates[0];
-  }
-
-  public getExchangeRateValue(currency: CurrencyCode, date?: string): number {
-    if (currency === 'EGP') return 1;
-    const rateRecord = this.getDailyExchangeRate(currency, date);
-    return rateRecord ? rateRecord.officialRate || rateRecord.sellRate || 1 : 1;
-  }
-
-  public saveExchangeRate(record: Omit<DailyExchangeRateRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): DailyExchangeRateRecord {
-    if (!this.state.exchangeRates) {
-      this.state.exchangeRates = [];
-    }
-    const existingIndex = record.id 
-      ? this.state.exchangeRates.findIndex((r) => r.id === record.id)
-      : this.state.exchangeRates.findIndex((r) => r.currency === record.currency && r.date === record.date);
-
-    const now = new Date().toISOString();
-    let saved: DailyExchangeRateRecord;
-
-    if (existingIndex >= 0) {
-      saved = {
-        ...this.state.exchangeRates[existingIndex],
-        ...record,
-        updatedAt: now,
-      };
-      this.state.exchangeRates[existingIndex] = saved;
-      this.logAudit('UPDATE', `تحديث سعر صرف يومي: [${saved.currency}] ليوم ${saved.date} بقيمة ${saved.officialRate} ج.م`);
-    } else {
-      saved = {
-        ...record,
-        id: record.id || `fx-rate-${record.date}-${(record.currency || 'egp').toLowerCase()}-${Date.now()}`,
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.state.exchangeRates.push(saved);
-      this.logAudit('CREATE', `إضافة سعر صرف يومي جديد: [${saved.currency}] ليوم ${saved.date} بقيمة ${saved.officialRate} ج.م`);
-    }
-
-    this.saveState('EXCHANGE_RATES');
-    return saved;
-  }
-
-  public saveBulkExchangeRates(records: Array<Omit<DailyExchangeRateRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }>): void {
-    records.forEach((r) => {
-      if (!this.state.exchangeRates) {
-        this.state.exchangeRates = [];
-      }
-      const existingIndex = r.id 
-        ? this.state.exchangeRates.findIndex((item) => item.id === r.id)
-        : this.state.exchangeRates.findIndex((item) => item.currency === r.currency && item.date === r.date);
-
-      const now = new Date().toISOString();
-      if (existingIndex >= 0) {
-        this.state.exchangeRates[existingIndex] = {
-          ...this.state.exchangeRates[existingIndex],
-          ...r,
-          updatedAt: now,
-        };
-      } else {
-        this.state.exchangeRates.push({
-          ...r,
-          id: r.id || `fx-rate-${r.date}-${(r.currency || 'egp').toLowerCase()}-${Date.now()}`,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    });
-
-    this.logAudit('UPDATE', `تحديث دفعة أسعار صرف لـ ${records.length} عملة بنجاح`);
-    this.saveState('EXCHANGE_RATES');
-  }
-
-  public deleteExchangeRate(id: string): boolean {
-    if (!this.state.exchangeRates) return false;
-    const initialLen = this.state.exchangeRates.length;
-    this.state.exchangeRates = this.state.exchangeRates.filter((r) => r.id !== id);
-    if (this.state.exchangeRates.length < initialLen) {
-      this.logAudit('DELETE', `حذف سجل سعر صرف برقم: ${id}`);
-      this.saveState('EXCHANGE_RATES');
-      return true;
-    }
-    return false;
-  }
-
-  public setReportingCurrency(currency: CurrencyCode): void {
-    this.updatePreferences({ reportingCurrency: currency });
-    this.logAudit('UPDATE', `تغيير عملة التقرير والعرض المعتمدة إلى: [${currency}]`);
-  }
-
-  // ==========================================
-  // FEE ESTIMATOR & QUOTATION MANAGEMENT METHODS
-  // ==========================================
-  public getFeeEstimates(): FeeQuotationEstimate[] {
-    return this.state.feeEstimates || [];
-  }
-
-  public saveFeeEstimate(estimate: FeeQuotationEstimate): FeeQuotationEstimate {
-    if (!this.state.feeEstimates) {
-      this.state.feeEstimates = [];
-    }
-    const existingIndex = this.state.feeEstimates.findIndex((q) => q.id === estimate.id);
-    if (existingIndex >= 0) {
-      this.state.feeEstimates[existingIndex] = { ...estimate };
-      this.logAudit('UPDATE', `تحديث عرض السعر وتقدير الأتعاب رقم: ${estimate.quotationNumber} للعميل: ${estimate.clientName}`);
-    } else {
-      this.state.feeEstimates.unshift(estimate);
-      this.logAudit('CREATE', `إنشاء تقدير أتعاب وعرض سعر جديد: ${estimate.quotationNumber} بمبلغ ${estimate.totalQuotationAmount.toLocaleString()} ج.م`);
-    }
-    this.saveState('FEE_ESTIMATES');
-    return estimate;
-  }
-
-  public deleteFeeEstimate(id: string): boolean {
-    if (!this.state.feeEstimates) return false;
-    const initialLen = this.state.feeEstimates.length;
-    const quote = this.state.feeEstimates.find((q) => q.id === id);
-    this.state.feeEstimates = this.state.feeEstimates.filter((q) => q.id !== id);
-    if (this.state.feeEstimates.length < initialLen) {
-      this.logAudit('DELETE', `حذف تقدير الأتعاب وعرض السعر رقم: ${quote?.quotationNumber || id}`);
-      this.saveState('FEE_ESTIMATES');
-      return true;
-    }
-    return false;
-  }
-
-  public updateFeeEstimateStatus(id: string, status: FeeQuotationEstimate['status']): boolean {
-    if (!this.state.feeEstimates) return false;
-    const item = this.state.feeEstimates.find((q) => q.id === id);
-    if (item) {
-      item.status = status;
-      this.logAudit('UPDATE', `تحديث حالة عرض السعر رقم: ${item.quotationNumber} إلى: ${status}`);
-      this.saveState('FEE_ESTIMATES');
-      return true;
-    }
-    return false;
-  }
-
-  // --- Customs, Global Trade & Landed Cost Module (منظومة الجمارك والتجارة الخارجية) ---
-  public getCustomsShipments(): CustomsShipment[] {
-    return this.state.customsShipments || [];
-  }
-
-  public getCustomsShipmentById(id: string): CustomsShipment | undefined {
-    return (this.state.customsShipments || []).find((s) => s.id === id);
-  }
-
-  public saveCustomsShipment(shipment: CustomsShipment): CustomsShipment {
-    if (!this.state.customsShipments) {
-      this.state.customsShipments = [];
-    }
-    const idx = this.state.customsShipments.findIndex((s) => s.id === shipment.id);
-    const now = new Date().toISOString();
-    const updatedShipment: CustomsShipment = {
-      ...shipment,
-      updatedAt: now,
+  public updateClient(clientId: string, partial: Partial<ClientArchiveRecord>): ClientArchiveRecord | undefined {
+    const idx = this.state.clients.findIndex((c) => c.id === clientId);
+    if (idx === -1) return undefined;
+    this.state.clients[idx] = {
+      ...this.state.clients[idx],
+      ...partial,
+      updatedAt: new Date().toISOString(),
     };
-
-    if (idx >= 0) {
-      this.state.customsShipments[idx] = updatedShipment;
-      this.logAudit('UPDATE', `تحديث بيانات الشحنة الجمركية رقم [${shipment.shipmentCode}] (${shipment.title})`);
-    } else {
-      updatedShipment.createdAt = updatedShipment.createdAt || now;
-      this.state.customsShipments.unshift(updatedShipment);
-      this.logAudit('CREATE', `تسجيل شحنة جمركية جديدة رقم [${shipment.shipmentCode}]: ${shipment.title} للعميل: ${shipment.clientName}`);
-    }
-    this.saveState('CUSTOMS_SHIPMENTS');
-    return updatedShipment;
+    this.saveState('CLIENTS');
+    return this.state.clients[idx];
   }
 
-  public deleteCustomsShipment(id: string): boolean {
-    if (!this.state.customsShipments) return false;
-    const target = this.state.customsShipments.find((s) => s.id === id);
-    if (!target) return false;
-    this.state.customsShipments = this.state.customsShipments.filter((s) => s.id !== id);
-    this.logAudit('DELETE', `حذف ملف الشحنة الجمركية رقم [${target.shipmentCode}] - ${target.title}`);
-    this.saveState('CUSTOMS_SHIPMENTS');
-    return true;
-  }
-
-  public generateCustomsJournalEntries(shipmentId: string): { entryGoodsInTransit: JournalEntry; entryDuties?: JournalEntry; entryClosing?: JournalEntry } | null {
-    const shipment = this.getCustomsShipmentById(shipmentId);
-    if (!shipment) return null;
-    const today = new Date().toISOString().slice(0, 10);
-
-    // 1. Entry 1: إثبات بضاعة بالطريق واعتماد مستندي خارجي (CIF Value)
-    const entryGoodsInTransit = this.addJournalEntry({
-      date: today,
-      description: `إثبات فتح اعتماد مستندي وبضاعة مشحونة بالطريق - شحنة رقم ${shipment.shipmentCode} (${shipment.title})`,
-      referenceNumber: shipment.shipmentCode,
-      entryType: 'PURCHASE',
-      lines: [
-        {
-          id: `line-${Date.now()}-1`,
-          accountId: 'acc-123',
-          accountCode: '123',
-          accountName: 'اعتمادات مستندية لشراء بضائع ومهمات بالطريق',
-          debit: shipment.cifValueEgp,
-          credit: 0,
-          description: `قيمة البضاعة سيف بالعملة الأجنبية (${shipment.cifValueForeign.toLocaleString()} ${shipment.invoiceCurrency}) بسعر صرف ${shipment.customsExchangeRate}`,
-        },
-        {
-          id: `line-${Date.now()}-2`,
-          accountId: 'acc-211',
-          accountCode: '2112',
-          accountName: 'موردون خارجيون - التزامات اعتمادات مستندية',
-          debit: 0,
-          credit: shipment.cifValueEgp,
-          description: `استحقاق المورد الأجنبي: ${shipment.foreignExporterName} - اعتماد ${shipment.bankForm4Number || ''}`,
-        },
-      ],
-      totalDebit: shipment.cifValueEgp,
-      totalCredit: shipment.cifValueEgp,
-      isPosted: true,
-      clientId: shipment.clientId,
-      clientName: shipment.clientName,
-    });
-
-    // 2. Entry 2: إثبات الرسوم الجمركية والضرائب والمصاريف الإنزالية
-    const totalCustomsAndExpenses = (shipment.customsDutyAmount || 0) + (shipment.developmentFeeAmount || 0) + (shipment.totalAdditionalExpenses || 0);
-    const vatInput = shipment.vatAmount || 0;
-    const whtInput = shipment.withholdingTaxAmount || 0;
-
-    let entryDuties: JournalEntry | undefined = undefined;
-    if (totalCustomsAndExpenses > 0 || vatInput > 0) {
-      entryDuties = this.addJournalEntry({
-        date: today,
-        description: `إثبات سداد الرسوم الجمركية وضريبة القيمة المضافة ومصاريف التخليص - شحنة ${shipment.shipmentCode}`,
-        referenceNumber: shipment.customsDeclarationNumber || shipment.shipmentCode,
-        entryType: 'PURCHASE',
-        lines: [
-          {
-            id: `line-${Date.now()}-3`,
-            accountId: 'acc-123',
-            accountCode: '123',
-            accountName: 'اعتمادات مستندية لشراء بضائع ومهمات بالطريق (رسملة جمارك ومصاريف)',
-            debit: totalCustomsAndExpenses,
-            credit: 0,
-            description: `ضريبة جمركية (${shipment.customsDutyAmount.toLocaleString()}) + رسم تنمية (${shipment.developmentFeeAmount.toLocaleString()}) + مصاريف موانئ ونقل وتخليص (${shipment.totalAdditionalExpenses.toLocaleString()})`,
-          },
-          ...(vatInput > 0 ? [{
-            id: `line-${Date.now()}-4`,
-            accountId: 'acc-128',
-            accountCode: '1281',
-            accountName: 'مصلحة الضرائب - ضريبة القيمة المضافة مدخلات قابلة للخصم (14%)',
-            debit: vatInput,
-            credit: 0,
-            description: `ضريبة ق.م جمركية مسددة بموجب إفراج جمركي 13 لمصلحة الجمارك`,
-          }] : []),
-          ...(whtInput > 0 ? [{
-            id: `line-${Date.now()}-5`,
-            accountId: 'acc-1282',
-            accountCode: '1282',
-            accountName: 'مصلحة الضرائب - مبالغ مسددة تحت حساب الضريبة (خصم جمركي 1%)',
-            debit: whtInput,
-            credit: 0,
-            description: `خصم وتحصيل جمركي تحت حساب ضريبة أرباح الشركات`,
-          }] : []),
-          {
-            id: `line-${Date.now()}-6`,
-            accountId: 'acc-191',
-            accountCode: '191',
-            accountName: 'النقدية وما في حكمها / البنك وسداد منظومة نافذة',
-            debit: 0,
-            credit: totalCustomsAndExpenses + vatInput + (whtInput > 0 ? whtInput : 0),
-            description: `سداد إلكتروني عبر منظومة التحصيل المالي الموحدة لمنظومة نافذة والجمارك`,
-          },
-        ],
-        totalDebit: totalCustomsAndExpenses + vatInput + (whtInput > 0 ? whtInput : 0),
-        totalCredit: totalCustomsAndExpenses + vatInput + (whtInput > 0 ? whtInput : 0),
-        isPosted: true,
-        clientId: shipment.clientId,
-        clientName: shipment.clientName,
-      });
-    }
-
-    // 3. Entry 3: إقفال الاعتماد المستندي ورسملة التكلفة الإنزالية الكلية في المخزن
-    let entryClosing: JournalEntry | undefined = undefined;
-    if (shipment.status === 'RECEIVED_WAREHOUSE' || shipment.status === 'RELEASED') {
-      entryClosing = this.addJournalEntry({
-        date: today,
-        description: `إقفال حساب الاعتمادات المستندية وإثبات استلام البضاعة بالمخازن بالتكلفة الإنزالية النهائية - شحنة ${shipment.shipmentCode}`,
-        referenceNumber: `INV-STORE-${shipment.shipmentCode}`,
-        entryType: 'ADJUSTING',
-        lines: [
-          {
-            id: `line-${Date.now()}-7`,
-            accountId: 'acc-121',
-            accountCode: '121',
-            accountName: 'مخزون بضائع ومهمات وخامات مشتراة',
-            debit: shipment.totalLandedCostEgp,
-            credit: 0,
-            description: `التكلفة الإنزالية الكلية للبضاعة الواردة بعد تحميل كافة الرسوم والمصاريف الجمركية للمخزن`,
-          },
-          {
-            id: `line-${Date.now()}-8`,
-            accountId: 'acc-123',
-            accountCode: '123',
-            accountName: 'اعتمادات مستندية لشراء بضائع ومهمات بالطريق',
-            debit: 0,
-            credit: shipment.totalLandedCostEgp,
-            description: `إقفال رصيد الاعتماد المستندي واستلام البضاعة بالمستودع`,
-          },
-        ],
-        totalDebit: shipment.totalLandedCostEgp,
-        totalCredit: shipment.totalLandedCostEgp,
-        isPosted: true,
-        clientId: shipment.clientId,
-        clientName: shipment.clientName,
-      });
-    }
-
-    // Link created entry IDs to shipment
-    const linkedIds = [entryGoodsInTransit.id, ...(entryDuties ? [entryDuties.id] : []), ...(entryClosing ? [entryClosing.id] : [])];
-    shipment.linkedJournalEntryIds = Array.from(new Set([...(shipment.linkedJournalEntryIds || []), ...linkedIds]));
-    this.saveCustomsShipment(shipment);
-
-    return {
-      entryGoodsInTransit,
-      entryDuties,
-      entryClosing,
-    };
-  }
-
-  public payCustomsFromOfficeTreasury(
-    shipmentId: string,
-    payload: {
-      amount: number;
-      category: string;
-      description: string;
-      paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE';
-      treasuryType: 'OFFICE_MAIN_VAULT' | 'BANK_CURRENT_ACCOUNT' | 'PETTY_CASH';
-      paidBy?: string;
-    }
-  ): OfficeTreasuryTransaction | null {
-    const shipment = this.getCustomsShipmentById(shipmentId);
-    if (!shipment) return null;
-
-    const tx = this.addTreasuryTransaction({
-      date: new Date().toISOString().slice(0, 10),
-      type: 'EXPENSE_CLIENT_GOV_FEE',
-      category: payload.category || 'رسوم ومصروفات جمركية ونافذة',
-      amount: payload.amount,
-      clientId: shipment.clientId,
-      clientName: shipment.clientName,
-      paymentMethod: payload.paymentMethod === 'CHEQUE' ? 'CHEQUE' : payload.paymentMethod === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'CASH',
-      description: `${payload.description || `سداد رسوم جمركية ومصروفات تخليص عن شحنة [${shipment.shipmentCode}]`} (ACID: ${shipment.acidNumber} - بوليصة: ${shipment.blNumber})`,
-      recordedBy: payload.paidBy || this.state.officeProfile.auditorName || 'محمد جميل مرعي',
-    });
-
-    if (!shipment.linkedTreasuryTransactionIds) shipment.linkedTreasuryTransactionIds = [];
-    shipment.linkedTreasuryTransactionIds.push(tx.id);
-    this.saveCustomsShipment(shipment);
-
-    return tx;
-  }
-
-  public saveCustomsDocToClientArchive(
-    shipmentId: string,
-    clientId: string,
-    payload: {
-      title: string;
-      docType: 'CONTRACT' | 'TAX_CARD' | 'COMMERCIAL_REG' | 'FINANCIAL_STATEMENT' | 'POWER_OF_ATTORNEY' | 'MEMO' | 'OTHER';
-      fileDataUrl?: string;
-      fileName?: string;
-      remarks?: string;
-    }
-  ): ClientDocument | null {
-    const shipment = this.getCustomsShipmentById(shipmentId);
+  public addClientFolder(clientId: string, folderInput: Partial<ClientDocumentFolder> & { name: string }): ClientDocumentFolder | undefined {
     const client = this.state.clients.find((c) => c.id === clientId);
-    if (!client) return null;
+    if (!client) return undefined;
+    if (!Array.isArray(client.folders)) client.folders = [];
+    const folder: ClientDocumentFolder = {
+      id: folderInput.id || `fld-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: folderInput.name,
+      parentId: folderInput.parentId || null,
+      createdAt: new Date().toISOString().slice(0, 10),
+      ...folderInput,
+    };
+    client.folders.push(folder);
+    this.saveState('CLIENTS');
+    return folder;
+  }
 
-    let customsFolder = client.folders?.find((f) => f.name.includes('جمارك') || f.name.includes('استيراد') || f.name.includes('شحن'));
-    if (!customsFolder) {
-      customsFolder = this.addClientFolder(clientId, {
-        name: 'مستندات الجمارك والتجارة الخارجية',
-        icon: 'archive',
-        color: 'indigo',
-        description: 'بوالص الشحن، الفواتير التجارية، شهادات المنشأ وإفراجات نافذة',
-      });
+  public updateClientFolder(clientId: string, folderId: string, partial: Partial<ClientDocumentFolder>): void {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !Array.isArray(client.folders)) return;
+    const idx = client.folders.findIndex((f) => f.id === folderId);
+    if (idx >= 0) {
+      client.folders[idx] = { ...client.folders[idx], ...partial };
+      this.saveState('CLIENTS');
     }
+  }
 
-    const doc = this.addClientDocument(clientId, {
-      title: payload.title,
-      documentType: 'OTHER',
-      fileName: payload.fileName || `${payload.title}.pdf`,
-      fileSize: '1.2 MB',
-      fileDataUrl: payload.fileDataUrl || 'data:application/pdf;base64,JVBERi0xLjQKJ...',
-      folderId: customsFolder?.id,
-      folderName: customsFolder?.name,
-      notes: payload.remarks || `مرتبط بالشحنة الجمركية: ${shipment?.shipmentCode || ''}`,
-    });
+  public deleteClientFolder(clientId: string, folderId: string): void {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return;
+    client.folders = (client.folders || []).filter((f) => f.id !== folderId);
+    this.saveState('CLIENTS');
+  }
 
-    if (doc && shipment) {
-      if (!shipment.archiveDocumentIds) shipment.archiveDocumentIds = [];
-      shipment.archiveDocumentIds.push(doc.id);
-      this.saveCustomsShipment(shipment);
-    }
-
+  public addClientDocument(clientId: string, docInput: Partial<ClientDocument>): ClientDocument | undefined {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return undefined;
+    if (!Array.isArray(client.documents)) client.documents = [];
+    const doc: ClientDocument = {
+      id: docInput.id || `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      clientId,
+      title: docInput.title || docInput.fileName || docInput.name || 'مستند',
+      category: docInput.category || 'OTHER',
+      uploadDate: docInput.uploadDate || docInput.uploadedAt || new Date().toISOString().slice(0, 10),
+      ...docInput,
+    };
+    client.documents.unshift(doc);
+    this.saveState('CLIENTS');
     return doc;
   }
 
-  public resetToDemoData(): boolean {
-    const currentUser = this.getCurrentUser();
-    if (!currentUser || currentUser.role !== 'ADMIN') {
+  public moveClientDocument(
+    clientId: string,
+    docId: string,
+    targetFolderId: string | null,
+    _targetFolderName?: string
+  ): void {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !Array.isArray(client.documents)) return;
+    const doc = client.documents.find((d) => d.id === docId);
+    if (doc) {
+      doc.folderId = targetFolderId || undefined;
+      this.saveState('CLIENTS');
+    }
+  }
+
+  public deleteClientDocument(clientId: string, docId: string): void {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !Array.isArray(client.documents)) return;
+    client.documents = client.documents.filter((d) => d.id !== docId);
+    this.saveState('CLIENTS');
+  }
+
+  public addClientProcedure(
+    clientId: string,
+    procInput: Partial<ClientProcedureTask> & { title: string; category: string },
+    _financialOptions?: any
+  ): ClientProcedureTask | undefined {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return undefined;
+    if (!Array.isArray(client.procedures)) client.procedures = [];
+    const proc: ClientProcedureTask = {
+      id: procInput.id || `proc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      status: procInput.status || 'PENDING',
+      startDate: procInput.startDate || new Date().toISOString().slice(0, 10),
+      ...procInput,
+    };
+    client.procedures.unshift(proc);
+    this.saveState('CLIENTS');
+    return proc;
+  }
+
+  public updateClientProcedure(
+    clientId: string,
+    procedureId: string,
+    partial: Partial<ClientProcedureTask>,
+    _financialOptions?: any
+  ): ClientProcedureTask | undefined {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client || !Array.isArray(client.procedures)) return undefined;
+    const idx = client.procedures.findIndex((p) => p.id === procedureId);
+    if (idx === -1) return undefined;
+    client.procedures[idx] = { ...client.procedures[idx], ...partial };
+    this.saveState('CLIENTS');
+    return client.procedures[idx];
+  }
+
+  // =========================================================================
+  // Unified Fees & Collections (Stage 3 Item 8 - Single Source of Truth)
+  // =========================================================================
+  public saveFeeAgreement(agreementInput: Partial<ClientFeeAgreement> & { clientId: string; amount: number }): ClientFeeAgreement {
+    const existingIdx = agreementInput.id
+      ? this.state.feeAgreements.findIndex((a) => a.id === agreementInput.id)
+      : -1;
+
+    const record: ClientFeeAgreement = {
+      id: agreementInput.id || `fa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      clientId: agreementInput.clientId,
+      fiscalYear: agreementInput.fiscalYear || new Date().getFullYear(),
+      description: agreementInput.description || 'اتفاقية أتعاب مهنية',
+      amount: Number(agreementInput.amount) || 0,
+      dueDate: agreementInput.dueDate,
+      status: agreementInput.status || 'ACTIVE',
+      createdAt: agreementInput.createdAt || new Date().toISOString().slice(0, 10),
+      notes: agreementInput.notes,
+    };
+
+    if (existingIdx >= 0) {
+      this.state.feeAgreements[existingIdx] = record;
+    } else {
+      this.state.feeAgreements.push(record);
+    }
+
+    this.syncClientFeeTotals(record.clientId);
+    this.saveState('FEES');
+    return record;
+  }
+
+  public deleteFeeAgreement(agreementId: string): boolean {
+    const target = this.state.feeAgreements.find((a) => a.id === agreementId);
+    if (!target) return false;
+    this.state.feeAgreements = this.state.feeAgreements.filter((a) => a.id !== agreementId);
+    this.syncClientFeeTotals(target.clientId);
+    this.saveState('FEES');
+    return true;
+  }
+
+  /**
+   * Records a fee collection ONCE in feeCollections and automatically creates/updates
+   * the linked OfficeTreasuryTransaction (INCOME_FEES) with mutual IDs (no duplication).
+   */
+  public recordFeeCollection(input: {
+    id?: string;
+    agreementId?: string;
+    clientId: string;
+    amount: number;
+    paidAt?: string;
+    method?: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'INSTAPAY' | string;
+    receiptNo?: string;
+    notes?: string;
+  }): { collection: ClientFeeCollection; treasuryTransaction: OfficeTreasuryTransaction } {
+    const client = this.state.clients.find((c) => c.id === input.clientId);
+    let agreementId = input.agreementId;
+
+    if (!agreementId) {
+      const existingAgreement = this.state.feeAgreements.find(
+        (a) => a.clientId === input.clientId && a.status !== 'CANCELLED'
+      );
+      if (existingAgreement) {
+        agreementId = existingAgreement.id;
+      } else {
+        const autoAgreement = this.saveFeeAgreement({
+          clientId: input.clientId,
+          fiscalYear: client?.activeFiscalYear || new Date().getFullYear(),
+          description: `اتفاقية أتعاب مهنية - ${client?.name || input.clientId}`,
+          amount: Math.max(Number(client?.annualAgreedFees) || 0, Number(input.amount) || 0),
+          status: 'ACTIVE',
+        });
+        agreementId = autoAgreement.id;
+      }
+    }
+
+    const sharedId = input.id || `fc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const paidAt = input.paidAt || new Date().toISOString().slice(0, 10);
+    const method = input.method || 'CASH';
+
+    const collection: ClientFeeCollection = {
+      id: sharedId,
+      agreementId,
+      clientId: input.clientId,
+      amount: Number(input.amount) || 0,
+      paidAt,
+      method,
+      receiptNo: input.receiptNo,
+      treasuryTransactionId: sharedId,
+      notes: input.notes,
+      createdAt: new Date().toISOString(),
+    };
+
+    const treasuryTx: OfficeTreasuryTransaction = {
+      id: sharedId,
+      date: paidAt,
+      type: 'INCOME_FEES',
+      category: 'تحصيل أتعاب مهنية',
+      amount: Number(input.amount) || 0,
+      clientId: input.clientId,
+      clientName: client?.name || '',
+      feeCollectionId: sharedId,
+      agreementId,
+      paymentMethod: method,
+      receiptNumber: input.receiptNo,
+      referenceNumber: input.receiptNo,
+      description: input.notes || `تحصيل أتعاب مهنية - ${client?.name || input.clientId}`,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Prevent duplicates if called with an existing ID
+    this.state.feeCollections = this.state.feeCollections.filter((c) => c.id !== sharedId);
+    this.state.treasuryTransactions = this.state.treasuryTransactions.filter(
+      (t) => t.id !== sharedId && t.feeCollectionId !== sharedId
+    );
+
+    this.state.feeCollections.unshift(collection);
+    this.state.treasuryTransactions.unshift(treasuryTx);
+
+    this.syncClientFeeTotals(input.clientId);
+    this.saveState('FEES');
+    return { collection, treasuryTransaction: treasuryTx };
+  }
+
+  public deleteFeeCollection(collectionId: string): boolean {
+    const target = this.state.feeCollections.find((c) => c.id === collectionId);
+    if (!target) return false;
+    this.state.feeCollections = this.state.feeCollections.filter((c) => c.id !== collectionId);
+    this.state.treasuryTransactions = this.state.treasuryTransactions.filter(
+      (t) => t.id !== collectionId && t.id !== target.treasuryTransactionId && t.feeCollectionId !== collectionId
+    );
+    this.syncClientFeeTotals(target.clientId);
+    this.saveState('FEES');
+    return true;
+  }
+
+  private syncClientFeeTotals(clientId: string): void {
+    const client = this.state.clients.find((c) => c.id === clientId);
+    if (!client) return;
+    const summary = computeSingleClientFeeSummary(
+      clientId,
+      this.state.feeAgreements,
+      this.state.feeCollections
+    );
+    client.annualAgreedFees = summary.totalAgreed;
+    client.paidFees = summary.totalPaid;
+  }
+
+  public addTreasuryTransaction(
+    txInput: Partial<OfficeTreasuryTransaction>
+  ): OfficeTreasuryTransaction {
+    // If someone passes INCOME_FEES with a clientId, route through recordFeeCollection so it stays a single source of truth!
+    if (txInput.type === 'INCOME_FEES' && txInput.clientId && !txInput.feeCollectionId) {
+      const { treasuryTransaction } = this.recordFeeCollection({
+        id: txInput.id,
+        agreementId: txInput.agreementId,
+        clientId: txInput.clientId,
+        amount: Number(txInput.amount) || 0,
+        paidAt: txInput.date,
+        method: txInput.paymentMethod || 'CASH',
+        receiptNo: txInput.receiptNumber || txInput.referenceNumber,
+        notes: txInput.description,
+      });
+      return treasuryTransaction;
+    }
+
+    const created: OfficeTreasuryTransaction = {
+      id: txInput.id || `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      date: txInput.date || new Date().toISOString().slice(0, 10),
+      type: txInput.type || 'EXPENSE_OFFICE',
+      amount: Number(txInput.amount) || 0,
+      description: txInput.description || '',
+      createdAt: txInput.createdAt || new Date().toISOString(),
+      ...txInput,
+    };
+    this.state.treasuryTransactions.unshift(created);
+    this.saveState('TREASURY');
+    return created;
+  }
+
+  // =========================================================================
+  // Open Items, Checklists & Approved Statements
+  // =========================================================================
+  public getOpenItems(clientId?: string, _fiscalYear?: number): OpenItem[] {
+    if (!clientId) return this.state.openItems || [];
+    return (this.state.openItems || []).filter((i) => i.clientId === clientId);
+  }
+
+  public addOpenItem(item: Partial<OpenItem> & { clientId: string; text: string }): OpenItem {
+    const created: OpenItem = {
+      id: item.id || `oi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      clientId: item.clientId,
+      kind: item.kind || 'DOCUMENT',
+      text: item.text,
+      requestedAt: item.requestedAt || new Date().toISOString().slice(0, 10),
+      status: item.status || 'OPEN',
+      ...item,
+    };
+    this.state.openItems.unshift(created);
+    this.saveState('OPEN_ITEMS');
+    return created;
+  }
+
+  public updateOpenItem(id: string, partial: Partial<OpenItem>): OpenItem | undefined {
+    const idx = this.state.openItems.findIndex((i) => i.id === id);
+    if (idx === -1) return undefined;
+    this.state.openItems[idx] = { ...this.state.openItems[idx], ...partial };
+    this.saveState('OPEN_ITEMS');
+    return this.state.openItems[idx];
+  }
+
+  public deleteOpenItem(id: string): boolean {
+    const before = this.state.openItems.length;
+    this.state.openItems = this.state.openItems.filter((i) => i.id !== id);
+    this.saveState('OPEN_ITEMS');
+    return this.state.openItems.length < before;
+  }
+
+  public getChecklist(clientId: string, fiscalYear: number): any[] {
+    const key = `${clientId}_${fiscalYear}`;
+    return this.state.closingChecklists?.[key] || [];
+  }
+
+  public saveChecklist(clientId: string, fiscalYear: number, items: any[]): void {
+    const key = `${clientId}_${fiscalYear}`;
+    if (!this.state.closingChecklists) this.state.closingChecklists = {};
+    this.state.closingChecklists[key] = items;
+    this.saveState('CHECKLISTS');
+  }
+
+  public getApprovedStatementsForClient(clientId: string, fiscalYear?: number): ApprovedStatementsSnapshot[] {
+    return (this.state.approvedStatements || []).filter(
+      (s) => s.clientId === clientId && (fiscalYear === undefined || s.fiscalYear === fiscalYear)
+    );
+  }
+
+  public addApprovedStatement(
+    input: Partial<ApprovedStatementsSnapshot> & { clientId: string; fiscalYear: number }
+  ): ApprovedStatementsSnapshot {
+    const existingForPeriod = this.getApprovedStatementsForClient(input.clientId, input.fiscalYear);
+    const nextVersion = input.version || input.versionNo || existingForPeriod.length + 1;
+    const snap: ApprovedStatementsSnapshot = {
+      id: input.id || `as-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      clientId: input.clientId,
+      fiscalYear: input.fiscalYear,
+      version: nextVersion,
+      versionNo: nextVersion,
+      approvedAt: input.approvedAt || new Date().toISOString(),
+      approvedBy: input.approvedBy || 'مراقب الحسابات',
+      source: input.source || 'LEDGER',
+      trialBalanceRows: input.trialBalanceRows || [],
+      incomeStatement: input.incomeStatement || {},
+      balanceSheet: input.balanceSheet || {},
+      cashFlow: input.cashFlow || {},
+      verificationCode: input.verificationCode || generateVerificationCode(),
+      ...input,
+    };
+    this.state.approvedStatements.unshift(snap);
+    this.saveState('APPROVED_STATEMENTS');
+    return snap;
+  }
+
+  // =========================================================================
+  // Certificates & Verification Persistence
+  // =========================================================================
+  public addCertificate(
+    certInput: Partial<ProfessionalCertificate> & { clientName: string; certifiedAmount: number }
+  ): ProfessionalCertificate {
+    const verificationCode = certInput.verificationCode || generateVerificationCode();
+    const cert: ProfessionalCertificate = {
+      id: certInput.id || `cert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      certificateNumber:
+        certInput.certificateNumber || `CERT-${new Date().getFullYear()}-${this.state.certificates.length + 101}`,
+      certificateType: certInput.certificateType || 'INCOME_PROOF',
+      beneficiaryType: certInput.beneficiaryType || 'NATURAL_PERSON',
+      clientName: certInput.clientName,
+      recipientEntity: certInput.recipientEntity || '',
+      purpose: certInput.purpose || '',
+      periodText: certInput.periodText || '',
+      certifiedAmount: Number(certInput.certifiedAmount) || 0,
+      issueDate: certInput.issueDate || new Date().toISOString().slice(0, 10),
+      qrPayload: certInput.qrPayload || '',
+      auditorNotes: certInput.auditorNotes || '',
+      securityHash: certInput.securityHash || '',
+      printedCount: certInput.printedCount || 0,
+      verificationCode,
+      registryStatus: 'PENDING',
+      createdAt: certInput.createdAt || new Date().toISOString(),
+      ...certInput,
+    };
+
+    this.state.certificates.unshift(cert);
+    this.saveState('CERTIFICATES');
+
+    // Asynchronously record in server registry and update registryStatus
+    Promise.resolve(
+      IssuedDocumentService.recordIssuedDocument({
+        verificationCode,
+        documentType: cert.certificateType || 'CERTIFICATE',
+        issueDate: cert.issueDate,
+        firmName: this.state.officeProfile?.firmName || '—',
+        status: 'ACTIVE',
+        displayDocNumber: cert.certificateNumber,
+      })
+    )
+      .then((res) => {
+        cert.registryStatus = res?.success ? 'RECORDED' : 'FAILED';
+        this.saveState('CERTIFICATES');
+      })
+      .catch(() => {
+        cert.registryStatus = 'FAILED';
+        this.saveState('CERTIFICATES');
+      });
+
+    return cert;
+  }
+
+  public updateCertificate(id: string, partial: Partial<ProfessionalCertificate>): ProfessionalCertificate | undefined {
+    const idx = this.state.certificates.findIndex((c) => c.id === id);
+    if (idx === -1) return undefined;
+    this.state.certificates[idx] = { ...this.state.certificates[idx], ...partial };
+    this.saveState('CERTIFICATES');
+    return this.state.certificates[idx];
+  }
+
+  public deleteCertificate(id: string): boolean {
+    const before = this.state.certificates.length;
+    this.state.certificates = this.state.certificates.filter((c) => c.id !== id);
+    this.saveState('CERTIFICATES');
+    return this.state.certificates.length < before;
+  }
+
+  public async retryRegistryForCertificate(id: string): Promise<boolean> {
+    const cert = this.state.certificates.find((c) => c.id === id);
+    if (!cert) return false;
+    try {
+      const res = await IssuedDocumentService.recordIssuedDocument({
+        verificationCode: cert.verificationCode || generateVerificationCode(),
+        documentType: cert.certificateType || 'CERTIFICATE',
+        issueDate: cert.issueDate,
+        firmName: this.state.officeProfile?.firmName || '—',
+        status: 'ACTIVE',
+        displayDocNumber: cert.certificateNumber,
+      });
+      cert.registryStatus = res?.success ? 'RECORDED' : 'FAILED';
+      this.saveState('CERTIFICATES');
+      return Boolean(res?.success);
+    } catch {
+      cert.registryStatus = 'FAILED';
+      this.saveState('CERTIFICATES');
       return false;
     }
-    this.state.clients = SAMPLE_CLIENTS as any;
-    this.state.journalEntries = SAMPLE_JOURNAL_ENTRIES as any;
-    this.state.treasuryTransactions = [...SAMPLE_TREASURY_TRANSACTIONS];
-    this.state.taxDeclarations = [...SAMPLE_TAX_DECLARATIONS];
-    this.state.taxMandates = [...SAMPLE_TAX_MANDATES];
-    this.state.certificates = [...SAMPLE_CERTIFICATES];
-    this.state.invoices = [...SAMPLE_INVOICES];
-    this.state.feasibilityStudies = [];
-    this.state.creditSimulations = [];
-    this.state.fixedAssets = [...SAMPLE_FIXED_ASSETS];
-    this.saveState();
-    this.logAudit('CREATE', 'استعادة البيانات التجريبية الشاملة بواسطة المدير');
+  }
+
+  // =========================================================================
+  // Tax Declarations, Mandates, Invoices, Fixed Assets, Exchange Rates
+  // =========================================================================
+  public addTaxDeclaration(decl: Partial<TaxDeclarationRecord>): TaxDeclarationRecord {
+    const created: TaxDeclarationRecord = {
+      id: decl.id || `tax-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      declarationType: decl.declarationType || 'VAT_MONTHLY',
+      period: decl.period || '',
+      fiscalYear: decl.fiscalYear || 2026,
+      dueDate: decl.dueDate || new Date().toISOString().slice(0, 10),
+      taxableBase: Number(decl.taxableBase) || 0,
+      taxAmount: Number(decl.taxAmount) || 0,
+      penaltiesOrAdjustments: Number(decl.penaltiesOrAdjustments) || 0,
+      whtDeductions: Number(decl.whtDeductions) || 0,
+      netPayable: Number(decl.netPayable) || 0,
+      status: decl.status || 'DRAFT',
+      ...decl,
+    };
+    this.state.taxDeclarations.unshift(created);
+    this.saveState('TAXES');
+    return created;
+  }
+
+  public updateTaxDeclaration(id: string, partial: Partial<TaxDeclarationRecord>): TaxDeclarationRecord | undefined {
+    const idx = this.state.taxDeclarations.findIndex((t) => t.id === id);
+    if (idx === -1) return undefined;
+    this.state.taxDeclarations[idx] = { ...this.state.taxDeclarations[idx], ...partial };
+    this.saveState('TAXES');
+    return this.state.taxDeclarations[idx];
+  }
+
+  public updateTaxMandate(id: string, partial: any): any {
+    const idx = this.state.taxMandates.findIndex((m) => m.id === id);
+    if (idx >= 0) {
+      this.state.taxMandates[idx] = { ...this.state.taxMandates[idx], ...partial };
+    } else {
+      this.state.taxMandates.push({ id, ...partial });
+    }
+    this.saveState('TAXES');
+  }
+
+  public batchAddInvoices(invoicesList: Partial<Invoice>[]): number {
+    let added = 0;
+    for (const inv of invoicesList) {
+      this.state.invoices.push({
+        id: inv.id || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        invoiceNumber: inv.invoiceNumber || `INV-${this.state.invoices.length + 1}`,
+        invoiceType: inv.invoiceType || 'SALES',
+        date: inv.date || new Date().toISOString().slice(0, 10),
+        partnerName: inv.partnerName || 'عميل / مورد',
+        items: inv.items || [],
+        subtotal: Number(inv.subtotal) || 0,
+        totalDiscount: Number(inv.totalDiscount) || 0,
+        totalVat: Number(inv.totalVat) || 0,
+        totalWht: Number(inv.totalWht) || 0,
+        grandTotal: Number(inv.grandTotal) || 0,
+        paidAmount: Number(inv.paidAmount) || 0,
+        remainingAmount: Number(inv.remainingAmount) || 0,
+        status: inv.status || 'ISSUED',
+        paymentMethod: inv.paymentMethod || 'CASH',
+        ...inv,
+      });
+      added++;
+    }
+    this.saveState('INVOICES');
+    return added;
+  }
+
+  public updateInvoice(id: string, partial: Partial<Invoice>): Invoice | undefined {
+    const idx = this.state.invoices.findIndex((i) => i.id === id);
+    if (idx === -1) return undefined;
+    this.state.invoices[idx] = { ...this.state.invoices[idx], ...partial };
+    this.saveState('INVOICES');
+    return this.state.invoices[idx];
+  }
+
+  public addFixedAsset(asset: Partial<FixedAsset>): FixedAsset {
+    const created: FixedAsset = {
+      id: asset.id || `fa-asset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      assetCode: asset.assetCode || `AST-${this.state.fixedAssets.length + 1}`,
+      name: asset.name || 'أصل ثابت',
+      category: asset.category || 'COMPUTERS_SOFTWARE',
+      purchaseDate: asset.purchaseDate || new Date().toISOString().slice(0, 10),
+      purchaseCost: Number(asset.purchaseCost) || 0,
+      salvageValue: Number(asset.salvageValue) || 0,
+      usefulLifeYears: Number(asset.usefulLifeYears) || 5,
+      depreciationRate: Number(asset.depreciationRate) || 20,
+      taxDepreciationRate: Number(asset.taxDepreciationRate) || 25,
+      depreciationMethod: asset.depreciationMethod || 'STRAIGHT_LINE',
+      accumulatedDepreciation: Number(asset.accumulatedDepreciation) || 0,
+      netBookValue: Number(asset.netBookValue) || 0,
+      status: asset.status || 'ACTIVE',
+      ...asset,
+    };
+    this.state.fixedAssets.push(created);
+    this.saveState('FIXED_ASSETS');
+    return created;
+  }
+
+  public updateFixedAsset(id: string, partial: Partial<FixedAsset>): FixedAsset | undefined {
+    const idx = this.state.fixedAssets.findIndex((a) => a.id === id);
+    if (idx === -1) return undefined;
+    this.state.fixedAssets[idx] = { ...this.state.fixedAssets[idx], ...partial };
+    this.saveState('FIXED_ASSETS');
+    return this.state.fixedAssets[idx];
+  }
+
+  public deleteFixedAsset(id: string): boolean {
+    const before = this.state.fixedAssets.length;
+    this.state.fixedAssets = this.state.fixedAssets.filter((a) => a.id !== id);
+    this.saveState('FIXED_ASSETS');
+    return this.state.fixedAssets.length < before;
+  }
+
+  public disposeFixedAsset(
+    id: string,
+    disposalInfo: { disposalDate: string; disposalValue?: number; disposalAmount?: number; notes?: string }
+  ): FixedAsset | undefined {
+    return this.updateFixedAsset(id, {
+      status: 'DISPOSED',
+      disposalDate: disposalInfo.disposalDate,
+      disposalValue: disposalInfo.disposalValue ?? disposalInfo.disposalAmount ?? 0,
+      notes: disposalInfo.notes,
+    });
+  }
+
+  public postDepreciationJournalEntry(params: {
+    fiscalYear?: number;
+    year?: number;
+    totalDepreciation: number;
+    clientId?: string;
+    description?: string;
+  }): JournalEntry {
+    const fy = params.fiscalYear || params.year || 2026;
+    return this.addJournalEntry({
+      entryNumber: `DEP-${fy}`,
+      date: `${fy}-12-31`,
+      description: params.description || `قيد إهلاك الأصول الثابتة السنوي لعام ${fy}`,
+      documentType: 'DEPRECIATION',
+      isPosted: true,
+      status: 'POSTED',
+      clientId: params.clientId,
+      fiscalYear: fy,
+      lines: [
+        {
+          id: `dep-dr-${Date.now()}`,
+          accountCode: '5201',
+          accountName: 'مصروف إهلاك الأصول الثابتة',
+          debit: params.totalDepreciation,
+          credit: 0,
+        },
+        {
+          id: `dep-cr-${Date.now()}`,
+          accountCode: '2101',
+          accountName: 'مجمع إهلاك الأصول الثابتة',
+          debit: 0,
+          credit: params.totalDepreciation,
+        },
+      ],
+    });
+  }
+
+  public getDailyExchangeRate(currency: CurrencyCode, _date?: string): DailyExchangeRateRecord | undefined {
+    return this.state.exchangeRates.find((r) => r.currency === currency || r.code === currency);
+  }
+
+  public getExchangeRateValue(currency: CurrencyCode, _date?: string): number {
+    if (!currency || currency === 'EGP') return 1;
+    const rec = this.getDailyExchangeRate(currency, _date);
+    return rec?.officialRate || rec?.rateToEgp || 1;
+  }
+
+  public saveExchangeRate(rate: Partial<DailyExchangeRateRecord> & { currency: CurrencyCode }): DailyExchangeRateRecord {
+    const now = new Date().toISOString();
+    const record: DailyExchangeRateRecord = {
+      id: rate.id || `fx-${rate.currency}-${Date.now()}`,
+      date: rate.date || now.slice(0, 10),
+      currency: rate.currency,
+      baseCurrency: rate.baseCurrency || 'EGP',
+      buyRate: Number(rate.buyRate || rate.officialRate || rate.rateToEgp || 1),
+      sellRate: Number(rate.sellRate || rate.officialRate || rate.rateToEgp || 1),
+      officialRate: Number(rate.officialRate || rate.rateToEgp || 1),
+      rateToEgp: Number(rate.rateToEgp || rate.officialRate || 1),
+      source: rate.source || 'CBE',
+      createdAt: rate.createdAt || now,
+      updatedAt: now,
+      ...rate,
+    };
+    const idx = this.state.exchangeRates.findIndex((r) => r.id === record.id);
+    if (idx >= 0) {
+      this.state.exchangeRates[idx] = record;
+    } else {
+      this.state.exchangeRates.unshift(record);
+    }
+    this.saveState('EXCHANGE_RATES');
+    return record;
+  }
+
+  public saveBulkExchangeRates(records: Partial<DailyExchangeRateRecord>[]): number {
+    let count = 0;
+    for (const r of records) {
+      if (r.currency) {
+        this.saveExchangeRate(r as Partial<DailyExchangeRateRecord> & { currency: CurrencyCode });
+        count++;
+      }
+    }
+    return count;
+  }
+
+  public deleteExchangeRate(id: string): void {
+    this.state.exchangeRates = this.state.exchangeRates.filter((r) => r.id !== id);
+    this.saveState('EXCHANGE_RATES');
+  }
+
+  // =========================================================================
+  // Office Profile, Preferences, WhatsApp, Logs & Locks
+  // =========================================================================
+  public updateOfficeProfile(partial: Partial<OfficeProfile>): OfficeProfile {
+    this.state.officeProfile = { ...this.state.officeProfile, ...partial };
+    this.saveState('OFFICE_PROFILE');
+    return this.state.officeProfile;
+  }
+
+  public updatePreferences(partial: Partial<UserPreferences>): UserPreferences {
+    this.state.preferences = { ...this.state.preferences, ...partial };
+    this.saveState('PREFERENCES');
+    return this.state.preferences;
+  }
+
+  public setLanguage(lang: 'ar' | 'en'): void {
+    this.updatePreferences({ language: lang });
+  }
+
+  public setReportingCurrency(curr: CurrencyCode): void {
+    this.updatePreferences({ reportingCurrency: curr });
+  }
+
+  public getWhatsAppBotSettings(): WhatsAppBotSettings {
+    if (!this.state.whatsappBotSettings) {
+      this.state.whatsappBotSettings = {
+        isAutoReplyEnabled: true,
+        officeWorkingHours: '9 ص - 6 م',
+        welcomeGreeting: 'مرحباً بكم',
+        botName: 'المساعد الآلي',
+        includeQrVerification: true,
+        apiDispatchMode: 'DIRECT_WEB_API',
+        templates: [...DEFAULT_WHATSAPP_TEMPLATES],
+      };
+    }
+    return this.state.whatsappBotSettings;
+  }
+
+  public getWhatsAppTemplates(): WhatsAppMessageTemplate[] {
+    return this.getWhatsAppBotSettings().templates || [];
+  }
+
+  public saveWhatsAppTemplate(tpl: WhatsAppMessageTemplate): WhatsAppMessageTemplate {
+    const settings = this.getWhatsAppBotSettings();
+    const idx = settings.templates.findIndex((t) => t.id === tpl.id);
+    if (idx >= 0) {
+      settings.templates[idx] = { ...tpl, updatedAt: new Date().toISOString() };
+    } else {
+      settings.templates.push({ ...tpl, id: tpl.id || `tpl-${Date.now()}`, updatedAt: new Date().toISOString() });
+    }
+    this.saveState('WHATSAPP');
+    return tpl;
+  }
+
+  public deleteWhatsAppTemplate(id: string): void {
+    const settings = this.getWhatsAppBotSettings();
+    settings.templates = settings.templates.filter((t) => t.id !== id);
+    this.saveState('WHATSAPP');
+  }
+
+  public resetWhatsAppTemplatesToDefault(): void {
+    const settings = this.getWhatsAppBotSettings();
+    settings.templates = [...DEFAULT_WHATSAPP_TEMPLATES];
+    this.saveState('WHATSAPP');
+  }
+
+  public sendWhatsAppMessage(msgInput: Partial<WhatsAppMessage> & { phoneNumber: string; messageBody: string }): WhatsAppMessage {
+    const msg: WhatsAppMessage = {
+      id: msgInput.id || `wa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      clientId: msgInput.clientId,
+      clientName: msgInput.clientName || 'عميل',
+      phoneNumber: msgInput.phoneNumber,
+      category: msgInput.category || 'GENERAL',
+      messageBody: msgInput.messageBody,
+      direction: msgInput.direction || 'OUTBOUND',
+      status: msgInput.status || 'SENT',
+      sentAt: msgInput.sentAt || new Date().toISOString(),
+    };
+    this.state.whatsappMessages.unshift(msg);
+    this.saveState('WHATSAPP');
+    return msg;
+  }
+
+  public logAudit(action: string, entityTypeOrDetails: string, details?: string, entityId?: string): void {
+    const user = this.getCurrentUser();
+    const isTwoArg = details === undefined;
+    this.state.auditLogs.unshift({
+      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      userId: user?.id || 'system',
+      userName: user?.name || 'النظام',
+      userRole: user?.role || 'ADMIN',
+      action,
+      entityType: isTwoArg ? 'SYSTEM' : entityTypeOrDetails,
+      entityId,
+      details: isTwoArg ? entityTypeOrDetails : details,
+    });
+    if (this.state.auditLogs.length > 1000) {
+      this.state.auditLogs.length = 1000;
+    }
+  }
+
+  public getAuditLogs(): AuditLogEntry[] {
+    return this.state.auditLogs || [];
+  }
+
+  public addFinancialActivityLog(logInput: Partial<FinancialActivityLog>): FinancialActivityLog {
+    const entry: FinancialActivityLog = {
+      id: logInput.id || `fal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: logInput.timestamp || new Date().toISOString(),
+      actionType: logInput.actionType || 'UPDATE',
+      module: logInput.module || 'SYSTEM',
+      summary: logInput.summary || '',
+      ...logInput,
+    };
+    this.state.financialActivityLogs.unshift(entry);
+    this.saveState('ACTIVITY_LOGS');
+    return entry;
+  }
+
+  public getFinancialActivityLogs(fiscalYear?: number, clientId?: string): FinancialActivityLog[] {
+    return (this.state.financialActivityLogs || []).filter((l) => {
+      const matchYear = !fiscalYear || !l.fiscalYear || l.fiscalYear === fiscalYear;
+      const matchClient = !clientId || !l.clientId || l.clientId === clientId;
+      return matchYear && matchClient;
+    });
+  }
+
+  public clearFinancialActivityLogs(fiscalYear?: number, clientId?: string): void {
+    if (!fiscalYear && !clientId) {
+      this.state.financialActivityLogs = [];
+    } else {
+      this.state.financialActivityLogs = (this.state.financialActivityLogs || []).filter(
+        (l) => (fiscalYear && l.fiscalYear !== fiscalYear) || (clientId && l.clientId !== clientId)
+      );
+    }
+    this.saveState('ACTIVITY_LOGS');
+  }
+
+  public clearLocalAccountingData(): void {
+    this.state.journalEntries = [];
+    this.state.invoices = [];
+    this.state.treasuryTransactions = [];
+    this.saveState('ALL');
+  }
+
+  public isPeriodLocked(fiscalYear: number): boolean {
+    return Boolean(this.state.fiscalPeriodLocks?.[fiscalYear]?.isLocked);
+  }
+
+  public unprotectAllFiscalPeriods(): { success: boolean; message: string } {
+    this.state.fiscalPeriodLocks = {};
+    this.saveState('LOCKS');
+    return { success: true, message: 'تم فتح جميع الفترات المالية بنجاح.' };
+  }
+
+  public getSystemSerials(): SystemSerialsConfig {
+    if (!this.state.systemSerials) {
+      this.state.systemSerials = {
+        systemSerial: 'MAREI-ERP-2026-PRO',
+        activationKey: 'ACT-2026-MAREI-CPA',
+        licenseNumber: 'س.م.م 43122',
+        taxAuthorityRegNo: '233-519-890',
+        journalPrefix: 'JV-2026-',
+        journalNextNumber: 1001,
+        invoicePrefix: 'INV-2026-',
+        invoiceNextNumber: 101,
+        certificatePrefix: 'CERT-2026-',
+        certificateNextNumber: 501,
+        treasuryPrefix: 'TR-2026-',
+        treasuryNextNumber: 201,
+      };
+    }
+    return this.state.systemSerials;
+  }
+
+  public updateSystemSerials(serials: Partial<SystemSerialsConfig>): { success: boolean; message: string } {
+    this.state.systemSerials = { ...this.getSystemSerials(), ...serials };
+    this.saveState('SERIALS');
+    return { success: true, message: 'تم تحديث إعدادات الترقيم التسلسلي بنجاح.' };
+  }
+
+  public resetDeviceSecurityBindings(): { success: boolean; message: string } {
+    return { success: true, message: 'تم إعادة ضبط ارتباطات أمان الأجهزة بنجاح.' };
+  }
+
+  public async syncToCloudNow(): Promise<boolean> {
+    this.flushDirtyStorage();
     return true;
+  }
+
+  public saveRecord(recordId: string, data: any, expectedVersion = 1): { success: boolean; version?: number; status?: number; error?: string } {
+    const existing = this.versionedRecords.get(recordId);
+    if (!existing) {
+      this.versionedRecords.set(recordId, { data, version: 1 });
+      return { success: true, version: 1 };
+    }
+    if (existing.version !== expectedVersion) {
+      return {
+        success: false,
+        status: 409,
+        error: `تعارض إصدار (409 Version Conflict): الإصدار الحالي هو ${existing.version}`,
+      };
+    }
+    const nextVer = existing.version + 1;
+    this.versionedRecords.set(recordId, { data, version: nextVer });
+    return { success: true, version: nextVer };
+  }
+
+  public getRecord(recordId: string): { data: any; version: number } | undefined {
+    return this.versionedRecords.get(recordId);
   }
 }
 

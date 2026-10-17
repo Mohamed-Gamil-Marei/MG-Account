@@ -102,6 +102,7 @@ export const getParentHub = (tabId: string): string => {
     case 'FINANCIAL_SIMULATOR':
     case 'CERTIFICATES':
     case 'FEASIBILITY_STUDY':
+    case 'CURRENCY_RATES':
     case 'FINANCIAL_REPORTING_HUB':
       return 'FINANCIAL_REPORTING_HUB';
 
@@ -112,17 +113,24 @@ export const getParentHub = (tabId: string): string => {
     case 'ETA_RECONCILIATION':
     case 'PAYROLL_INSURANCE':
     case 'AUDIT_CONSISTENCY_SENTINEL':
+    case 'E_INVOICING_TOKENS':
+    case 'TAX_COMPLIANCE_HUB':
     case 'TAX_AUDIT_HUB':
       return 'TAX_AUDIT_HUB';
 
     case 'CLIENTS_ARCHIVE':
+    case 'PRACTICE_CLIENTS_HUB':
     case 'PRACTICE_MANAGEMENT':
     case 'WHATSAPP_BOT':
     case 'OFFICE_TREASURY':
+    case 'MULTI_TENANT_WORKSPACES':
     case 'OFFICE_HUB':
       return 'OFFICE_HUB';
 
     case 'AUDIT_TRAIL':
+    case 'BACKUP_EXPORT':
+    case 'USERS_DEVICES':
+    case 'SECURITY_AUDIT_HUB':
     case 'AUDIT_SECURITY_HUB':
       return 'AUDIT_SECURITY_HUB';
 
@@ -141,9 +149,6 @@ export const getParentHub = (tabId: string): string => {
     case 'MOBILE_COMPANION':
       return 'MOBILE_COMPANION';
 
-    case 'MULTI_TENANT_WORKSPACES':
-      return 'MULTI_TENANT_WORKSPACES';
-
     case 'DASHBOARD':
     default:
       return 'DASHBOARD';
@@ -160,9 +165,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   profile,
   currentLanguage,
   onOpenSettingsModal,
-  onOpenBackupModal,
+  onOpenBackupModal: _onOpenBackupModal,
   onOpenDesktopModal,
-  onOpenUpdateModal,
+  onOpenUpdateModal: _onOpenUpdateModal,
   onOpenShortcutsModal,
   onOpenManualModal,
   onOpenPromoModal,
@@ -170,7 +175,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const state: DatabaseState = db.getState();
   const officeProfile = profile || state.officeProfile;
-  const currentUser = db.getCurrentUser();
   const activeLang = currentLanguage || state.preferences?.language || 'ar';
   const isEn = activeLang === 'en';
 
@@ -198,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const parentHub = getParentHub(activeTab);
 
-  // --- 7 Primary Items Requested (البنود الـ 7 الرئيسية) ---
+  // Stage 2 Item 5: Single unified entry per Hub (الرئيسية + 8 مراكز موحدة بدون تكرار)
   const primarySevenSections = [
     {
       id: 'DASHBOARD',
@@ -212,94 +216,108 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
     },
     {
-      id: 'CLIENTS_ARCHIVE',
-      defaultTab: 'CLIENTS_ARCHIVE',
-      number: '2',
-      label: 'العملاء',
-      labelEn: 'Clients',
-      icon: Building2,
-      description: 'ملفات وسجلات الشركات المعتمدة',
-      badge: `${state.clients.length} ${isEn ? 'Clients' : 'عميل'}`,
-      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-    },
-    {
       id: 'ACCOUNTING_HUB',
       defaultTab: 'JOURNAL_ENTRIES',
-      number: '3',
-      label: 'الدفتر',
-      labelEn: 'Journal & Ledger',
+      number: '2',
+      label: 'مركز المحاسبة',
+      labelEn: 'Accounting Hub',
       icon: BookOpen,
-      description: 'القيود، الدفاتر وميزان المراجعة',
-      badge: unpostedEntriesCount > 0 
-        ? (isEn ? `${unpostedEntriesCount} Unposted` : `${unpostedEntriesCount} غير مرحل`) 
+      description: 'اليومية، الأستاذ، الميزان، ومراجعة الملفات',
+      badge: unpostedEntriesCount > 0
+        ? (isEn ? `${unpostedEntriesCount} Unposted` : `${unpostedEntriesCount} غير مرحل`)
         : `${state.journalEntries.length}`,
       badgeColor: unpostedEntriesCount > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
     },
     {
-      id: 'FILE_REVIEW',
-      defaultTab: 'FILE_REVIEW',
+      id: 'OFFICE_HUB',
+      defaultTab: 'CLIENTS_ARCHIVE',
+      number: '3',
+      label: 'العملاء والمكتب',
+      labelEn: 'Clients & Office Hub',
+      icon: Building2,
+      description: 'أرشيف العملاء، الأتعاب، الخزنة والواتساب',
+      badge: `${state.clients.length} ${isEn ? 'Clients' : 'عميل'}`,
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+    },
+    {
+      id: 'TAX_AUDIT_HUB',
+      defaultTab: 'TAX_TRACKER',
       number: '4',
-      label: 'مراجعة شركة',
-      labelEn: 'Company Audit',
-      icon: FileCheck2,
-      description: 'مراجعة وقراءة الملفات والموازين والربط',
-      badge: isEn ? 'Audit' : 'فحص ميزان',
-      badgeColor: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
+      label: 'الضرائب والتدقيق',
+      labelEn: 'Tax & Compliance Hub',
+      icon: Percent,
+      description: 'الإقرارات، الفحص الضريبي، المرتبات والتوكينات',
+      badge: pendingTaxesCount > 0
+        ? (isEn ? `${pendingTaxesCount} Due` : `${pendingTaxesCount} مستحق`)
+        : (isEn ? 'ETA' : 'إقرارات ETA'),
+      badgeColor: pendingTaxesCount > 0 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
     },
     {
       id: 'CREDIT_HUB',
-      defaultTab: 'CREDIT_HUB',
+      defaultTab: 'CREDIT_SIMULATOR',
       number: '5',
       label: 'مركز الائتمان',
       labelEn: 'Credit Hub',
       icon: TrendingUp,
       description: 'محاكي الائتمان، الملف البنكي وسجل الملفات',
-      badge: isEn ? 'Credit' : 'مركز الائتمان',
+      badge: isEn ? 'Credit' : 'ائتمان بنكي',
       badgeColor: 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
     },
     {
-      id: 'TAX_TRACKER',
-      defaultTab: 'TAX_TRACKER',
-      number: '6',
-      label: 'الضرائب',
-      labelEn: 'Taxes & Portal',
-      icon: Percent,
-      description: 'إقرارات القيمة المضافة والدخل وETA',
-      badge: pendingTaxesCount > 0 
-        ? (isEn ? `${pendingTaxesCount} Due` : `${pendingTaxesCount} مستحق`) 
-        : (isEn ? 'ETA' : 'إقرارات ETA'),
-      badgeColor: pendingTaxesCount > 0 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-    },
-    {
-      id: 'OFFICE_TREASURY',
-      defaultTab: 'OFFICE_TREASURY',
-      number: '7',
-      label: 'الأتعاب والخزنة',
-      labelEn: 'Treasury & Fees',
-      icon: CreditCard,
-      description: 'المقبوضات والمصروفات وأتعاب المكتب',
-      badge: isEn ? 'Treasury' : 'خزنة وأتعاب',
-      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
-    },
-  ];
-
-  // --- Remaining Screens Moved to "المزيد" (باقي الشاشات في بند المزيد) ---
-  const moreTools = [
-    {
       id: 'FINANCIAL_PLANNING_HUB',
-      defaultTab: 'FINANCIAL_PLANNING_HUB',
-      label: 'التخطيط والتقدير المالي',
-      labelEn: 'Financial Planning & Budgets',
+      defaultTab: 'BUDGET_PLANNER',
+      number: '6',
+      label: 'التخطيط المالي',
+      labelEn: 'Financial Planning Hub',
       icon: Calculator,
-      badge: 'موازنة وتدفقات',
+      description: 'الموازنات التقديرية والتنبؤ بالتدفقات النقدية',
+      badge: isEn ? 'Budgets' : 'موازنة وتدفقات',
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
     },
     {
       id: 'AUDIT_TOOLS_HUB',
-      defaultTab: 'AUDIT_TOOLS_HUB',
-      label: 'منصة التدقيق وفحص القيود',
-      labelEn: 'Audit Sentinel Hub',
+      defaultTab: 'EXCEL_AUDIT_SENTINEL',
+      number: '7',
+      label: 'التدقيق الذكي',
+      labelEn: 'Smart Audit Hub',
       icon: Sparkles,
-      badge: 'فحص ذكي',
+      description: 'مختبر الإكسيل، كشف الاحتيال وفحص القيود',
+      badge: isEn ? 'XAI' : 'فحص ذكي',
+      badgeColor: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
+    },
+    {
+      id: 'FINANCIAL_REPORTING_HUB',
+      defaultTab: 'ANNUAL_FINANCIAL_DOSSIER',
+      number: '8',
+      label: 'التقارير المالية',
+      labelEn: 'Financial Reporting Hub',
+      icon: FileSpreadsheet,
+      description: 'الملف المالي السنوي، الشهادات ودراسات الجدوى',
+      badge: isEn ? 'EAS' : 'تقارير EAS',
+      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+    },
+    {
+      id: 'AUDIT_SECURITY_HUB',
+      defaultTab: 'AUDIT_TRAIL',
+      number: '9',
+      label: 'الأمان والرقابة',
+      labelEn: 'Security & Audit Hub',
+      icon: ShieldCheck,
+      description: 'سجل العمليات، النسخ الاحتياطي والمستخدمون',
+      badge: `${state.auditLogs.length}`,
+      badgeColor: 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
+    },
+  ];
+
+  // Remaining standalone screens (no duplicates of hubs/subtabs)
+  const moreTools = [
+    {
+      id: 'INVOICING',
+      defaultTab: 'INVOICING',
+      label: 'الفواتير والمبيعات',
+      labelEn: 'Invoicing & Sales',
+      icon: Receipt,
+      badge: `${state.invoices.length}`,
     },
     {
       id: 'CUSTOMS_HUB',
@@ -310,36 +328,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: 'ACI',
     },
     {
-      id: 'WHATSAPP_BOT',
-      defaultTab: 'WHATSAPP_BOT',
-      label: 'إدارة الواتساب والتواصل',
-      labelEn: 'WhatsApp Business API',
-      icon: MessageSquare,
-      badge: 'Bot',
-    },
-    {
       id: 'SAP_ERP',
       defaultTab: 'SAP_ERP',
       label: 'نظام SAP ERP للمؤسسات',
       labelEn: 'SAP ERP Integration',
       icon: Database,
       badge: 'SAP',
-    },
-    {
-      id: 'CURRENCY_EXCHANGE_RATES',
-      defaultTab: 'CURRENCY_EXCHANGE_RATES',
-      label: 'أسعار الصرف وفروق العملة',
-      labelEn: 'Exchange Rates (EAS 13)',
-      icon: LineChart,
-      badge: 'CBE',
-    },
-    {
-      id: 'AUDIT_SECURITY_HUB',
-      defaultTab: 'AUDIT_TRAIL',
-      label: 'سجل العمليات والرقابة',
-      labelEn: 'Audit Trail & Compliance',
-      icon: History,
-      badge: `${state.auditLogs.length}`,
     },
     {
       id: 'MOBILE_COMPANION',
@@ -349,43 +343,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Smartphone,
       badge: '📱',
     },
-    {
-      id: 'FINANCIAL_STATEMENTS',
-      defaultTab: 'FINANCIAL_STATEMENTS',
-      label: 'القوائم المالية المعتمدة',
-      labelEn: 'Financial Statements EAS',
-      icon: FileSpreadsheet,
-      badge: 'EAS',
-    },
-    {
-      id: 'INVOICING',
-      defaultTab: 'INVOICING',
-      label: 'الفواتير والمبيعات',
-      labelEn: 'Invoicing & Sales',
-      icon: Receipt,
-      badge: `${state.invoices.length}`,
-    },
-    {
-      id: 'MULTI_TENANT_WORKSPACES',
-      defaultTab: 'MULTI_TENANT_WORKSPACES',
-      label: 'بيئات الشركات والمصانع',
-      labelEn: 'Multi-Tenant Workspaces',
-      icon: Factory,
-      badge: `${state.clients.length} كيان`,
-    },
-    {
-      id: 'TAX_AUDIT_HUB',
-      defaultTab: 'TAX_AUDIT_HUB',
-      label: 'الفحص الضريبي والطعون',
-      labelEn: 'Tax Inspection & Appeals',
-      icon: Scale,
-      badge: 'فحص وطعون',
-    },
   ];
 
-  const isMoreActive = moreTools.some(
-    (h) => parentHub === h.id || activeTab === h.id || (h.defaultTab && activeTab === h.defaultTab)
-  );
+  const isMoreActive = moreTools.some((h) => parentHub === h.id);
   const [showMoreTools, setShowMoreTools] = useState(isMoreActive);
 
   return (

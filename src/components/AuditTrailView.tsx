@@ -1,279 +1,82 @@
-import React, { useState, useMemo } from 'react';
-import {
-  History,
-  Download,
-  Upload,
-  RefreshCw,
-  Trash2,
-  Database,
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  FileSpreadsheet,
-  FileCode,
-  ShieldCheck,
-  Laptop,
-  ShieldAlert,
-} from 'lucide-react';
-import { db, DatabaseState } from '../db/localDatabase';
-import { PurgeDatabaseModal } from './PurgeDatabaseModal';
-import { DeviceLockModal } from './DeviceLockModal';
-import { ScreenActionToolbar } from './common/ScreenActionToolbar';
+import React, { useState } from 'react';
+import { DatabaseState } from '../db/localDatabase';
+import { History, Search, ShieldCheck } from 'lucide-react';
 
-interface AuditTrailViewProps {
+export interface AuditTrailViewProps {
   state: DatabaseState;
 }
 
 export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ state }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
-  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
-  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
-
-  const filteredLogs = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    return (state.auditLogs || []).filter((log) => {
-      return (
-        !term ||
-        (log.user || '').toLowerCase().includes(term) ||
-        (log.details || '').toLowerCase().includes(term) ||
-        (log.action || '').toLowerCase().includes(term)
-      );
-    });
-  }, [state.auditLogs, searchTerm]);
-
-  const handleDownloadBackup = () => {
-    const jsonStr = db.exportFullBackupJson();
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `نسخة_محاسبية_احتياطية_محمد_جميل_مرعي_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const jsonStr = event.target?.result as string;
-        const success = db.importFullBackupJson(jsonStr);
-        if (success) {
-          setRestoreStatus('تم استعادة قاعدة البيانات بنجاح تام');
-          setTimeout(() => setRestoreStatus(null), 4000);
-        } else {
-          alert('فشل استعادة الملف: تنسيق JSON غير متوافق');
-        }
-      } catch (err) {
-        alert('حدث خطأ أثناء قراءة ملف النسخ الاحتياطي');
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleResetData = () => {
-    if (
-      window.confirm(
-        'تحذير: هل أنت متأكد من إعادة ضبط قاعدة البيانات إلى البيانات النموذجية الأولية؟ سيتم تحديث كافة السجلات.'
-      )
-    ) {
-      db.resetToDemoData();
-      setRestoreStatus('تمت إعادة تهيئة المنظومة بالبيانات النموذجية');
-      setTimeout(() => setRestoreStatus(null), 4000);
-    }
-  };
+  const [search, setSearch] = useState('');
+  const logs = (state.auditLogs || []).filter((l) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      l.action?.toLowerCase().includes(q) ||
+      l.details?.toLowerCase().includes(q) ||
+      l.userName?.toLowerCase().includes(q)
+    );
+  });
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <History className="w-6 h-6 text-slate-700 dark:text-slate-300" />
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              سجل التدقيق والرقابة المحاسبية والنسخ الاحتياطي (Audit Trail & Backup)
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5" dir="rtl">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+            <History className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-black text-slate-900 dark:text-white">
+              سجل الرقابة والتدقيق الشامل (Audit Trail)
             </h2>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            سجل غير قابل للتعديل يوثق كافة العمليات والمستخدمين والتعديلات على قيود اليومية والحسابات، مع إدارة التخزين المحلي وقفل الجهاز ضد السرقة.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Device Security Button */}
-          <button
-            onClick={() => setIsDeviceModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-xl font-bold text-xs border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer"
-            title="حماية وقفل الجهاز ومنع نقل الملف"
-          >
-            <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>قفل الجهاز والأمان</span>
-          </button>
-
-          <ScreenActionToolbar
-            modelType="AUDIT"
-            title="سجل التدقيق والرقابة المحاسبية"
-            count={filteredLogs.length}
-            showImport={false}
-          />
-
-          <button
-            onClick={handleDownloadBackup}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>نسخة احتياطية كاملة (JSON)</span>
-          </button>
-
-          <label className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer">
-            <Upload className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-            <span>استعادة قاعدة البيانات</span>
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
-
-          {/* Purge Database Button */}
-          <button
-            onClick={() => setIsPurgeModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-600 hover:text-white text-red-700 dark:text-red-300 rounded-xl font-bold text-xs border border-red-200 dark:border-red-800 transition-all cursor-pointer shadow-2xs"
-            title="تفريغ وتصفير كافة بيانات وسجلات المنظومة برقم سري"
-          >
-            <Trash2 className="w-4 h-4 text-red-600" />
-            <span>تفريغ شامل</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Restore Notification */}
-      {restoreStatus && (
-        <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{restoreStatus}</span>
-        </div>
-      )}
-
-      {/* Database Health Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-slate-400 font-bold block">إجمالي سجلات الحسابات:</span>
-          <div className="text-lg font-black text-slate-900 font-mono mt-0.5">
-            {state.accounts.length} حساب
+            <p className="text-xs text-slate-500">
+              توثيق زمني غير قابل للتلاعب لكافة العمليات المحاسبية والضريبية والأمنية
+            </p>
           </div>
         </div>
-
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-slate-400 font-bold block">قيود اليومية المسجلة:</span>
-          <div className="text-lg font-black text-emerald-800 font-mono mt-0.5">
-            {state.journalEntries.length} قيد
-          </div>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-slate-400 font-bold block">حركات الخزنة والشركات:</span>
-          <div className="text-lg font-black text-blue-800 font-mono mt-0.5">
-            {state.treasuryTransactions.length + state.clients.length} سجل
-          </div>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-slate-400 font-bold block">عمليات الرقابة والتدقيق:</span>
-          <div className="text-lg font-black text-purple-800 font-mono mt-0.5">
-            {state.auditLogs.length} عملية
-          </div>
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-        <div className="relative w-full md:w-96">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+        <div className="relative w-64">
+          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
           <input
             type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث في سجل التعديلات والتدقيق..."
-            className="w-full pl-3 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-400"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث في سجل التدقيق..."
+            className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-300 text-xs"
           />
         </div>
       </div>
 
-      {/* Audit Logs Table - Compact Mode & Zebra Striping */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      {logs.length === 0 ? (
+        <div className="p-8 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
+          <ShieldCheck className="w-8 h-8 text-emerald-500" />
+          <span>سجل الرقابة نشط وجاهز لتسجيل كافة العمليات</span>
+        </div>
+      ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs accounting-table">
+          <table className="w-full text-xs text-right border-collapse">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-800">
-                <th className="py-2 px-3">التوقيت والتاريخ</th>
-                <th className="py-2 px-3">المستخدم والمدقق</th>
-                <th className="py-2 px-3">نوع الإجراء</th>
-                <th className="py-2 px-3">تفاصيل وبيان الحركة الرقابية</th>
+              <tr className="bg-slate-900 text-white">
+                <th className="p-3">التوقيت</th>
+                <th className="p-3">المستخدم</th>
+                <th className="p-3">العملية</th>
+                <th className="p-3">الكيان</th>
+                <th className="p-3">التفاصيل</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredLogs.slice().map((log, idx) => (
-                <tr
-                  key={idx}
-                  className={`hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors ${
-                    idx % 2 === 1 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'
-                  }`}
-                >
-                  <td className="py-1.5 px-3 font-mono text-slate-500 dark:text-slate-400 text-[11px]">{log.timestamp}</td>
-                  <td className="py-1.5 px-3 font-bold text-slate-900 dark:text-slate-100">{log.user}</td>
-                  <td className="py-1.5 px-3">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        log.action === 'CREATE'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
-                          : log.action === 'UPDATE'
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
-                          : log.action === 'DELETE'
-                          ? 'bg-red-100 text-red-800 dark:bg-rose-950/50 dark:text-rose-300'
-                          : log.action === 'POST'
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
-                          : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                      }`}
-                    >
-                      {log.action === 'CREATE'
-                        ? 'إنشاء'
-                        : log.action === 'UPDATE'
-                        ? 'تعديل'
-                        : log.action === 'DELETE'
-                        ? 'حذف'
-                        : log.action === 'POST'
-                        ? 'ترحيل'
-                        : 'إلغاء ترحيل'}
-                    </span>
-                  </td>
-                  <td className="py-1.5 px-3 text-slate-800 dark:text-slate-200">{log.details}</td>
+            <tbody className="divide-y divide-slate-200">
+              {logs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50">
+                  <td className="p-3 font-mono text-[11px]">{log.timestamp}</td>
+                  <td className="p-3 font-bold">{log.userName}</td>
+                  <td className="p-3 font-mono font-bold text-indigo-700">{log.action}</td>
+                  <td className="p-3 text-slate-600">{log.entityType}</td>
+                  <td className="p-3 text-slate-800">{log.details}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Device Lock & Binding Modal */}
-      <DeviceLockModal
-        isOpen={isDeviceModalOpen}
-        onClose={() => setIsDeviceModalOpen(false)}
-      />
-
-      {/* Purge Database Modal */}
-      <PurgeDatabaseModal
-        isOpen={isPurgeModalOpen}
-        onClose={() => setIsPurgeModalOpen(false)}
-        onPurgeComplete={() => {
-          setRestoreStatus('تم تفريغ وتصفير كافة بيانات وسجلات المنظومة بنجاح.');
-        }}
-      />
+      )}
     </div>
   );
 };

@@ -1,127 +1,85 @@
-import { round2 } from './accountingCalculations';
-
-export interface TrialBalanceVarianceOptions {
-  pctThreshold?: number;
-  minAmount?: number;
-}
-
 export interface VarianceAccountItem {
   mappedCode: string;
   mappedName: string;
   currentBalance: number;
   priorBalance: number;
   difference: number;
-  percentage: number | null;
-  flagged: boolean;
-  isNew: boolean;
-  isDisappeared: boolean;
+  percentage: number | null; // null if priorBalance === 0 (new account)
 }
 
 export interface VarianceAnalysisResult {
-  variances: VarianceAccountItem[];
+  allAccounts: VarianceAccountItem[];
   flaggedAccounts: VarianceAccountItem[];
   newAccounts: VarianceAccountItem[];
   disappearedAccounts: VarianceAccountItem[];
+  pctThreshold: number;
+  minAmount: number;
 }
 
-export interface GenericTrialBalanceRow {
-  debit?: number;
-  credit?: number;
-  netBalance?: number;
-  mappedCode?: string;
-  mappedName?: string;
-  originalCode?: string;
-  originalName?: string;
+export interface VarianceOptions {
+  pctThreshold?: number;
+  minAmount?: number;
+}
+
+function getRowNetBalance(row: any): number {
+  if (typeof row.netBalance === 'number') return row.netBalance;
+  const endDebit = Number(row.endingDebit ?? row.closingDebit ?? row.debit ?? 0);
+  const endCredit = Number(row.endingCredit ?? row.closingCredit ?? row.credit ?? 0);
+  return endDebit - endCredit;
 }
 
 export function computeVariance(
-  currentRows: GenericTrialBalanceRow[],
-  priorRows: GenericTrialBalanceRow[],
-  opts: TrialBalanceVarianceOptions = {}
+  currentRows: any[],
+  priorRows: any[],
+  options: VarianceOptions = {}
 ): VarianceAnalysisResult {
-  const pctThreshold = opts.pctThreshold ?? 30;
-  const minAmount = opts.minAmount ?? 10000;
+  const pctThreshold = options.pctThreshold ?? 30;
+  const minAmount = options.minAmount ?? 10000;
 
   const currentMap = new Map<string, { name: string; balance: number }>();
   for (const r of currentRows || []) {
-    const code = String(r.mappedCode || '').trim();
-    if (!code || code === 'UNMAPPED') continue;
-
-    let rowNet = 0;
-    if (r.debit !== undefined || r.credit !== undefined) {
-      rowNet = (Number(r.debit) || 0) - (Number(r.credit) || 0);
-    } else if (r.netBalance !== undefined) {
-      rowNet = Number(r.netBalance) || 0;
-    }
-
-    const name = r.mappedName || r.originalName || code;
-    const existing = currentMap.get(code);
-    if (existing) {
-      existing.balance += rowNet;
-    } else {
-      currentMap.set(code, { name, balance: rowNet });
-    }
+    const code = String(r.mappedCode || r.accountCode || r.code || '').trim();
+    if (!code) continue;
+    const name = String(r.mappedName || r.accountName || r.name || code).trim();
+    const bal = getRowNetBalance(r);
+    const prev = currentMap.get(code);
+    currentMap.set(code, {
+      name: prev?.name || name,
+      balance: (prev?.balance || 0) + bal,
+    });
   }
 
   const priorMap = new Map<string, { name: string; balance: number }>();
   for (const r of priorRows || []) {
-    const code = String(r.mappedCode || '').trim();
-    if (!code || code === 'UNMAPPED') continue;
-
-    let rowNet = 0;
-    if (r.debit !== undefined || r.credit !== undefined) {
-      rowNet = (Number(r.debit) || 0) - (Number(r.credit) || 0);
-    } else if (r.netBalance !== undefined) {
-      rowNet = Number(r.netBalance) || 0;
-    }
-
-    const name = r.mappedName || r.originalName || code;
-    const existing = priorMap.get(code);
-    if (existing) {
-      existing.balance += rowNet;
-    } else {
-      priorMap.set(code, { name, balance: rowNet });
-    }
+    const code = String(r.mappedCode || r.accountCode || r.code || '').trim();
+    if (!code) continue;
+    const name = String(r.mappedName || r.accountName || r.name || code).trim();
+    const bal = getRowNetBalance(r);
+    const prev = priorMap.get(code);
+    priorMap.set(code, {
+      name: prev?.name || name,
+      balance: (prev?.balance || 0) + bal,
+    });
   }
 
-  const allCodes = new Set<string>([
-    ...Array.from(currentMap.keys()),
-    ...Array.from(priorMap.keys()),
-  ]);
-
-  const variances: VarianceAccountItem[] = [];
+  const allCodes = Array.from(new Set([...currentMap.keys(), ...priorMap.keys()])).sort();
+  const allAccounts: VarianceAccountItem[] = [];
+  const flaggedAccounts: VarianceAccountItem[] = [];
   const newAccounts: VarianceAccountItem[] = [];
   const disappearedAccounts: VarianceAccountItem[] = [];
 
-  allCodes.forEach((code) => {
+  for (const code of allCodes) {
     const curr = currentMap.get(code);
-    const pri = priorMap.get(code);
-
-    const currentBalance = curr ? round2(curr.balance) : 0;
-    const priorBalance = pri ? round2(pri.balance) : 0;
-    const mappedName = (curr ? curr.name : pri?.name) || code;
-
-    const difference = round2(currentBalance - priorBalance);
+    const prior = priorMap.get(code);
+    const currentBalance = Math.round(((curr?.balance || 0) + Number.EPSILON) * 100) / 100;
+    const priorBalance = Math.round(((prior?.balance || 0) + Number.EPSILON) * 100) / 100;
+    const difference = Math.round(((currentBalance - priorBalance) + Number.EPSILON) * 100) / 100;
+    const mappedName = curr?.name || prior?.name || code;
 
     let percentage: number | null = null;
-    let pctValForCheck = 0;
-
-    if (priorBalance !== 0) {
-      const rawPct = (difference / priorBalance) * 100;
-      percentage = round2(rawPct);
-      pctValForCheck = Math.abs(percentage);
+    if (Math.abs(priorBalance) > 0.001) {
+      percentage = Math.round(((difference / Math.abs(priorBalance)) * 100) * 10) / 10;
     }
-
-    const isNew = !!curr && !pri && currentBalance !== 0;
-    const isDisappeared = !curr && !!pri && priorBalance !== 0;
-
-    const absDiff = Math.abs(difference);
-    const passesAmount = absDiff >= minAmount;
-    const passesPct = priorBalance === 0
-      ? currentBalance !== 0
-      : pctValForCheck >= pctThreshold;
-
-    const flagged = passesAmount && passesPct;
 
     const item: VarianceAccountItem = {
       mappedCode: code,
@@ -130,29 +88,31 @@ export function computeVariance(
       priorBalance,
       difference,
       percentage,
-      flagged,
-      isNew,
-      isDisappeared,
     };
 
-    variances.push(item);
+    allAccounts.push(item);
 
-    if (isNew) {
+    if (Math.abs(priorBalance) < 0.01 && Math.abs(currentBalance) >= 0.01) {
       newAccounts.push(item);
-    }
-    if (isDisappeared) {
+    } else if (Math.abs(priorBalance) >= 0.01 && Math.abs(currentBalance) < 0.01) {
       disappearedAccounts.push(item);
     }
-  });
 
-  const flaggedAccounts = variances
-    .filter((v) => v.flagged)
-    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+    const absDiff = Math.abs(difference);
+    const exceedsAmount = absDiff >= minAmount;
+    const exceedsPct = percentage === null ? absDiff >= minAmount : Math.abs(percentage) >= pctThreshold;
+
+    if (exceedsAmount && exceedsPct) {
+      flaggedAccounts.push(item);
+    }
+  }
 
   return {
-    variances,
+    allAccounts,
     flaggedAccounts,
     newAccounts,
     disappearedAccounts,
+    pctThreshold,
+    minAmount,
   };
 }

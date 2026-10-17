@@ -1,97 +1,67 @@
-/**
- * English Number to Words Converter (Tafqeet in English)
- * Designed for International Financial Statements, Auditor Reports, and Invoices
- */
-
-import { CurrencyCode } from '../types';
-
 const ONES = [
   '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
   'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-  'Seventeen', 'Eighteen', 'Nineteen'
+  'Seventeen', 'Eighteen', 'Nineteen',
 ];
 
 const TENS = [
-  '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'
+  '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety',
 ];
 
-const CURRENCY_LABELS: Record<CurrencyCode, { main: string; mainPlural: string; sub: string; subPlural: string }> = {
-  EGP: { main: 'Egyptian Pound', mainPlural: 'Egyptian Pounds', sub: 'Piaster', subPlural: 'Piasters' },
-  USD: { main: 'US Dollar', mainPlural: 'US Dollars', sub: 'Cent', subPlural: 'Cents' },
-  EUR: { main: 'Euro', mainPlural: 'Euros', sub: 'Cent', subPlural: 'Cents' },
-  SAR: { main: 'Saudi Riyal', mainPlural: 'Saudi Riyals', sub: 'Halala', subPlural: 'Halalas' },
-  AED: { main: 'UAE Dirham', mainPlural: 'UAE Dirhams', sub: 'Fils', subPlural: 'Fils' },
-  GBP: { main: 'Pound Sterling', mainPlural: 'Pounds Sterling', sub: 'Penny', subPlural: 'Pence' },
-  KWD: { main: 'Kuwaiti Dinar', mainPlural: 'Kuwaiti Dinars', sub: 'Fils', subPlural: 'Fils' },
-  QAR: { main: 'Qatari Riyal', mainPlural: 'Qatari Riyals', sub: 'Dirham', subPlural: 'Dirhams' },
-  CNY: { main: 'Chinese Yuan', mainPlural: 'Chinese Yuan', sub: 'Fen', subPlural: 'Fen' },
-};
+const SCALES = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
 
-function convertLessThanThousand(num: number): string {
-  if (num === 0) return '';
-  let str = '';
-
+function convertChunk(num: number): string {
+  const parts: string[] = [];
   if (num >= 100) {
-    str += ONES[Math.floor(num / 100)] + ' Hundred';
+    parts.push(`${ONES[Math.floor(num / 100)]} Hundred`);
     num %= 100;
-    if (num > 0) str += ' and ';
   }
-
   if (num >= 20) {
-    str += TENS[Math.floor(num / 10)];
-    if (num % 10 > 0) str += '-' + ONES[num % 10];
+    const ten = Math.floor(num / 10);
+    const one = num % 10;
+    parts.push(one > 0 ? `${TENS[ten]}-${ONES[one]}` : TENS[ten]);
   } else if (num > 0) {
-    str += ONES[num];
+    parts.push(ONES[num]);
   }
-
-  return str;
+  return parts.join(' ');
 }
 
 export function numberToEnglishWords(
   amount: number,
-  currencyCode: CurrencyCode = 'EGP'
+  currencyName = 'Egyptian Pounds',
+  subUnitName = 'Piasters'
 ): string {
-  if (isNaN(amount) || amount === 0) {
-    const cur = CURRENCY_LABELS[currencyCode] || CURRENCY_LABELS.EGP;
-    return `Zero ${cur.mainPlural} Only`;
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return `Zero ${currencyName} Only`;
   }
 
-  const isNegative = amount < 0;
-  const absAmount = Math.abs(amount);
-  const integerPart = Math.floor(absAmount);
-  const decimalPart = Math.round((absAmount - integerPart) * 100);
+  const absVal = Math.abs(amount);
+  const intPart = Math.floor(absVal);
+  const decPart = Math.round((absVal - intPart) * 100);
 
-  const units = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
-  const cur = CURRENCY_LABELS[currencyCode] || CURRENCY_LABELS.EGP;
+  if (intPart === 0 && decPart === 0) {
+    return `Zero ${currencyName} Only`;
+  }
 
-  let intWords = '';
-  if (integerPart === 0) {
-    intWords = 'Zero';
-  } else {
-    let temp = integerPart;
-    let unitIdx = 0;
-    const parts: string[] = [];
+  const chunks: string[] = [];
+  let rem = intPart;
+  let scaleIdx = 0;
 
-    while (temp > 0) {
-      const chunk = temp % 1000;
-      if (chunk > 0) {
-        const chunkStr = convertLessThanThousand(chunk);
-        const unitName = units[unitIdx];
-        parts.unshift(unitName ? `${chunkStr} ${unitName}` : chunkStr);
-      }
-      temp = Math.floor(temp / 1000);
-      unitIdx++;
+  while (rem > 0) {
+    const chunk = rem % 1000;
+    if (chunk > 0) {
+      const words = convertChunk(chunk);
+      const scale = SCALES[scaleIdx];
+      chunks.unshift(scale ? `${words} ${scale}` : words);
     }
-    intWords = parts.join(', ');
+    rem = Math.floor(rem / 1000);
+    scaleIdx++;
   }
 
-  const mainUnit = integerPart === 1 ? cur.main : cur.mainPlural;
-  let result = (isNegative ? 'Minus ' : '') + `${intWords} ${mainUnit}`;
-
-  if (decimalPart > 0) {
-    const subWords = convertLessThanThousand(decimalPart);
-    const subUnit = decimalPart === 1 ? cur.sub : cur.subPlural;
-    result += ` and ${subWords} ${subUnit}`;
+  let result = chunks.length > 0 ? `${chunks.join(', ')} ${currencyName}` : '';
+  if (decPart > 0) {
+    const decWords = convertChunk(decPart);
+    result += result ? ` and ${decWords} ${subUnitName}` : `${decWords} ${subUnitName}`;
   }
 
   return `${result} Only`;

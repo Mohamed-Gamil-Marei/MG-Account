@@ -1,220 +1,124 @@
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut as fbSignOut, 
-  onAuthStateChanged,
-  User as FirebaseUser
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
-import { SystemUser, UserRole } from '../types';
-import { db as localDb } from '../db/localDatabase';
+import { UserRole } from '../types';
 
 export interface FirebaseUserProfile {
   uid: string;
   email: string;
   name: string;
-  role: UserRole; // 'ADMIN' | 'ACCOUNTANT' | 'SECRETARY' | 'PENDING'
+  photoURL?: string;
+  role: UserRole;
   roleTitleArabic: string;
-  phone?: string;
-  canAccessTreasury: boolean;
-  canAccessAuditTrail: boolean;
-  canAccessCreditFiles?: boolean;
-  canAccessTaxReports?: boolean;
+  isApproved?: boolean;
+  isOffline?: boolean;
+  mustChangePassword?: boolean;
+  canAccessTreasury?: boolean;
+  canAccessAuditTrail?: boolean;
   canManageUsers?: boolean;
   canPostEntries?: boolean;
   canEditPostedEntries?: boolean;
   canDeleteRecords?: boolean;
-  isOffline?: boolean;
-  mustChangePassword?: boolean;
-  createdAt?: any;
+  canAccessCreditFiles?: boolean;
+  canAccessTaxReports?: boolean;
+  permittedClientIds?: string[];
+  lastLoginAt?: string;
+  createdAt?: string;
+  authSource?: 'SERVER_SQLITE' | 'FIREBASE' | 'OFFLINE_LOCAL';
+  sessionToken?: string;
+  [key: string]: any;
 }
 
-export type AuthListener = (user: FirebaseUserProfile | null, rawUser: FirebaseUser | null) => void;
+const SESSION_PROFILE_KEY = 'mg_cpa_active_auth_profile';
+const SESSION_TOKEN_KEY = 'mg_cpa_server_session_token';
 
 class FirebaseAuthService {
-  private currentUserProfile: FirebaseUserProfile | null = null;
-  private rawFirebaseUser: FirebaseUser | null = null;
-  private listeners: AuthListener[] = [];
-  private isInitialized = false;
+  private currentProfile: FirebaseUserProfile | null = null;
+  private listeners: Set<(profile: FirebaseUserProfile | null) => void> = new Set();
 
   constructor() {
-    onAuthStateChanged(auth, async (user) => {
-      this.rawFirebaseUser = user;
-      if (user) {
-        await this.loadUserProfile(user);
-      } else {
-        this.currentUserProfile = null;
-        this.isInitialized = true;
-        this.notifyListeners();
-      }
-    });
+    this.loadStoredSession();
   }
 
-  private async loadUserProfile(user: FirebaseUser) {
+  private loadStoredSession(): void {
     try {
-      const docRef = doc(db, 'users', user.uid);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data();
-        this.currentUserProfile = this.formatUser(data, user);
-      } else {
-        // Create default PENDING profile if not exists in Firestore
-        const defaultProfile: any = {
-          uid: user.uid,
-          email: user.email || '',
-          name: user.displayName || user.email?.split('@')[0] || 'مستخدم جديد',
-          role: 'PENDING',
-          canManageUsers: false,
-          canAccessTreasury: false,
-          canAccessAuditTrail: false,
-          canPostEntries: false,
-          canEditPostedEntries: false,
-          canDeleteRecords: false,
-          canAccessCreditFiles: false,
-          canAccessTaxReports: false,
-          createdAt: new Date().toISOString(),
-        };
-        await setDoc(docRef, defaultProfile, { merge: true });
-        this.currentUserProfile = this.formatUser(defaultProfile, user);
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(SESSION_PROFILE_KEY);
+      if (raw) {
+        this.currentProfile = JSON.parse(raw);
       }
-      if (this.currentUserProfile) {
-        localDb.setCurrentUserId(this.currentUserProfile.uid);
-      }
-    } catch (err) {
-      console.error('Error loading user profile from Firestore:', err);
-    } finally {
-      this.isInitialized = true;
-      this.notifyListeners();
+    } catch {
+      this.currentProfile = null;
     }
   }
 
-  private formatUser(u: any, user: FirebaseUser): FirebaseUserProfile {
-    const role = u.role || 'PENDING';
-    const roleTitle =
-      role === 'ADMIN'
-        ? 'مدير النظام والشريك المسؤول'
-        : role === 'ACCOUNTANT'
-        ? 'محاسب قانوني معتمد'
-        : role === 'SECRETARY'
-        ? 'سكرتارية وإداري'
-        : 'قيد الانتظار (PENDING - بانتظار تفعيل المدير)';
-
-    return {
-      uid: user.uid,
-      email: user.email || u.email,
-      name: u.name || user.displayName || 'مستخدم',
-      role,
-      roleTitleArabic: roleTitle,
-      canAccessTreasury: !!u.canAccessTreasury,
-      canAccessAuditTrail: !!u.canAccessAuditTrail,
-      canAccessCreditFiles: !!u.canAccessCreditFiles,
-      canAccessTaxReports: !!u.canAccessTaxReports,
-      canManageUsers: !!u.canManageUsers,
-      canPostEntries: !!u.canPostEntries,
-      canEditPostedEntries: !!u.canEditPostedEntries,
-      canDeleteRecords: !!u.canDeleteRecords,
-      createdAt: u.createdAt,
-    };
+  public getCurrentProfile(): FirebaseUserProfile | null {
+    return this.currentProfile;
   }
 
-  public subscribe(cb: AuthListener): () => void {
-    this.listeners.push(cb);
-    if (this.isInitialized) {
-      cb(this.currentUserProfile, this.rawFirebaseUser);
+  public setCurrentProfile(profile: FirebaseUserProfile | null, token?: string): void {
+    this.currentProfile = profile;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        if (profile) {
+          localStorage.setItem(SESSION_PROFILE_KEY, JSON.stringify(profile));
+          if (token || profile.sessionToken) {
+            localStorage.setItem(SESSION_TOKEN_KEY, token || profile.sessionToken || '');
+          }
+        } else {
+          localStorage.removeItem(SESSION_PROFILE_KEY);
+          localStorage.removeItem(SESSION_TOKEN_KEY);
+        }
+      }
+    } catch {
+      // ignore storage errors
     }
+    this.notifyListeners();
+  }
+
+  public onAuthStateChange(callback: (profile: FirebaseUserProfile | null) => void): () => void {
+    this.listeners.add(callback);
+    callback(this.currentProfile);
     return () => {
-      this.listeners = this.listeners.filter((l) => l !== cb);
+      this.listeners.delete(callback);
     };
   }
 
-  private notifyListeners() {
-    this.listeners.forEach((cb) => cb(this.currentUserProfile, this.rawFirebaseUser));
+  private notifyListeners(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(this.currentProfile);
+      } catch {
+        // ignore listener errors
+      }
+    }
   }
 
-  public async signIn(email: string, pass: string): Promise<FirebaseUserProfile> {
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
-    await this.loadUserProfile(cred.user);
-    if (!this.currentUserProfile) {
-      throw new Error('تعذر تحميل ملف المستخدم.');
-    }
-    return this.currentUserProfile;
+  public isAdmin(): boolean {
+    return this.currentProfile?.role === 'ADMIN';
   }
 
-  public async signUp(name: string, email: string, pass: string): Promise<FirebaseUserProfile> {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    const user = cred.user;
-    const defaultProfile: any = {
-      uid: user.uid,
-      email,
-      name,
-      role: 'PENDING',
-      canManageUsers: false,
-      canAccessTreasury: false,
-      canAccessAuditTrail: false,
-      canPostEntries: false,
-      canEditPostedEntries: false,
-      canDeleteRecords: false,
-      canAccessCreditFiles: false,
-      canAccessTaxReports: false,
-      createdAt: new Date().toISOString(),
-    };
-    const docRef = doc(db, 'users', user.uid);
-    await setDoc(docRef, defaultProfile);
-    await this.loadUserProfile(user);
-    if (!this.currentUserProfile) {
-      throw new Error('تعذر إنشاء وتسجيل حساب المستخدم.');
+  public async getIdToken(): Promise<string | null> {
+    if (this.currentProfile?.sessionToken) return this.currentProfile.sessionToken;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem(SESSION_TOKEN_KEY);
+      }
+    } catch {
+      // ignore
     }
-    return this.currentUserProfile;
+    return null;
   }
 
   public async signOut(): Promise<void> {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    } catch {}
-
-    try {
-      const { clearOfflineAuthCache } = await import('./offlineAuthService');
-      clearOfflineAuthCache();
-    } catch {}
-
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('mg_firebase_user');
-      localStorage.removeItem('cpa_offline_auth_v1');
+      const token = await this.getIdToken();
+      if (token && typeof fetch !== 'undefined') {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+    } finally {
+      this.setCurrentProfile(null);
     }
-
-    try {
-      localDb.clearCurrentUser();
-    } catch {}
-
-    try {
-      await fbSignOut(auth).catch(() => {});
-    } catch {}
-
-    this.currentUserProfile = null;
-    this.rawFirebaseUser = null;
-    this.notifyListeners();
-  }
-
-  public async checkSetup(): Promise<boolean> {
-    return false;
-  }
-
-  public async setupAdmin(name: string, email: string, pass: string): Promise<FirebaseUserProfile> {
-    return this.signUp(name, email, pass);
-  }
-
-  public getCurrentProfile(): FirebaseUserProfile | null {
-    return this.currentUserProfile;
-  }
-
-  public async getIdToken(forceRefresh = false): Promise<string | null> {
-    if (!this.rawFirebaseUser) return null;
-    return await this.rawFirebaseUser.getIdToken(forceRefresh);
-  }
-
-  public isAdmin(): boolean {
-    return this.currentUserProfile?.role === 'ADMIN';
   }
 }
 

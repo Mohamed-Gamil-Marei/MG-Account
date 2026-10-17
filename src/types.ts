@@ -1,1205 +1,1235 @@
-/**
- * Types and interfaces for the Egyptian Accounting & Auditing System
- * منظومة المحاسب القانوني ومراقب الحسابات / محمد جميل مرعي
- */
-
-export type AccountCategory = 'ASSETS' | 'LIABILITIES' | 'EQUITY' | 'REVENUES' | 'EXPENSES';
-export type AccountNature = 'DEBIT' | 'CREDIT';
-
-export interface Account {
-  id: string;
-  code: string; // e.g. "1110", "1210", "2110"
-  name: string;
-  nameEn?: string; // Standard English accounting name (IFRS/EAS)
-  category: AccountCategory;
-  nature: AccountNature;
-  level: number; // 1 = Main, 2 = Sub, 3 = Analytical
-  parentId?: string | null;
-  openingBalanceDebit: number;
-  openingBalanceCredit: number;
-  currentDebit?: number;
-  currentCredit?: number;
-  currentBalance?: number;
-  description?: string;
-  isSystem?: boolean;
-  currency?: CurrencyCode; // العملة الخاصة بالحساب (افتراضياً EGP)
-}
-
-export type CurrencyCode = 'EGP' | 'USD' | 'EUR' | 'SAR' | 'AED' | 'GBP' | 'KWD' | 'QAR' | 'CNY';
-
-export interface CurrencyRateInfo {
-  code: CurrencyCode;
-  nameAr: string;
-  nameEn: string;
-  symbol: string;
-  rateToEgp: number; // e.g. 48.65 for USD
-  flag: string;
-  updatedAt?: string;
-}
-
-export interface DailyExchangeRateRecord {
-  id: string;
-  date: string; // YYYY-MM-DD
-  currency: CurrencyCode;
-  baseCurrency: CurrencyCode; // Usually 'EGP'
-  buyRate: number; // سعر الشراء البنكي
-  sellRate: number; // سعر البيع البنكي
-  officialRate: number; // سعر البنك المركزي المصري (CBE Mid Rate)
-  source?: 'CBE' | 'MANUAL' | 'COMMERCIAL_BANKS' | 'CUSTOM';
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface JournalEntryLine {
-  id: string;
-  accountId: string;
-  accountCode: string;
-  accountName: string;
-  currency?: CurrencyCode; // العملة الخاصة بالسطر
-  exchangeRate?: number;   // سعر الصرف مقابل الجنيه المصري
-  foreignDebit?: number;   // المبلغ بالعملة الأجنبية مدين
-  foreignCredit?: number;  // المبلغ بالعملة الأجنبية دائن
-  debit: number;           // القيمة المعيارية بالجنيه المصري (EGP)
-  credit: number;          // القيمة المعيارية بالجنيه المصري (EGP)
-  costCenter?: string;
-  description?: string;
-}
-
-export interface AuditRecord {
-  timestamp: string;
-  user: string;
-  userName?: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'POST' | 'UNPOST' | string;
-  details: string;
-  previousValue?: any;
-  newValue?: any;
-}
-
-export interface FinancialActivityLog {
-  id: string;
-  timestamp: string;
-  userId?: string;
-  userName?: string;
-  userRole?: string;
-  statementType: 'BALANCE_SHEET' | 'INCOME' | 'CASH_FLOW' | 'NOTES' | 'TRIAL_BALANCE_SYNC' | 'GENERAL';
-  action: 'UPDATE_LINE' | 'ADD_CUSTOM_LINE' | 'DELETE_CUSTOM_LINE' | 'SYNC_TRIAL_BALANCE' | 'RESET_TO_LEDGER' | 'ARCHIVE_STATEMENT';
-  itemKey?: string;
-  itemName: string;
-  previousValue?: number | string;
-  newValue?: number | string;
-  variance?: number; // قيمة التعديل (الفارق)
-  notes?: string;
-  fiscalYear: number;
-  clientId?: string;
-  clientName?: string;
-}
-
-export interface JournalEntry {
-  id: string;
-  entryNumber: number;
-  serialNumber: string; // e.g. "JV-2026-0001"
-  date: string;
-  description: string;
-  currency?: CurrencyCode;     // العملة الرئيسية للقيد (افتراضياً EGP)
-  clientId?: string;           // معرف العميل المرتبط بالقيد
-  clientName?: string;         // اسم العميل المرتبط بالقيد
-  exchangeRate?: number;       // سعر الصرف المطبق على القيد
-  foreignTotalDebit?: number;  // إجمالي المدين بالعملة الأجنبية
-  foreignTotalCredit?: number; // إجمالي الدائن بالعملة الأجنبية
-  lines: JournalEntryLine[];
-  totalDebit: number;          // إجمالي المدين بالجنيه المصري
-  totalCredit: number;         // إجمالي الدائن بالجنيه المصري
-  isPosted: boolean;
-  entryType: 'GENERAL' | 'ADJUSTING' | 'CLOSING' | 'RECEIPT' | 'PAYMENT' | 'SALES' | 'PURCHASE';
-  referenceNumber?: string;
-  source?: 'AUDIT_DIRECT_ENTRY' | string;
-  qrPayload?: string;
-  attachedFileUrl?: string;
-  attachedFileName?: string;
-  auditTrail: AuditRecord[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface FiscalPeriodLock {
-  id: string;
-  fiscalYear: number;
-  period: string; // 'ANNUAL' or 'Q1', 'Q2', 'Q3', 'Q4' or '01'..'12'
-  isLocked: boolean;
-  lockedAt: string;
-  lockedBy: string;
-  closingEntryId?: string;
-  notes?: string;
-}
-
-export type ProcedureStatus =
-  | 'PENDING'              // في الانتظار / قيد التجهيز
-  | 'IN_PROGRESS'          // جاري العمل والتنفيذ
-  | 'PENDING_CLIENT_DOCS'  // بانتظار مستندات من العميل
-  | 'AT_AUTHORITY'         // لدى الجهة الحكومية / المأمورية / الاستثمار
-  | 'COMPLETED'            // تم الإنجاز والاعتماد
-  | 'CANCELLED';           // ملغي / معلق
-
-export type DeadlineType =
-  | 'INCOME_TAX'
-  | 'VAT'
-  | 'WHT'
-  | 'PAYROLL_TAX'
-  | 'SOCIAL_INSURANCE'
-  | 'COMMERCIAL_REGISTER'
-  | 'OTHER';
-
-export type DeadlineStatus = 'PENDING' | 'FILED' | 'LATE';
-
-export interface ClientDeadline {
-  id: string;
-  clientId: string;
-  clientName?: string;
-  type: DeadlineType;
-  title: string;
-  dueDate: string; // ISO YYYY-MM-DD
-  status: DeadlineStatus;
-  filedAt?: string;
-  note?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export type OpenItemKind = 'DOCUMENT' | 'QUESTION' | 'ADJUSTMENT';
-export type OpenItemStatus = 'OPEN' | 'RECEIVED' | 'CLOSED';
-
-export interface OpenItem {
-  id: string;
-  clientId: string;
-  clientName?: string;
-  fiscalYear?: number | string;
-  kind: OpenItemKind;
-  text: string;
-  requestedAt: string; // ISO YYYY-MM-DD
-  dueDate?: string;
-  status: OpenItemStatus;
-  closedAt?: string;
-  closedBy?: string;
-  note?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export type ProcedureCategory =
-  | 'TAX_AUDIT'            // فحص ضريبي
-  | 'TAX_DECLARATION'      // إقرارات ضريبية
-  | 'COMPANY_ESTABLISHMENT'// تأسيس وتعديل شركات
-  | 'COMMERCIAL_REGISTRY'  // استخراج وتجديد سجل تجاري
-  | 'FINANCIAL_AUDIT'      // مراجعة واعتماد قوائم مالية
-  | 'FEASIBILITY_STUDY'    // دراسة جدوى اقتصادية
-  | 'PROFESSIONAL_CERT'    // شهادة مهنية ودخل
-  | 'SOCIAL_INSURANCE'     // تأمينات اجتماعية وملف عمال
-  | 'GOV_FEE_PAYMENT'      // سداد رسوم ومصروفات حكومية
-  | 'GENERAL_CONSULTING';  // استشارات وخدمات محاسبية
-
-export interface ClientProcedureTask {
-  id: string;
-  clientId: string;
-  clientName: string;
-  procedureCode: string; // e.g. "PRC-2026-001"
-  title: string; // e.g. "استخراج سجل تجاري محدث وتعديل السمة التجارية"
-  category: ProcedureCategory;
-  description?: string;
-  assignedTo: string; // اسم المحاسب أو المراجع المسؤول
-  status: ProcedureStatus;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  startDate: string;
-  dueDate: string;
-  completedDate?: string;
-  
-  // Financial & Treasury Integration (رسوم وأتعاب الخزنة)
-  agreedFees: number;               // إجمالي الأتعاب المتفق عليها
-  collectedFees: number;            // الأتعاب المحصلة فعلياً في الخزنة
-  governmentFees: number;           // الرسوم والمصروفات الحكومية المسددة من الخزنة
-  
-  feeTreasuryVouchers?: string[];   // أرقام سندات قبض الأتعاب بالخزنة (e.g. TR-2026-0012)
-  expenseTreasuryVouchers?: string[]; // أرقام سندات صرف الرسوم من الخزنة (e.g. TR-2026-0045)
-  
-  progressPercent: number; // 0 to 100%
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ClientDocumentFolder {
-  id: string;
-  clientId: string;
-  name: string; // e.g. "القوائم المالية والتقارير", "المستندات القانونية والتأسيسية", "الإقرارات والفواتير الضريبية", "المراجعة والتكليفات", "العقود والاتفاقيات"
-  icon?: string; // 'folder' | 'file-text' | 'shield' | 'percent' | 'scale' | 'briefcase'
-  color?: string;
-  description?: string;
-  isDefault?: boolean;
-  createdAt: string;
-}
-
-export type ClientDocumentCategory = 'TAX' | 'LEGAL' | 'CONTRACTUAL' | 'FINANCIAL' | 'GENERAL';
-
-export interface ClientDocument {
-  id: string;
-  clientId?: string;
-  folderId?: string;
-  folderName?: string;
-  title: string;
-  category?: ClientDocumentCategory | string; // تصنيف المستند: ضريبي، قانوني، تعاقدي، مالي، عام
-  documentType: 'TAX_CARD' | 'COMMERCIAL_REG' | 'ARTICLES_OF_INC' | 'FINANCIAL_REPORT' | 'POWER_OF_ATTORNEY' | 'RECEIPT' | 'AUDIT_REPORT' | 'TAX_RETURN' | 'CONTRACT' | 'OTHER';
-  fileDataUrl?: string; // Base64 or Blob URL
-  fileName?: string;
-  fileSize?: string;
-  uploadedAt: string;
-  tag?: string;
-  notes?: string;
-  fiscalYear?: number;
-  googleDriveLink?: string;
-  documentStatus?: 'REQUIRED' | 'RECEIVED' | 'MISSING'; // مطلوب / وصل / ناقص
-}
-
-export type ClientRelationshipType = 'PERMANENT' | 'TEMPORARY'; // دائم (سنوي/تعاقدي) | مؤقت (استشاري/مهمة محددة)
-
-export interface ActiveClientContext {
-  clientId: string | null;
-  clientName?: string;
-  companyName?: string;
-  clientCode?: string;
-  relationshipType?: ClientRelationshipType;
-  selectedFiscalYear?: number;
-  autoFilterAccountingData?: boolean;
-  lastUpdated?: string;
-}
-
-export interface PortalCredentials {
-  // منظومة الفاتورة والإيصال الإلكتروني
-  etaPortal?: {
-    username?: string;
-    password?: string;
-    clientId?: string;
-    clientSecret?: string;
-    tokenExpiryDate?: string;
-    notes?: string;
-  };
-  etaEInvoicing?: {
-    username?: string;
-    password?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    tokenExpiryDate?: string;
-    clientId?: string;
-    clientSecret?: string;
-    notes?: string;
-  };
-  // منظومة الضرائب العامة (الساب / كبار الممولين / البوابة الإلكترونية)
-  sapTaxPortal?: {
-    username?: string;
-    password?: string;
-    pinOtp?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    notes?: string;
-  };
-  sapPortal?: {
-    username?: string;
-    password?: string;
-    pinOtp?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    notes?: string;
-  };
-  // منظومة ضريبة المرتبات والأجور (كسب العمل)
-  payrollTaxPortal?: {
-    username?: string;
-    password?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    notes?: string;
-  };
-  etaGeneralTax?: {
-    username?: string;
-    password?: string;
-    pinOtp?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    notes?: string;
-  };
-  etaPayrollTax?: {
-    username?: string;
-    password?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    notes?: string;
-  };
-  // منظومة نافذة (الجمارك والتجارة الخارجية)
-  nafezaPortal?: {
-    username?: string;
-    password?: string;
-    tradeCode?: string;
-    expiryDate?: string;
-    notes?: string;
-  };
-  nafeza?: {
-    username?: string;
-    password?: string;
-    tradeCode?: string;
-    expiryDate?: string;
-    portalUrl?: string;
-    notes?: string;
-  };
-  // توكن الختم والتوقيع الإلكتروني (Egypt Trust, MCDR, Delta, etc.)
-  eSignatureToken?: {
-    provider?: string; // شركة إيجيبت ترست / مصر للمقاصة / دلتا
-    tokenType?: 'E_SEAL' | 'E_SIGNATURE' | 'BOTH'; // ختم إلكتروني / توقيع إلكتروني / الاثنين
-    pin?: string; // الرقم السري للتوكن (حقل موحد مشفر على السيرفر)
-    serialNumber?: string;
-    expiryDate?: string;
-    notes?: string;
-  };
-  // التأمينات الاجتماعية والعمل
-  socialInsurancePortal?: {
-    username?: string;
-    password?: string;
-    facilityNumber?: string;
-    expiryDate?: string;
-    notes?: string;
-  };
-}
-
-export type CompanyType = 'JOINT_STOCK' | 'LLC' | 'PARTNERSHIP' | 'SOLE_PROPRIETORSHIP' | 'INDIVIDUAL' | 'ONE_PERSON' | 'LIMITED_LIABILITY';
-
-export interface ClientArchiveRecord {
-  id: string;
-  clientCode: string; // e.g. "CL-0101"
-  name: string;
-  clientType: 'PRIMARY' | 'CASUAL'; // عميل أساسي للمكتب / عميل عابر
-  relationshipType?: ClientRelationshipType; // تصنيف العلاقة: دائم (Permanent) أو مؤقت (Temporary)
-  companyType: CompanyType;
-  commercialRegistrationNo: string;
-  taxCardNo: string;
-  taxOffice: string; // مأمورية الضرائب المختصة
-  incomeTaxFileNo: string;
-  vatRegistrationNo: string;
-  socialInsuranceNo: string;
-  // أنواع الضرائب الخاضع لها (اختيار متعدد في مصر)
-  taxTypes?: string[];
-  // تفاصيل الخضوع الضريبي والتأميني والمنظومة
-  taxSystemType?: 'SAP' | 'OLD_PORTAL' | 'ETA_INTEGRATED'; // المنظومة: ساب المدمجة / القديمة
-  isVatSubject?: boolean; // خاضع لضريبة القيمة المضافة؟
-  vatStatus?: 'STANDARD_14' | 'TABLE_TAX' | 'EXEMPT' | 'NOT_SUBJECT'; // نوع الخضوع للقيمة المضافة
-  isSocialInsuranceSubject?: boolean; // خاضع للتأمينات الاجتماعية؟
-  socialInsuranceOffice?: string; // مكتب التأمينات المختص
-  insuredWorkersCount?: number; // عدد العمالة المؤمن عليها
-  eInvoicingStatus?: 'MANDATED_STAGE' | 'REGISTERED' | 'EXEMPT' | 'E_RECEIPT'; // الموقف من الفاتورة والإيصال
-  eInvoicingStage?: string; // مرحلة الإلزام للفاتورة
-  isPayrollSubject?: boolean; // خاضع لضريبة كسب العمل (نموذج 4)
-  isWithholdingTaxSubject?: boolean; // خاضع لنظام الخصم والتحصيل تحت حساب الضريبة (نموذج 41)
-  capital: number;
-  partners: { name: string; sharePercentage: number; role: string; nationalId?: string }[];
-  contactPerson: string;
-  phone: string;
-  email: string;
-  address: string;
-  activity: string;
-  activityType?: string;
-  commercialName?: string;
-  legalForm?: string;
-  legalStructure?: string;
-  portalCredentials?: PortalCredentials; // بيانات الحسابات الحكومية والضرائب والساب ونافذة
-  folders?: ClientDocumentFolder[]; // المجلدات والتصنيفات للمستندات
-  documents: ClientDocument[];
-  procedures?: ClientProcedureTask[]; // السجل الإداري الشامل للإجراءات والمهام
-  tasksHistory?: { id: string; date: string; taskDescription: string; status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'; fees: number; treasuryTxId?: string }[];
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface OfficeTreasuryTransaction {
-  id: string;
-  voucherNumber: string; // e.g. "TR-2026-0045"
-  date: string;
-  type: 'INCOME_FEES' | 'EXPENSE_OFFICE' | 'EXPENSE_CLIENT_GOV_FEE' | 'PARTNER_DRAWINGS' | 'PETTY_CASH';
-  category: string; // أتعاب فحص ضريبي، أتعاب اعتماد ميزانية، رسوم استخراج سجل تجاري، مصاريف إدارية...
-  amount: number;
-  clientId?: string;
-  clientName?: string;
-  procedureId?: string; // معرف الإجراء المرتبط
-  procedureTitle?: string; // اسم الإجراء المرتبط
-  paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'INSTAPAY' | 'CHEQUE';
-  referenceNo?: string;
-  description: string;
-  recordedBy: string;
-  qrPayload?: string;
-  attachedFileUrl?: string;
-  createdAt: string;
-}
-
-export interface TaxDeclarationRecord {
-  id: string;
-  declarationType: 'VAT_10' | 'INCOME_27_CORP' | 'INCOME_28_INDIV' | 'PAYROLL_4' | 'WHT_41' | 'ANNUAL_PAYROLL_SETTLEMENT';
-  period: string; // e.g. "شهر يناير 2026", "الربع الأول 2026", "سنة 2025"
-  periodMonth?: string; // e.g. "2026-03"
-  taxYear: number;
-  clientId: string;
-  clientName: string;
-  dueDate: string;
-  submissionDate?: string;
-  status: 'DRAFT' | 'READY_TO_SUBMIT' | 'SUBMITTED_TO_ETA' | 'PAID' | 'OVERDUE' | 'APPROVED' | 'LATE';
-  // VAT Specifics
-  salesTaxableAmount?: number;
-  vatOutputTax?: number; // 14%
-  purchasesTaxableAmount?: number;
-  vatInputTax?: number; // ضريبة المدخلات المخصومة
-  netVatPayable?: number;
-  netVatDue?: number;
-  // VAT Balance & Nature specifics (الرصيد السابق والحالي وطبيعة الإقرار)
-  declarationNature?: 'STANDARD_14' | 'ZERO_RETURN' | 'TABLE_TAX' | 'EXEMPT' | 'EXPORT_ZERO';
-  previousCreditBalance?: number; // الرصيد الدائن السابق المرحل من الشهر الماضي
-  netCurrentPeriodTax?: number; // صافي ضريبة الفترة (مخرجات - مدخلات)
-  creditCarriedForward?: number; // الرصيد الدائن المرحل للشهر التالي
-  // Income / Payroll specifics
-  grossTaxableIncome?: number;
-  taxDue?: number;
-  totalTaxDue?: number;
-  whtDeducted?: number; // مسدد تحت حساب الضريبة
-  netTaxPayable?: number;
-  // Amendment fields (إقرار أصلي أو معدل - مادة 33 قانون 206)
-  amendmentType?: 'ORIGINAL' | 'AMENDED';
-  originalDeclarationId?: string;
-  originalDeclarationRef?: string;
-  amendmentReason?: string;
-  amendmentDifferenceAmount?: number;
-  amendmentDate?: string;
-  receiptNumber?: string;
-  etaReferenceNumber?: string;
-  paymentProofUrl?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Invoices Harmonizer & Categorization Types (مجمع ومنسق فواتير المبيعات والمشتريات والإشعارات)
-export type InvoiceDocType = 'SALES' | 'PURCHASE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
-
-export type InvoiceNatureCategory = 
-  | 'GOODS_RAW'      // شراء بضاعة ومواد خام
-  | 'OPERATING_SERV' // خدمات لازمة للنشاط
-  | 'CAPITAL_ASSETS' // أصول ومعدات رأسمالية
-  | 'GA_SUPPLIES'    // مصروفات ومستلزمات عمومية
-  | 'IMPORT_GOODS'   // مشتريات استيرادية ACI
-  | 'GOODS_SALES'    // مبيعات سلع تجارية ومصنعة
-  | 'SERVICE_SALES'  // تأدية خدمات للغير
-  | 'TABLE_TAX'      // ضريبة جدول / مقاولات
-  | 'EXPORT';        // صادرات (سعر صفر%)
-
-export interface HarmonizedTaxInvoice {
-  id: string;
-  clientId: string;
-  clientName: string;
-  period: string; // e.g. "مارس 2026"
-  invoiceNumber: string;
-  invoiceDate: string;
-  docType: InvoiceDocType;
-  category: InvoiceNatureCategory;
-  partnerName: string;
-  partnerTaxId?: string;
-  itemDescription?: string;
-  taxableAmount: number;
-  taxRate: number; // 14, 5, 0
-  vatAmount: number;
-  whtAmount?: number; // 1%
-  totalAmount: number;
-  notes?: string;
-}
-
-export type CertificateBeneficiaryType = 'NATURAL_PERSON' | 'LEGAL_ENTITY'; // شخص طبيعي (فرد / مهنة حرة / موظف) | شخص اعتباري (شركة / منشأة)
-export type CertificateTemplateType = 
-  | 'INCOME_PROOF'            // إثبات صافي دخل سنوي / شهري
-  | 'FREELANCE_INCOME'        // إثبات صافي دخل مهن حرة واستشارات
-  | 'EMPLOYEE_ADDITIONAL_INC' // إثبات دخول إضافية واستثمارات للأفراد
-  | 'INVESTED_CAPITAL'        // رأس مال مستثمر وحجم أعمال
-  | 'FINANCIAL_SOLVENCY'      // ملاءة مالية وثروة
-  | 'AUDIT_COMPLIANCE'        // فحص ومراجعة حسابات وقوائم مالية
-  | 'REAL_ESTATE_INCOME'      // إثبات إيرادات عقارية واستثمارية
-  | 'CUSTOM_CERTIFICATE';     // شهادة مهنية عامة مخصصة الصياغة
-
-export interface ProfessionalCertificate {
-  id: string;
-  certificateNumber: string; // e.g. "CERT-2026-089"
-  certificateType: CertificateTemplateType;
-  verificationCode?: string;
-  registryStatus?: 'PENDING' | 'RECORDED' | 'FAILED';
-  customCertificateHeading?: string; // عنوان مخصص للشهادة (بدل العنوان الافتراضي)
-  beneficiaryType: CertificateBeneficiaryType; // نوع المستفيد (شخص طبيعي أو اعتباري)
-  issueDate: string;
-  clientId?: string;
-  clientName: string;
-  beneficiaryTitle?: string; // اللقب أو الصفة (مثل: السيد /، السيدة /، الدكتور /)
-  beneficiaryGender?: 'MALE' | 'FEMALE'; // ذكر أو أنثى لضبط الصياغة والتأنيث/التذكير
-  customIntroText?: string; // صيغة مخصصة للديباجة ومقدمة الشهادة
-  customBodyText?: string; // صيغة مخصصة لمتن الشهادة
-  customPreambleBasis?: string; // صيغة الفحص والاستناد المخصصة
-  customDeclarationPhrase?: string; // عبارة الإقرار المخصصة (نشهد ونقر بأن...)
-
-  nationalId?: string; // الرقم القومي (14 رقم) للأشخاص الطبيعيين
-  jobTitle?: string; // المهنة / الوظيفة الحالية للأشخاص الطبيعيين
-  address?: string; // محل الإقامة أو المقر
-  commercialRegNo?: string; // السجل التجاري (للشركات والأنشطة الفردية)
-  taxCardNo?: string; // البطاقة الضريبية إن وجدت
-  activityName?: string; // اسم المنشأة / جهة العمل / طبيعة النشاط
-  recipientEntity: string; // e.g. "بنك مصر - قطاع التمويل العقاري والائتمان", "سفارة...", "الهيئة العامة للاستثمار"
-  purpose: string;
-  periodText: string; // e.g. "عن السنة المالية المنتهية في 31 ديسمبر 2025" أو "عن متوسط الدخل الشهري لعام 2025"
-  certifiedAmount: number; // المبلغ المعتمد الرئيسي
-  monthlyAmount?: number; // المعادل الشهري إن وجد
-  annualNetIncome?: number; // صافي الدخل السنوي
-  monthlyNetIncome?: number; // صافي الدخل الشهري
-  
-  // Invested Capital & Business Size specifics
-  investedCapitalAmount?: number; // إجمالي رأس المال المستثمر
-  paidCapitalAmount?: number; // رأس المال المصدر والمدفوع
-  authorizedCapitalAmount?: number; // رأس المال المرخص به
-  annualTurnoverAmount?: number; // حجم الأعمال / الإيرادات السنوية
-  fixedAssetsValue?: number; // صافي الأصول الثابتة المستثمرة
-  workingCapitalAmount?: number; // رأس المال العامل
-  bankDepositBank?: string; // اسم البنك المودع به رأس المال
-  bankDepositAccount?: string; // رقم الحساب أو الشهادة البنكية
-  shareholdersEquity?: number; // صافي حقوق الملكية
-
-  // Financial Solvency & Audit Compliance specifics
-  solvencyNetWorth?: number; // صافي الثروة / الملاءة
-  totalAssets?: number; // إجمالي الأصول
-  totalLiabilities?: number; // إجمالي الالتزامات
-  currentRatio?: number; // نسبة التداول
-  netProfitAmount?: number; // صافي الربح السنوي
-
-  // Table options & Breakdown
-  showBreakdownTable?: boolean; // إظهار أو إخفاء جدول التحليل والتفصيل
-  breakdownTableTitle?: string; // عنوان جدول التحليل (مثال: بيان عناصر رأس المال المستثمر)
-  breakdownColumnName?: string; // تسمية عمود البند (مثال: عنصر رأس المال / مصدر الدخل)
-  breakdownAmountName?: string; // تسمية عمود المبلغ (مثال: القيمة المستثمرة / الإيراد السنوي)
-  breakdownNoteName?: string; // تسمية عمود البيان أو النسبة
-  incomeBreakdown?: { source: string; amount: number; monthlyEquivalent?: number; notes?: string }[]; // تفصيل عناصر الدخل أو رأس المال
-
-  // Display toggles
-  showFinancialMetricsCards?: boolean; // إظهار كروت المؤشرات الفرعية في الشهادة
-  showTaxId?: boolean; // إظهار البطاقة الضريبية
-  showCommercialReg?: boolean; // إظهار السجل التجاري
-
-  
-  auditorNotes: string;
-  
-  qrPayload: string;
-  securityHash: string;
-  printedCount: number;
-  createdAt: string;
-}
-
-export interface InvoiceItem {
-  id: string;
-  itemType?: 'EGS' | 'GS1'; // نظام التكويد المصري أو الدولي
-  itemCode: string; // e.g. "EG-100200300-ITM01" or "6221234567890"
-  description: string;
-  unitType?: string; // EA (قطعة), C62 (وحدة), KGM (كجم), MTR (متر), JOB (خدمة/عملية), HUR (ساعة)
-  quantity: number;
-  unitPrice: number;
-  discountRate: number; // %
-  discountAmount?: number;
-  vatRate: number; // usually 14%
-  whtRate: number; // usually 1% or 0%
-  totalBeforeTax: number;
-  salesTotal?: number;
-  vatAmount: number;
-  whtAmount: number;
-  netTotal: number;
-}
-
-export type EtaDocumentType = 'I' | 'C' | 'D' | 'R'; // Invoice (I), Credit Note (C), Debit Note (D), Receipt (R)
-export type EtaEnvironment = 'PREPROD' | 'PROD';
-export type EtaReceiverType = 'B' | 'P' | 'F'; // Business (B), Person/Individual (P), Foreigner (F)
-export type EtaSubmissionStatus = 'NOT_SUBMITTED' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'CANCELLED' | 'REJECTED';
-
-export interface EtaConfig {
-  environment: EtaEnvironment;
-  clientId: string;
-  clientSecret: string;
-  posSerial?: string; // لمعاملات الإيصال الإلكتروني POS
-  posOsVersion?: string;
-  issuerTaxRegNo: string; // الرقم الضريبي للمصدر
-  issuerName: string;
-  issuerActivityCode: string; // e.g. "6920" أنشطة المحاسبة والمراجعة القانونية
-  branchId: string; // "0" الفرع الرئيسي
-  country: string; // "EG"
-  governate: string; // "Cairo", "Giza", "Alexandria"...
-  regionCity: string;
-  street: string;
-  buildingNumber: string;
-  postalCode?: string;
-  tokenPin?: string;
-  tokenType: 'USB_TOKEN' | 'HSM' | 'SOFT_CERT' | 'SIMULATED';
-  tokenSubject?: string;
-  autoSubmitOnIssue: boolean;
-}
-
-export interface Invoice {
-  id: string;
-  invoiceNumber: string; // e.g. "INV-2026-012"
-  invoiceType: 'SALES' | 'PURCHASE' | 'OFFICE_SERVICE';
-  date: string;
-  dueDate?: string;
-  partnerId?: string;
-  clientId?: string;
-  partnerName: string;
-  partnerTaxNo?: string;
-  partnerNationalId?: string;
-  partnerCommercialReg?: string;
-  partnerAddress?: string;
-  receiverType?: EtaReceiverType;
-  receiverCountry?: string;
-  receiverGovernate?: string;
-  receiverCity?: string;
-  receiverStreet?: string;
-  receiverBuildingNumber?: string;
-  items: InvoiceItem[];
-  subtotal: number;
-  totalDiscount: number;
-  totalVat: number;
-  totalWht: number;
-  grandTotal: number;
-  paidAmount: number;
-  remainingAmount: number;
-  status: 'DRAFT' | 'ISSUED' | 'PAID' | 'PARTIAL' | 'CANCELLED';
-  paymentMethod: 'CASH' | 'CREDIT' | 'BANK' | 'INSTAPAY';
-  qrPayload: string;
-  currency?: CurrencyCode | string;
-  exchangeRate?: number;
-  notes?: string;
-  
-  // ETA Electronic Invoicing & e-Receipt SDK specific fields
-  isReceipt?: boolean; // هل هو إيصال إلكتروني B2C
-  etaDocumentType?: EtaDocumentType; // 'I' | 'C' | 'D' | 'R'
-  etaDocumentVersion?: '1.0' | '0.9';
-  etaStatus?: EtaSubmissionStatus;
-  etaUuid?: string; // المعرف الفريد الصادر من مصلحة الضرائب
-  etaLongId?: string;
-  etaSubmissionId?: string;
-  etaSubmissionDate?: string;
-  etaValidationErrors?: string[];
-  etaCanonicalHash?: string; // بصمة التشفير المعيارية SHA-256
-  etaSignatureValue?: string; // التوقيع الرقمي CAdES-BES
-  etaPublicUrl?: string; // رابط التحقق من المستند على بوابة المصلحة
-  
-  createdAt: string;
-}
-
-export interface FeasibilityStudy {
-  id: string;
-  studyCode: string;
-  projectName: string;
-  sector: string;
-  studyDate: string;
-  preparedFor: string;
-  investmentCosts: {
-    landAndBuildings: number;
-    machineryAndEquipment: number;
-    vehiclesAndTransportation: number;
-    furnitureAndFixtures: number;
-    preOperatingExpenses: number;
-    initialWorkingCapital: number;
-    contingencyReserve: number;
-    totalInvestment: number;
-  };
-  financingStructure: {
-    equityCapital: number;
-    bankLoans: number;
-    loanInterestRate: number; // %
-    loanRepaymentYears: number;
-  };
-  operatingCostsAnnual: {
-    rawMaterials: number;
-    salariesAndWages: number;
-    utilitiesAndEnergy: number;
-    maintenance: number;
-    marketingAndSales: number;
-    generalAndAdministrative: number;
-    annualDepreciation: number;
-    totalOperatingCosts: number;
-  };
-  expectedRevenuesAnnual: {
-    year1: number;
-    year2: number;
-    year3: number;
-    year4: number;
-    year5: number;
-  };
-  financialMetrics: {
-    breakEvenSales: number;
-    breakEvenPercentage: number;
-    paybackPeriodYears: number;
-    netPresentValue: number; // NPV
-    internalRateOfReturn: number; // IRR %
-    averageNetProfitMargin: number; // %
-    averageRoi: number; // %
-  };
-  conclusionsAndRecommendations: string;
-  createdAt: string;
-}
-
-export interface CreditModelSimulation {
-  id: string;
-  modelName: string;
-  targetSales: number;
-  sector: string;
-  targetNetMargin: number; // %
-  costOfGoodsSold: number;
-  grossProfit: number;
-  operatingExpenses: number;
-  ebitda: number;
-  depreciation: number;
-  financeCosts: number;
-  incomeTax: number;
-  netProfit: number;
-  currentAssets: {
-    cashAndBanks: number;
-    accountsReceivable: number;
-    inventory: number;
-    prepayments: number;
-    total: number;
-  };
-  nonCurrentAssets: {
-    fixedAssetsNet: number;
-    projectsUnderConstruction: number;
-    total: number;
-  };
-  totalAssets: number;
-  currentLiabilities: {
-    accountsPayable: number;
-    shortTermBankFacilities: number;
-    accrualsAndTaxLiabilities: number;
-    total: number;
-  };
-  longTermLiabilities: {
-    longTermBankLoans: number;
-    total: number;
-  };
-  equity: {
-    paidCapital: number;
-    legalReserve: number;
-    retainedEarnings: number;
-    currentNetIncome: number;
-    total: number;
-  };
-  totalLiabilitiesAndEquity: number;
-  ratios: {
-    grossMarginPct: number;
-    netMarginPct: number;
-    currentRatio: number;
-    quickRatio: number;
-    debtToEquity: number;
-    receivablesTurnoverDays: number;
-    inventoryTurnoverDays: number;
-  };
-  auditorOpinion: string;
-  createdAt: string;
-}
-
-export interface OfficeProfile {
-  firmName: string;
-  name?: string; // alias for firmName
-  officeName?: string; // alias for firmName
-  firmNameArabic?: string; // alias for firmName
-  auditorName: string;
-  title: string;
-  licenseNumber: string; // رقم القيد بسجل المحاسبين والمراجعين بوزارة المالية
-  taxAuthorityLicense?: string;
-  taxAuthorityRegNo: string;
-  phone: string;
-  mobile: string;
-  email: string;
-  address: string; // العنوان المجمع أو الافتراضي
-  mainOfficeAddress?: string; // عنوان المكتب الرئيسي (ميدان النافورة الدور الرابع مركز الحسينية الشرقية)
-  showMainOfficeAddress?: boolean; // خيار إظهار أو إخفاء عنوان المكتب الرئيسي
-  branchOfficeAddress?: string; // عنوان الفرع (المباركية مول مدينة العاشر من رمضان الشرقية)
-  showBranchOfficeAddress?: boolean; // خيار إظهار أو إخفاء عنوان الفرع
-  mainOfficeTitle?: string;
-  branchOfficeTitle?: string;
-  showOfficePhones?: boolean;
-  showLogo?: boolean;
-  logoType?: 'MOHAMED_GAMIL_GOLD' | 'EGYPT_EMBLEM' | 'CUSTOM_UPLOAD' | 'NONE';
-  headerStyle?: 'standard' | 'formal-classic' | 'two-column' | 'compact';
-  logoUrl?: string;
-  stampUrl?: string;
-  publicDomainUrl?: string; // رابط النطاق العام للتحقق المباشر من الـ QR
-  systemSerial?: string; // سريال المنظومة الرئيسي المشفر
-  activationKey?: string; // كود التفعيل والترخيص الرقمي
-  notes?: string;
-  defaultTaxEnabled?: boolean; // هل تطبق ضريبة القيمة المضافة افتراضياً
-  defaultTaxRate?: number; // النسبة الافتراضية لضريبة القيمة المضافة %
-  defaultWhtEnabled?: boolean; // هل يطبق خصم الأرباح التجارية أ.ت.ص افتراضياً
-  defaultWhtRate?: number; // النسبة الافتراضية للخصم %
-  sendClientDataToGemini?: boolean; // إرسال بيانات العميل لـ Gemini (مطفأ افتراضياً)
-}
-
-// Tax Mandates & Task Scheduler Types
-export type TaxMandateType =
-  | 'VAT_10'
-  | 'INCOME_27_CORP'
-  | 'INCOME_28_INDIV'
-  | 'PAYROLL_4'
-  | 'ANNUAL_PAYROLL'
-  | 'WHT_41'
-  | 'STAMP_TAX'
-  | 'REAL_ESTATE_TAX'
-  | 'TAX_AUDIT_SESSION'
-  | 'OTHER';
-
-export type TaxMandateStatus =
-  | 'NOT_STARTED'
-  | 'COLLECTING_DOCS'
-  | 'RECONCILING'
-  | 'READY_TO_SUBMIT'
-  | 'SUBMITTED'
-  | 'PAID'
-  | 'OVERDUE';
-
-export interface TaxMandateTask {
-  id: string;
-  mandateCode: string; // e.g. "TAX-MAND-2026-001"
-  clientId: string;
-  clientName: string;
-  mandateTitle: string; // e.g. "إقرار ضريبة القيمة المضافة لشهر يناير 2026"
-  taxType: TaxMandateType;
-  periodName: string; // "شهر يناير 2026", "الربع الأول 2026"
-  taxYear: number;
-  deadlineDate: string; // YYYY-MM-DD
-  reminderDaysBefore: number;
-  assignedTo: string;
-  status: TaxMandateStatus;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  estimatedTaxAmount?: number;
-  actualTaxAmount?: number;
-  receiptNumber?: string;
-  etaSubmissionRef?: string;
-  etaReferenceNumber?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Multi-User Access Control (RBAC)
-export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT' | 'SECRETARY' | 'PENDING';
-
-export type BrandColor = 'blue' | 'emerald' | 'indigo' | 'slate' | 'amber';
-export type ThemeMode = 'light' | 'dark' | 'system';
 export type AppLanguage = 'ar' | 'en';
-
-export interface ReportLayoutConfig {
-  paperSize: 'A4' | 'LETTER' | 'LEGAL';
-  orientation: 'PORTRAIT' | 'LANDSCAPE';
-  margins: 'DEFAULT' | 'NARROW' | 'WIDE' | 'NONE';
-  includeLetterhead?: boolean;
-  includeStamp?: boolean;
-  includeQr?: boolean;
-}
-
-export type StandardReportType =
-  | 'TRIAL_BALANCE'
-  | 'BALANCE_SHEET'
-  | 'INCOME_STATEMENT'
-  | 'UNIFIED_FINANCIAL_REPORT'
-  | 'AUDITOR_REPORT'
-  | 'INVOICE'
-  | 'TAX_DECLARATION'
-  | 'CERTIFICATE'
-  | 'CREDIT_DOSSIER'
-  | 'FEASIBILITY_STUDY';
-
-export interface PrintSettings {
-  paperSize: 'A4' | 'LETTER' | 'LEGAL';
-  orientation: 'PORTRAIT' | 'LANDSCAPE' | 'AUTO';
-  quality: 'HIGH' | 'DRAFT';
-  margins: 'DEFAULT' | 'NARROW' | 'WIDE' | 'NONE';
-  includeLetterhead: boolean;
-  includeOfficeTaxInfo: boolean;
-  includeQrVerification: boolean;
-  includeSignatureStamp: boolean;
-  autoPrintDelayMs: number; // تأخير زمني بالملي ثانية للتأكد من ريندر الـ DOM كاملاً قبل الطباعة
-  showPreviewModalByDefault: boolean;
-  // نظام التحكم المتقدم في الـ QR وأساليب الطباعة والتصدير
-  qrMode?: 'OFFLINE_TEXT' | 'URL_LINK'; // نمط الـ QR: بطاقة نصية أوفلاين معتمدة أو رابط ويب
-  qrSizePx?: number; // حجم رمز الـ QR بالبكسل (90, 115, 135)
-  stampStyle?: 'CIRCULAR_SEAL' | 'RECTANGLE_FORMAL' | 'SIGNATURE_ONLY'; // نمط الختم
-  showPageNumbers?: boolean; // إظهار ترقيم الصفحات
-  showDocumentTimestamp?: boolean; // إظهار ختم التوقيت الرقمي وتاريخ الطباعة
-  watermark?: 'NONE' | 'DRAFT' | 'OFFICIAL' | 'CONFIDENTIAL'; // العلامة المائية للطباعة
-  inkSaver?: boolean; // نمط توفير الحبر (أبيض وأسود عالي التباين)
-  // تخصيص الترويسة والشعار وتنسيقات كل تقرير
-  headerStyle?: 'standard' | 'formal-classic' | 'two-column' | 'compact';
-  headerColorTheme?: 'navy' | 'emerald' | 'indigo' | 'gold' | 'slate';
-  logoPosition?: 'RIGHT' | 'CENTER' | 'LEFT';
-  logoSizePx?: number; // 48, 64, 80
-  reportDefaults?: Partial<Record<StandardReportType, ReportLayoutConfig>>;
-}
-
-export interface SapApiConfig {
-  id: string;
-  companyId?: string;
-  companyName: string;
-  hostUrl: string; // e.g. https://sap.example.com:50000
-  odataServicePath: string; // e.g. /sap/opu/odata/sap/API_FINANCIAL_POSTING_SRV
-  clientNumber?: string; // e.g. 100
-  username: string;
-  password?: string;
-  apiToken?: string;
-  companyCode: string; // e.g. 1000
-  chartOfAccountsCode?: string;
-  isActive: boolean;
-  autoSyncIntervalMinutes?: number;
-  lastSyncTimestamp?: string;
-  lastSyncStatus?: 'SUCCESS' | 'FAILED' | 'NEVER';
-  lastSyncMessage?: string;
-}
-
-export interface ExcelImportAuditLog {
-  id: string;
-  timestamp: string;
-  fileName: string;
-  fileSize?: string;
-  importType: 'JOURNAL_ENTRIES' | 'GENERAL_LEDGER' | 'CHART_OF_ACCOUNTS' | 'TRIAL_BALANCE' | 'BANK_STATEMENT';
-  importedBy: string;
-  entriesAddedCount: number;
-  linesCount: number;
-  totalAmount: number;
-  companyId?: string;
-  companyName?: string;
-  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
-  details?: string;
-}
-
-export interface CustomFirebaseConfig {
-  projectId: string;
-  appId: string;
-  apiKey: string;
-  authDomain?: string;
-  firestoreDatabaseId?: string;
-  storageBucket?: string;
-  messagingSenderId?: string;
-  isCustomActive: boolean;
-}
-
-export interface UserPreferences {
-  themeMode: ThemeMode;
-  brandColor: BrandColor;
-  language?: AppLanguage;
-  reportingCurrency?: CurrencyCode; // عملة التقرير والعرض (افتراضياً EGP)
-  baseCurrency?: CurrencyCode;      // العملة الوظيفية للمنشأة (افتراضياً EGP)
-  compactView?: boolean;
-  securityAuthEnabled?: boolean; // تفعيل أو إلغاء التحقق بالرقم السري عند التعديل
-  customEditPassword?: string;   // كلمة المرور المخصصة للتعديل
-  defaultSettlementAccountId?: string; // حساب التسوية / الفروق المعلقة للإصلاح التلقائي للقيد
-  printSettings?: PrintSettings;
-  sapConfigs?: SapApiConfig[];
-  excelImportLogs?: ExcelImportAuditLog[];
-  customFirebaseConfig?: CustomFirebaseConfig;
-}
-
-export type FixedAssetCategory =
-  | 'BUILDINGS'              // مباني وإنشاءات (5% قسط ثابت)
-  | 'MACHINERY_EQUIPMENT'   // آلات ومعدات وماكينات (أساس إهلاك 25% مع إمكانية 30% معجل)
-  | 'VEHICLES'              // سيارات ووسائل نقل وانتقال (أساس إهلاك 25%)
-  | 'FURNITURE_FIXTURES'    // أثاث وتجهيزات ومفروشات مكتبية (أساس إهلاك 25%)
-  | 'COMPUTERS_SOFTWARE'    // حواسب آلية وبرامج ونظم معلومات (أساس إهلاك 50%)
-  | 'INTANGIBLE_ASSETS'     // أصول غير ملموسة وشهرة وبراءات (10% قسط ثابت)
-  | 'LANDS';                // أراضي (لا تهلك)
-
-export type DepreciationMethod =
-  | 'STRAIGHT_LINE'         // القسط الثابت
-  | 'DECLINING_BALANCE'     // القسط المتناقص
-  | 'SUM_OF_YEARS_DIGITS'   // مجموع أرقام السنوات
-  | 'TAX_LAW_91';           // معايير مصلحة الضرائب المصرية (قانون 91 لسنة 2005)
-
-export type AssetStatus = 'ACTIVE' | 'DISPOSED' | 'FULLY_DEPRECIATED' | 'UNDER_MAINTENANCE';
-
-export interface DepreciationHistoryRecord {
-  year: number;
-  month?: number;
-  periodLabel: string;
-  openingBookValue: number;
-  depreciationAmount: number;
-  accumulatedDepreciation: number;
-  closingBookValue: number;
-  taxDepreciationAmount?: number;
-  temporaryTaxDifference?: number;
-  isPostedToJournal?: boolean;
-  journalEntryId?: string;
-  date: string;
-}
-
-export interface FixedAsset {
-  id: string;
-  assetCode: string; // e.g. "AST-2026-001"
-  name: string;      // e.g. "خادم رئيسي Dell PowerEdge + خوادم سحابية"
-  category: FixedAssetCategory;
-  purchaseDate: string; // YYYY-MM-DD
-  operationDate: string; // YYYY-MM-DD (تاريخ بدء الاستخدام والتشغيل)
-  acquisitionCost: number; // تكلفة الاقتناء والشراء
-  scrapValue: number; // القيمة التخريدية المقدرة (الخردة)
-  usefulLifeYears: number; // العمر الإنتاجي بالسنوات
-  accountingDepreciationRate: number; // نسبة الإهلاك المحاسبي السنوية %
-  depreciationMethod: DepreciationMethod;
-  
-  // Egyptian Tax Law (قانون 91 لسنة 2005)
-  taxDepreciationRate: number; // نسبة الإهلاك الضريبي القانونية %
-  isEligibleForAcceleratedDepreciation?: boolean; // إهلاك معجل 30% للآلات والمعدات الجديدة
-  acceleratedDepreciationClaimed?: boolean;
-  
-  // Tracking & Custody (العهدة والموقع)
-  location?: string; // e.g. "الفرع الرئيسي - غرفة السيرفرات"
-  custodian?: string; // e.g. "م. حسام الدين عبد المجيد"
-  costCenter?: string; // e.g. "الإدارة العامة وتقنية المعلومات"
-  invoiceRef?: string; // رقم الفاتورة أو المستند
-  serialNumber?: string; // الرقم التسلسلي للأصل
-  
-  // Accounts Mapping (ربط الحسابات المصرية)
-  assetAccountId: string; // كود حساب الأصل (e.g. "122" أصول ثابتة)
-  depreciationExpenseAccountId: string; // كود حساب مصروف الإهلاك (e.g. "334")
-  accumulatedDepreciationAccountId: string; // كود حساب مجمع الإهلاك (e.g. "231" أو الحساب المقابل)
-  
-  // Current Balances (الأرصدة اللحظية)
-  currentAccumulatedDepreciation: number; // مجمع الإهلاك الحالي
-  currentBookValue: number; // صافي القيمة الدفترية الحالية
-  status: AssetStatus;
-  
-  // Disposal Info (في حالة البيع أو الاستبعاد أو التكهين)
-  disposalDate?: string;
-  disposalAmount?: number;
-  disposalReason?: string;
-  capitalGainLoss?: number;
-  
-  depreciationSchedule?: DepreciationHistoryRecord[];
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type ThemeMode = 'light' | 'dark' | 'system';
+export type BrandColor = 'emerald' | 'blue' | 'indigo' | 'amber' | 'slate';
+export type CurrencyCode = 'EGP' | 'USD' | 'EUR' | 'GBP' | 'SAR' | 'AED' | 'KWD' | string;
+export type UserRole = 'ADMIN' | 'AUDITOR' | 'ACCOUNTANT' | 'TAX_SPECIALIST' | 'SECRETARY' | 'VIEWER' | 'PENDING' | string;
 
 export type NavigationTab =
   | 'DASHBOARD'
-  | 'MOBILE_COMPANION'
-  | 'MULTI_TENANT_WORKSPACES'
   | 'ACCOUNTING_HUB'
-  | 'FINANCIAL_REPORTING_HUB'
-  | 'TAX_AUDIT_HUB'
-  | 'OFFICE_HUB'
-  | 'AUDIT_SECURITY_HUB'
   | 'CHART_OF_ACCOUNTS'
   | 'JOURNAL_ENTRIES'
-  | 'CURRENCY_EXCHANGE_RATES'
   | 'GENERAL_LEDGER'
   | 'TRIAL_BALANCE'
   | 'FILE_REVIEW'
   | 'FIXED_ASSETS'
   | 'BANK_RECONCILIATION'
+  | 'CURRENCY_EXCHANGE_RATES'
   | 'OCR_INVOICE_SCANNER'
+  | 'AUDIT_WORKING_PAPERS'
+  | 'FINANCIAL_REPORTING_HUB'
   | 'FINANCIAL_STATEMENTS'
+  | 'ANNUAL_FINANCIAL_DOSSIER'
   | 'FINANCIAL_DOSSIER_GENERATOR'
-  | 'BUDGET_PLANNER'
   | 'FINANCIAL_NOTES'
   | 'AUDITOR_REPORT'
   | 'FINANCIAL_SIMULATOR'
-  | 'AUDIT_WORKING_PAPERS'
-  | 'JOURNAL_AUDIT_SCANNER'
-  | 'FRAUD_AUDIT_SENTINEL'
-  | 'AUDIT_CONSISTENCY_SENTINEL'
-  | 'CASH_FLOW_PREDICTOR'
-  | 'CREDIT_SIMULATOR'
-  | 'TAX_EXPOSURE_SIMULATOR'
-  | 'TAX_PENALTY_SIMULATOR'
-  | 'ETA_RECONCILIATION'
-  | 'PAYROLL_INSURANCE'
-  | 'OFFICE_TREASURY'
-  | 'CLIENTS_ARCHIVE'
-  | 'PRACTICE_MANAGEMENT'
-  | 'WHATSAPP_BOT'
-  | 'TAX_TRACKER'
-  | 'TAX_FILING_CELLS'
   | 'CERTIFICATES'
   | 'FEASIBILITY_STUDY'
-  | 'INVOICING'
-  | 'CUSTOMS_SHIPMENTS'
-  | 'SAP_ERP'
-  | 'AUDIT_TRAIL'
-  | 'EXCEL_AUDIT_SENTINEL'
   | 'CREDIT_HUB'
+  | 'CREDIT_SIMULATOR'
   | 'QUICK_BANK_DOSSIER'
   | 'CREDIT_DOSSIER_REGISTRY'
   | 'FINANCIAL_PLANNING_HUB'
+  | 'BUDGET_PLANNER'
   | 'BUDGET_AND_CASHFLOW'
-  | 'AUDIT_TOOLS_HUB';
+  | 'CASH_FLOW_PREDICTOR'
+  | 'AUDIT_TOOLS_HUB'
+  | 'EXCEL_AUDIT_SENTINEL'
+  | 'FRAUD_AUDIT_SENTINEL'
+  | 'JOURNAL_AUDIT_SCANNER'
+  | 'TAX_AUDIT_HUB'
+  | 'TAX_TRACKER'
+  | 'TAX_FILING_CELLS'
+  | 'TAX_PENALTY_SIMULATOR'
+  | 'TAX_EXPOSURE_SIMULATOR'
+  | 'ETA_RECONCILIATION'
+  | 'PAYROLL_INSURANCE'
+  | 'AUDIT_CONSISTENCY_SENTINEL'
+  | 'OFFICE_HUB'
+  | 'CLIENTS_ARCHIVE'
+  | 'PRACTICE_MANAGEMENT'
+  | 'WHATSAPP_BOT'
+  | 'OFFICE_TREASURY'
+  | 'AUDIT_SECURITY_HUB'
+  | 'AUDIT_TRAIL'
+  | 'INVOICING'
+  | 'SAP_ERP'
+  | 'CUSTOMS_HUB'
+  | 'CUSTOMS_SHIPMENTS'
+  | 'CUSTOMS_LANDED_COST'
+  | 'CUSTOMS_NAFEZA_ACI'
+  | 'MOBILE_COMPANION'
+  | 'MULTI_TENANT_WORKSPACES'
+  | 'MG_DESIGNER'
+  | string;
 
-// Bank Reconciliation Interfaces
+export type AccountCategory =
+  | 'ASSETS'
+  | 'LIABILITIES'
+  | 'EQUITY'
+  | 'REVENUES'
+  | 'EXPENSES'
+  | 'ASSET'
+  | 'LIABILITY'
+  | 'REVENUE'
+  | 'EXPENSE'
+  | string;
+
+export type AccountNature = 'DEBIT' | 'CREDIT';
+
+export interface Account {
+  id: string;
+  code: string;
+  name: string;
+  nameEn?: string;
+  category: AccountCategory;
+  nature: AccountNature;
+  level: number;
+  parentId?: string;
+  parentCode?: string;
+  openingBalanceDebit: number;
+  openingBalanceCredit: number;
+  currentDebit?: number;
+  currentCredit?: number;
+  currentBalance?: number;
+  isSystem?: boolean;
+  isActive?: boolean;
+  clientId?: string;
+  currency?: CurrencyCode;
+  subType?: string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface JournalEntryLine {
+  id: string;
+  accountId?: string;
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  description?: string;
+  costCenter?: string;
+  currency?: CurrencyCode;
+  exchangeRate?: number;
+  foreignDebit?: number;
+  foreignCredit?: number;
+  taxCode?: string;
+  clientId?: string;
+  [key: string]: any;
+}
+
+export interface JournalEntry {
+  id: string;
+  entryNumber: string | number;
+  date: string;
+  description: string;
+  referenceNumber?: string;
+  documentType?: string;
+  lines: JournalEntryLine[];
+  isPosted?: boolean;
+  status?: 'DRAFT' | 'POSTED' | 'CANCELLED' | string;
+  postedAt?: string;
+  postedBy?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  fiscalYear?: number;
+  clientId?: string;
+  clientName?: string;
+  currency?: CurrencyCode;
+  exchangeRate?: number;
+  source?: string;
+  sourceInvoiceId?: string;
+  isAutoGenerated?: boolean;
+  attachments?: string[];
+  notes?: string;
+  [key: string]: any;
+}
+
+export type CompanyType =
+  | 'SOLE_PROPRIETORSHIP'
+  | 'PARTNERSHIP'
+  | 'LIMITED_LIABILITY'
+  | 'JOINT_STOCK'
+  | 'ONE_PERSON_COMPANY'
+  | 'FREELANCER'
+  | 'OTHER'
+  | string;
+
+export type ClientRelationshipType =
+  | 'ANNUAL_CONTRACT'
+  | 'MONTHLY_BOOKKEEPING'
+  | 'TAX_ONLY'
+  | 'CONSULTATION_CASE'
+  | 'AUDIT_ONLY'
+  | string;
+
+export type ProcedureCategory =
+  | 'TAX_INSPECTION'
+  | 'COMPANY_INCORPORATION'
+  | 'COMMERCIAL_REGISTER'
+  | 'VAT_REGISTRATION'
+  | 'E_INVOICING'
+  | 'SOCIAL_INSURANCE'
+  | 'INDUSTRIAL_REGISTER'
+  | 'BANK_CREDIT_FILE'
+  | 'ANNUAL_AUDIT'
+  | 'OTHER'
+  | string;
+
+export type ProcedureStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED' | 'CANCELLED' | string;
+
+export interface ClientProcedureTask {
+  id: string;
+  title: string;
+  category: ProcedureCategory;
+  status: ProcedureStatus;
+  assignedTo?: string;
+  startDate?: string;
+  dueDate?: string;
+  completedDate?: string;
+  agreedFee?: number;
+  paidFee?: number;
+  governmentExpenses?: number;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface PortalCredentialEntry {
+  username?: string;
+  email?: string;
+  password?: string;
+  pinCode?: string;
+  tokenPin?: string;
+  tokenSerial?: string;
+  tokenType?: string;
+  expiryDate?: string;
+  issuer?: string;
+  registeredMobile?: string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface PortalCredentials {
+  id?: string;
+  portalName?: string;
+  portalType?: 'ETA_CORE' | 'E_INVOICE' | 'E_RECEIPT' | 'SAP_PORTAL' | 'INSURANCE' | 'GAFI' | 'OTHER' | string;
+  username?: string;
+  email?: string;
+  password?: string;
+  pinCode?: string;
+  tokenPin?: string;
+  tokenSerial?: string;
+  tokenType?: string;
+  expiryDate?: string;
+  subscriptionStatus?: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | string;
+  registeredMobile?: string;
+  notes?: string;
+  etaEInvoicing?: PortalCredentialEntry;
+  eSignatureToken?: PortalCredentialEntry;
+  sapPortal?: PortalCredentialEntry;
+  sapTaxPortal?: PortalCredentialEntry;
+  etaGeneralTax?: PortalCredentialEntry;
+  etaPayrollTax?: PortalCredentialEntry;
+  nafeza?: PortalCredentialEntry;
+  socialInsurancePortal?: PortalCredentialEntry;
+  [key: string]: any;
+}
+
+export type ClientDocumentCategory =
+  | 'TAX_CARD'
+  | 'COMMERCIAL_REGISTER'
+  | 'COMPANY_CONTRACT'
+  | 'VAT_CERTIFICATE'
+  | 'TAX_RETURN'
+  | 'FINANCIAL_STATEMENT'
+  | 'INVOICE'
+  | 'POWER_OF_ATTORNEY'
+  | 'INSURANCE'
+  | 'OTHER'
+  | string;
+
+export interface ClientDocumentFolder {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  createdAt: string;
+  color?: string;
+  icon?: string;
+  [key: string]: any;
+}
+
+export interface ClientDocument {
+  id: string;
+  clientId?: string;
+  folderId?: string | null;
+  title?: string;
+  name?: string;
+  fileName?: string;
+  category?: ClientDocumentCategory;
+  documentType?: string;
+  fileType?: string;
+  mimeType?: string;
+  fileSize?: number | string;
+  uploadDate?: string;
+  uploadedAt?: string;
+  expiryDate?: string;
+  issueDate?: string;
+  documentNumber?: string;
+  dataUrl?: string;
+  fileDataUrl?: string;
+  fileUrl?: string;
+  serverDocumentId?: string;
+  notes?: string;
+  tag?: string;
+  tags?: string[];
+  [key: string]: any;
+}
+
+export interface ClientArchiveRecord {
+  id: string;
+  code: string;
+  name: string;
+  nameEn?: string;
+  taxId: string;
+  taxCardNo?: string;
+  taxRegistrationNumber?: string;
+  commercialRegister: string;
+  commercialRegNo?: string;
+  incomeTaxFileNo?: string;
+  vatRegNo?: string;
+  legalForm?: CompanyType;
+  companyType?: CompanyType;
+  relationshipType?: ClientRelationshipType;
+  industry?: string;
+  activityType?: string;
+  taxOffice?: string;
+  vatTaxOffice?: string;
+  address?: string;
+  phone?: string;
+  whatsappPhone?: string;
+  email?: string;
+  contactPerson?: string;
+  nationalId?: string;
+  capitalAmount?: number;
+  paidUpCapital?: number;
+  incorporationDate?: string;
+  commercialRegisterExpiryDate?: string;
+  taxCardIssueDate?: string;
+  taxCardExpiryDate?: string;
+  vatRegistrationDate?: string;
+  eInvoiceRegistered?: boolean;
+  eReceiptRegistered?: boolean;
+  hasEsealToken?: boolean;
+  tokenSerial?: string;
+  tokenPin?: string;
+  tokenExpiryDate?: string;
+  tokenCustodyStatus?: 'IN_OFFICE' | 'WITH_CLIENT' | 'AT_AUTHORITY' | string;
+  tokenCustodyDate?: string;
+  tokenReceiverName?: string;
+  portalCredentials?: PortalCredentials;
+  taxPortalUsername?: string;
+  taxPortalPassword?: string;
+  eInvoicePortalEmail?: string;
+  eInvoicePortalPassword?: string;
+  folders?: ClientDocumentFolder[];
+  documents?: ClientDocument[];
+  procedures?: ClientProcedureTask[];
+  annualAgreedFees?: number;
+  paidFees?: number;
+  openingBalanceFees?: number;
+  isWithholdingTaxSubject?: boolean;
+  isVatRegistered?: boolean;
+  isPayrollTaxSubject?: boolean;
+  fiscalYearEndMonth?: number;
+  activeFiscalYear?: number;
+  assignedAccountant?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'UNDER_LIQUIDATION' | string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+export interface ClientFeeAgreement {
+  id: string;
+  clientId: string;
+  fiscalYear: number;
+  description: string;
+  amount: number;
+  dueDate?: string;
+  status: 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
+  createdAt?: string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface ClientFeeCollection {
+  id: string;
+  agreementId: string;
+  clientId: string;
+  amount: number;
+  paidAt: string;
+  method: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'INSTAPAY' | string;
+  receiptNo?: string;
+  treasuryTransactionId?: string;
+  notes?: string;
+  createdAt?: string;
+  [key: string]: any;
+}
+
+export type OpenItemKind = 'DOCUMENT' | 'INQUIRY' | 'ADJUSTMENT' | 'SIGNATURE' | string;
+export type OpenItemStatus = 'OPEN' | 'RESOLVED' | 'RECEIVED' | 'CLOSED';
+
+export interface OpenItem {
+  id: string;
+  clientId: string;
+  fiscalYear?: number;
+  kind: OpenItemKind;
+  text: string;
+  requestedAt: string;
+  resolvedAt?: string;
+  status: OpenItemStatus;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface ApprovedStatementsSnapshot {
+  id: string;
+  clientId: string;
+  fiscalYear: number;
+  version?: number;
+  versionNo?: number;
+  approvedAt: string;
+  approvedBy: string;
+  source: 'LEDGER' | 'EXCEL_REVIEW' | 'SIMULATOR' | string;
+  trialBalanceRows: any[];
+  incomeStatement: any;
+  balanceSheet: any;
+  cashFlow: any;
+  notes?: any[];
+  checklistStatus?: { ok?: boolean; ready?: boolean; missing?: string[]; items?: any[] };
+  verificationCode?: string;
+  notesComment?: string;
+  [key: string]: any;
+}
+
+export interface OfficeTreasuryTransaction {
+  id: string;
+  transactionNumber?: string;
+  date: string;
+  type: 'INCOME_FEES' | 'EXPENSE_OFFICE' | 'CLIENT_DEPOSIT' | 'GOV_EXPENSE_ON_BEHALF' | 'INCOME' | 'EXPENSE' | string;
+  category?: string;
+  amount: number;
+  clientId?: string;
+  clientName?: string;
+  feeCollectionId?: string;
+  agreementId?: string;
+  paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'INSTAPAY' | 'VODAFONE_CASH' | 'CHEQUE' | string;
+  referenceNumber?: string;
+  receiptNumber?: string;
+  description: string;
+  createdBy?: string;
+  createdAt?: string;
+  isPostedToGeneralLedger?: boolean;
+  notes?: string;
+  [key: string]: any;
+}
+
+export type InvoiceDocType = 'I' | 'C' | 'D' | string;
+export type EtaDocumentType = 'I' | 'C' | 'D' | string;
+export type InvoiceNatureCategory = 'GOODS' | 'SERVICES' | 'CONTRACTING' | 'CONSULTING' | 'ASSETS' | string;
+
+export interface InvoiceItem {
+  id: string;
+  itemCode: string;
+  gs1EgsCode?: string;
+  description: string;
+  unitType?: string;
+  quantity: number;
+  unitPrice: number;
+  discountRate: number;
+  discountAmount?: number;
+  vatRate: number;
+  whtRate: number;
+  tableTaxRate?: number;
+  totalBeforeTax: number;
+  vatAmount: number;
+  whtAmount: number;
+  tableTaxAmount?: number;
+  netTotal: number;
+  [key: string]: any;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  internalId?: string;
+  invoiceType: 'SALES' | 'PURCHASE' | 'RETURN_SALES' | 'RETURN_PURCHASE' | string;
+  documentType?: InvoiceDocType;
+  natureCategory?: InvoiceNatureCategory;
+  date: string;
+  dueDate?: string;
+  clientId?: string;
+  partnerName: string;
+  partnerTaxId?: string;
+  partnerAddress?: string;
+  currency?: CurrencyCode;
+  exchangeRate?: number;
+  items: InvoiceItem[];
+  subtotal: number;
+  totalDiscount: number;
+  totalVat: number;
+  totalWht: number;
+  totalTableTax?: number;
+  grandTotal: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: 'DRAFT' | 'ISSUED' | 'PAID' | 'PARTIALLY_PAID' | 'CANCELLED' | 'SUBMITTED_ETA' | string;
+  paymentMethod: 'CASH' | 'CREDIT' | 'BANK_TRANSFER' | 'CHEQUE' | string;
+  etaUuid?: string;
+  etaSubmissionId?: string;
+  etaStatus?: 'NOT_SENT' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'REJECTED' | 'CANCELLED' | string;
+  qrPayload?: string;
+  isPosted?: boolean;
+  journalEntryId?: string;
+  notes?: string;
+  createdAt?: string;
+  [key: string]: any;
+}
+
+export interface EtaConfig {
+  environment: 'PREPROD' | 'PROD';
+  clientId: string;
+  clientSecret?: string;
+  clientSecret1?: string;
+  clientSecret2?: string;
+  rin?: string;
+  companyName?: string;
+  branchCode?: string;
+  activityCode?: string;
+  issuerTaxRegNo?: string;
+  issuerName?: string;
+  issuerActivityCode?: string;
+  branchId?: string;
+  tokenPin?: string;
+  tokenCommonName?: string;
+  documentTypeVersion?: '0.9' | '1.0' | string;
+  posSerial?: string;
+  posOsVersion?: string;
+  isConnected?: boolean;
+  autoSubmitOnIssue?: boolean;
+  lastSyncAt?: string;
+  [key: string]: any;
+}
+
+export interface TaxDeclarationRecord {
+  id: string;
+  clientId?: string;
+  clientName?: string;
+  taxId?: string;
+  declarationType: 'VAT_MONTHLY_10' | 'WHT_QUARTERLY_41' | 'PAYROLL_QUARTERLY_4' | 'ANNUAL_INCOME_101' | 'ANNUAL_CORP_105' | 'DIVIDENDS' | string;
+  period: string;
+  fiscalYear: number;
+  dueDate: string;
+  submissionDate?: string;
+  salesOrRevenuesAmount: number;
+  purchasesOrCostsAmount: number;
+  outputTaxAmount: number;
+  inputTaxDeductible: number;
+  whtDeductedAmount?: number;
+  netTaxPayable: number;
+  creditCarriedForward?: number;
+  status: 'DRAFT' | 'READY_TO_SUBMIT' | 'SUBMITTED' | 'PAID' | 'AMENDED' | string;
+  etaReceiptNumber?: string;
+  paymentReference?: string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export type CertificateTemplateType =
+  | 'INCOME_PROOF'
+  | 'FREELANCE_INCOME'
+  | 'TAX_POSITION'
+  | 'CAPITAL_VERIFICATION'
+  | 'REVENUE_TURNOVER'
+  | 'EXPORT_SUBSIDY'
+  | 'SOLVENCY_CREDIT'
+  | 'CUSTOM'
+  | string;
+
+export type CertificateBeneficiaryType = 'NATURAL_PERSON' | 'LEGAL_ENTITY' | string;
+
+export interface ProfessionalCertificate {
+  id: string;
+  certificateNumber: string;
+  certificateType: CertificateTemplateType;
+  beneficiaryType: CertificateBeneficiaryType;
+  clientId?: string;
+  clientName: string;
+  taxId?: string;
+  commercialRegister?: string;
+  nationalId?: string;
+  address?: string;
+  activityDescription?: string;
+  recipientEntity: string;
+  purpose: string;
+  periodText: string;
+  certifiedAmount: number;
+  netProfitAmount?: number;
+  totalAssetsAmount?: number;
+  paidUpCapitalAmount?: number;
+  currency?: CurrencyCode;
+  issueDate: string;
+  expiryDate?: string;
+  auditorNotes: string;
+  qrPayload: string;
+  securityHash: string;
+  verificationCode?: string;
+  registryStatus?: 'PENDING' | 'RECORDED' | 'FAILED';
+  printedCount: number;
+  createdAt: string;
+  [key: string]: any;
+}
+
+export type FixedAssetCategory =
+  | 'LAND'
+  | 'BUILDINGS'
+  | 'MACHINERY'
+  | 'VEHICLES'
+  | 'COMPUTERS'
+  | 'FURNITURE'
+  | 'INTANGIBLE'
+  | 'OTHER'
+  | string;
+
+export type DepreciationMethod = 'STRAIGHT_LINE' | 'DECLINING_BALANCE' | 'TAX_ACCELERATED' | string;
+
+export interface FixedAsset {
+  id: string;
+  assetCode: string;
+  name: string;
+  category: FixedAssetCategory;
+  clientId?: string;
+  purchaseDate: string;
+  usageStartDate?: string;
+  purchaseCost: number;
+  capitalizedAdditions?: number;
+  salvageValue: number;
+  usefulLifeYears: number;
+  accountingDepreciationRate: number;
+  taxDepreciationRate: number;
+  depreciationMethod: DepreciationMethod;
+  accumulatedDepreciation: number;
+  netBookValue: number;
+  location?: string;
+  serialNumber?: string;
+  status: 'ACTIVE' | 'FULLY_DEPRECIATED' | 'DISPOSED' | 'UNDER_MAINTENANCE' | string;
+  disposalDate?: string;
+  disposalValue?: number;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface CustomsShipment {
+  id: string;
+  shipmentCode: string;
+  acidNumber: string;
+  clientId?: string;
+  importerName: string;
+  importerTaxId: string;
+  exporterName: string;
+  exporterCountry: string;
+  portOfArrival: string;
+  arrivalDate: string;
+  freeDaysAllowed: number;
+  containersCount: number;
+  containerDailyDemurrageEgp: number;
+  hsCode: string;
+  goodsDescription: string;
+  fobValueForeign: number;
+  freightValueForeign: number;
+  insuranceValueForeign: number;
+  currency: CurrencyCode;
+  customsExchangeRate: number;
+  cifValueEgp: number;
+  customsDutyRate: number;
+  customsDutyAmountEgp: number;
+  scheduleTaxRate?: number;
+  scheduleTaxAmountEgp?: number;
+  vatRate: number;
+  vatAmountEgp: number;
+  whtRate: number;
+  whtAmountEgp: number;
+  portAndClearanceExpensesEgp: number;
+  totalLandedCostEgp: number;
+  status: 'PRE_ARRIVAL_ACI' | 'AT_PORT_INSPECTION' | 'DUTIES_ASSESSED' | 'RELEASED' | 'DELIVERED_WAREHOUSE' | string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface DailyExchangeRateRecord {
+  id: string;
+  date: string;
+  currency: CurrencyCode;
+  baseCurrency: CurrencyCode;
+  buyRate: number;
+  sellRate: number;
+  officialRate: number;
+  source: 'CBE' | 'MANUAL' | 'BANK' | string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  code?: string;
+  name?: string;
+  rateToEgp?: number;
+  isBase?: boolean;
+  lastUpdated?: string;
+}
+
+export interface FeasibilityStudy {
+  id: string;
+  studyCode?: string;
+  projectName: string;
+  clientId?: string;
+  clientName?: string;
+  sector?: string;
+  initialInvestment: number;
+  workingCapital?: number;
+  discountRate: number;
+  taxRate?: number;
+  annualRevenueYear1?: number;
+  revenueGrowthRate?: number;
+  operatingExpenseRatio?: number;
+  npv?: number;
+  irr?: number;
+  paybackPeriodYears?: number;
+  roiPercent?: number;
+  createdAt: string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface OfficeProfile {
+  auditorName: string;
+  auditorNameEn?: string;
+  firmName: string;
+  firmNameEn?: string;
+  title: string;
+  titleEn?: string;
+  licenseNumber: string;
+  taxAuthorityRegNo: string;
+  efsaRegNo?: string;
+  centralBankRegNo?: string;
+  commercialRegisterNo?: string;
+  chamberRegistrationNo?: string;
+  address: string;
+  addressEn?: string;
+  phone: string;
+  mobile: string;
+  whatsappNumber?: string;
+  email: string;
+  website?: string;
+  logoUrl?: string;
+  stampUrl?: string;
+  signatureUrl?: string;
+  headerRightLines?: string[];
+  headerLeftLines?: string[];
+  footerRightText?: string;
+  footerCenterText?: string;
+  footerLeftText?: string;
+  defaultTaxEnabled?: boolean;
+  defaultTaxRate?: number;
+  includeOfficeTaxInfo?: boolean;
+  sendClientDataToGemini?: boolean;
+  showMainOfficeAddress?: boolean;
+  mainOfficeAddress?: string;
+  showBranchOfficeAddress?: boolean;
+  branchOfficeAddress?: string;
+  taxAuthorityLicense?: string;
+  etaConfig?: EtaConfig;
+  [key: string]: any;
+}
+
+export interface SystemUser {
+  id: string;
+  username?: string;
+  name: string;
+  email: string;
+  pin?: string;
+  passwordHash?: string;
+  role: UserRole;
+  roleTitleArabic: string;
+  isActive?: boolean;
+  canManageUsers?: boolean;
+  canAccessTreasury: boolean;
+  canAccessAuditTrail: boolean;
+  canPostEntries?: boolean;
+  canEditPostedEntries?: boolean;
+  canDeleteRecords?: boolean;
+  canAccessCreditFiles?: boolean;
+  canAccessTaxReports?: boolean;
+  permittedClientIds?: string[];
+  mustChangePassword?: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+  [key: string]: any;
+}
+
+export interface CustomFirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId: string;
+  databaseId?: string;
+  firestoreDatabaseId?: string;
+  isEnabled?: boolean;
+  isCustomActive?: boolean;
+  [key: string]: any;
+}
+
+export interface UserPreferences {
+  themeMode: ThemeMode;
+  brandColor: BrandColor;
+  language: AppLanguage;
+  compactView: boolean;
+  reportingCurrency?: CurrencyCode;
+  autoBackupEnabled?: boolean;
+  soundEffectsEnabled?: boolean;
+  customFirebaseConfig?: CustomFirebaseConfig;
+  [key: string]: any;
+}
+
+export type WhatsAppEventCategory =
+  | 'TAX_REMINDER'
+  | 'FEE_CLAIM'
+  | 'DOCUMENT_REQUEST'
+  | 'REPORT_READY'
+  | 'INVOICE_NOTIFICATION'
+  | 'WELCOME'
+  | 'GENERAL'
+  | string;
+
+export interface WhatsAppMessageTemplate {
+  id: string;
+  code?: string;
+  title: string;
+  category: WhatsAppEventCategory;
+  subject?: string;
+  templateBody: string;
+  isDefault?: boolean;
+  isActive?: boolean;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+export interface WhatsAppBotSettings {
+  isAutoReplyEnabled: boolean;
+  officeWorkingHours: string;
+  welcomeGreeting: string;
+  botName: string;
+  includeQrVerification: boolean;
+  apiDispatchMode: 'DIRECT_WEB_API' | 'META_CLOUD_API' | 'BAILEYS_GATEWAY' | string;
+  customApiBaseUrl?: string;
+  templates: WhatsAppMessageTemplate[];
+  [key: string]: any;
+}
+
+export interface WhatsAppMessage {
+  id: string;
+  clientId?: string;
+  clientName: string;
+  phoneNumber: string;
+  category: WhatsAppEventCategory;
+  messageBody: string;
+  direction: 'OUTBOUND' | 'INBOUND' | 'OUTGOING' | 'INCOMING';
+  status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'QUEUED';
+  sentAt: string;
+  sentBy?: string;
+  referenceId?: string;
+  [key: string]: any;
+}
+
+export interface FinancialActivityLog {
+  id: string;
+  timestamp: string;
+  actionType: 'CREATE' | 'UPDATE' | 'DELETE' | 'POST' | 'UNPOST' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'ARCHIVE' | string;
+  module: 'JOURNAL' | 'ACCOUNTS' | 'STATEMENTS' | 'CLIENTS' | 'TREASURY' | 'TAX' | 'INVOICES' | 'SYSTEM' | string;
+  recordId?: string;
+  recordCode?: string;
+  clientId?: string;
+  clientName?: string;
+  fiscalYear?: number;
+  summary: string;
+  details?: string;
+  amountImpact?: number;
+  userId?: string;
+  userName?: string;
+  [key: string]: any;
+}
+
+export type StandardReportType =
+  | 'BALANCE_SHEET'
+  | 'INCOME_STATEMENT'
+  | 'CASH_FLOW'
+  | 'EQUITY_CHANGES'
+  | 'TRIAL_BALANCE'
+  | 'GENERAL_LEDGER'
+  | 'AUDITOR_REPORT'
+  | 'TAX_DECLARATION'
+  | 'CERTIFICATE'
+  | 'CLIENT_DOSSIER'
+  | string;
+
+export interface ReportLayoutConfig {
+  reportType?: StandardReportType;
+  paperSize: 'A4' | 'A3' | 'LETTER' | string;
+  orientation: 'portrait' | 'landscape' | 'PORTRAIT' | 'LANDSCAPE' | string;
+  marginsMm?: { top: number; right: number; bottom: number; left: number };
+  margins?: 'DEFAULT' | 'NARROW' | 'WIDE' | 'NONE' | string;
+  fontScalePercent?: number;
+  showLogo?: boolean;
+  showWatermark?: boolean;
+  showQrVerification?: boolean;
+  showBarcode?: boolean;
+  showSignatureBlock?: boolean;
+  showComparativeFigures?: boolean;
+  includeLetterhead?: boolean;
+  includeStamp?: boolean;
+  [key: string]: any;
+}
+
+export interface PrintSettings {
+  paperSize: 'A4' | 'A3' | 'LETTER';
+  orientation: 'portrait' | 'landscape';
+  margins: 'normal' | 'narrow' | 'wide' | 'custom';
+  customMarginsMm?: { top: number; right: number; bottom: number; left: number };
+  scalePercent: number;
+  fontFamily: string;
+  baseFontSizePx: number;
+  headerStyle: 'OFFICIAL_BOXED' | 'MODERN_MINIMAL' | 'CLASSIC_DUAL_LANG';
+  showOfficeHeader: boolean;
+  showClientBanner: boolean;
+  showFooterSignatures: boolean;
+  showPageNumbers: boolean;
+  showPrintTimestamp: boolean;
+  showQrCode: boolean;
+  showCode128Barcode: boolean;
+  showWatermark: boolean;
+  watermarkText: string;
+  watermarkOpacity: number;
+  useAccountingParentheses: boolean;
+  hideZeroBalances: boolean;
+  colorMode: 'COLOR' | 'GRAYSCALE' | 'BLACK_AND_WHITE';
+  tableDensity: 'COMPACT' | 'NORMAL' | 'SPACIOUS';
+  reportDefaults?: Partial<Record<StandardReportType, Partial<ReportLayoutConfig>>>;
+  [key: string]: any;
+}
+
+export interface OcrSuggestedJournalLine {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  description?: string;
+  notes?: string;
+  [key: string]: any;
+}
+
+export interface OcrInvoiceResult {
+  vendorName?: string;
+  vendorTaxId?: string;
+  counterparty?: string;
+  taxNumber?: string;
+  commercialRegister?: string;
+  invoiceNumber: string;
+  invoiceDate?: string;
+  date?: string;
+  invoiceType?: string;
+  subtotal: number;
+  taxRate?: number;
+  taxAmount?: number;
+  vatAmount?: number;
+  withholdingTaxRate?: number;
+  whtAmount?: number;
+  totalAmount: number;
+  currency?: CurrencyCode;
+  confidenceScore?: number;
+  items?: { description: string; quantity: number; unitPrice: number; total: number }[];
+  suggestedLines?: OcrSuggestedJournalLine[];
+  suggestedJournalEntry?: any;
+  rawImagePreviewUrl?: string;
+  rawText?: string;
+  [key: string]: any;
+}
+
 export interface BankStatementLine {
   id: string;
   date: string;
+  valueDate?: string;
   reference: string;
   description: string;
-  debit: number; // سحب أو مصروف بنكي
-  credit: number; // إيداع أو تحويل وارد
+  debit: number;
+  credit: number;
   balance?: number;
-  isMatched?: boolean;
-  matchedEntryId?: string;
+  isMatched: boolean;
+  matchedJournalEntryId?: string;
+  matchedJournalNumber?: string;
   matchedEntryRef?: string;
-  matchConfidence?: number; // 0 to 100%
+  matchConfidence?: number;
   notes?: string;
+  category?: 'MATCHED' | 'BANK_CHARGES' | 'UNPRESENTED_CHEQUE' | 'DEPOSIT_IN_TRANSIT' | 'UNMATCHED';
+  [key: string]: any;
 }
 
 export interface BankReconciliationSession {
   id: string;
   bankAccountId: string;
+  bankAccountCode: string;
   bankAccountName: string;
-  statementStartDate: string;
-  statementEndDate: string;
-  statementOpeningBalance: number;
+  periodEndDate: string;
   statementEndingBalance: number;
-  bookBalance: number;
-  statementLines: BankStatementLine[];
-  status: 'IN_PROGRESS' | 'RECONCILED' | 'APPROVED';
-  reconciledAt?: string;
-  reconciledBy?: string;
-  notes?: string;
+  ledgerEndingBalance: number;
+  adjustedBankBalance: number;
+  adjustedLedgerBalance: number;
+  unreconciledDifference: number;
+  lines: BankStatementLine[];
+  status: 'DRAFT' | 'RECONCILED';
+  createdAt: string;
 }
 
-// Fraud & Forensic Audit Sentinel Interfaces
-export interface BenfordDigitStat {
+export type ExcelAuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+export type ExcelAnomalyCategory =
+  | 'UNBALANCED_ROW'
+  | 'DUPLICATE_ENTRY'
+  | 'ABNORMAL_NATURE'
+  | 'WEEKEND_OR_HOLIDAY'
+  | 'ROUND_NUMBER_BIAS'
+  | 'BENFORD_DEVIATION'
+  | 'MISSING_ACCOUNT_CODE'
+  | 'OUTLIER_ZSCORE'
+  | 'TAX_DISCREPANCY'
+  | string;
+
+export interface ExcelAuditRow {
+  id?: string;
+  rowIndex: number;
+  originalRowData?: Record<string, any>;
+  accountCode?: string;
+  accountName?: string;
+  account?: string;
+  entity?: string;
+  docNo?: string;
+  date?: string;
+  reference?: string;
+  description?: string;
+  amount: number;
+  debit: number;
+  credit: number;
+  category?: string;
+  hasWarnings?: boolean;
+  openingDebit?: number;
+  openingCredit?: number;
+  movementDebit?: number;
+  movementCredit?: number;
+  endingDebit?: number;
+  endingCredit?: number;
+  netBalance?: number;
+  mappedCategory?: AccountCategory;
+  anomalies?: {
+    category: ExcelAnomalyCategory;
+    severity: ExcelAuditSeverity;
+    messageAr: string;
+    recommendationAr?: string;
+  }[];
+  riskScore?: number;
+  [key: string]: any;
+}
+
+export interface BenfordDigitMetric {
   digit: number;
+  expectedPct?: number;
+  actualPct?: number;
+  count?: number;
+  deviationPct?: number;
+  isSuspicious?: boolean;
   actualCount: number;
   actualPercentage: number;
-  expectedPercentage: number; // Benford's Law theoretical (Log10(1 + 1/d))
+  expectedPercentage: number;
   deviation: number;
+  zScore?: number;
   isAnomalous: boolean;
+  [key: string]: any;
+}
+
+export type BenfordDigitStat = BenfordDigitMetric;
+
+export interface BenfordAnalysisResult {
+  totalSampleSize?: number;
+  validNumbersCount?: number;
+  madScore?: number;
+  meanAbsoluteDeviation: number;
+  conformityLevel: 'CLOSE' | 'ACCEPTABLE' | 'MARGINAL' | 'NON_CONFORMING' | 'CLOSE_CONFORMITY' | 'ACCEPTABLE_CONFORMITY' | 'MARGINAL_CONFORMITY' | 'NON_CONFORMITY' | string;
+  conformitySummaryAr?: string;
+  digits?: BenfordDigitMetric[];
+  digitStats: BenfordDigitMetric[];
+  flaggedDigits?: number[];
+  distortedDigits: number[];
+  [key: string]: any;
+}
+
+export interface AuditClusterSummary {
+  clusterId?: string;
+  clusterName?: string;
+  clusterLabelAr?: string;
+  labelAr?: string;
+  count: number;
+  minAmount: number;
+  maxAmount: number;
+  totalSum: number;
+  totalAmount?: number;
+  meanAmount: number;
+  outliersCount: number;
+  avgRiskScore?: number;
+  [key: string]: any;
+}
+
+export interface UnsupervisedMlAnomaly {
+  id: string;
+  rowIndex: number;
+  row: ExcelAuditRow;
+  reference?: string;
+  description?: string;
+  amount?: number;
+  score: number;
+  zScore?: number;
+  isolationScore?: number;
+  severity: ExcelAuditSeverity;
+  category: ExcelAnomalyCategory;
+  title: string;
+  reasonAr?: string;
+  mathematicalReason: string;
+  auditingInterpretation: string;
+  mandatoryManualAuditStep: string;
+  verificationVerdict?: 'UNCHECKED' | 'VERIFIED_SAFE' | 'CONFIRMED_ISSUE' | string;
+  isManuallyVerified?: boolean;
+  auditorComment?: string;
+  [key: string]: any;
+}
+
+export interface ExcelAuditDatasetSummary {
+  fileName: string;
+  sheetName?: string;
+  auditDate?: string;
+  totalRows?: number;
+  validRows?: number;
+  validRowsCount: number;
+  totalGrossAmount: number;
+  totalDebit: number;
+  totalCredit: number;
+  meanAmount: number;
+  medianAmount: number;
+  stdDeviation: number;
+  overallRiskScore: number;
+  anomaliesCount: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  rows?: ExcelAuditRow[];
+  benford?: BenfordAnalysisResult;
+  mlAnomalies?: UnsupervisedMlAnomaly[];
+  clusters?: AuditClusterSummary[];
+  [key: string]: any;
+}
+
+export interface ColumnDetectionField {
+  detectedColumn: string | null;
+  confidence: number;
+  isManualOverride: boolean;
+}
+
+export interface ColumnMappingConfig {
+  dateCol: ColumnDetectionField;
+  amountCol: ColumnDetectionField;
+  debitCol: ColumnDetectionField;
+  creditCol: ColumnDetectionField;
+  descriptionCol: ColumnDetectionField;
+  docNoCol: ColumnDetectionField;
+  accountCol: ColumnDetectionField;
+  entityCol: ColumnDetectionField;
+  categoryCol: ColumnDetectionField;
+  [key: string]: any;
+}
+
+export interface ExcelImportAuditLog {
+  id: string;
+  timestamp?: string;
+  fileName: string;
+  importedAt?: string;
+  importedBy?: string;
+  rowsImported?: number;
+  totalDebit?: number;
+  totalCredit?: number;
+  status?: 'SUCCESS' | 'PARTIAL' | 'FAILED' | string;
+  notes?: string;
+  [key: string]: any;
 }
 
 export interface AnomalyAlert {
   id: string;
-  entryId: string;
-  entryNumber: number;
-  entryDate: string;
-  accountName: string;
-  amount: number;
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'INFO';
-  category: 'BENFORD_DEVIATION' | 'ROUND_NUMBER' | 'AFTER_HOURS' | 'WEEKEND' | 'DUPLICATE_SPLIT' | 'LARGE_CASH_DRAWS' | 'RAPID_REVERSAL';
+  entryId?: string;
+  entryNumber?: string | number;
+  date?: string;
+  entryDate?: string;
+  type?: string;
+  category?: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | 'CRITICAL';
   title: string;
   description: string;
-  recommendation: string;
-  isAudited?: boolean;
-  auditorNotes?: string;
+  amount?: number;
+  accountCode?: string;
+  accountName?: string;
+  recommendation?: string;
+  [key: string]: any;
 }
 
-// 12-Month Predictive Cash Flow Interfaces
+export interface AuditEngagementContract {
+  id: string;
+  contractCode: string;
+  clientId: string;
+  clientName: string;
+  engagementType: 'ANNUAL_AUDIT' | 'TAX_INSPECTION_DEFENSE' | 'ETA_COMPLIANCE' | 'BOOKKEEPING' | 'FEASIBILITY_ADVISORY' | string;
+  fiscalYear: number;
+  contractDate: string;
+  startDate: string;
+  endDate: string;
+  totalAgreedFee: number;
+  paidAmount: number;
+  remainingAmount: number;
+  assignedAuditor: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'SUSPENDED' | 'CANCELLED';
+  billingSchedule: {
+    milestoneName: string;
+    dueDate: string;
+    amount: number;
+    isBilled: boolean;
+    isPaid: boolean;
+  }[];
+  notes?: string;
+}
+
 export interface CashFlowMonthForecast {
-  monthKey: string; // "2026-01"
-  monthNameAr: string; // "يناير 2026"
+  monthIndex?: number;
+  monthLabel?: string;
+  monthKey: string;
+  monthNameAr: string;
   openingCash: number;
   expectedInflows: {
     collectedReceivables: number;
@@ -1217,598 +1247,83 @@ export interface CashFlowMonthForecast {
   };
   netMonthlyChange: number;
   projectedEndingCash: number;
-  stressTestEndingCash: number; // سيناريو الضغط الشديد
+  stressTestEndingCash: number;
   safetyBufferDeficit: boolean;
   riskLevel: 'SAFE' | 'WARNING' | 'CRITICAL';
+  expectedCollections?: number;
+  expectedVendorPayments?: number;
+  expectedPayrollAndRent?: number;
+  expectedTaxAndVat?: number;
+  expectedCapexOrLoans?: number;
+  netCashFlow?: number;
+  closingCash?: number;
+  isDeficit?: boolean;
+  [key: string]: any;
 }
 
-// Practice Management & Audit Engagements
-export interface AuditEngagementContract {
+export interface HarmonizedTaxInvoice {
   id: string;
-  contractCode: string;
-  clientId: string;
-  clientName: string;
-  engagementType: 'ANNUAL_AUDIT' | 'TAX_INSPECTION_DEFENSE' | 'ETA_COMPLIANCE' | 'COMPANY_FORMATION' | 'FEASIBILITY_STUDY';
-  fiscalYear: number;
-  contractDate: string;
-  startDate: string;
-  endDate: string;
-  totalAgreedFee: number;
-  paidAmount: number;
-  remainingAmount: number;
-  billingSchedule: {
-    milestoneName: string;
-    dueDate: string;
-    amount: number;
-    isBilled: boolean;
-    isPaid: boolean;
-    receiptId?: string;
-  }[];
-  status: 'ACTIVE' | 'COMPLETED' | 'SUSPENDED' | 'RENEWAL_DUE';
-  assignedAuditor: string;
-  notes?: string;
-}
-
-// Fee Estimator & Quotation Generator Interfaces
-export type EntityLegalType =
-  | 'JOINT_STOCK' // شركة مساهمة مصرية
-  | 'LLC' // شركة ذات مسؤولية محدودة
-  | 'ONE_PERSON' // شركة الشخص الواحد
-  | 'PARTNERSHIP' // شركة تضامن أو توصية
-  | 'SOLE_PROPRIETORSHIP' // منشأة فردية
-  | 'FOREIGN_BRANCH' // فرع شركة أجنبية
-  | 'NGO'; // جمعية أو مؤسسة أهلية
-
-export type LegalComplexityLevel =
-  | 'LOW' // بسيط / نشاط خدمي محدد (1.0x)
-  | 'MEDIUM' // متوسط / نشاط تجاري وصناعي عادي (1.25x)
-  | 'HIGH' // متقدم / استيراد وتصدير وفروع متعددة وفحص ضريبي (1.6x)
-  | 'VERY_HIGH'; // معقد جداً / إعادة هيكلة، لجان طعن، دمج وتصفية (2.0x)
-
-export type AccountingSystemQuality =
-  | 'REGULAR_ERP' // نظام محاسبي إلكتروني منتظم وموثق (1.0x)
-  | 'MANUAL_BOOKS' // دفاتر ورقية يدوية تحتاج مراجعة مكثفة (1.3x)
-  | 'NO_SYSTEM'; // عدم وجود نظام محاسبي / فوضى مستندية (1.7x)
-
-export type ProcedureServiceType =
-  | 'ANNUAL_AUDIT' // مراجعة وتدقيق القوائم المالية السنوية
-  | 'TAX_INSPECTION_DEFENSE' // حضور لجان الفحص والطعن الضريبي
-  | 'COMPANY_FORMATION' // تأسيس شركات واستخراج التراخيص والسجل
-  | 'ETA_COMPLIANCE' // تأهيل وتكامل منظومة الفاتورة والإيصال
-  | 'FEASIBILITY_STUDY' // دراسة جدوى وتقييم مالي وائتماني
-  | 'RESTRUCTURING_CAPITAL' // زيادة رأس مال وتعديل عقد وتصفية
-  | 'MONTHLY_RETAINER'; // استشارات ومتابعة محاسبية وضريبية شهرية
-
-export interface FeeHourlyBreakdown {
-  partnerHours: number;
-  partnerHourlyRate: number;
-  managerHours: number;
-  managerHourlyRate: number;
-  seniorAuditorHours: number;
-  seniorAuditorHourlyRate: number;
-}
-
-export interface FeeQuotationEstimate {
-  id: string;
-  quotationNumber: string; // e.g. "QUO-2026-1045"
-  date: string;
-  validUntil: string;
   clientId?: string;
-  clientName: string;
-  contactPerson?: string;
-  phone: string;
-  email?: string;
-  
-  // Criteria
-  procedureType: ProcedureServiceType;
-  procedureTitle: string;
-  legalType: EntityLegalType;
-  complexityLevel: LegalComplexityLevel;
-  accountingQuality: AccountingSystemQuality;
-  annualTurnoverBracket: string;
-  branchesCount: number;
-  
-  // Time & Effort
-  hourlyBreakdown: FeeHourlyBreakdown;
-  totalEstimatedHours: number;
-  
-  // Cost & Calculation
-  baseLaborCost: number;
-  complexityMultiplier: number;
-  qualityMultiplier: number;
-  calculatedProfessionalFee: number;
-  discountPercentage: number;
-  netProfessionalFee: number;
-  estimatedGovFees: number;
-  taxVatFee: number;
-  totalQuotationAmount: number;
-  
-  // Scope & Terms
-  scopeItems: string[];
-  clientDeliverables: string[];
-  paymentTerms: {
-    milestoneName: string;
-    percentage: number;
-    amount: number;
-  }[];
-  executionDurationDays: number;
+  invoiceNumber: string;
+  date?: string;
+  invoiceDate: string;
+  docType?: 'SALES' | 'PURCHASE' | 'CREDIT_NOTE' | 'DEBIT_NOTE' | string;
+  category?: InvoiceNatureCategory | string;
+  partyName?: string;
+  partyTaxId?: string;
+  partnerName: string;
+  partnerTaxId: string;
+  itemDescription?: string;
+  taxableAmount: number;
+  taxRate?: number;
+  vatAmount: number;
+  whtAmount?: number;
+  totalAmount: number;
+  type?: 'SALES' | 'PURCHASE' | string;
+  bookNetAmount?: number;
+  bookVatAmount?: number;
+  etaNetAmount?: number;
+  etaVatAmount?: number;
+  varianceNet?: number;
+  varianceVat?: number;
+  matchStatus?: 'MATCHED' | 'MISSING_IN_ETA' | 'MISSING_IN_BOOKS' | 'VALUE_MISMATCH' | string;
+  source?: string;
+  etaUuid?: string;
   notes?: string;
-  verificationCode: string;
-  status: 'DRAFT' | 'SENT_WHATSAPP' | 'SENT_EMAIL' | 'ACCEPTED' | 'REJECTED' | 'CONVERTED_TO_CONTRACT';
-  createdAt: string;
+  [key: string]: any;
 }
 
-export type WhatsAppMessageDirection = 'INCOMING' | 'OUTGOING';
-export type WhatsAppMessageSender = 'CLIENT' | 'OFFICE_BOT' | 'AUDITOR';
-export type WhatsAppMessageStatus = 'PENDING' | 'SENT' | 'DELIVERED' | 'READ';
-export type WhatsAppEventCategory =
-  | 'GENERAL'
-  | 'INVOICE'
-  | 'TREASURY_RECEIPT'
-  | 'TAX_DECLARATION'
-  | 'TAX_DEADLINE_REMINDER'
-  | 'CERTIFICATE'
-  | 'PROCEDURE_UPDATE'
-  | 'SECURITY_VERIFICATION'
-  | 'INTERACTIVE_BOT_MENU'
-  | 'BOT_AUTO_REPLY';
-
-export interface WhatsAppMessage {
-  id: string;
-  clientId: string;
-  clientName: string;
-  phone: string;
-  direction: WhatsAppMessageDirection;
-  sender: WhatsAppMessageSender;
-  text: string;
-  timestamp: string;
-  status: WhatsAppMessageStatus;
-  category?: WhatsAppEventCategory;
-  mediaPayload?: {
-    type?: 'INVOICE' | 'RECEIPT' | 'TAX_DECLARATION' | 'CERTIFICATE' | 'DOCUMENT';
-    title?: string;
-    referenceCode?: string;
-    amount?: number;
-    receiptNumber?: string;
-    qrUrl?: string;
-    verificationLink?: string;
-  };
-}
-
-export interface WhatsAppMessageTemplate {
-  id: string;
-  code: string;
-  title: string;
-  category: WhatsAppEventCategory;
-  subject: string;
-  templateBody: string;
-  isDefault?: boolean;
-  isActive?: boolean;
-  updatedAt?: string;
-}
-
-export interface WhatsAppBotSettings {
-  isAutoReplyEnabled: boolean;
-  officeWorkingHours: string;
-  welcomeGreeting: string;
-  botName: string;
-  includeQrVerification: boolean;
-  apiDispatchMode?: 'DIRECT_WEB_API' | 'META_CLOUD_API' | 'CUSTOM_GATEWAY' | 'INTERNAL_BAILEYS_QR';
-  customApiBaseUrl?: string; // e.g. 'https://api.whatsapp.com/send' or 'https://wa.me'
-  defaultCountryCode?: string; // e.g. '20'
-  autoFormatEgyptianNumbers?: boolean;
-  autoAppendOfficeSignature?: boolean;
-  metaCloudApiConfig?: {
-    phoneNumberId?: string;
-    wabaId?: string;
-    accessToken?: string;
-    webhookVerifyToken?: string;
-  };
-  customGatewayConfig?: {
-    endpointUrl?: string;
-    apiKey?: string;
-    instanceId?: string;
-  };
-  templates?: WhatsAppMessageTemplate[];
-}
-
-export interface SystemUser {
-  id: string;
-  name: string;
-  username?: string;
-  employeeCode?: string;
-  email: string;
-  role: UserRole;
-  roleTitleArabic: string; // "مدير النظام والشريك المسؤول", "مراقب حسابات / مراجع أول", "محاسب مالي / مسجل قيود", "سكرتارية واستقبال"
-  pinCode?: string; // e.g. "1234"
+export interface SapApiConfig {
+  id?: string;
+  companyCode?: string;
+  companyName?: string;
+  hostUrl?: string;
+  odataServicePath?: string;
+  clientNumber?: string;
+  baseUrl?: string;
+  companyDb?: string;
+  username: string;
   password?: string;
-  avatarInitials?: string;
+  systemType?: 'SAP_B1_SERVICE_LAYER' | 'SAP_S4HANA_ODATA' | 'ODOO_XMLRPC' | string;
   isActive?: boolean;
-  canAccessTreasury: boolean;
-  canAccessAuditTrail: boolean;
-  canAccessCreditFiles?: boolean;
-  canAccessTaxReports?: boolean;
-  canManageUsers?: boolean;
-  canPostEntries?: boolean;
-  canEditPostedEntries?: boolean;
-  canDeleteRecords?: boolean;
-  canIssueInvoices?: boolean;
-  canModifySettings?: boolean;
-  restrictedTabs?: NavigationTab[] | string[];
-  mustChangePassword?: boolean;
-  createdAt: string;
+  isConnected?: boolean;
+  autoSyncJournal?: boolean;
+  autoSyncCoa?: boolean;
+  lastSyncTime?: string;
+  lastSyncTimestamp?: string;
+  lastSyncStatus?: string;
+  lastSyncMessage?: string;
+  [key: string]: any;
 }
 
 declare global {
   interface Window {
     electronDesktop?: {
-      isDesktop: boolean;
-      getInitialAdminCredentials: () => Promise<{ name: string; email: string; password: string; isReset?: boolean } | null>;
-      chooseBackupFolder: () => Promise<string | null>;
-      chooseRestoreFile: () => Promise<string | null>;
-      saveBackupToFile: (filePath: string) => Promise<{ success: boolean; size?: number; error?: string }>;
-      restoreFromFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
-      getNetworkStatus: () => Promise<{ host: string; port: number; allowLan: boolean; localIps: string[]; lanUrl: string }>;
-      setNetworkAccess: (allowLan: boolean) => Promise<{ success: boolean; allowLan: boolean; restartRequired: boolean }>;
-      getUserDataPath: () => Promise<string>;
+      isDesktop?: boolean;
+      saveBackupFile?: (fileName: string, content: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      openBackupFile?: () => Promise<{ success: boolean; content?: string; fileName?: string; error?: string }>;
+      getAppVersion?: () => Promise<string>;
+      [key: string]: any;
     };
   }
 }
-
-// OCR Smart Invoice & Paper Receipt Scanner Interfaces
-export interface OcrInvoiceLineItem {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
-}
-
-export interface OcrSuggestedJournalLine {
-  accountCode: string;
-  accountName: string;
-  debit: number;
-  credit: number;
-  notes: string;
-}
-
-export interface OcrInvoiceResult {
-  invoiceNumber: string;
-  date: string;
-  counterparty: string;
-  taxNumber?: string;
-  commercialRegister?: string;
-  invoiceType: 'PURCHASE' | 'SALES' | 'EXPENSE' | 'ASSET' | 'SERVICE';
-  subtotal: number;
-  taxRate: number;
-  taxAmount: number;
-  withholdingTaxRate: number;
-  withholdingTaxAmount: number;
-  totalAmount: number;
-  currency: CurrencyCode;
-  paymentMethod: 'CASH' | 'BANK' | 'PAYABLE' | 'RECEIVABLE' | 'PETTY_CASH';
-  lineItems: OcrInvoiceLineItem[];
-  detectedTextSummary: string;
-  confidence: number;
-  suggestedJournalEntry: {
-    description: string;
-    lines: OcrSuggestedJournalLine[];
-    taxDirective: string;
-  };
-  rawImagePreviewUrl?: string;
-}
-
-// ============================================================================
-// Customs, Global Trade & Landed Cost Management (منظومة الجمارك والتجارة الخارجية)
-// ============================================================================
-
-export type CustomsShipmentType =
-  | 'IMPORT'              // استيراد تجاري أو صناعي
-  | 'EXPORT'              // تصدير بضائع للخارج
-  | 'DRAWBACK'            // استرداد جمركي (دروباك)
-  | 'TEMPORARY_ADMISSION' // سماح مؤقت لتصنيع وإعادة تصدير
-  | 'FREE_ZONE'           // مناطق حرة واستثمارية
-  | 'TRANSIT';            // ترانزيت عبور دولي
-
-export type CustomsShipmentStatus =
-  | 'PLANNED'             // قيد التخطيط والتفاوض
-  | 'ACI_ISSUED'          // تم استخراج رقم ACID وشهادة الشحن
-  | 'SAILED'              // أبحرت السفينة في الطريق
-  | 'ARRIVED_PORT'        // وصلت الميناء وتفريغ الحاويات
-  | 'UNDER_CLEARANCE'     // قيد التخليص الجمركي والفحص الرقابي
-  | 'INSPECTION'          // كشف ومعاينة وسحب عينات
-  | 'CUSTOMS_PAID'        // تم سداد الرسوم والضرائب الجمركية
-  | 'RELEASED'            // تم الإفراج الجمركي النهائي
-  | 'RECEIVED_WAREHOUSE'  // استلام البضاعة في المخازن وإقفال التكلفة
-  | 'CANCELLED';          // ملغاة
-
-export type IncotermCode = 'FOB' | 'CIF' | 'CFR' | 'EXW' | 'DDP' | 'CIP' | 'FCA' | 'CPT' | 'DAP';
-
-export type TradePaymentMethod =
-  | 'LETTER_OF_CREDIT'    // اعتماد مستندي (L/C)
-  | 'COLLECTION_DOCS'     // مستندات تحصيل (CAD)
-  | 'ADVANCE_TRANSFER'    // تحويل بنكي مقدماً (T/T)
-  | 'SUPPLIER_CREDIT'     // تسهيلات موردين
-  | 'OPEN_ACCOUNT';       // حساب مفتوح
-
-export interface CustomsShipmentItem {
-  id: string;
-  itemCode: string;
-  hsCode: string; // كود البند الجمركي (e.g. "8471.30.00.00")
-  description: string;
-  quantity: number;
-  unit: string; // قطعة, كرتونة, طن, كجم, متر
-  unitPriceForeign: number;
-  totalPriceForeign: number;
-  netWeightKg?: number;
-  grossWeightKg?: number;
-  volumeCbm?: number;
-  customsDutyRatePct: number; // نسبة الضريبة الجمركية المقررة %
-  vatRatePct?: number; // نسبة ضريبة القيمة المضافة %
-  dutyAmountEgp: number; // قيمة الضريبة الجمركية المحتسبة
-  apportionedOtherCostEgp: number; // نصيب الصنف من المصاريف الإنزالية المشتركة
-  totalItemLandedCostEgp: number; // التكلفة الإنزالية الإجمالية للصنف بالمخزن
-  unitLandedCostEgp: number; // تكلفة الوحدة الواحدة في المخزن (EGP)
-}
-
-export interface CustomsShipment {
-  id: string;
-  shipmentCode: string; // e.g. "IMP-2026-0041"
-  shipmentType: CustomsShipmentType;
-  title: string; // بيان الشحنة
-  clientId: string;
-  clientName: string;
-  status: CustomsShipmentStatus;
-
-  // منظومة نافذة والتسجيل المسبق (ACI)
-  acidNumber: string; // 19 رقم
-  acidIssueDate?: string;
-  acidExpiryDate?: string;
-  foreignExporterName: string;
-  foreignExporterCountry: string;
-  foreignExporterCode?: string;
-
-  // وثائق النقل والجمارك
-  blNumber: string; // بوليصة الشحن (B/L أو AWB)
-  shippingLine: string; // الخط الملاحي (Maersk, MSC, etc.)
-  vesselName?: string;
-  portOfLoading: string; // ميناء الشحن
-  customsPortOfArrival: string; // ميناء الإفراج (الإسكندرية، السخنة، بورسعيد، دمياط، مطار القاهرة)
-  customsDeclarationNumber?: string; // رقم الشهادة الجمركية (الإفراج)
-  customsDeclarationDate?: string;
-  arrivalDate?: string;
-  releaseDate?: string;
-  incoterm: IncotermCode;
-  paymentMethod: TradePaymentMethod;
-  bankForm4Number?: string; // استمارة 4 بنكية
-  bankName?: string;
-  containersCount?: number;
-  containerNumbers?: string[];
-  demurrageFreeDays?: number; // أيام السماح المجانية للحاويات
-  demurrageDailyFeePerContainer?: number;
-
-  // القيم والعملات وسعر الصرف الجمركي
-  invoiceCurrency: CurrencyCode;
-  invoiceAmountForeign: number;
-  customsExchangeRate: number; // سعر الدولار الجمركي المعتمد
-  freightForeign?: number; // نولون الشحن الخارجي
-  insuranceForeign?: number; // التأمين الملاحي
-  cifValueForeign: number; // إجمالي القيمة سيف بالعملة الأجنبية
-  cifValueEgp: number; // القيمة المقدرة جمركياً بالجنيه المصري (وعاء الاحتساب)
-
-  // الرسوم والضرائب الجمركية المباشرة
-  customsDutyAmount: number; // الضريبة الجمركية الواردة
-  developmentFeeAmount: number; // رسم التنمية
-  vatAmount: number; // ضريبة القيمة المضافة الجمركية 14%
-  tableTaxAmount?: number; // ضريبة الجدول إن وجدت
-  withholdingTaxAmount?: number; // خصم وإضافة استيراد 1% أو 0.5%
-  inspectionAndLabFees?: number; // رسوم الفحص والمعامل (سلامة الغذاء / الرقابة)
-  totalCustomsDutiesAndTaxes: number; // إجمالي ما تم سداده للجمارك
-
-  // المصاريف والتكاليف الإضافية (Landed Costs)
-  customsBrokerFees: number; // أتعاب المخلص الجمركي وضريبتها
-  portStorageAndHandlingFees: number; // أرضيات وحراسة ومصاريف موانئ
-  demurrageFeesPaid: number; // غرامات تأخير حاويات
-  inlandFreightFees: number; // نقل وشحن داخلي وتعتيق
-  bankCommissionsAndLcExpenses: number; // عمولات بنكية وفتح اعتماد ونموذج 4
-  otherExpenses: number; // مصاريف نثرية وفحص أخرى
-  totalAdditionalExpenses: number; // إجمالي المصاريف الإضافية
-
-  // إجمالي التكلفة الإنزالية النهائية ومعامل التكلفة
-  totalLandedCostEgp: number; // التكلفة الإنزالية الكلية للرسملة على المخزون
-  costMultiplierRatio: number; // معامل التكلفة (Total Landed Cost / CIF EGP)
-
-  // الأصناف والبنود
-  items: CustomsShipmentItem[];
-
-  // الروابط والتكامل (اليومية، الخزينة، الأرشيف)
-  linkedJournalEntryIds?: string[];
-  linkedTreasuryTransactionIds?: string[];
-  archiveDocumentIds?: string[];
-  notes?: string;
-
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface HsTariffCode {
-  code: string;
-  titleAr: string;
-  titleEn: string;
-  dutyRatePct: number;
-  vatRatePct: number;
-  regulatoryAuthority?: string;
-  category: string;
-}
-
-// ============================================================================
-// AI Smart Excel Audit & Unsupervised Anomaly Sentinel (مختبر المراجعة والتدقيق الذكي للإكسيل)
-// ============================================================================
-
-export type ExcelAuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-
-export type ExcelAnomalyCategory =
-  | 'BENFORD_DEVIATION'
-  | 'ISOLATION_OUTLIER'
-  | 'EXACT_DUPLICATE'
-  | 'FUZZY_DUPLICATE'
-  | 'STRUCTURING_THRESHOLD'
-  | 'ROUND_NUMBER'
-  | 'WEEKEND_OFF_HOURS'
-  | 'RELATIVE_SIZE_SPIKE'
-  | 'SEQUENCE_GAP'
-  | 'IRREGULAR_ACCOUNT_DEBIT';
-
-export interface ColumnMappingConfidence {
-  detectedColumn: string | null;
-  confidence: number; // 0 to 100%
-  isManualOverride: boolean;
-}
-
-export interface ColumnMappingConfig {
-  dateCol: ColumnMappingConfidence;
-  amountCol: ColumnMappingConfidence;
-  debitCol: ColumnMappingConfidence;
-  creditCol: ColumnMappingConfidence;
-  descriptionCol: ColumnMappingConfidence;
-  docNoCol: ColumnMappingConfidence;
-  accountCol: ColumnMappingConfidence;
-  entityCol: ColumnMappingConfidence;
-  categoryCol: ColumnMappingConfidence;
-}
-
-export interface ExcelAuditRow {
-  id: string;
-  rowIndex: number;
-  originalRowData: Record<string, any>;
-  date: string;
-  docNo: string;
-  description: string;
-  account: string;
-  entity: string;
-  amount: number;
-  debit: number;
-  credit: number;
-  category: string;
-  hasWarnings?: boolean;
-}
-
-export interface BenfordDigitMetric {
-  digit: number;
-  actualCount: number;
-  actualPercentage: number;
-  expectedPercentage: number; // Benford Log10(1 + 1/d)
-  deviation: number;
-  zScore: number;
-  isAnomalous: boolean;
-}
-
-export interface BenfordAnalysisResult {
-  digitStats: BenfordDigitMetric[];
-  totalEvaluatedAmounts: number;
-  meanAbsoluteDeviation: number; // MAD
-  conformityLevel: 'CLOSE' | 'ACCEPTABLE' | 'MARGINAL' | 'NON_CONFORMING';
-  chiSquareStatistic: number;
-  isSignificantDistortion: boolean;
-  distortedDigits: number[];
-}
-
-export interface UnsupervisedMlAnomaly {
-  id: string;
-  rowIndex: number;
-  row: ExcelAuditRow;
-  score: number; // 0 to 100 anomaly intensity
-  severity: ExcelAuditSeverity;
-  category: ExcelAnomalyCategory;
-  title: string;
-  mathematicalReason: string; // Quantitative XAI explanation
-  auditingInterpretation: string; // ESA 240 / EAS / Egyptian Law reference
-  mandatoryManualAuditStep: string; // Substantive verification action
-  isManuallyVerified?: boolean;
-  auditorNotes?: string;
-  verificationVerdict?: 'CONFIRMED_ERROR' | 'JUSTIFIED_LEGITIMATE' | 'PENDING_DOCUMENTATION' | 'UNCHECKED';
-}
-
-export interface AuditClusterSummary {
-  clusterName: string;
-  clusterLabelAr: string;
-  count: number;
-  minAmount: number;
-  maxAmount: number;
-  totalSum: number;
-  meanAmount: number;
-  outliersCount: number;
-}
-
-export interface ExcelAuditDatasetSummary {
-  fileName: string;
-  sheetName: string;
-  totalRows: number;
-  validRowsCount: number;
-  skippedRowsCount: number;
-  totalGrossAmount: number;
-  meanAmount: number;
-  medianAmount: number;
-  stdDeviation: number;
-  minAmount: number;
-  maxAmount: number;
-  mappedColumns: { key: string; labelAr: string; column: string; confidence: number }[];
-  anomaliesCount: {
-    total: number;
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
-  benfordResult: BenfordAnalysisResult;
-  clusters: AuditClusterSummary[];
-  overallRiskScore: number; // 0 (Prism Safe) to 100 (High Risk / Material Misstatement Danger)
-  aiExecutiveMemo?: string;
-  aiSuggestedAuditProcedures?: string[];
-  auditDate: string;
-  auditorName: string;
-  firmName: string;
-}
-
-export interface ApprovedStatementsSnapshot {
-  id: string;
-  clientId: string;
-  fiscalYear: number;
-  versionNo: number;
-  approvedBy: string;
-  verificationCode?: string;
-  approvedAt: string;
-  source: 'LEDGER' | 'FILE_REVIEW';
-  trialBalanceRows: { code: string; name: string; debit: number; credit: number }[];
-  incomeStatement: any;
-  balanceSheet: any;
-  cashFlow: any;
-  note?: string;
-  checklistStatus: { ok: boolean; missing: string[] };
-}
-
-export interface ClientFeeAgreement {
-  id: string;
-  clientId: string;
-  fiscalYear: number;
-  description: string;
-  amount: number;
-  vatRate?: number;
-  dueDate?: string;
-  status: 'ACTIVE' | 'CANCELLED';
-}
-
-export interface ClientFeeCollection {
-  id: string;
-  agreementId: string;
-  clientId: string;
-  amount: number;
-  receivedAt: string;
-  method: 'CASH' | 'BANK' | 'CHEQUE';
-  reference?: string;
-  note?: string;
-}
-
-
-
-
-

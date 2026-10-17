@@ -1,65 +1,48 @@
 import DOMPurify from 'dompurify';
 
-export function sanitizeHtml(html: string | null | undefined): string {
-  if (!html) return '';
-  return DOMPurify.sanitize(html, {
+export function sanitizeHtml(input: string | null | undefined): string {
+  if (!input) return '';
+  return DOMPurify.sanitize(String(input), {
     ALLOWED_TAGS: [
-      'p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li',
-      'h1', 'h2', 'h3', 'h4', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-      'span', 'div',
+      'div', 'span', 'p', 'b', 'strong', 'em', 'i', 'u', 'br', 'hr',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li',
+      'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+      'blockquote', 'code', 'pre', 'small', 'sub', 'sup',
     ],
-    ALLOWED_ATTR: ['style', 'dir', 'class'],
-    ALLOW_DATA_ATTR: false,
+    ALLOWED_ATTR: ['class', 'dir', 'style', 'align', 'colspan', 'rowspan', 'id', 'title'],
   });
 }
 
-export function sanitizeSvg(svg: string | null | undefined): string {
-  if (!svg) return '';
-  return DOMPurify.sanitize(svg, {
+export function sanitizeSvg(input: string | null | undefined): string {
+  if (!input) return '';
+  return DOMPurify.sanitize(String(input), {
     USE_PROFILES: { svg: true, svgFilters: true },
-    FORBID_TAGS: ['script', 'foreignObject'],
-    FORBID_ATTR: [
-      'onload', 'onerror', 'onclick', 'onmouseover', 'onmouseout',
-      'onfocus', 'onblur', 'onchange', 'onsubmit', 'onkeydown', 'onkeypress', 'onkeyup'
+    ADD_TAGS: ['svg', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon', 'text', 'g', 'defs', 'style', 'title'],
+    ADD_ATTR: [
+      'xmlns', 'viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width',
+      'stroke-linecap', 'stroke-linejoin', 'd', 'x', 'y', 'rx', 'ry', 'cx', 'cy', 'r',
+      'x1', 'y1', 'x2', 'y2', 'points', 'transform', 'text-anchor', 'dominant-baseline',
+      'font-size', 'font-family', 'font-weight', 'class', 'style', 'id', 'opacity',
     ],
   });
 }
 
-export function sanitizePrintHtml(html: string | null | undefined): string {
-  if (!html) return '';
-
-  DOMPurify.addHook('uponSanitizeAttribute', (node: any, data: any) => {
-    if (data.attrName === 'src' && node.nodeName && node.nodeName.toLowerCase() === 'img') {
-      const srcVal = data.attrValue.trim().toLowerCase();
-      const isAllowedBase64 = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(srcVal);
-      if (!isAllowedBase64) {
-        data.attrValue = '';
-      }
-    }
+export function sanitizePrintHtml(input: string | null | undefined): string {
+  if (!input) return '';
+  const cleaned = DOMPurify.sanitize(String(input), {
+    USE_PROFILES: { html: true, svg: true, svgFilters: true },
+    ADD_TAGS: [
+      'style', 'svg', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon', 'text', 'g', 'defs',
+      'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'img',
+    ],
+    ADD_ATTR: [
+      'class', 'dir', 'style', 'id', 'src', 'alt', 'width', 'height', 'colspan', 'rowspan',
+      'xmlns', 'viewBox', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y', 'cx', 'cy', 'r',
+      'text-anchor', 'dominant-baseline', 'font-size', 'font-family', 'font-weight', 'transform',
+    ],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus'],
   });
-
-  try {
-    return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        'p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li',
-        'h1', 'h2', 'h3', 'h4', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
-        'caption', 'colgroup', 'col', 'hr', 'small', 'sub', 'sup', 'section', 'header', 'footer',
-        'span', 'div', 'img',
-        'svg', 'g', 'rect', 'path', 'circle', 'line', 'polyline', 'polygon', 'text', 'tspan', 'defs', 'linearGradient', 'stop', 'clipPath'
-      ],
-      ALLOWED_ATTR: [
-        'style', 'dir', 'class', 'colspan', 'rowspan', 'width', 'height',
-        'viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y', 'cx', 'cy', 'r', 'points', 'transform', 'alt', 'src',
-        'text-anchor', 'font-size', 'font-family', 'font-weight', 'shape-rendering', 'fill-rule', 'fill-opacity', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin', 'opacity'
-      ],
-      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'],
-      FORBID_ATTR: [
-        'onload', 'onerror', 'onclick', 'onmouseover', 'onmouseout',
-        'onfocus', 'onblur', 'onchange', 'onsubmit', 'onkeydown', 'onkeypress', 'onkeyup'
-      ],
-      ALLOW_DATA_ATTR: false,
-    });
-  } finally {
-    DOMPurify.removeHook('uponSanitizeAttribute');
-  }
+  return cleaned.replace(/src=["']\s*javascript:[^"']*["']/gi, '');
 }

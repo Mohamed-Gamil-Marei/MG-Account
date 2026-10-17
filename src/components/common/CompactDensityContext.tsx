@@ -1,73 +1,45 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
-export type TableDensityMode = 'compact' | 'comfortable';
+export type DensityMode = 'comfortable' | 'compact';
 
-interface DensityContextType {
-  density: TableDensityMode;
-  setDensity: (mode: TableDensityMode) => void;
-  toggleDensity: () => void;
+export interface DensityContextValue {
+  density: DensityMode;
+  isCompact: boolean;
   isFocusMode: boolean;
-  setIsFocusMode: (val: boolean) => void;
+  toggleDensity: () => void;
+  setDensity: (mode: DensityMode) => void;
   toggleFocusMode: () => void;
 }
 
-const DensityContext = createContext<DensityContextType>({
+const DensityContext = createContext<DensityContextValue>({
   density: 'comfortable',
-  setDensity: () => {},
-  toggleDensity: () => {},
+  isCompact: false,
   isFocusMode: false,
-  setIsFocusMode: () => {},
+  toggleDensity: () => {},
+  setDensity: () => {},
   toggleFocusMode: () => {},
 });
 
 export const DensityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [density, setDensityState] = useState<TableDensityMode>(() => {
-    try {
-      const saved = localStorage.getItem('mg_table_density');
-      return (saved === 'compact' || saved === 'comfortable') ? saved : 'comfortable';
-    } catch {
-      return 'comfortable';
-    }
-  });
-
-  const [isFocusMode, setIsFocusModeState] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('mg_focus_zen_mode') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const setDensity = (mode: TableDensityMode) => {
-    setDensityState(mode);
-    try {
-      localStorage.setItem('mg_table_density', mode);
-    } catch {}
-  };
+  const [density, setDensity] = useState<DensityMode>('comfortable');
+  const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
 
   const toggleDensity = () => {
-    setDensity(density === 'compact' ? 'comfortable' : 'compact');
-  };
-
-  const setIsFocusMode = (val: boolean) => {
-    setIsFocusModeState(val);
-    try {
-      localStorage.setItem('mg_focus_zen_mode', String(val));
-    } catch {}
+    setDensity((prev) => (prev === 'comfortable' ? 'compact' : 'comfortable'));
   };
 
   const toggleFocusMode = () => {
-    setIsFocusMode(!isFocusMode);
+    setIsFocusMode((prev) => !prev);
   };
 
   return (
     <DensityContext.Provider
       value={{
         density,
-        setDensity,
-        toggleDensity,
+        isCompact: density === 'compact',
         isFocusMode,
-        setIsFocusMode,
+        toggleDensity,
+        setDensity,
         toggleFocusMode,
       }}
     >
@@ -76,4 +48,6 @@ export const DensityProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
-export const useDensity = () => useContext(DensityContext);
+export function useDensity(): DensityContextValue {
+  return useContext(DensityContext);
+}

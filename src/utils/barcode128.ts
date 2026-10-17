@@ -65,17 +65,20 @@ export function encodeCode128B(text: string): { widths: number[]; checksum: numb
  */
 export function generateCode128Svg(
   text: string,
-  options: {
-    height?: number;
-    width?: number;
-    moduleWidth?: number;
-    showText?: boolean;
-    barColor?: string;
-    bgColor?: string;
-    fontSize?: number;
-    quietZone?: boolean;
-  } = {}
+  options:
+    | number
+    | {
+        height?: number;
+        width?: number;
+        moduleWidth?: number;
+        showText?: boolean;
+        barColor?: string;
+        bgColor?: string;
+        fontSize?: number;
+        quietZone?: boolean;
+      } = {}
 ): string {
+  const normalizedOptions = typeof options === 'number' ? { height: options } : options;
   const {
     height = 44,
     moduleWidth = 1.8,
@@ -84,7 +87,7 @@ export function generateCode128Svg(
     bgColor = '#FFFFFF',
     fontSize = 10,
     quietZone = true,
-  } = options;
+  } = normalizedOptions;
 
   const rawText = (text || 'CERT-2026-0001').trim();
   const { widths } = encodeCode128B(rawText);

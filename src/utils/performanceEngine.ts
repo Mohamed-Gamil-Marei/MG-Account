@@ -212,7 +212,7 @@ export function autoMatchBankStatement(
       if (line.accountId === bankAccountId || line.accountCode.startsWith('1102') || line.accountName.includes('بنك')) {
         bankJournalLines.push({
           entryId: entry.id,
-          entryNumber: entry.entryNumber,
+          entryNumber: Number(entry.entryNumber) || 0,
           serialNumber: entry.serialNumber,
           date: entry.date,
           debit: line.debit || 0,

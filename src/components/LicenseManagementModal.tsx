@@ -27,6 +27,7 @@ import { db } from '../db/localDatabase';
 export interface LicenseStatusData {
   success?: boolean;
   status: 'VALID' | 'EXPIRING' | 'GRACE' | 'EXPIRED' | 'MISSING_OR_INVALID';
+  enforcement?: 'on' | 'off' | string;
   message?: string;
   daysRemaining?: number;
   maxUsers?: number;

@@ -74,3 +74,30 @@ export function computeFeeSummary(
 
   return result;
 }
+
+export function computeSingleClientFeeSummary(
+  clientId: string,
+  agreements: ClientFeeAgreement[],
+  collections: ClientFeeCollection[],
+  nowDate: Date = new Date()
+): ClientFeeSummaryItem & { totalAgreed: number; totalPaid: number } {
+  const map = computeFeeSummary(
+    (agreements || []).filter((a) => a.clientId === clientId),
+    (collections || []).filter((c) => c.clientId === clientId),
+    nowDate
+  );
+  const item = map[clientId] || {
+    clientId,
+    totalDue: 0,
+    totalCollected: 0,
+    remaining: 0,
+    daysOverdue: 0,
+    agreementsCount: 0,
+  };
+  return {
+    ...item,
+    totalAgreed: item.totalDue,
+    totalPaid: item.totalCollected,
+  };
+}
+

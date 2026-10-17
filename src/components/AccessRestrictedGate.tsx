@@ -1,98 +1,44 @@
-import React, { useState } from 'react';
-import { ShieldAlert, Lock, KeyRound, UserCheck, AlertCircle, ArrowRight } from 'lucide-react';
-import { SystemUser, NavigationTab } from '../types';
-import { SecurityAuthModal } from './SecurityAuthModal';
+import React from 'react';
+import { SystemUser } from '../types';
+import { ShieldAlert, Lock, Home } from 'lucide-react';
 
-interface AccessRestrictedGateProps {
-  currentUser: SystemUser;
-  targetTabName?: string;
-  tabTitle?: string;
+export interface AccessRestrictedGateProps {
+  currentUser?: SystemUser | null;
+  targetTabName: string;
   onOverrideSuccess?: () => void;
-  onUnlock?: () => void;
   onNavigateHome?: () => void;
-  onGoBack?: () => void;
 }
 
 export const AccessRestrictedGate: React.FC<AccessRestrictedGateProps> = ({
   currentUser,
   targetTabName,
-  tabTitle,
-  onOverrideSuccess,
-  onUnlock,
   onNavigateHome,
-  onGoBack,
 }) => {
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const effectiveTabName = targetTabName || tabTitle || '';
-  const handleSuccess = onOverrideSuccess || onUnlock || (() => {});
-  const handleHome = onNavigateHome || onGoBack || (() => {});
-
   return (
-    <div className="min-h-[500px] flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto shadow-inner">
-          <Lock className="w-8 h-8" />
-        </div>
-
-        <div className="space-y-2">
-          <span className="text-xs font-bold font-mono px-3 py-1 bg-rose-50 text-rose-800 rounded-full border border-rose-200">
-            صلاحيات الوصول مقيدة (RBAC Protected)
-          </span>
-          <h3 className="text-lg font-bold text-slate-900">
-            غير مصرح لك بفتح قسم [{effectiveTabName}]
-          </h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            المستخدم الحالي: <strong>{currentUser.name}</strong> بصلاحية (<strong>{currentUser.roleTitleArabic}</strong>).
-            تم تقييد الوصول إلى هذا القسم الحساس وفقاً لسياسة الرقابة الداخلية وإجراءات ضبط الجودة بالمكتب.
-          </p>
-        </div>
-
-        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-right text-xs space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500">مستوى الصلاحية الحالي:</span>
-            <span className="font-bold text-slate-800">{currentUser.role}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500">الوصول للخزنة:</span>
-            <span className={currentUser.canAccessTreasury ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}>
-              {currentUser.canAccessTreasury ? 'مسموح' : 'محظور'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500">الوصول لسجل المراجعة والتدقيق:</span>
-            <span className={currentUser.canAccessAuditTrail ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}>
-              {currentUser.canAccessAuditTrail ? 'مسموح' : 'محظور'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+    <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 rounded-2xl p-8 text-center max-w-lg mx-auto my-8 space-y-4" dir="rtl">
+      <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+        <ShieldAlert className="w-7 h-7" />
+      </div>
+      <h3 className="text-base font-black text-slate-900 dark:text-white">
+        وصول مقيد حسب صلاحيات الدور الوظيفي (RBAC)
+      </h3>
+      <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+        المستخدم الحالي <strong>({currentUser?.name || 'غير محدد'})</strong> لا يملك صلاحية الوصول إلى شاشة <strong>{targetTabName}</strong>. يرجى مراجعة الشريك المدير لمنح الصلاحية.
+      </p>
+      <div className="flex items-center justify-center gap-3 pt-2">
+        {onNavigateHome && (
           <button
-            onClick={handleHome}
-            className="w-full sm:flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            type="button"
+            onClick={onNavigateHome}
+            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1.5"
           >
-            العودة للوحة التحكم
+            <Home className="w-4 h-4" />
+            <span>العودة للرئيسية</span>
           </button>
-
-          <button
-            onClick={() => setIsAuthModalOpen(true)}
-            className="w-full sm:flex-1 py-2.5 px-4 bg-indigo-700 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
-          >
-            <KeyRound className="w-4 h-4" />
-            <span>إذن استثنائي للمدير</span>
-          </button>
-        </div>
-
-        {/* Override Modal */}
-        <SecurityAuthModal
-          isOpen={isAuthModalOpen}
-          actionTitle={`فتح وتخويل الوصول إلى قسم [${effectiveTabName}]`}
-          onSuccess={() => {
-            setIsAuthModalOpen(false);
-            handleSuccess();
-          }}
-          onClose={() => setIsAuthModalOpen(false)}
-        />
+        )}
+        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+          <Lock className="w-3.5 h-3.5" /> محمي بواسطة نظام الصلاحيات
+        </span>
       </div>
     </div>
   );

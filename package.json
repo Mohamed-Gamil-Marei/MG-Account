@@ -1,8 +1,0 @@
-{
-  "name": "root-redirect",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "build": "cd /app/applet && npm run build"
-  }
-}
