@@ -7,13 +7,22 @@ export interface TaxBracket {
 export interface TaxConfig {
   effectiveDate: string; // ISO format
   corporateTaxRate: number; // Flat rate for corporations
-  individualBrackets: TaxBracket[]; // Bracketed rates for individuals
+  individualBrackets: TaxBracket[]; // General individual brackets
   personalExemption?: number; // Personal exemption amount
+  salaryBrackets?: TaxBracket[]; // المرتبات
+  commercialBrackets?: TaxBracket[]; // النشاط التجاري والمهني
+  vatRate?: number; // القيمة المضافة (e.g., 0.14)
+  legalReviewedBy?: string; // تمت المراجعة القانونية بواسطة
+  legalReviewDate?: string; // تاريخ المراجعة
+  legalReference?: string; // المرجع القانوني (رقم القانون/القرار)
+  createdAt?: string;
+  createdBy?: string;
 }
 
 /**
  * Egyptian Tax Rates & Brackets Configuration
  * Based on Law 91 of 2005 and its amendments (latest being Law 30 of 2023 / Law 175 of 2023)
+ * NOTE: Do not change any existing percentage or bracket.
  */
 export const TAX_CONFIGS: TaxConfig[] = [
   {
@@ -32,13 +41,44 @@ export const TAX_CONFIGS: TaxConfig[] = [
   },
 ];
 
+let customTaxConfigs: TaxConfig[] = [];
+
+export function setCustomTaxConfigs(configs: TaxConfig[]) {
+  customTaxConfigs = configs;
+}
+
+export function getCustomTaxConfigs(): TaxConfig[] {
+  return customTaxConfigs;
+}
+
+export function getAllTaxConfigs(): TaxConfig[] {
+  const combined = [...customTaxConfigs, ...TAX_CONFIGS];
+  return combined.sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+}
+
 /**
  * Gets the tax configuration applicable for a specific date
  */
 export function getTaxConfig(date: string = new Date().toISOString()): TaxConfig {
-  const sorted = [...TAX_CONFIGS].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
-  const config = sorted.find(c => c.effectiveDate <= date);
+  const all = getAllTaxConfigs();
+  const config = all.find(c => c.effectiveDate <= date);
   return config || TAX_CONFIGS[0];
+}
+
+/**
+ * Checks if tax config has been legally reviewed within the last 12 months
+ */
+export function isTaxConfigLegallyValid(config: TaxConfig): { isValid: boolean; message?: string } {
+  if (!config.legalReviewedBy || !config.legalReviewDate) {
+    return { isValid: false, message: "الشرائح الضريبية لم تتم مراجعتها قانونيًا، راجع قبل تقديم أي إقرار" };
+  }
+  const reviewTime = new Date(config.legalReviewDate).getTime();
+  const now = Date.now();
+  const twelveMonthsMs = 12 * 30.44 * 24 * 60 * 60 * 1000;
+  if (isNaN(reviewTime) || (now - reviewTime) > twelveMonthsMs) {
+    return { isValid: false, message: "الشرائح الضريبية لم تتم مراجعتها قانونيًا، راجع قبل تقديم أي إقرار" };
+  }
+  return { isValid: true };
 }
 
 /**

@@ -247,12 +247,14 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
     email: '',
     address: '',
     notes: '',
+    eInvoicingStatus: undefined as string | undefined,
     portalCredentials: {
       etaEInvoicing: { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' },
       sapPortal: { username: '', password: '', expiryDate: '', portalUrl: '' },
       etaGeneralTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://eservices.incometax.gov.eg' },
       etaPayrollTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://payroll.incometax.gov.eg' },
       nafeza: { username: '', password: '', expiryDate: '', portalUrl: 'https://www.nafeza.gov.eg' },
+      eSignatureToken: undefined as any,
     } as PortalCredentials,
   });
 
@@ -399,12 +401,14 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         email: client.email || '',
         address: client.address || '',
         notes: client.notes || '',
+        eInvoicingStatus: client.eInvoicingStatus,
         portalCredentials: client.portalCredentials || {
           etaEInvoicing: { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' },
           sapPortal: { username: '', password: '', expiryDate: '', portalUrl: '' },
           etaGeneralTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://eservices.incometax.gov.eg' },
           etaPayrollTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://payroll.incometax.gov.eg' },
           nafeza: { username: '', password: '', expiryDate: '', portalUrl: 'https://www.nafeza.gov.eg' },
+          eSignatureToken: undefined,
         },
       });
       setIsAddClientModalOpen(true);
@@ -466,12 +470,14 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
       email: clientToEdit.email || '',
       address: clientToEdit.address || '',
       notes: clientToEdit.notes || '',
+      eInvoicingStatus: clientToEdit.eInvoicingStatus,
       portalCredentials: clientToEdit.portalCredentials || {
         etaEInvoicing: { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' },
         sapPortal: { username: '', password: '', expiryDate: '', portalUrl: '' },
         etaGeneralTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://eservices.incometax.gov.eg' },
         etaPayrollTax: { username: '', password: '', expiryDate: '', portalUrl: 'https://payroll.incometax.gov.eg' },
         nafeza: { username: '', password: '', expiryDate: '', portalUrl: 'https://www.nafeza.gov.eg' },
+        eSignatureToken: undefined,
       },
     });
     setIsAuthModalOpen(false);
@@ -505,9 +511,9 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         email: clientFormData.email,
         address: clientFormData.address,
         notes: clientFormData.notes,
+        eInvoicingStatus: clientFormData.eInvoicingStatus,
         portalCredentials: clientFormData.portalCredentials,
       });
-
       alert('تم حفظ وتحديث بيانات العميل والملف الضريبي وكلمات مرور البوابات بنجاح.');
       setIsAddClientModalOpen(false);
       setEditingClientId(null);
@@ -536,6 +542,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         procedures: [],
         tasksHistory: [],
         notes: clientFormData.notes,
+        eInvoicingStatus: clientFormData.eInvoicingStatus,
         portalCredentials: clientFormData.portalCredentials,
       });
 
@@ -1905,6 +1912,19 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                             </div>
 
                             <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                              {portal.key === 'etaEInvoicing' && (
+                                <div className="mb-2">
+                                  {liveSelectedClient?.eInvoicingStatus === 'REGISTERED' ? (
+                                    <div className="text-[11px] bg-emerald-50 text-emerald-800 p-2 rounded-lg border border-emerald-200 font-bold flex items-center gap-1.5">
+                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> مسجل في منظومة الفاتورة الإلكترونية
+                                    </div>
+                                  ) : (
+                                    <div className="text-[11px] bg-slate-100 text-slate-600 p-2 rounded-lg border border-slate-200 font-medium">
+                                      غير مسجل / غير محدد
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               {/* Username */}
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-slate-500 text-[11px]">اسم المستخدم / الرقم الضريبي:</span>
@@ -1988,6 +2008,103 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                                   <span className="text-slate-400">ملاحظات:</span> {cred.notes}
                                 </div>
                               )}
+
+                              {portal.key === 'etaEInvoicing' && (() => {
+                                const token = liveSelectedClient.portalCredentials?.eSignatureToken;
+                                const tokenType = token?.tokenType;
+                                let tokenBadge = <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">لا يوجد توكن</span>;
+                                if (tokenType === 'E_SEAL') {
+                                  tokenBadge = <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-bold border border-indigo-200">له توكن ختم</span>;
+                                } else if (tokenType === 'E_SIGNATURE') {
+                                  tokenBadge = <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold border border-purple-200">توقيع</span>;
+                                } else if (tokenType === 'BOTH') {
+                                  tokenBadge = <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">ختم + توقيع</span>;
+                                } else {
+                                  tokenBadge = <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">غير محدد</span>;
+                                }
+
+                                let tokenExpiryBadge = null;
+                                if (token?.expiryDate) {
+                                  const exp = new Date(token.expiryDate);
+                                  const diffDays = Math.ceil((exp.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                  if (diffDays <= 0) {
+                                    tokenExpiryBadge = <span className="px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-bold">منتهي!</span>;
+                                  } else if (diffDays <= 30) {
+                                    tokenExpiryBadge = <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[9px] font-black">ينتهي خلال {diffDays} يوم!</span>;
+                                  } else {
+                                    tokenExpiryBadge = <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold">ساري ({diffDays} يوم)</span>;
+                                  }
+                                }
+
+                                const tokenCompKey = `${liveSelectedClient.id}_eSignatureToken`;
+                                const revealedPin = revealedPasswordsMap[tokenCompKey] || '';
+                                const isTokenRevealed = showPasswordMap['eSignatureToken'] || false;
+                                const isTokenLoading = loadingRevealKey === tokenCompKey;
+                                const hasTokenPin = Boolean((token as any)?.hasPassword || token?.pin || revealedPin);
+
+                                return (
+                                  <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-bold text-indigo-900 text-xs">التوكن الإلكتروني:</span>
+                                      {tokenBadge}
+                                    </div>
+                                    {tokenType && (
+                                      <div className="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 space-y-1.5 text-[11px]">
+                                        <div className="flex items-center justify-between text-slate-700">
+                                          <span>المزود: <strong className="text-slate-900">{token.provider || 'إيجيبت ترست'}</strong></span>
+                                          {tokenExpiryBadge}
+                                        </div>
+                                        {token.serialNumber && (
+                                          <div className="flex items-center justify-between text-slate-700">
+                                            <span>الرقم التسلسلي:</span>
+                                            <span className="font-mono font-bold text-slate-900">{token.serialNumber}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-center justify-between text-slate-700">
+                                          <span>باسورد التوكن (PIN):</span>
+                                          <div className="flex items-center gap-1">
+                                            <span className="font-mono font-bold text-slate-900">
+                                              {hasTokenPin ? (isTokenRevealed ? revealedPin || '••••' : '••••') : 'غير مسجل'}
+                                            </span>
+                                            {hasTokenPin && (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  disabled={isTokenLoading}
+                                                  onClick={() => handleTogglePasswordReveal(liveSelectedClient.id, 'eSignatureToken')}
+                                                  className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer disabled:opacity-50"
+                                                  title={isTokenRevealed ? 'إخفاء باسورد التوكن' : 'إظهار باسورد التوكن (سجل مراجعة)'}
+                                                >
+                                                  {isTokenLoading ? (
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                                                  ) : isTokenRevealed ? (
+                                                    <EyeOff className="w-3.5 h-3.5" />
+                                                  ) : (
+                                                    <Eye className="w-3.5 h-3.5" />
+                                                  )}
+                                                </button>
+                                                {isTokenRevealed && revealedPin && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      navigator.clipboard.writeText(revealedPin);
+                                                      alert('تم نسخ باسورد التوكن بنجاح');
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 cursor-pointer"
+                                                    title="نسخ باسورد التوكن"
+                                                  >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -3485,72 +3602,216 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
                 </div>
 
                 {/* 1. ETA e-Invoicing */}
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  <span className="font-bold text-emerald-800 text-xs block">1. منظومة الفاتورة والإيصال الإلكتروني (ETA)</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div>
-                      <label className="block text-[11px] text-slate-600 mb-0.5">اسم المستخدم / الرقم الضريبي</label>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-800 text-xs">1. منظومة الفاتورة والإيصال الإلكتروني (ETA)</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
-                        type="text"
-                        value={clientFormData.portalCredentials?.etaEInvoicing?.username || ''}
-                        onChange={(e) =>
+                        type="checkbox"
+                        checked={clientFormData.eInvoicingStatus === 'REGISTERED'}
+                        onChange={(e) => {
+                          const isRegistered = e.target.checked;
                           setClientFormData({
                             ...clientFormData,
+                            eInvoicingStatus: isRegistered ? 'REGISTERED' : undefined,
                             portalCredentials: {
                               ...clientFormData.portalCredentials,
-                              etaEInvoicing: {
-                                ...clientFormData.portalCredentials?.etaEInvoicing,
-                                username: e.target.value,
-                              },
-                            },
-                          })
-                        }
-                        placeholder="الرقم الضريبي أو الإيميل"
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                              etaEInvoicing: isRegistered
+                                ? (clientFormData.portalCredentials?.etaEInvoicing || { portalUrl: 'https://invoicing.eta.gov.eg' })
+                                : { username: '', password: '', expiryDate: '', portalUrl: 'https://invoicing.eta.gov.eg' }
+                            }
+                          });
+                        }}
+                        className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-600 mb-0.5">كلمة المرور / الباسورد</label>
-                      <input
-                        type="text"
-                        value={clientFormData.portalCredentials?.etaEInvoicing?.password || ''}
-                        onChange={(e) =>
-                          setClientFormData({
-                            ...clientFormData,
-                            portalCredentials: {
-                              ...clientFormData.portalCredentials,
-                              etaEInvoicing: {
-                                ...clientFormData.portalCredentials?.etaEInvoicing,
-                                password: e.target.value,
-                              },
-                            },
-                          })
-                        }
-                        placeholder="••••••••"
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ انتهاء الصلاحية</label>
-                      <input
-                        type="date"
-                        value={clientFormData.portalCredentials?.etaEInvoicing?.expiryDate || ''}
-                        onChange={(e) =>
-                          setClientFormData({
-                            ...clientFormData,
-                            portalCredentials: {
-                              ...clientFormData.portalCredentials,
-                              etaEInvoicing: {
-                                ...clientFormData.portalCredentials?.etaEInvoicing,
-                                expiryDate: e.target.value,
-                              },
-                            },
-                          })
-                        }
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
-                      />
-                    </div>
+                      <span className="text-xs font-bold text-slate-700">مسجل في منظومة الفاتورة الإلكترونية</span>
+                    </label>
                   </div>
+                  {clientFormData.eInvoicingStatus === 'REGISTERED' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">اسم المستخدم / الرقم الضريبي</label>
+                        <input
+                          type="text"
+                          value={clientFormData.portalCredentials?.etaEInvoicing?.username || ''}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                etaEInvoicing: {
+                                  ...clientFormData.portalCredentials?.etaEInvoicing,
+                                  username: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          placeholder="الرقم الضريبي أو الإيميل"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">كلمة المرور / الباسورد</label>
+                        <input
+                          type="text"
+                          value={clientFormData.portalCredentials?.etaEInvoicing?.password || ''}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                etaEInvoicing: {
+                                  ...clientFormData.portalCredentials?.etaEInvoicing,
+                                  password: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          placeholder="••••••••"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ انتهاء الصلاحية</label>
+                        <input
+                          type="date"
+                          value={clientFormData.portalCredentials?.etaEInvoicing?.expiryDate || ''}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                etaEInvoicing: {
+                                  ...clientFormData.portalCredentials?.etaEInvoicing,
+                                  expiryDate: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 1.bis Electronic Token (eSignatureToken) */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-indigo-800 text-xs">التوكن الإلكتروني (الختم والتوقيع الإلكتروني)</span>
+                    <select
+                      value={clientFormData.portalCredentials?.eSignatureToken?.tokenType || ''}
+                      onChange={(e) => {
+                        const tType = e.target.value;
+                        setClientFormData({
+                          ...clientFormData,
+                          portalCredentials: {
+                            ...clientFormData.portalCredentials,
+                            eSignatureToken: !tType ? undefined : {
+                              ...(clientFormData.portalCredentials?.eSignatureToken || {}),
+                              tokenType: tType as any,
+                              provider: clientFormData.portalCredentials?.eSignatureToken?.provider || 'إيجيبت ترست'
+                            }
+                          }
+                        });
+                      }}
+                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                    >
+                      <option value="">لا يوجد توكن</option>
+                      <option value="E_SEAL">ختم إلكتروني</option>
+                      <option value="E_SIGNATURE">توقيع إلكتروني</option>
+                      <option value="BOTH">الاثنين معًا (ختم + توقيع)</option>
+                    </select>
+                  </div>
+                  {clientFormData.portalCredentials?.eSignatureToken?.tokenType && (
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">الشركة المزودة</label>
+                        <select
+                          value={clientFormData.portalCredentials?.eSignatureToken?.provider || 'إيجيبت ترست'}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                eSignatureToken: {
+                                  ...clientFormData.portalCredentials?.eSignatureToken,
+                                  provider: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                        >
+                          <option value="إيجيبت ترست">إيجيبت ترست (Egypt Trust)</option>
+                          <option value="مصر للمقاصة">مصر للمقاصة (MCDR)</option>
+                          <option value="دلتا">شركة دلتا (Delta)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">الرقم التسلسلي للتوكن</label>
+                        <input
+                          type="text"
+                          value={clientFormData.portalCredentials?.eSignatureToken?.serialNumber || ''}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                eSignatureToken: {
+                                  ...clientFormData.portalCredentials?.eSignatureToken,
+                                  serialNumber: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          placeholder="SN-XXXX"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">باسورد التوكن (PIN)</label>
+                        <input
+                          type="text"
+                          value={clientFormData.portalCredentials?.eSignatureToken?.pin || ''}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                eSignatureToken: {
+                                  ...clientFormData.portalCredentials?.eSignatureToken,
+                                  pin: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          placeholder="••••"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">تاريخ الانتهاء</label>
+                        <input
+                          type="date"
+                          value={clientFormData.portalCredentials?.eSignatureToken?.expiryDate || ''}
+                          onChange={(e) =>
+                            setClientFormData({
+                              ...clientFormData,
+                              portalCredentials: {
+                                ...clientFormData.portalCredentials,
+                                eSignatureToken: {
+                                  ...clientFormData.portalCredentials?.eSignatureToken,
+                                  expiryDate: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. SAP Portal */}

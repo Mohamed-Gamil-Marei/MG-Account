@@ -1,3 +1,4 @@
+import { getTaxConfig } from "../config/taxSettings";
 import { sanitizeSvg } from '../utils/sanitizeHtml';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
@@ -710,6 +711,7 @@ export const EgyptianTaxDeclarationPdfModal: React.FC<EgyptianTaxDeclarationPdfM
 
             {/* Footer Bar */}
             <div className="pt-1 border-t border-slate-200 flex items-center justify-between text-[9px] text-slate-500">
+              {(() => { const cfg = getTaxConfig(currentDeclaration?.submissionDate || new Date().toISOString()); return (<div className="text-[8.5px] text-slate-600 font-bold mb-0.5">نسخة الإعداد الضريبي المستخدم: تاريخ السريان (${cfg.effectiveDate}) • الشركات: ${(cfg.corporateTaxRate*100).toFixed(1)}% • المرجع القانوني: ${cfg.legalReference || "قانون 91 لسنة 2005 وتعديلاته"} • المراجعة القانونية: ${cfg.legalReviewedBy || "تلقائي"} (${cfg.legalReviewDate || cfg.effectiveDate})</div>); })()}
               <span>طُبع بواسطة: منظومة المحاسب القانوني ومراقب الحسابات • {profile.auditorName || 'محمد جميل مرعي'}</span>
               <span className="font-mono">Page 1 of 1 • System Generated Official Return</span>
             </div>

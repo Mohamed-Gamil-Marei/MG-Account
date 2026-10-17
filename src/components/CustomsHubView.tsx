@@ -51,7 +51,7 @@ import {
   CurrencyCode,
 } from '../types';
 import { db, DatabaseState } from '../db/localDatabase';
-import { SAMPLE_HS_CODES } from '../data/sampleCustomsData';
+import { SAMPLE_HS_CODES } from '../seed/sampleCustomsData';
 import { PrintService } from '../services/PrintService';
 import { DemurrageSentinelTab } from './customs/DemurrageSentinelTab';
 import { FxHedgingEas13Tab } from './customs/FxHedgingEas13Tab';

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { db } from '../db/localDatabase';
 import { fetchWithAuth } from './apiClient';
-import { DEFAULT_OFFICE_PROFILE } from '../data/sampleData';
+import { DEFAULT_OFFICE_PROFILE } from '../seed/sampleData';
 
 describe('Gemini AI Privacy & Office Settings (sendClientDataToGemini)', () => {
   beforeEach(() => {

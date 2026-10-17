@@ -61,8 +61,8 @@ export const SAFE_FALLBACK_USER: SystemUser = {
   canAccessTaxReports: false,
   createdAt: '2026-01-01T00:00:00.000Z',
 };
-import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
-import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../data/defaultExchangeRates';
+import { DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS } from '../seed/defaultChartOfAccounts';
+import { DEFAULT_SAMPLE_EXCHANGE_RATES } from '../seed/defaultExchangeRates';
 import { SecurityAuthService } from '../services/securityAuth';
 import {
   DEFAULT_OFFICE_PROFILE,
@@ -81,8 +81,8 @@ import {
   SAMPLE_WHATSAPP_MESSAGES,
   DEFAULT_WHATSAPP_BOT_SETTINGS,
   SAMPLE_FEE_ESTIMATES,
-} from '../data/sampleData';
-import { SAMPLE_CUSTOMS_SHIPMENTS } from '../data/sampleCustomsData';
+} from '../seed/sampleData';
+import { SAMPLE_CUSTOMS_SHIPMENTS } from '../seed/sampleCustomsData';
 import { IssuedDocumentService } from '../services/issuedDocumentService';
 
 const STORAGE_KEYS = {

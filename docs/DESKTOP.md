@@ -119,3 +119,25 @@ npm run desktop:rebuild
 الملف `.github/workflows/build-desktop.yml` مبرمج لتنفيذ عملية البناء آلياً على بيئة سحابية:
 - **نظام Windows:** يبني `MG Account Setup.exe` بنظام NSIS لمعمارية `x64` ويرفعه كأصل جاهز للتحميل.
 - **نظام macOS:** يبني حزمة `MG-Account.dmg` لمعماريتي `arm64` و `x64` (Universal) بدون حاجة لشهادة توقيع مدفوعة (`identity: null`).
+
+---
+
+### 9. نظام الترخيص ووضع التشغيل (License Modes & Features)
+تدعم المنظومة نظام ترخيص موقع رقمياً (Ed25519) مع إمكانية تحديد وضع التشغيل والخصائص المتاحة:
+1. **وضع التشغيل (`mode`):**
+   - `"ONLINE"`: يتيح التشغيل المتصل مع تفعيل كافة الميزات السحابية والذكاء الاصطناعي وواتساب والربط الضريبي افتراضياً.
+   - `"OFFLINE"`: وضع أوفلاين آمن، حيث تُعطل تلقائياً خدمات Gemini AI و WhatsApp و Firebase Sync وإرسال الفواتير لمصلحة الضرائب (ETA Submit)، بينما يظل إدخال وتجهيز بيانات الفواتير والعملاء متاحاً بالكامل محلياً.
+   - **التوافق العكسي:** الأكواد القديمة التي لا تحتوي على حقل `mode` تُعامل تلقائياً كـ `OFFLINE`.
+2. **الخصائص التفصيلية (`features`):**
+   - `cloudSync`: مزامنة السحابة (Firebase Sync).
+   - `ai`: مساعد الذكاء الاصطناعي (Gemini AI & OCR).
+   - `whatsapp`: محرك واتساب للأعمال (WhatsApp Business API).
+   - `eta`: الإرسال المباشر لمنظومة الفاتورة الإلكترونية.
+3. **أداة إصدار التراخيص (`tools/generate-license.mjs`):**
+   - يدعم المعاملات `--mode=ONLINE` أو `OFFLINE` وخصائص الباقة (`--cloudSync=true/false`, `--ai=true/false`, `--whatsapp=true/false`, `--eta=true/false`).
+   - مثال:
+     ```bash
+     node tools/generate-license.mjs --issue --office="مكتب المحاسبة" --plan=ONLINE --mode=ONLINE --cloudSync=true --ai=true --whatsapp=true --eta=true --days=365 --maxUsers=15
+     ```
+4. **التفعيل الديناميكي:**
+   - يمكن لصق كود الترخيص الجديد عبر شاشة التفعيل (بصلاحية `ADMIN` فقط) دون الحاجة لإعادة تشغيل الخادم ودون أي فقد للبيانات، مع تسجيل العملية في سجل المراجعة (Audit Trail).

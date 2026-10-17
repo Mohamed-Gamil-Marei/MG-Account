@@ -70,6 +70,17 @@ export const Header: React.FC<HeaderProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudSync.getStatus());
+  const [licenseInfo, setLicenseInfo] = useState<{ mode?: string; features?: any; status?: string }>({});
+  useEffect(() => {
+    fetch('/api/license/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setLicenseInfo({ mode: data.mode, features: data.features, status: data.status });
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [dbState, setDbState] = useState(db.getState());
 
   useEffect(() => {
@@ -113,6 +124,10 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 {profile?.licenseNumber || '—'}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-sm ${licenseInfo.mode === 'ONLINE' ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30' : 'bg-amber-500/20 text-amber-200 border-amber-500/30'}`} title={`وضع التشغيل: ${licenseInfo.mode === 'ONLINE' ? 'متصل (Online)' : 'أوفلاين (Offline)'}`}>
+                <span className={`w-2 h-2 rounded-full ${licenseInfo.mode === 'ONLINE' ? 'bg-indigo-400 animate-pulse' : 'bg-amber-400'}`}></span>
+                <span>{licenseInfo.mode === 'ONLINE' ? 'أونلاين (Online)' : 'أوفلاين (Offline)'}</span>
               </span>
               <span className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                 <Phone className="w-3 h-3 text-blue-300" />

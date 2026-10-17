@@ -27,7 +27,7 @@ import { UnifiedSelectDropdown } from '../common/UnifiedSelectDropdown';
 import { ActionMenu } from '../common/ActionMenu';
 import * as XLSX from 'xlsx';
 import { formatWorksheetForArabicExport, writeArabicExcelFile } from '../../utils/excelArabicStyler';
-import { NOTES_TEMPLATES } from '../../data/notesTemplates';
+import { NOTES_TEMPLATES } from '../../seed/notesTemplates';
 import { renderNote } from '../../utils/renderNote';
 
 export interface NoteBreakdownRow {

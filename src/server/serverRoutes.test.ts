@@ -75,6 +75,8 @@ describe('Real Server HTTP Route Tests (src/server/serverRoutes.test.ts)', () =>
         licenseId: 'LIC-TEST-SUITE',
         officeName: 'مكتب الاختبارات الشاملة',
         plan: 'ONLINE',
+        mode: 'ONLINE',
+        features: { cloudSync: true, ai: true, whatsapp: true, eta: true },
         issuedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         maxUsers: 50,

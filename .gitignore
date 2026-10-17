@@ -5,7 +5,7 @@ coverage/
 .whatsapp_session/
 .env*
 !.env.example
-data/
+/data/
 keys/
 release/
 *.db

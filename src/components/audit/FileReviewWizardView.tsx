@@ -43,7 +43,7 @@ import {
   round2,
 } from '../../utils/accountingCalculations';
 import { buildAuditFromTrialBalance } from '../../utils/auditFromTrialBalance';
-import { NOTES_TEMPLATES } from '../../data/notesTemplates';
+import { NOTES_TEMPLATES } from '../../seed/notesTemplates';
 import { renderNote } from '../../utils/renderNote';
 import {
   computeVariance,
