@@ -50,8 +50,20 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState<boolean>(false);
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
   const [showApprovedPassword, setShowApprovedPassword] = useState<boolean>(false);
+  const [licenseEnforcement, setLicenseEnforcement] = useState<string>('on');
 
   const currentUser = db.getCurrentUser();
+
+  useEffect(() => {
+    fetch('/api/license/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.enforcement) {
+          setLicenseEnforcement(data.enforcement);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (initialSubTab) {
@@ -323,7 +335,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
             </div>
 
             {/* Sovereign License Management Card (ADMIN only) */}
-            {currentUser.role === 'ADMIN' && (
+            {licenseEnforcement !== 'off' && currentUser.role === 'ADMIN' && (
               <div
                 data-testid="security-hub-license-card"
                 className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-700 shadow-md text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
@@ -437,10 +449,12 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
       {isPurgeModalOpen && (
         <PurgeDatabaseModal isOpen={isPurgeModalOpen} onClose={() => setIsPurgeModalOpen(false)} />
       )}
-      <LicenseManagementModal
-        isOpen={isLicenseModalOpen}
-        onClose={() => setIsLicenseModalOpen(false)}
-      />
+      {licenseEnforcement !== 'off' && (
+        <LicenseManagementModal
+          isOpen={isLicenseModalOpen}
+          onClose={() => setIsLicenseModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

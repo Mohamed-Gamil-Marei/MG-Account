@@ -32,6 +32,7 @@ import { db, DatabaseState } from '../../db/localDatabase';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { EgyptianTaxDeclarationPdfModal } from '../EgyptianTaxDeclarationPdfModal';
 import { ScreenActionToolbar } from '../common/ScreenActionToolbar';
+import { EInvoicingTokensRegistryView } from './EInvoicingTokensRegistryView';
 
 export const OFFICIAL_SAP_PORTAL_URL =
   'https://auth.eta.gov.eg:8080/auth/realms/e-tax/protocol/saml?SAMLRequest=fZFBa8JAEIX%2FStj7uhut0S4mIJVCoC1SSw%2B9jclEA8luujOx9t93E2mxF2FPj5n33je7Imibzqx7PtpX%2FOyROMo3qdhpPdfzBO7lXRKXMq4wllDttVzEMJvfl8l%2BUZUiekdPtbOpmE60iHKiHnNLDJaDpKeJjLXU8VuszWwW3oeINiGhtsDj1pG5I6MUhPgJMkwO7jTBg1nqpR5F5RGalhRKhrPqvGNXuEYNpUX06HyBY%2FNUVNAQDg22QFSf8E85t40lM1KmovfWOKCajIUWyXBhduvnJxPam19zka2GaTPC%2BKv92%2BshFv1AJbKqAyroimelrhwv9p15CRb5ZuuauvgeUFrg2wmDUpeyGkdNN1yeGC2LaN007ushnIoDN%2Fsehcoumf9%2FNvsB&RelayState=oucqqvqvwazouwrdorferoafbqoxratvzdwbxfd&SigAlg=http%3A%2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=Djou9cgY%2FYDnax7L%2B5j3Vex%2BFNM7GotG0rntgsxbzLx%2BnpgGJPQcjrXKWNAr6ihpxzZpBqOEQgw5ClxuPBFclBUt5QiMJQMhDgdJp5a5LFLk%2FfFkjKA5RtJx12tzb76%2FBAS%2BnsR3G%2BVrEPNGlUk3qz9%2FLpHx2RXv7p2BlVZ7R%2FA5Kos0ZL%2F3NyR9I5rtU4mxtQV%2FjurnuRv%2FnDNrPIA6dgdb9MQ3%2FQUNzRzhEEe131ZSLVC5CO%2BkW1JTBNdS210ldYxzYZFkDX91MhUL3FpGHvxCCP74cJQXA6f7MrGLXec7prjrEK2lmN5DKxg%2FegfZGxy0mBNPUurWLOsQYaL%2BLw%3D%3D#/home';
@@ -194,6 +195,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
   const [systemFilter, setSystemFilter] = useState<SystemFilter>('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeViewMode, setActiveViewMode] = useState<'AGENDA' | 'TOKENS'>('AGENDA');
   
   // تحديد الفترة الضريبية بالتاريخ (وفق نظام الضرائب)
   const [selectedIsoMonth, setSelectedIsoMonth] = useState('2026-03');
@@ -1011,7 +1013,36 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
         </div>
       )}
 
-      {/* 1. الشريط العلوي المبسط بدون حشو */}
+      {/* View Mode Switcher (Agenda vs Tokens) */}
+      <div className="flex items-center justify-center sm:justify-start gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit mx-auto sm:mx-0">
+        <button
+          onClick={() => setActiveViewMode('AGENDA')}
+          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeViewMode === 'AGENDA'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>أجندة وسجل الإقرارات</span>
+        </button>
+        <button
+          onClick={() => setActiveViewMode('TOKENS')}
+          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeViewMode === 'TOKENS'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
+        >
+          <Key className="w-3.5 h-3.5" />
+          <span>سجل الفاتورة والتوكنات</span>
+        </button>
+      </div>
+
+      {activeViewMode === 'TOKENS' ? (
+        <EInvoicingTokensRegistryView state={state} />
+      ) : (
+        <>
       <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-2xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
@@ -2589,6 +2620,8 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
           state={state}
           initialDeclaration={selectedDeclForPdf}
         />
+      )}
+        </>
       )}
     </div>
   );

@@ -30,6 +30,7 @@ import { ClientSelector } from '../common/ClientSelector';
 import { TaxRiskAndPenaltiesView } from '../tax/TaxRiskAndPenaltiesView';
 import { TaxAppealsDefenseView } from '../tax/TaxAppealsDefenseView';
 import { TaxMandateScheduler } from '../TaxMandateScheduler';
+import { EInvoicingTokensRegistryView } from '../tax/EInvoicingTokensRegistryView';
 import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
 import { Scale } from 'lucide-react';
 import { runAutomatedJournalAudit } from '../../services/journalAuditEngine';

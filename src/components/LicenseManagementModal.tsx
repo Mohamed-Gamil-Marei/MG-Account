@@ -109,6 +109,7 @@ export const LicenseManagementModal: React.FC<LicenseManagementModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
+  if (licenseData?.enforcement === 'off') return null;
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
