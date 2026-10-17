@@ -25,6 +25,7 @@ import { DeviceLockModal } from '../DeviceLockModal';
 import { PurgeDatabaseModal } from '../PurgeDatabaseModal';
 import { AccessRestrictedGate } from '../AccessRestrictedGate';
 import { ResponsiveSubTabBar } from '../common/ThemeUIComponents';
+import { LicenseManagementModal } from '../LicenseManagementModal';
 
 export type SecurityAuditSubTab = 'AUDIT_TRAIL' | 'BACKUP_EXPORT' | 'USERS_DEVICES';
 
@@ -47,6 +48,7 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
   const [isUserManagerOpen, setIsUserManagerOpen] = useState<boolean>(false);
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState<boolean>(false);
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState<boolean>(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
   const [showApprovedPassword, setShowApprovedPassword] = useState<boolean>(false);
 
   const currentUser = db.getCurrentUser();
@@ -115,6 +117,17 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
         />
 
         <div className="hidden sm:flex items-center gap-2 text-xs shrink-0 pl-1">
+          {currentUser.role === 'ADMIN' && (
+            <button
+              onClick={() => setIsLicenseModalOpen(true)}
+              data-testid="security-hub-license-btn"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors text-xs border border-emerald-500/30"
+              title="إدارة وتفعيل ترخيص المنظومة (ADMIN)"
+            >
+              <KeyRound className="w-4 h-4 text-emerald-400" />
+              <span>ترخيص المنظومة</span>
+            </button>
+          )}
           <button
             onClick={() => setIsBackupModalOpen(true)}
             className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors text-xs"
@@ -309,6 +322,39 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
               </div>
             </div>
 
+            {/* Sovereign License Management Card (ADMIN only) */}
+            {currentUser.role === 'ADMIN' && (
+              <div
+                data-testid="security-hub-license-card"
+                className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-700 shadow-md text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                    <KeyRound className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-black text-white">ترخيص المنظومة والتوقيع الرقمي (Ed25519)</h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        مدير المنظومة (ADMIN)
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1">
+                      التحقق من صلاحية الترخيص، حالة الباقة، المزايا المفعلة، ووضع التشغيل (أوفلاين / أونلاين).
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsLicenseModalOpen(true)}
+                  data-testid="security-hub-manage-license-card-btn"
+                  className="w-full md:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 flex items-center justify-center gap-2"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>إدارة وتفعيل الترخيص...</span>
+                </button>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Multi-user RBAC Card */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
@@ -391,6 +437,10 @@ export const SecurityAuditHubView: React.FC<SecurityAuditHubViewProps> = ({
       {isPurgeModalOpen && (
         <PurgeDatabaseModal isOpen={isPurgeModalOpen} onClose={() => setIsPurgeModalOpen(false)} />
       )}
+      <LicenseManagementModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+      />
     </div>
   );
 };

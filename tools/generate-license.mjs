@@ -46,14 +46,37 @@ if (command === '--issue') {
     return found ? found.split('=')[1] : null;
   };
 
+  const parseBooleanArg = (name, defaultVal) => {
+    const val = getArg(name);
+    if (val !== null) {
+      if (val === 'true' || val === '1') return true;
+      if (val === 'false' || val === '0') return false;
+    }
+    if (args.includes(`--no-${name}`)) return false;
+    if (args.includes(`--${name}`)) return true;
+    return defaultVal;
+  };
+
   const officeName = getArg('office') || 'المكتب المهني للمحاسبة والمراجعة';
   const plan = getArg('plan') || 'OFFICE'; // TRIAL | OFFICE | ONLINE
   const days = parseInt(getArg('days') || '365', 10);
   const maxUsers = parseInt(getArg('maxUsers') || '10', 10);
-
   const issuedAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
   const licenseId = `LIC-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+
+  // Mode and Features:
+  // Default for OFFLINE: all features false. Default for ONLINE: all features true.
+  const rawMode = (getArg('mode') || (plan.toUpperCase() === 'ONLINE' ? 'ONLINE' : 'OFFLINE')).toUpperCase();
+  const mode = rawMode === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
+  const isOnline = mode === 'ONLINE';
+
+  const features = {
+    cloudSync: parseBooleanArg('cloudSync', isOnline),
+    ai: parseBooleanArg('ai', isOnline),
+    whatsapp: parseBooleanArg('whatsapp', isOnline),
+    eta: parseBooleanArg('eta', isOnline),
+  };
 
   const payloadObj = {
     licenseId,
@@ -62,6 +85,8 @@ if (command === '--issue') {
     issuedAt,
     expiresAt,
     maxUsers,
+    mode,
+    features,
   };
 
   const payloadStr = JSON.stringify(payloadObj);
@@ -87,5 +112,6 @@ if (command === '--issue') {
 
 console.log('الاستخدام:');
 console.log('  node tools/generate-license.mjs --init');
-console.log('  node tools/generate-license.mjs --issue --office="مكتب المحاسبة" --plan=OFFICE --days=365 --maxUsers=15');
+console.log('  node tools/generate-license.mjs --issue --office="مكتب المحاسبة" --plan=OFFICE --days=365 --maxUsers=15 --mode=OFFLINE');
+console.log('  node tools/generate-license.mjs --issue --office="مكتب المحاسبة" --plan=ONLINE --days=365 --maxUsers=15 --mode=ONLINE --cloudSync --ai --whatsapp --eta');
 process.exit(1);

@@ -13,5 +13,4 @@ release/
 *.db-shm
 *.pem
 *.key
-dist/
 

@@ -15,7 +15,14 @@ export function generateVerificationCode(length: number = 24): string {
     crypto.getRandomValues(array);
   } else {
     // Fallback for environments where crypto is under node:crypto
-    const nodeCrypto = typeof window === 'undefined' ? require('crypto') : null;
+    const nodeCrypto = typeof window === 'undefined' ? (() => {
+      try {
+        if (typeof require === 'function') {
+          return require('crypto');
+        }
+      } catch {}
+      return null;
+    })() : null;
     if (nodeCrypto && nodeCrypto.randomBytes) {
       const bytes = nodeCrypto.randomBytes(minLength);
       for (let i = 0; i < minLength; i++) {

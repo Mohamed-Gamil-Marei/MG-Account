@@ -32,6 +32,7 @@ import {
   Printer,
   Receipt,
   Percent,
+  Copy,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, BrandColor, ThemeMode, UserPreferences, CustomFirebaseConfig } from '../types';
@@ -79,6 +80,35 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
   const [securityEnabled, setSecurityEnabled] = useState<boolean>(preferences.securityAuthEnabled ?? false);
   const [compactView, setCompactView] = useState<boolean>(preferences.compactView ?? false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+
+  // Device Activation Code State
+  const [revealedActivationCode, setRevealedActivationCode] = useState<string | null>(null);
+  const [isRevealingCode, setIsRevealingCode] = useState<boolean>(false);
+  const [copiedActivationCode, setCopiedActivationCode] = useState<boolean>(false);
+  const [activationCodeError, setActivationCodeError] = useState<string | null>(null);
+
+  const handleRevealActivationCode = async () => {
+    if (revealedActivationCode) {
+      setRevealedActivationCode(null);
+      return;
+    }
+
+    try {
+      setIsRevealingCode(true);
+      setActivationCodeError(null);
+      const res = await fetchWithAuth('/api/settings/reveal-activation-code');
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRevealedActivationCode(data.code);
+      } else {
+        setActivationCodeError(data.error || 'تعذر إظهار كود تفعيل الأجهزة');
+      }
+    } catch (err: any) {
+      setActivationCodeError('خطأ أثناء الاتصال بالسيرفر لإظهار الكود');
+    } finally {
+      setIsRevealingCode(false);
+    }
+  };
 
   // Custom Firebase Configuration State
   const customFb = preferences.customFirebaseConfig || {
@@ -764,15 +794,23 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* 4. Desktop LAN Access Setting (Item 5 - ADMIN only) */}
+              {/* 4. Office LAN Sharing (ADMIN only) */}
               {isAdmin && (
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div
+                  data-testid="lan-sharing-card"
+                  className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Laptop className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {currentLang === 'ar' ? 'الوصول عبر شبكة المكتب المحلية (Desktop LAN)' : 'Office Local Network (LAN) Access'}
-                      </span>
+                      <div>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                          مشاركة على شبكة المكتب
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                          Office Local Network (LAN) Sharing
+                        </span>
+                      </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -785,27 +823,134 @@ export const AppSettingsModal: React.FC<AppSettingsModalProps> = ({
                     </label>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    الوضع الافتراضي معطل (127.0.0.1) لتأمين البيانات داخل هذا الجهاز فقط. يمكنك تفعيله (0.0.0.0) للسماح لأجهزة المحاسبين والموظفين في نفس المكتب بفتح المنظومة عبر المتصفح.
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                    تتيح هذه الخاصة لأجهزة المحاسبين والموظفين داخل نفس شبكة المكتب المحلية (Wi-Fi أو الكابل) بفتح واستخدام المنظومة مباشرة عبر المتصفح دون الحاجة لتثبيت برامج إضافية.
                   </p>
 
-                  {desktopLanEnabled && (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl space-y-2 text-xs text-amber-900 dark:text-amber-200">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <strong>تحذير أمني:</strong> سيتمكن أي جهاز على نفس شبكة Wi-Fi أو الكابل من الاتصال بهذا الجهاز. يرجى التأكد من تعيين كلمات مرور قوية لجميع المستخدمين.
-                        </div>
+                  {/* Full Address Display with Copy Button */}
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">
+                          العنوان الكامل المعتمد للاتصال بالشبكة:
+                        </span>
+                        <span className="text-xs font-mono font-black text-blue-600 dark:text-blue-400 block mt-0.5" data-testid="lan-full-address">
+                          {desktopNetworkInfo?.lanUrl || `http://127.0.0.1:${desktopNetworkInfo?.port || 3210}`}
+                        </span>
                       </div>
-                      {desktopNetworkInfo?.lanUrl && (
-                        <div className="pt-1">
-                          <span className="text-[11px] block text-slate-600 dark:text-slate-400 mb-0.5">رابط وصول الأجهزة الأخرى:</span>
-                          <span className="font-mono font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-900 px-2 py-1 rounded border border-blue-200 select-all block">
-                            {desktopNetworkInfo.lanUrl}
-                          </span>
-                        </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = desktopNetworkInfo?.lanUrl || `http://127.0.0.1:${desktopNetworkInfo?.port || 3210}`;
+                          navigator.clipboard.writeText(url);
+                          alert('تم نسخ عنوان شبكة المكتب الكامل للحافظة!');
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                        title="نسخ العنوان الكامل"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>نسخ العنوان</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <span>البورت الفعلي النشط: <strong className="font-mono text-slate-800 dark:text-slate-200">{desktopNetworkInfo?.port || 3210}</strong></span>
+                      <span>•</span>
+                      <span>الخادم: <strong className="font-mono text-slate-800 dark:text-slate-200">{desktopLanEnabled ? '0.0.0.0 (LAN Active)' : '127.0.0.1 (Local Only)'}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Keep Awake Warning */}
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>تحذير هام لعمل المنظومة:</strong> يجب بقاء هذا الجهاز شغالاً ومرفوعاً عن وضع السكون (Sleep/Hibernate) أثناء ساعات العمل، حتى تتمكن باقي أجهزة المحاسبين والموظفين بالشبكة من الاتصال والاستمرار بالعمل بدون انقطاع.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Static IP and Firewall Reminder */}
+                  <div className="p-3 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl space-y-1 text-xs text-blue-950 dark:text-blue-200">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>تذكير بإعدادات الشبكة:</strong> يرجى تثبيت عنوان IP المحلي (Static IP) لهذا الجهاز من إعدادات الويندوز أو الروتر، وضبط جدار الحماية (Windows Firewall) على شبكة خاصة (Private Network) لضمان استقرار الاتصال وسهولة دخول الأجهزة.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Master Device Activation Code (ADMIN Only - Required by security specification) */}
+              {isAdmin && (
+                <div
+                  data-testid="device-activation-code-card"
+                  className="p-4 bg-gradient-to-br from-slate-900 to-slate-850 dark:from-slate-950 dark:to-slate-900 rounded-2xl border border-slate-700 space-y-3 text-white"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-white">
+                        {currentLang === 'ar' ? 'كود تفعيل وتصريح الأجهزة (Master Device Activation Code)' : 'Master Device Activation Code'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                      {currentLang === 'ar' ? 'مدير المنظومة (ADMIN)' : 'ADMIN'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {currentLang === 'ar'
+                      ? 'الكود المعتمد لربط وتصريح أجهزة الكمبيوتر والموبايل الجديدة بمكتبك. يتم تسجيل كل عملية إظهار في سجل الرقابة والتدقيق (Audit Logs).'
+                      : 'Master code for authorizing new office workstations. Every reveal action is recorded in Audit Logs.'}
+                  </p>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="flex-1 px-3 py-2 bg-slate-950 rounded-xl border border-slate-700 font-mono text-xs font-bold text-emerald-400 flex items-center justify-between">
+                      <span data-testid="revealed-activation-code-value">
+                        {revealedActivationCode ? revealedActivationCode : '••••••••••••••••'}
+                      </span>
+                      {revealedActivationCode && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(revealedActivationCode);
+                            setCopiedActivationCode(true);
+                            setTimeout(() => setCopiedActivationCode(false), 2000);
+                          }}
+                          className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+                          title="نسخ الكود"
+                        >
+                          {copiedActivationCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
                       )}
                     </div>
+
+                    <button
+                      type="button"
+                      data-testid="btn-reveal-activation-code"
+                      onClick={handleRevealActivationCode}
+                      disabled={isRevealingCode}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                    >
+                      {isRevealingCode ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : revealedActivationCode ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>إخفاء</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>إظهار</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {activationCodeError && (
+                    <p className="text-[11px] text-red-400 font-bold">{activationCodeError}</p>
                   )}
                 </div>
               )}

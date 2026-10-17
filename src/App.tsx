@@ -43,6 +43,8 @@ import {
   FolderTree,
   Factory,
   X,
+  KeyRound,
+  ShieldAlert,
 } from 'lucide-react';
 
 // Primary view loaded directly for immediate startup render
@@ -115,6 +117,7 @@ import { firebaseAuth, FirebaseUserProfile } from './services/firebaseAuthServic
 import { FirebaseAuthGate } from './components/auth/FirebaseAuthGate';
 import { InitialAdminModal } from './components/desktop/InitialAdminModal';
 import { ForceChangePasswordModal } from './components/desktop/ForceChangePasswordModal';
+import { LicenseManagementModal } from './components/LicenseManagementModal';
 import { cloudSync } from './lib/cloudSync';
 
 function HubLoadingFallback() {
@@ -196,6 +199,36 @@ export default function App() {
   const [isMgPromoModalOpen, setIsMgPromoModalOpen] = useState<boolean>(false);
   const [isLogoInspectionModalOpen, setIsLogoInspectionModalOpen] = useState<boolean>(false);
   const [isMobileMoreSheetOpen, setIsMobileMoreSheetOpen] = useState<boolean>(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
+  const [licenseInfo, setLicenseInfo] = useState<{
+    status?: string;
+    mode?: string;
+    features?: any;
+    daysRemaining?: number;
+  }>({});
+
+  const refreshLicenseStatus = () => {
+    fetch('/api/license/status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setLicenseInfo({
+            status: data.status,
+            mode: data.mode || data.payload?.mode,
+            features: data.features || data.payload?.features,
+            daysRemaining: data.daysRemaining,
+          });
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshLicenseStatus();
+    const handleLicenseUpdated = () => refreshLicenseStatus();
+    window.addEventListener('license-updated', handleLicenseUpdated);
+    return () => window.removeEventListener('license-updated', handleLicenseUpdated);
+  }, []);
 
   const [firebaseProfile, setFirebaseProfile] = useState<FirebaseUserProfile | null>(null);
   const [authResolved, setAuthResolved] = useState<boolean>(false);
@@ -1108,6 +1141,13 @@ export default function App() {
           onClose={() => setIsLogoInspectionModalOpen(false)}
         />
       )}
+
+      {/* Sovereign System License Management Modal */}
+      <LicenseManagementModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        onActivated={refreshLicenseStatus}
+      />
 
       {/* Global Command Palette (Ctrl + K) */}
       {isCommandPaletteOpen && (

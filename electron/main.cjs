@@ -11,7 +11,7 @@ const {
   getInitialAdminCredentials,
 } = require('./desktopAdmin.cjs');
 
-// 1. Single Instance Lock (Item 1)
+// 1. Single Instance Lock
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   console.log('[Desktop] Another instance is already running. Quitting.');
@@ -24,6 +24,7 @@ let serverInstance = null;
 let activePort = null;
 let activeHost = '127.0.0.1';
 let allowLan = false;
+let preferredPort = 3210;
 
 app.on('second-instance', () => {
   if (mainWindow) {
@@ -32,19 +33,25 @@ app.on('second-instance', () => {
   }
 });
 
-// Helper to find a free port dynamically
-function getFreePort() {
-  return new Promise((resolve, reject) => {
-    const srv = http.createServer();
-    srv.listen(0, '127.0.0.1', () => {
-      const port = srv.address().port;
-      srv.close(() => resolve(port));
-    });
-    srv.on('error', reject);
+// Helper to find an available port starting at startPort (Default: 3210)
+function getAvailablePort(startPort = 3210, host = '0.0.0.0') {
+  return new Promise((resolve) => {
+    let port = startPort;
+    const checkPort = (p) => {
+      const server = http.createServer();
+      server.once('error', (err) => {
+        checkPort(p + 1);
+      });
+      server.once('listening', () => {
+        server.close(() => resolve(p));
+      });
+      server.listen(p, host);
+    };
+    checkPort(port);
   });
 }
 
-// 2. Data Directories Setup in app.getPath('userData') (Item 2)
+// 2. Data Directories Setup in app.getPath('userData')
 function setupDataDirectories() {
   const userDataPath = app.getPath('userData');
   const dataDir = path.join(userDataPath, 'data');
@@ -61,14 +68,21 @@ function setupDataDirectories() {
   process.env.DOCUMENTS_DIR = documentsDir;
   process.env.BACKUP_DIR = backupDir;
   process.env.DESKTOP_ENV = '1';
+  process.env.IS_ELECTRON_DESKTOP = 'true';
+  process.env.COOKIE_SECURE = 'false';
   process.env.DIST_PATH = path.join(__dirname, '..', 'dist');
 
-  // Network configuration (Item 5)
+  // Network configuration & Port preferences
   const configPath = path.join(userDataPath, 'desktop-config.json');
   try {
     if (fs.existsSync(configPath)) {
       const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       allowLan = Boolean(cfg.allowLan);
+      if (cfg.preferredPort && Number.isInteger(cfg.preferredPort)) {
+        preferredPort = cfg.preferredPort;
+      } else if (cfg.port && Number.isInteger(cfg.port)) {
+        preferredPort = cfg.port;
+      }
     }
   } catch {}
 
@@ -78,7 +92,7 @@ function setupDataDirectories() {
   return { userDataPath, dataDir, dbPath, configPath };
 }
 
-// 3. Automatic Secrets Management (Item 3)
+// 3. Automatic Secrets Management
 function setupSecrets(userDataPath) {
   const secretsPath = path.join(userDataPath, 'secrets.dat');
   let secrets = null;
@@ -135,10 +149,29 @@ function setupSecrets(userDataPath) {
   process.env.ETA_TOKEN_PIN = secrets.ETA_TOKEN_PIN;
 }
 
-// 4. Start In-Process Server (Item 1)
-async function startDesktopServer() {
-  activePort = await getFreePort();
+// 4. Start In-Process Server
+async function startDesktopServer(configPath, startPort = 3210) {
+  activePort = await getAvailablePort(startPort, activeHost);
   process.env.PORT = String(activePort);
+  process.env.COOKIE_SECURE = 'false';
+  process.env.IS_ELECTRON_DESKTOP = 'true';
+
+  // Persist preferredPort and actualPort into desktop-config.json
+  try {
+    let existingCfg = {};
+    if (fs.existsSync(configPath)) {
+      existingCfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+    const updatedCfg = {
+      ...existingCfg,
+      preferredPort: startPort || 3210,
+      actualPort: activePort,
+      allowLan: allowLan,
+    };
+    fs.writeFileSync(configPath, JSON.stringify(updatedCfg, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[Desktop Config] Could not write desktop-config.json:', err);
+  }
 
   // Require bundled server
   const serverPath = path.join(__dirname, '..', 'dist', 'server.cjs');
@@ -180,12 +213,10 @@ async function createMainWindow(port) {
 
 // Register IPC Handlers
 function setupIpcHandlers(userDataPath, configPath) {
-  // One-time Admin credentials retrieval (Item 4)
   ipcMain.handle('desktop:get-initial-admin', () => {
     return getInitialAdminCredentials();
   });
 
-  // Backup & Restore Dialogs (Item 7)
   ipcMain.handle('desktop:choose-backup-folder', async () => {
     const dateStr = new Date().toISOString().slice(0, 10);
     const res = await dialog.showSaveDialog(mainWindow, {
@@ -249,68 +280,56 @@ function setupIpcHandlers(userDataPath, configPath) {
         if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
         if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
 
-        const dbEntry = zip.file('app.db') || zip.file('data/app.db');
-        if (dbEntry) {
-          const dbContent = await dbEntry.async('nodebuffer');
-          fs.writeFileSync(dbPath, dbContent);
-        }
+        for (const filename of Object.keys(zip.files)) {
+          const zipEntry = zip.files[filename];
+          if (zipEntry.isDirectory) continue;
 
-        const documentsDir = process.env.DOCUMENTS_DIR;
-        const docFiles = Object.keys(zip.files).filter(k => k.startsWith('documents/'));
-        if (docFiles.length > 0 && fs.existsSync(documentsDir)) {
-          fs.rmSync(documentsDir, { recursive: true, force: true });
-          fs.mkdirSync(documentsDir, { recursive: true });
-          for (const k of docFiles) {
-            const entry = zip.files[k];
-            if (!entry.dir) {
-              const targetDocPath = path.join(dataDir, k);
+          if (filename === 'app.db' || filename.endsWith('/app.db')) {
+            const buf = await zipEntry.async('nodebuffer');
+            fs.writeFileSync(dbPath, buf);
+          } else if (filename.startsWith('documents/')) {
+            const relPath = filename.replace('documents/', '');
+            if (relPath) {
+              const targetDocPath = path.join(process.env.DOCUMENTS_DIR, relPath);
               fs.mkdirSync(path.dirname(targetDocPath), { recursive: true });
-              const content = await entry.async('nodebuffer');
-              fs.writeFileSync(targetDocPath, content);
+              const buf = await zipEntry.async('nodebuffer');
+              fs.writeFileSync(targetDocPath, buf);
             }
           }
         }
       }
 
-      // Restart server & reload window
-      await startDesktopServer();
-      if (mainWindow) {
-        mainWindow.loadURL(`http://127.0.0.1:${activePort}`);
-      }
+      // Relaunch or restart server
+      app.relaunch();
+      app.exit(0);
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
     }
   });
 
-  // Network Status and LAN Access (Item 5)
-  ipcMain.handle('desktop:get-network-status', () => {
-    const nets = os.networkInterfaces();
-    const ips = [];
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]) {
-        if (net.family === 'IPv4' && !net.internal) {
-          ips.push(net.address);
-        }
-      }
-    }
-    return {
-      host: activeHost,
-      port: activePort,
-      allowLan,
-      localIps: ips,
-      lanUrl: ips.length ? `http://${ips[0]}:${activePort}` : `http://127.0.0.1:${activePort}`,
-    };
-  });
-
-  ipcMain.handle('desktop:set-network-access', (_event, newAllowLan) => {
-    allowLan = Boolean(newAllowLan);
-    fs.writeFileSync(configPath, JSON.stringify({ allowLan }, null, 2));
-    return { success: true, allowLan, restartRequired: true };
-  });
-
   ipcMain.handle('desktop:get-user-data-path', () => {
     return app.getPath('userData');
+  });
+
+  ipcMain.handle('desktop:set-network-access', async (_event, allow) => {
+    try {
+      allowLan = Boolean(allow);
+      let existingCfg = {};
+      if (fs.existsSync(configPath)) {
+        existingCfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      }
+      const updatedCfg = {
+        ...existingCfg,
+        preferredPort: preferredPort || 3210,
+        actualPort: activePort,
+        allowLan: allowLan,
+      };
+      fs.writeFileSync(configPath, JSON.stringify(updatedCfg, null, 2), 'utf8');
+      return { success: true, allowLan };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 }
 
@@ -322,7 +341,7 @@ app.whenReady().then(async () => {
     const resetAdminPasswordRequested = process.argv.includes('--reset-admin-password');
     setupOrResetDesktopAdmin(dbPath, { resetPassword: resetAdminPasswordRequested });
     setupIpcHandlers(userDataPath, configPath);
-    const port = await startDesktopServer();
+    const port = await startDesktopServer(configPath, preferredPort);
     await createMainWindow(port);
   } catch (err) {
     console.error('[Desktop Fatal Startup Error]:', err);

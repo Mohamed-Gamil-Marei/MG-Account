@@ -7,16 +7,30 @@ if (!fs.existsSync(keysDir)) {
   fs.mkdirSync(keysDir, { recursive: true });
 }
 
-const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519', {
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-});
+const privateKeyPath = path.join(keysDir, 'private.pem');
+const publicKeyPath = path.join(keysDir, 'public.pem');
 
-fs.writeFileSync(path.join(keysDir, 'private.pem'), privateKey);
-fs.writeFileSync(path.join(keysDir, 'public.pem'), publicKey);
+const isNew = process.argv.includes('--new');
+let publicKey = '';
+let privateKey = '';
 
-console.log('Generated Ed25519 keypair in keys/');
+// Reuse existing keys if present, unless explicitly requested via --new
+if (!isNew && fs.existsSync(privateKeyPath) && fs.existsSync(publicKeyPath)) {
+  publicKey = fs.readFileSync(publicKeyPath, 'utf8');
+  console.log('Reusing existing Ed25519 keypair from keys/');
+} else {
+  const generated = crypto.generateKeyPairSync('ed25519', {
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  publicKey = generated.publicKey;
+  privateKey = generated.privateKey;
+  fs.writeFileSync(privateKeyPath, privateKey);
+  fs.writeFileSync(publicKeyPath, publicKey);
+  console.log(isNew ? 'Generated NEW Ed25519 keypair (--new flag specified).' : 'Generated Ed25519 keypair in keys/');
+}
 
+// Update ED25519_PUBLIC_KEY in server.ts with the public key
 const serverPath = path.join(__dirname, '../server.ts');
 let serverContent = fs.readFileSync(serverPath, 'utf8');
 

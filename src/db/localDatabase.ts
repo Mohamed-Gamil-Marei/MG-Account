@@ -2967,8 +2967,6 @@ export class LocalDatabase {
   public exportFullBackupJson(): string {
     let securityMeta = null;
     try {
-      // Lazy load signature from SecurityAuthService
-      const { SecurityAuthService } = require('../services/securityAuth');
       securityMeta = SecurityAuthService.generateBackupLicenseSignature();
     } catch {
       // Fallback
@@ -2995,7 +2993,6 @@ export class LocalDatabase {
       // Automatically validate & license this machine if backup has a valid license signature
       if (parsed.securityMetadata) {
         try {
-          const { SecurityAuthService } = require('../services/securityAuth');
           SecurityAuthService.processImportedBackupLicense(parsed);
         } catch (e) {
           console.error('License import error:', e);

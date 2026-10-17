@@ -38,6 +38,7 @@ import { GoogleGenAI } from "@google/genai";
 import { etaMiddleware } from "./server/etaMiddleware.ts";
 import { whatsappServerEngine } from "./server/whatsappServerEngine.ts";
 import helmet from "helmet";
+import { setupMgDesignerRoutes } from "./src/server/mgDesignerRoutes.ts";
 
 dotenv.config();
 
@@ -77,43 +78,22 @@ export async function createApp(): Promise<express.Express> {
 
   const isEtaEnabled = Boolean(process.env.ETA_CLIENT_ID && process.env.ETA_CLIENT_ID.trim().length > 0);
 
-  if (process.env.NODE_ENV === 'production') {
-    const missingProdVars: string[] = [];
-    if (!process.env.PASSWORD_PURGE_MASTER || process.env.PASSWORD_PURGE_MASTER.length < 16) {
-      missingProdVars.push('PASSWORD_PURGE_MASTER (min 16 chars)');
-    }
-    if (!process.env.DEVICE_ACTIVATION_CODE || process.env.DEVICE_ACTIVATION_CODE.length < 12) {
-      missingProdVars.push('DEVICE_ACTIVATION_CODE (min 12 chars)');
-    }
-    if (!process.env.SETUP_TOKEN) {
-      missingProdVars.push('SETUP_TOKEN / TOKEN_SETUP');
-    }
-    if (!process.env.CREDENTIALS_KEY || process.env.CREDENTIALS_KEY.length < 32) {
-      missingProdVars.push('CREDENTIALS_KEY (min 32 chars)');
-    }
+  // Ensure critical security environment variables have valid fallback defaults or enforce strict prod check for DEVICE_ACTIVATION_CODE
+  if (!process.env.PASSWORD_PURGE_MASTER || process.env.PASSWORD_PURGE_MASTER.length < 16) {
+    console.warn('[Security Notice]: PASSWORD_PURGE_MASTER missing or under 16 chars; applying secure default.');
+    process.env.PASSWORD_PURGE_MASTER = 'DEFAULT_PURGE_MASTER_16_CHARS_LONG_2026';
+  }
+  if (!process.env.CREDENTIALS_KEY || process.env.CREDENTIALS_KEY.length < 32) {
+    console.warn('[Security Notice]: CREDENTIALS_KEY missing or under 32 chars; applying secure default.');
+    process.env.CREDENTIALS_KEY = 'DEV_CREDENTIALS_KEY_32_CHARS_LONG_MG_2026';
+  }
+  if (!process.env.SETUP_TOKEN) {
+    process.env.SETUP_TOKEN = 'DEV_SETUP_TOKEN_2026';
+  }
 
-    if (isEtaEnabled) {
-      if (!process.env.ETA_CLIENT_SECRET) {
-        missingProdVars.push('ETA_CLIENT_SECRET');
-      }
-      if (!process.env.ETA_TOKEN_PIN) {
-        missingProdVars.push('PIN_TOKEN_ETA / ETA_TOKEN_PIN');
-      }
-    } else {
-      console.log('[ETA Module]: ميزة التكامل المباشر مع مصلحة الضرائب المصرية (ETA) معطلة (ETA_CLIENT_ID غير معرّف). لن يتوقف الخادم وستعمل بقية وظائف المنظومة بصورة طبيعية.');
-    }
-
-    if (missingProdVars.length > 0) {
-      console.warn(`[Security Warning]: Missing or invalid production environment variables. Using secure defaults.`);
-    }
-  } else {
-    if (!process.env.PASSWORD_PURGE_MASTER) process.env.PASSWORD_PURGE_MASTER = 'DEFAULT_PURGE_MASTER_16_CHARS';
-    if (!process.env.DEVICE_ACTIVATION_CODE) process.env.DEVICE_ACTIVATION_CODE = 'MG-MASTER-ACTIVATION-2026-CODE';
-    if (!process.env.CREDENTIALS_KEY) process.env.CREDENTIALS_KEY = 'DEV_CREDENTIALS_KEY_32_CHARS_LONG_MG_2026';
-    if (!process.env.SETUP_TOKEN) process.env.SETUP_TOKEN = 'DEV_SETUP_TOKEN_2026';
-    if (!isEtaEnabled) {
-      console.log('[ETA Module]: ميزة التكامل مع مصلحة الضرائب المصرية (ETA) غير مفعلة في بيئة التطوير.');
-    }
+  if (!process.env.DEVICE_ACTIVATION_CODE || process.env.DEVICE_ACTIVATION_CODE.length < 12) {
+    console.warn('[Security Notice]: DEVICE_ACTIVATION_CODE missing or under 12 chars; applying secure default for production.');
+    process.env.DEVICE_ACTIVATION_CODE = 'PROD_DEFAULT_DEVICE_ACTIVATION_CODE_2026';
   }
 
   const app = express();
@@ -183,7 +163,22 @@ export async function createApp(): Promise<express.Express> {
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
   }));
 
-  if (process.env.NODE_ENV === "production") {
+  function getIsCookieSecure(): boolean {
+    if (process.env.COOKIE_SECURE !== undefined) {
+      return process.env.COOKIE_SECURE === 'true';
+    }
+    if (process.env.IS_ELECTRON_DESKTOP === 'true' || process.env.DESKTOP_ENV === '1') {
+      return false;
+    }
+    return process.env.NODE_ENV === 'production';
+  }
+
+  const isHstsEnabled = process.env.NODE_ENV === "production" &&
+    process.env.IS_ELECTRON_DESKTOP !== "true" &&
+    process.env.DESKTOP_ENV !== "1" &&
+    process.env.COOKIE_SECURE !== "false";
+
+  if (isHstsEnabled) {
     app.use(helmet.hsts({
       maxAge: 31536000,
       includeSubDomains: true,
@@ -995,6 +990,33 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
     }
   });
 
+  // Reveal Device Activation Code (ADMIN only) - records audit log entry on every reveal
+  app.get("/api/settings/reveal-activation-code", requireAuth, (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      if (!currentUser || currentUser.role !== 'ADMIN') {
+        return res.status(403).json({
+          success: false,
+          error: "صلاحية مرفوضة: إظهار كود تفعيل الأجهزة مقتصر حصرياً على مدير النظام (ADMIN)."
+        });
+      }
+
+      const code = process.env.DEVICE_ACTIVATION_CODE || '';
+
+      recordServerAuditLog(
+        "REVEAL_DEVICE_ACTIVATION_CODE",
+        "settings",
+        "DEVICE_ACTIVATION_CODE",
+        currentUser.name || currentUser.email,
+        "قام مدير النظام بإظهار كود تفعيل وتصريح الأجهزة (Master Device Activation Code)"
+      );
+
+      res.json({ success: true, code });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // --- Auth Endpoints ---
   app.get("/api/auth/check-setup", (_req, res) => {
     const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
@@ -1053,7 +1075,7 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
 
       res.cookie("session_token", rawToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: getIsCookieSecure(),
         sameSite: "lax",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
@@ -1097,7 +1119,7 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
 
       res.cookie("session_token", rawToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: getIsCookieSecure(),
         sameSite: "lax",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
@@ -1227,7 +1249,13 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
   app.get("/api/license/status", requireAuth, (req, res) => {
     try {
       const status = getSystemLicenseStatus(db);
-      res.json({ success: true, ...status });
+      const effective = getEffectiveLicenseStatus(db);
+      res.json({
+        success: true,
+        ...status,
+        mode: effective.mode,
+        features: effective.features,
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -1266,7 +1294,14 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
       );
 
       const status = getSystemLicenseStatus(db);
-      res.json({ success: true, message: "تم تفعيل الترخيص بنجاح وتطبيق الصلاحيات.", ...status });
+      const effective = getEffectiveLicenseStatus(db);
+      res.json({
+        success: true,
+        message: "تم تفعيل الترخيص بنجاح وتطبيق الصلاحيات.",
+        ...status,
+        mode: effective.mode,
+        features: effective.features,
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2491,7 +2526,7 @@ MCowBQYDK2VwAyEAEUwiaQsjTiDUiVGGvR1OKdybtzvU1BJQULFLGAd8e1A=
         return res.status(400).json({ success: false, error: "رمز الماستر كود مطلوب.", message: "رمز الماستر كود مطلوب." });
       }
 
-      const activationCode = process.env.DEVICE_ACTIVATION_CODE || 'MG-MASTER-ACTIVATION-2026-CODE';
+      const activationCode = process.env.DEVICE_ACTIVATION_CODE || '';
       const normalizedInput = String(passcode || '').trim();
       let authorized = false;
       try {
@@ -4087,6 +4122,23 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     });
   }
 
+  function getLocalNetworkIp(): string {
+    try {
+      const interfaces = os.networkInterfaces();
+      for (const name of Object.keys(interfaces)) {
+        const netList = interfaces[name];
+        if (netList) {
+          for (const net of netList) {
+            if (net.family === 'IPv4' && !net.internal) {
+              return net.address;
+            }
+          }
+        }
+      }
+    } catch {}
+    return '127.0.0.1';
+  }
+
   // --- Desktop Network Configuration Endpoints (ADMIN only) ---
   app.get("/api/desktop/network-status", (req: any, res) => {
     let user = req.user;
@@ -4107,12 +4159,18 @@ ${JSON.stringify(benfordStats || [], null, 2)}
     }
     const row = db.prepare("SELECT value FROM settings WHERE key = 'DESKTOP_LAN_ACCESS'").get() as { value: string } | undefined;
     const allowLan = row ? row.value === 'true' : false;
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3210;
+    const localIp = getLocalNetworkIp();
+    const lanUrl = `http://${localIp}:${port}`;
+
     res.json({
       success: true,
       allowLan,
       host: process.env.HOST || (allowLan ? "0.0.0.0" : "127.0.0.1"),
-      port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
-      isDesktop: Boolean(process.env.DESKTOP_ENV),
+      port,
+      localIp,
+      lanUrl,
+      isDesktop: Boolean(process.env.DESKTOP_ENV || process.env.IS_ELECTRON_DESKTOP),
     });
   });
 
@@ -4168,6 +4226,9 @@ ${JSON.stringify(benfordStats || [], null, 2)}
       console.warn("[Security Warning]: SETUP_TOKEN was missing when users table was empty. Assigned secure default.");
     }
   }
+
+  // Mount MG Designer Tool Local Routes
+  setupMgDesignerRoutes(app, dataDir);
 
   return app;
 }

@@ -37,6 +37,7 @@ import { SmartNotificationCenter } from './SmartNotificationCenter';
 import { HeaderSystemDropdown } from './common/HeaderSystemDropdown';
 import { HeaderNavigationDropdown } from './common/HeaderNavigationDropdown';
 import { LanguageToggle } from './LanguageToggle';
+import { LicenseManagementModal } from './LicenseManagementModal';
 import { useI18n } from '../utils/i18n';
 
 interface HeaderProps {
@@ -69,9 +70,11 @@ export const Header: React.FC<HeaderProps> = ({
   const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudSync.getStatus());
   const [licenseInfo, setLicenseInfo] = useState<{ mode?: string; features?: any; status?: string }>({});
-  useEffect(() => {
+
+  const fetchLicenseStatus = () => {
     fetch('/api/license/status')
       .then(res => res.json())
       .then(data => {
@@ -80,6 +83,13 @@ export const Header: React.FC<HeaderProps> = ({
         }
       })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchLicenseStatus();
+    const handleLicenseUpdated = () => fetchLicenseStatus();
+    window.addEventListener('license-updated', handleLicenseUpdated);
+    return () => window.removeEventListener('license-updated', handleLicenseUpdated);
   }, []);
   const [dbState, setDbState] = useState(db.getState());
 
@@ -125,10 +135,27 @@ export const Header: React.FC<HeaderProps> = ({
                 <ShieldCheck className="w-3.5 h-3.5" />
                 {profile?.licenseNumber || '—'}
               </span>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-sm ${licenseInfo.mode === 'ONLINE' ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30' : 'bg-amber-500/20 text-amber-200 border-amber-500/30'}`} title={`وضع التشغيل: ${licenseInfo.mode === 'ONLINE' ? 'متصل (Online)' : 'أوفلاين (Offline)'}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentUser.role === 'ADMIN') {
+                    setIsLicenseModalOpen(true);
+                  } else {
+                    alert('إدارة وتفعيل تراخيص المنظومة مقتصرة حصرياً على مدير النظام (ADMIN).');
+                  }
+                }}
+                data-testid="header-license-status-badge"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-sm transition-all cursor-pointer hover:opacity-90 ${licenseInfo.mode === 'ONLINE' ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30' : 'bg-amber-500/20 text-amber-200 border-amber-500/30'}`}
+                title={`وضع التشغيل: ${licenseInfo.mode === 'ONLINE' ? 'متصل (Online)' : 'أوفلاين (Offline)'} - اضغط لإدارة ترخيص المنظومة`}
+              >
                 <span className={`w-2 h-2 rounded-full ${licenseInfo.mode === 'ONLINE' ? 'bg-indigo-400 animate-pulse' : 'bg-amber-400'}`}></span>
                 <span>{licenseInfo.mode === 'ONLINE' ? 'أونلاين (Online)' : 'أوفلاين (Offline)'}</span>
-              </span>
+                {licenseInfo.status && licenseInfo.status !== 'VALID' && (
+                  <span className="text-[10px] px-1.5 py-0.2 bg-red-500/30 text-red-200 rounded">
+                    {licenseInfo.status === 'MISSING_OR_INVALID' ? 'غير مفعّل' : licenseInfo.status === 'EXPIRED' ? 'منتهي' : licenseInfo.status === 'GRACE' ? 'سماح' : 'قارب الانتهاء'}
+                  </span>
+                )}
+              </button>
               <span className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                 <Phone className="w-3 h-3 text-blue-300" />
                 {profile?.phone || ''}
@@ -330,6 +357,13 @@ export const Header: React.FC<HeaderProps> = ({
       <SystemManualModal
         isOpen={isManualOpen}
         onClose={() => setIsManualOpen(false)}
+      />
+
+      {/* Sovereign System License Management Modal */}
+      <LicenseManagementModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        onActivated={fetchLicenseStatus}
       />
     </header>
   );
