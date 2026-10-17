@@ -1443,7 +1443,7 @@ declare global {
   interface Window {
     electronDesktop?: {
       isDesktop: boolean;
-      getInitialAdminCredentials: () => Promise<{ name: string; email: string; password: string } | null>;
+      getInitialAdminCredentials: () => Promise<{ name: string; email: string; password: string; isReset?: boolean } | null>;
       chooseBackupFolder: () => Promise<string | null>;
       chooseRestoreFile: () => Promise<string | null>;
       saveBackupToFile: (filePath: string) => Promise<{ success: boolean; size?: number; error?: string }>;

@@ -1,72 +1,32 @@
-# خطة معالجة أخطاء التجميع وتثبيت البيانات وإتاحة التطبيق للمعاينة
+# Implementation Plan: Comprehensive Automated Test & Verification Check
 
-خطة عمل فورية لمعالجة أخطاء التجميع الناتجة عن فقدان ملف البيانات `sampleData.ts`، مع توفير خيار العمل بقاعدة بيانات فارغة أو نموذجية، والتأكد من استقرار الرابط المباشر للتشغيل.
+## Goal
+Run a complete automated test suite, type-safety check, production build, and feature audit across all recent features and requests (including tax configurations, seed folder reorganization, desktop initial admin setup, password reset recovery `--reset-admin-password`, offline auth, and licensing).
 
-## قرارات المستخدم والخيارات المعتمدة
+## User Brief & Requirements
+The user requested an automated test and verification check across all application features from recent orders.
 
-> [!IMPORTANT]
-> تم رصد حذف ملف `src/data/sampleData.ts`، وهو ما يوقف مرحلة الـ Build في Vite. سنقوم بتأمين استيراد البيانات بحيث لا يتوقف النظام مستقبلاً سواء وُجدت بيانات تجريبية أو كانت قاعدة البيانات جديدة وفارغة.
+## Proposed Steps
 
-- **القرار المعتمد**: إعادة توليد هيكل البيانات التأسيسي (`sampleData.ts`) مع إمكانية تفريغ البيانات من لوحة الإعدادات للمستخدم، والحفاظ على دليل الحسابات المصري وبيانات المكتب.
-- **إتاحة الرابط الفوري**: تشغيل خادم التطوير بنجاح وبناء نسخة التوزيع (`dist`) لتمكين المعاينة المباشرة عبر الرابط.
+### Step 1: Automated Unit & Integration Testing (`npm test`)
+- Run Vitest test runner across all 36 test suites.
+- Verify 245+ test cases pass cleanly (including desktop admin modal, `--reset-admin-password` recovery, tax calculations, license enforcement, and offline authentication).
 
----
+### Step 2: TypeScript Type Checking & Syntax Linting (`npm run lint`)
+- Execute `tsc --noEmit` to validate all imports, type definitions, and interface contracts.
 
-## 1. النظرة العامة والهدف الأساسي
+### Step 3: Production Build Execution (`npm run build`)
+- Compile Vite client assets (`dist/assets/`) and esbuild server bundle (`dist/server.cjs`).
+- Verify no missing module dependencies or transform errors.
 
-- **ما يقدمه التطبيق**: منظومة محاسبية وإدارية شاملة للمكاتب المهنية والمحاسبين القانونيين في مصر (دليل الحسابات المصري، قيود اليومية، الفواتير الإلكترونية، الإقرارات الضريبية، مراجعة وتدقيق المستندات، وإدارة ملفات العملاء).
-- **المشكلة الحالية**: حذف ملف `sampleData.ts` تسبب في فشل تجميع المشروع وتوقف ظهور الواجهة.
-- **الحل الجذري**: 
-  1. إعادة إنشاء `src/data/sampleData.ts` متوافق بنسبة 100% مع TypeScript وخالٍ من الأخطاء.
-  2. التحقق من بناء المشروع بالكامل عبر `compile_applet`.
-  3. تقديم الرابط المباشر للمعاينة.
+### Step 4: AI Studio Preview Applet Verification (`compile_applet`)
+- Run `compile_applet` tool to confirm zero compilation errors in the AI Studio platform environment.
 
----
+### Step 5: Comprehensive Summary Report
+- Provide a clear, structured Arabic summary of all verification results, test counts, and feature health status.
 
-## 2. تجربة المستخدم والتصميم البصري
-
-- **الواجهة والهوية**: واجهة عربية كاملة (RTL) بهوية بصرية مهنية تناسب مكاتب المحاسبة والمراجعة (ألوان كحلية داكنة مع لمسات ذهبية ملكية ورمادي فاحم، مع خط عربي واضح).
-- **التدفق عند الفتح**:
-  1. التحميل الفوري للوحة التحكم الرئيسية (Dashboard) دون شاشات بيضاء أو أخطاء استيراد.
-  2. إمكانية الانتقال السلس بين أقسام: العملاء، الخزينة، الفواتير، الضرائب، الجمارك، والمراجعة.
-
----
-
-## 3. القرارات التقنية
-
-- **القرار الأول: معالجة البيانات الأولية**:
-  - *النهج المختار*: كتابة ملف `src/data/sampleData.ts` نظيف ومعرّف بالكامل مع الأنواع الصحيحة لضمان نجاح `npm run build` و `tsc --noEmit`.
-  - *السبب*: منع أخطاء Rollup/Vite عند استيراد البيانات في `localDatabase.ts`.
-
-- **القرار الثاني: جهوزية النشر (Deployment Readiness)**:
-  - *النهج المختار*: اختبار البناء عبر `compile_applet` وتشغيل خادم التطوير على المنفذ 3000 للتأكد من استجابة `HTTP 200 OK`.
-  - *السبب*: تمكين المستخدم من فتح الرابط ومراجعة التطبيق وتجربته فوراً.
-
----
-
-## 4. المخطط المعماري وتدفق البيانات
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      واجهة المستخدم (React)                 │
-│  ┌───────────────┐ ┌────────────────┐ ┌──────────────────┐  │
-│  │ لوحة التحكم  │ │ إدارة الحسابات  │ │ الإقرارات والضرائب│  │
-│  └───────┬───────┘ └────────┬───────┘ └────────┬─────────┘  │
-└──────────┼──────────────────┼──────────────────┼────────────┘
-           │                  │                  │
-           ▼                  ▼                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│             محرك قاعدة البيانات المحلي (localDatabase)       │
-│  ┌───────────────────────┐       ┌───────────────────────┐  │
-│  │  دليل الحسابات المصري │       │ ملف المكتب والإعدادات │  │
-│  └───────────────────────┘       └───────────────────────┘  │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │ بيانات العملاء والقيود والمعاملات (sampleData.ts)      │  │
-│  └───────────────────────────────────────────────────────┘  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│        تخزين المتصفح الدائم (IndexedDB / LocalStorage)       │
-└─────────────────────────────────────────────────────────────┘
-```
+## Verification Criteria
+- All Vitest test suites pass with 0 failures.
+- TypeScript compiler returns 0 type or import errors.
+- Production build succeeds without errors.
+- Preview applet compiles cleanly.

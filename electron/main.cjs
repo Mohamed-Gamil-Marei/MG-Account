@@ -6,6 +6,10 @@ const crypto = require('crypto');
 const os = require('os');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
+const {
+  setupOrResetDesktopAdmin,
+  getInitialAdminCredentials,
+} = require('./desktopAdmin.cjs');
 
 // 1. Single Instance Lock (Item 1)
 const gotTheLock = app.requestSingleInstanceLock();
@@ -20,7 +24,6 @@ let serverInstance = null;
 let activePort = null;
 let activeHost = '127.0.0.1';
 let allowLan = false;
-let initialAdminCredentials = null;
 
 app.on('second-instance', () => {
   if (mainWindow) {
@@ -68,6 +71,7 @@ function setupDataDirectories() {
       allowLan = Boolean(cfg.allowLan);
     }
   } catch {}
+
   activeHost = allowLan ? '0.0.0.0' : '127.0.0.1';
   process.env.HOST = activeHost;
 
@@ -131,82 +135,7 @@ function setupSecrets(userDataPath) {
   process.env.ETA_TOKEN_PIN = secrets.ETA_TOKEN_PIN;
 }
 
-// 4. Direct Admin Setup on First Run (Item 4)
-function setupInitialAdminIfEmpty(dbPath) {
-  let db;
-  try {
-    db = new Database(dbPath);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'PENDING',
-        is_active INTEGER NOT NULL DEFAULT 1,
-        can_manage_users INTEGER DEFAULT 0,
-        can_access_treasury INTEGER DEFAULT 0,
-        can_access_audit_trail INTEGER DEFAULT 0,
-        can_post_entries INTEGER DEFAULT 0,
-        can_edit_posted_entries INTEGER DEFAULT 0,
-        can_delete_records INTEGER DEFAULT 0,
-        can_access_credit_files INTEGER DEFAULT 0,
-        can_access_tax_reports INTEGER DEFAULT 0,
-        must_change_password INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL
-      );
-    `);
-
-    try {
-      db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;");
-    } catch {}
-
-    const countRow = db.prepare('SELECT COUNT(*) as count FROM users').get();
-    if (countRow && countRow.count === 0) {
-      // Generate 12-char password
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-      let tempPassword = '';
-      for (let i = 0; i < 12; i++) {
-        tempPassword += chars[crypto.randomInt(0, chars.length)];
-      }
-
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(tempPassword, salt);
-      const createdAt = new Date().toISOString();
-
-      db.prepare(`
-        INSERT INTO users (
-          name, email, password_hash, role, is_active,
-          can_manage_users, can_access_treasury, can_access_audit_trail,
-          can_post_entries, can_edit_posted_entries, can_delete_records,
-          can_access_credit_files, can_access_tax_reports,
-          must_change_password, created_at
-        ) VALUES (
-          'admin', 'admin@desktop.local', ?, 'ADMIN', 1,
-          1, 1, 1,
-          1, 1, 1,
-          1, 1,
-          1, ?
-        )
-      `).run(hash, createdAt);
-
-      // Keep in memory ONLY for the one-time display (never log to console/disk)
-      initialAdminCredentials = {
-        name: 'admin',
-        email: 'admin@desktop.local',
-        password: tempPassword,
-      };
-    }
-  } catch (err) {
-    console.error('[Desktop Database Init Error]:', err);
-  } finally {
-    if (db) {
-      try { db.close(); } catch {}
-    }
-  }
-}
-
-// 5. Start In-Process Server (Item 1)
+// 4. Start In-Process Server (Item 1)
 async function startDesktopServer() {
   activePort = await getFreePort();
   process.env.PORT = String(activePort);
@@ -253,9 +182,7 @@ async function createMainWindow(port) {
 function setupIpcHandlers(userDataPath, configPath) {
   // One-time Admin credentials retrieval (Item 4)
   ipcMain.handle('desktop:get-initial-admin', () => {
-    const creds = initialAdminCredentials;
-    initialAdminCredentials = null; // Clear immediately from memory!
-    return creds;
+    return getInitialAdminCredentials();
   });
 
   // Backup & Restore Dialogs (Item 7)
@@ -392,9 +319,9 @@ app.whenReady().then(async () => {
   try {
     const { userDataPath, dbPath, configPath } = setupDataDirectories();
     setupSecrets(userDataPath);
-    setupInitialAdminIfEmpty(dbPath);
+    const resetAdminPasswordRequested = process.argv.includes('--reset-admin-password');
+    setupOrResetDesktopAdmin(dbPath, { resetPassword: resetAdminPasswordRequested });
     setupIpcHandlers(userDataPath, configPath);
-
     const port = await startDesktopServer();
     await createMainWindow(port);
   } catch (err) {

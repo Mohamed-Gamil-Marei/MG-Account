@@ -511,7 +511,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         email: clientFormData.email,
         address: clientFormData.address,
         notes: clientFormData.notes,
-        eInvoicingStatus: clientFormData.eInvoicingStatus,
+        eInvoicingStatus: clientFormData.eInvoicingStatus as any,
         portalCredentials: clientFormData.portalCredentials,
       });
       alert('تم حفظ وتحديث بيانات العميل والملف الضريبي وكلمات مرور البوابات بنجاح.');
@@ -542,7 +542,7 @@ export const ClientsArchiveView: React.FC<ClientsArchiveViewProps> = ({ state, o
         procedures: [],
         tasksHistory: [],
         notes: clientFormData.notes,
-        eInvoicingStatus: clientFormData.eInvoicingStatus,
+        eInvoicingStatus: clientFormData.eInvoicingStatus as any,
         portalCredentials: clientFormData.portalCredentials,
       });
 

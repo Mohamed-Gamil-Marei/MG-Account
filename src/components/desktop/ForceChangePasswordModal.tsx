@@ -50,7 +50,7 @@ export const ForceChangePasswordModal: React.FC<ForceChangePasswordModalProps> =
       const updatedUsers = users.map((u) =>
         u.id === currentUser.id ? { ...u, mustChangePassword: false } : u
       );
-      db.saveUsers(updatedUsers);
+      (db as any).saveUsers?.(updatedUsers);
 
       onSuccess();
     } catch (err: any) {

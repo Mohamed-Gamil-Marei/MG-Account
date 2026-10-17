@@ -691,10 +691,12 @@ export class LocalDatabase {
           cl.relationshipType = cl.clientType === 'PRIMARY' ? 'PERMANENT' : 'TEMPORARY';
         }
         if (!cl.folders || cl.folders.length === 0) {
-          cl.folders = DEFAULT_CLIENT_FOLDERS.map((f, idx) => ({
-            ...f,
+          cl.folders = DEFAULT_CLIENT_FOLDERS.map((folderName, idx) => ({
             id: `fld-${cl.id}-${idx + 1}`,
+            name: folderName,
+            title: folderName,
             clientId: cl.id,
+            createdAt: new Date().toISOString(),
           }));
         }
         return cl;
@@ -4407,15 +4409,15 @@ export class LocalDatabase {
     if (!currentUser || currentUser.role !== 'ADMIN') {
       return false;
     }
-    this.state.clients = [...SAMPLE_CLIENTS];
-    this.state.journalEntries = [...SAMPLE_JOURNAL_ENTRIES];
+    this.state.clients = SAMPLE_CLIENTS as any;
+    this.state.journalEntries = SAMPLE_JOURNAL_ENTRIES as any;
     this.state.treasuryTransactions = [...SAMPLE_TREASURY_TRANSACTIONS];
     this.state.taxDeclarations = [...SAMPLE_TAX_DECLARATIONS];
     this.state.taxMandates = [...SAMPLE_TAX_MANDATES];
     this.state.certificates = [...SAMPLE_CERTIFICATES];
     this.state.invoices = [...SAMPLE_INVOICES];
-    this.state.feasibilityStudies = [SAMPLE_FEASIBILITY_STUDY];
-    this.state.creditSimulations = [SAMPLE_CREDIT_SIMULATION];
+    this.state.feasibilityStudies = [];
+    this.state.creditSimulations = [];
     this.state.fixedAssets = [...SAMPLE_FIXED_ASSETS];
     this.saveState();
     this.logAudit('CREATE', 'استعادة البيانات التجريبية الشاملة بواسطة المدير');

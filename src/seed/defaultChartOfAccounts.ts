@@ -1,6 +1,15 @@
-import { Account } from '../types';
+import { Account, AccountCategory, AccountNature } from '../types';
 
-export const DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS: Account[] = [
+export interface RawChartAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  subType?: string;
+  balance: number;
+}
+
+export const RAW_EGYPTIAN_CHART_OF_ACCOUNTS: RawChartAccount[] = [
   { id: '1101', code: '1101', name: 'الربط المباشر مع الخزينة الرئيسية', type: 'ASSET', subType: 'CURRENT_ASSET', balance: 150000 },
   { id: '1102', code: '1102', name: 'البنك الأهلي المصري - حساب جاري', type: 'ASSET', subType: 'CURRENT_ASSET', balance: 450000 },
   { id: '1103', code: '1103', name: 'العملاء وحسابات القبض', type: 'ASSET', subType: 'CURRENT_ASSET', balance: 280000 },
@@ -22,9 +31,31 @@ export const DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS: Account[] = [
   { id: '3102', code: '3102', name: 'الأرباح المرحلة (المدورة)', type: 'EQUITY', balance: 353000 },
   { id: '4100', code: '4100', name: 'إيرادات المبيعات والخدمات', type: 'REVENUE', balance: 0 },
   { id: '4101', code: '4101', name: 'إيرادات النشاط الرئيسي (المبيعات)', type: 'REVENUE', balance: 950000 },
-  { id: '4102', code: '4102', name: 'إيرادات الخدمات والاستشارات', type: 'REVENUE', balance: 0 },
+  { id: '4102', code: '4102', name: 'إيرادات الخدمات واستشارات', type: 'REVENUE', balance: 0 },
   { id: '4110', code: '4110', name: 'إيرادات مبيعات الفواتير', type: 'REVENUE', balance: 0 },
   { id: '5101', code: '5101', name: 'تكلفة البضاعة المباعة (كست)', type: 'EXPENSE', balance: 580000 },
   { id: '5201', code: '5201', name: 'مصروفات عمومية وإدارية', type: 'EXPENSE', balance: 120000 },
   { id: '5202', code: '5202', name: 'مصروف أجور ومرتبات', type: 'EXPENSE', balance: 95000 },
 ];
+
+export const DEFAULT_EGYPTIAN_CHART_OF_ACCOUNTS: Account[] = RAW_EGYPTIAN_CHART_OF_ACCOUNTS.map((raw) => {
+  const category = (raw.type || 'ASSET') as AccountCategory;
+  const rawTypeStr = String(raw.type || '');
+  const isDebitNature = rawTypeStr === 'ASSET' || rawTypeStr === 'EXPENSE';
+  const nature: AccountNature = isDebitNature ? 'DEBIT' : 'CREDIT';
+  const bal = raw.balance || 0;
+
+  return {
+    id: raw.id,
+    code: raw.code,
+    name: raw.name,
+    category,
+    nature,
+    level: raw.code.length <= 2 ? 1 : raw.code.length <= 3 ? 2 : 3,
+    openingBalanceDebit: isDebitNature ? Math.max(0, bal) : 0,
+    openingBalanceCredit: !isDebitNature ? Math.max(0, bal) : 0,
+    currentDebit: 0,
+    currentCredit: 0,
+    currentBalance: bal,
+  };
+});

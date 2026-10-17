@@ -1,8 +1,65 @@
-export const SAMPLE_HS_CODES = [
-  { hsCode: '84713000', descriptionAr: 'أجهزة حاسب آلي محمولة (لابتوب)', dutyRatePercent: 5, vatRatePercent: 14 },
-  { hsCode: '85171200', descriptionAr: 'أجهزة هاتف محمول بشبكات خلوي', dutyRatePercent: 10, vatRatePercent: 14 },
-  { hsCode: '87032300', descriptionAr: 'سيارات ركوب خاصة 1600 سيسي', dutyRatePercent: 40, vatRatePercent: 14 },
-  { hsCode: '30049090', descriptionAr: 'أدوية ومستحضرات صيدلانية معالجة', dutyRatePercent: 2, vatRatePercent: 0 },
+export interface HsCodeRecord {
+  hsCode: string;
+  code: string;
+  descriptionAr: string;
+  titleAr: string;
+  titleEn: string;
+  dutyRatePercent: number;
+  dutyRatePct: number;
+  vatRatePercent: number;
+  vatRatePct: number;
+  regulatoryAuthority: string;
+}
+
+export const SAMPLE_HS_CODES: HsCodeRecord[] = [
+  {
+    hsCode: '84713000',
+    code: '84713000',
+    descriptionAr: 'أجهزة حاسب آلي محمولة (لابتوب)',
+    titleAr: 'أجهزة حاسب آلي محمولة (لابتوب)',
+    titleEn: 'Portable Automatic Data Processing Machines',
+    dutyRatePercent: 5,
+    dutyRatePct: 5,
+    vatRatePercent: 14,
+    vatRatePct: 14,
+    regulatoryAuthority: 'الهيئة العامة للرقابة على الصادرات والواردات',
+  },
+  {
+    hsCode: '85171200',
+    code: '85171200',
+    descriptionAr: 'أجهزة هاتف محمول بشبكات خلوي',
+    titleAr: 'أجهزة هاتف محمول بشبكات خلوي',
+    titleEn: 'Mobile Cellular Telephones',
+    dutyRatePercent: 10,
+    dutyRatePct: 10,
+    vatRatePercent: 14,
+    vatRatePct: 14,
+    regulatoryAuthority: 'الجهاز القومي لتنظيم الاتصالات NTRA',
+  },
+  {
+    hsCode: '87032300',
+    code: '87032300',
+    descriptionAr: 'سيارات ركوب خاصة 1600 سيسي',
+    titleAr: 'سيارات ركوب خاصة 1600 سيسي',
+    titleEn: 'Motor Cars Cylinder Capacity 1600cc',
+    dutyRatePercent: 40,
+    dutyRatePct: 40,
+    vatRatePercent: 14,
+    vatRatePct: 14,
+    regulatoryAuthority: 'الإدارة العامة للمرور وهيئة التنمية الصناعية',
+  },
+  {
+    hsCode: '30049090',
+    code: '30049090',
+    descriptionAr: 'أدوية ومستحضرات صيدلانية معالجة',
+    titleAr: 'أدوية ومستحضرات صيدلانية معالجة',
+    titleEn: 'Medicaments for Therapeutic Uses',
+    dutyRatePercent: 2,
+    dutyRatePct: 2,
+    vatRatePercent: 0,
+    vatRatePct: 0,
+    regulatoryAuthority: 'هيئه الدواء المصرية EDA',
+  },
 ];
 
 export const SAMPLE_CUSTOMS_SHIPMENTS = [

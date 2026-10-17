@@ -1,56 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Copy, Check, AlertTriangle, KeyRound, ArrowRight } from 'lucide-react';
+import {
+  getDesktopInitialAdminCredentials,
+  consumeDesktopInitialAdminCredentials,
+  DesktopAdminCredentials,
+} from '../../services/desktopAdminCredentialsService';
 
 interface InitialAdminModalProps {
   onDismiss?: (email: string) => void;
 }
 
 export const InitialAdminModal: React.FC<InitialAdminModalProps> = ({ onDismiss }) => {
-  const [credentials, setCredentials] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [credentials, setCredentials] = useState<DesktopAdminCredentials | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(true);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.electronDesktop?.getInitialAdminCredentials) {
-      window.electronDesktop.getInitialAdminCredentials().then((creds) => {
-        if (creds && creds.password) {
-          setCredentials(creds);
-        }
-      }).catch((err) => {
-        console.warn('Failed to retrieve initial admin credentials:', err);
-      });
-    }
+    let isMounted = true;
+    getDesktopInitialAdminCredentials().then((creds) => {
+      if (isMounted && creds && creds.password) {
+        setCredentials(creds);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (!credentials) return null;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(credentials.password);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(credentials.password);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   };
 
   const handleProceed = () => {
-    const email = credentials.email;
+    const email = credentials.email || 'admin@desktop.local';
+    consumeDesktopInitialAdminCredentials();
     setCredentials(null);
     if (onDismiss) {
       onDismiss(email);
     }
   };
 
+  const isReset = Boolean(credentials.isReset);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="bg-white dark:bg-slate-900 border-2 border-emerald-500 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-right font-['Cairo',system-ui,sans-serif]">
+    <div
+      data-testid="initial-admin-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+      dir="rtl"
+    >
+      <div className="bg-white dark:bg-slate-900 border-2 border-emerald-500 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-right font-['Cairo',system-ui,sans-serif] animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 shrink-0">
             <ShieldCheck className="w-7 h-7" />
           </div>
           <div>
             <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              بيانات الدخول الأولية لمدير المنظومة (سطح المكتب)
+              {isReset
+                ? 'استرجاع كلمة مرور مدير المنظومة (سطح المكتب)'
+                : 'بيانات الدخول الأولية لمدير المنظومة (سطح المكتب)'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              تم تهيئة أول حساب مدير للنظام تلقائياً وبأمان كامل.
+              {isReset
+                ? 'تم توليد كلمة مرور مؤقتة جديدة للمدير بناءً على تشغيل المنظومة بالمعامل --reset-admin-password.'
+                : 'تم تهيئة أول حساب مدير للنظام تلقائياً وبأمان كامل.'}
             </p>
           </div>
         </div>
@@ -70,7 +89,10 @@ export const InitialAdminModal: React.FC<InitialAdminModalProps> = ({ onDismiss 
             <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
               اسم المستخدم / البريد الإلكتروني:
             </label>
-            <div className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 select-all">
+            <div
+              data-testid="initial-admin-email"
+              className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 select-all"
+            >
               {credentials.email}
             </div>
           </div>
@@ -89,7 +111,10 @@ export const InitialAdminModal: React.FC<InitialAdminModalProps> = ({ onDismiss 
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex-1 font-mono text-base font-black text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700/60 tracking-wider select-all">
+              <div
+                data-testid="initial-admin-password"
+                className="flex-1 font-mono text-base font-black text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700/60 tracking-wider select-all"
+              >
                 {showPassword ? credentials.password : '••••••••••••'}
               </div>
               <button
@@ -111,6 +136,7 @@ export const InitialAdminModal: React.FC<InitialAdminModalProps> = ({ onDismiss 
         {/* Action Button */}
         <button
           type="button"
+          data-testid="initial-admin-proceed-btn"
           onClick={handleProceed}
           className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-2xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
         >

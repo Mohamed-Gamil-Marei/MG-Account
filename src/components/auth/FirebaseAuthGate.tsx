@@ -18,6 +18,7 @@ import {
 import { firebaseAuth, FirebaseUserProfile } from '../../services/firebaseAuthService';
 import { saveOfflineAuthCache, verifyOfflineAuthCache, clearOfflineAuthCache } from '../../services/offlineAuthService';
 import { db } from '../../db/localDatabase';
+import { InitialAdminModal } from '../desktop/InitialAdminModal';
 
 interface FirebaseAuthGateProps {
   onAuthenticated: (profile: FirebaseUserProfile) => void;
@@ -38,6 +39,11 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   // Standard Login / Register state
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
+
+  const handleInitialAdminDismiss = (adminEmail: string) => {
+    setEmail(adminEmail || 'admin@desktop.local');
+    setIsRegistering(false);
+  };
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -278,6 +284,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   if (checkingSetup) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4" dir="rtl">
+        <InitialAdminModal onDismiss={handleInitialAdminDismiss} />
         <div className="text-center space-y-3">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
           <p className="text-xs text-slate-400 font-medium">جاري التحقق من حالة المنظومة...</p>
@@ -290,6 +297,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   if (needsAdminSetup) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 overflow-y-auto" dir="rtl">
+        <InitialAdminModal onDismiss={handleInitialAdminDismiss} />
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-600/15 rounded-full blur-3xl" />
           <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl" />
@@ -450,6 +458,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
   // STANDARD LOGIN / REGISTER FORM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 overflow-y-auto" dir="rtl">
+      <InitialAdminModal onDismiss={handleInitialAdminDismiss} />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/15 rounded-full blur-3xl" />
@@ -528,6 +537,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({ onAuthentica
               <div className="relative">
                 <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
+                  data-testid="login-email-input"
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

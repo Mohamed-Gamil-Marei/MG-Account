@@ -1,12 +1,14 @@
-import { OfficeProfile, User, UserPreferences, WhatsAppBotSettings } from '../types';
+import { OfficeProfile, SystemUser, UserPreferences, WhatsAppBotSettings } from '../types';
 
 export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   auditorName: 'محمد جميل مرعي',
   firmName: 'مكتب المحاسب القانوني ومراقب الحسابات / محمد جميل مرعي',
+  title: 'محاسب قانوني ومراجع حسابات',
   licenseNumber: 'س.م.م 43122',
-  taxRegistrationNumber: '120-489-890',
+  taxAuthorityRegNo: '120-489-890',
   address: '32 شارع مصطفى النحاس - مدينة نصر - القاهرة - مصر',
   phone: '0552777332',
+  mobile: '01003335360',
   email: 'info@marei-cpa.com',
   logoUrl: '',
   commercialRegisterNo: '98412',
@@ -15,7 +17,7 @@ export const DEFAULT_OFFICE_PROFILE: OfficeProfile = {
   defaultTaxRate: 14,
   includeOfficeTaxInfo: true,
   sendClientDataToGemini: false,
-};
+} as any;
 
 export const DEFAULT_CLIENT_FOLDERS = [
   'المستندات الدائمة والبطاقة الضريبية',
@@ -26,29 +28,35 @@ export const DEFAULT_CLIENT_FOLDERS = [
 ];
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  theme: 'system',
+  themeMode: 'system',
+  brandColor: 'emerald',
   language: 'ar',
-  compactMode: false,
-  showNotifications: true,
-  autoSaveInterval: 30,
+  compactView: false,
 };
 
 export const DEFAULT_WHATSAPP_BOT_SETTINGS: WhatsAppBotSettings = {
-  isEnabled: true,
-  apiDispatchMode: 'NATIVE',
+  isAutoReplyEnabled: true,
+  officeWorkingHours: '09:00 - 17:00',
+  welcomeGreeting: 'مرحباً بك في مكتب المحاسب القانوني ومراقب الحسابات د. محمد جميل مرعي',
+  botName: 'مساعد المكتب الذكي',
+  includeQrVerification: true,
+  apiDispatchMode: 'DIRECT_WEB_API',
   customApiBaseUrl: 'https://api.whatsapp.com/send',
-  autoSendOnInvoicePost: false,
   templates: [
     {
       id: 'tmpl-1',
       code: 'VERIFICATION_CODE',
       title: 'رمز التحقق الرقمي المعتمد',
+      category: 'GENERAL' as any,
+      subject: 'رمز التوثيق',
       templateBody: 'رمز التأكيد الخاص ببيانات الاعتماد لمكتب المحاسب القانوني هو: {code}. للاستفسار اتصل على 01003335360.',
     },
     {
       id: 'tmpl-2',
       code: 'INVOICE_NOTIFY',
       title: 'إشعار إصدَار فاتورة إلكترونية',
+      category: 'GENERAL' as any,
+      subject: 'فاتورة إلكترونية جديدة',
       templateBody: 'عزيزي العميل {clientName}، تم إصدار الفاتورة رقم {invoiceNo} بمبلغ {amount} ج.م.',
     },
   ],
@@ -56,12 +64,13 @@ export const DEFAULT_WHATSAPP_BOT_SETTINGS: WhatsAppBotSettings = {
 
 export const SAMPLE_WHATSAPP_MESSAGES = [];
 
-export const SAMPLE_SYSTEM_USERS: User[] = [
+export const SAMPLE_SYSTEM_USERS: SystemUser[] = [
   {
     id: 'user-admin',
     name: 'المدير الرئيسي - محمد جميل مرعي',
     email: 'admin@marei-cpa.com',
     role: 'ADMIN',
+    roleTitleArabic: 'مدير المنظومة والشريك المسؤول',
     isActive: true,
     canManageUsers: true,
     canAccessTreasury: true,
@@ -78,6 +87,7 @@ export const SAMPLE_SYSTEM_USERS: User[] = [
     name: 'محاسب عام - أحمد محمود',
     email: 'accountant@marei-cpa.com',
     role: 'ACCOUNTANT',
+    roleTitleArabic: 'محاسب رئيسي بالمنظومة',
     isActive: true,
     canManageUsers: false,
     canAccessTreasury: true,
