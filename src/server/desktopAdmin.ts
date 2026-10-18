@@ -28,22 +28,29 @@ export function ensureUsersAndSessionsSchema(sqliteDb: any): void {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'PENDING',
       is_active INTEGER NOT NULL DEFAULT 1,
-      can_manage_users INTEGER DEFAULT 1,
-      can_access_treasury INTEGER DEFAULT 1,
-      can_access_audit_trail INTEGER DEFAULT 1,
-      can_post_entries INTEGER DEFAULT 1,
-      can_edit_posted_entries INTEGER DEFAULT 1,
-      can_delete_records INTEGER DEFAULT 1,
-      can_access_credit_files INTEGER DEFAULT 1,
-      can_access_tax_reports INTEGER DEFAULT 1,
-      must_change_password INTEGER DEFAULT 0,
+      can_manage_users INTEGER NOT NULL DEFAULT 0,
+      can_access_treasury INTEGER NOT NULL DEFAULT 0,
+      can_access_audit_trail INTEGER NOT NULL DEFAULT 0,
+      can_post_entries INTEGER NOT NULL DEFAULT 0,
+      can_edit_posted_entries INTEGER NOT NULL DEFAULT 0,
+      can_delete_records INTEGER NOT NULL DEFAULT 0,
+      can_access_credit_files INTEGER NOT NULL DEFAULT 0,
+      can_access_tax_reports INTEGER NOT NULL DEFAULT 0,
+      must_change_password INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      token TEXT UNIQUE NOT NULL,
+      token_hash TEXT UNIQUE NOT NULL,
       user_id INTEGER NOT NULL,
-      expires_at TEXT NOT NULL
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      email TEXT PRIMARY KEY,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      locked_until TEXT,
+      last_attempt TEXT NOT NULL
     );
   `);
 }

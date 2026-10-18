@@ -60,8 +60,8 @@ export function getDossierPageMetas(
   }
   return [
     { id: 'p-1', pageNumber: 1, title: `تقرير مراقب الحسابات المستقل (${selectedYear})` },
-    { id: 'p-2', pageNumber: 2, title: `قائمة المركز المالي في 31 ديسمبر ${selectedYear}${compSuffix}` },
-    { id: 'p-3', pageNumber: 3, title: `قائمة الدخل والأرباح والخسائر عن عام ${selectedYear}${compSuffix}` },
+    { id: 'p-2', pageNumber: 2, title: `قائمة المركز المالي بنهاية السنة المالية ${selectedYear}${compSuffix}` },
+    { id: 'p-3', pageNumber: 3, title: `قائمة الدخل والأرباح والخسائر عن السنة المالية ${selectedYear}${compSuffix}` },
     { id: 'p-4', pageNumber: 4, title: `قائمة التدفقات النقدية والتغير في حقوق الملكية (${selectedYear})` },
     { id: 'p-5', pageNumber: 5, title: `الإيضاحات المتممة للقوائم المالية والمؤشرات الائتمانية (${selectedYear})` },
   ];

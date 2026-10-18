@@ -61,8 +61,12 @@ export type NavigationTab =
   | 'CUSTOMS_NAFEZA_ACI'
   | 'MOBILE_COMPANION'
   | 'MULTI_TENANT_WORKSPACES'
+  | 'UNASSIGNED_ENTRIES'
+  | 'ACCOUNT_MAPPING'
   | 'MG_DESIGNER'
   | string;
+
+export type ClientActivityTemplate = 'COMMERCIAL' | 'INDUSTRIAL' | 'SERVICE' | 'CONTRACTING';
 
 export type AccountCategory =
   | 'ASSETS'
@@ -95,11 +99,35 @@ export interface Account {
   currentBalance?: number;
   isSystem?: boolean;
   isActive?: boolean;
-  clientId?: string;
+  clientId: string;
+  fiscalYear?: number;
   currency?: CurrencyCode;
   subType?: string;
   notes?: string;
-  [key: string]: any;
+}
+
+export interface OpeningBalanceEntry {
+  debit: number;
+  credit: number;
+  accountCode?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export type NestedOpeningBalancesMap = Record<
+  string,
+  Record<number, Record<string, OpeningBalanceEntry>>
+>;
+
+export interface ClientOpeningBalanceRecord {
+  clientId: string;
+  fiscalYear: number;
+  accountId: string;
+  accountCode: string;
+  openingBalanceDebit: number;
+  openingBalanceCredit: number;
+  updatedAt: string;
+  updatedBy: string;
 }
 
 export interface JournalEntryLine {
@@ -115,19 +143,104 @@ export interface JournalEntryLine {
   exchangeRate?: number;
   foreignDebit?: number;
   foreignCredit?: number;
+  originalAmount?: number;
+  amountEgp?: number;
   taxCode?: string;
   clientId?: string;
   [key: string]: any;
 }
 
+export type InvoiceType =
+  | 'SALES'
+  | 'PURCHASE'
+  | 'RETURN_SALES'
+  | 'RETURN_PURCHASE'
+  | 'CREDIT_NOTE'
+  | 'DEBIT_NOTE'
+  | 'OFFICE_SERVICE';
+
+export type AccountMappingFieldKey =
+  | 'cashAccountCode'
+  | 'receivablesAccountCode'
+  | 'payablesAccountCode'
+  | 'salesAccountCode'
+  | 'officeServiceRevenueAccountCode'
+  | 'purchasesAccountCode'
+  | 'salesReturnsAccountCode'
+  | 'purchaseReturnsAccountCode'
+  | 'vatOutputAccountCode'
+  | 'vatInputAccountCode'
+  | 'whtReceivableAccountCode'
+  | 'whtPayableAccountCode'
+  | 'tableTaxAccountCode'
+  | 'fxGainAccountCode'
+  | 'fxLossAccountCode';
+
+export interface ClientAccountMapping {
+  clientId: string;
+  cashAccountCode: string;
+  receivablesAccountCode: string;
+  payablesAccountCode: string;
+  salesAccountCode: string;
+  officeServiceRevenueAccountCode: string;
+  purchasesAccountCode: string;
+  salesReturnsAccountCode: string;
+  purchaseReturnsAccountCode: string;
+  vatOutputAccountCode: string;
+  vatInputAccountCode: string;
+  whtReceivableAccountCode: string;
+  whtPayableAccountCode: string;
+  tableTaxAccountCode: string;
+  fxGainAccountCode: string;
+  fxLossAccountCode: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export type FinancialStatementLineKey =
+  // Balance Sheet (قائمة المركز المالي)
+  | 'BS_CASH_EQUIVALENTS' // النقدية وما في حكمها
+  | 'BS_TRADE_RECEIVABLES' // العملاء والمدينون التجاريون
+  | 'BS_INVENTORY' // المخزون
+  | 'BS_OTHER_CURRENT_ASSETS' // أصول متداولة وأرصدة مدينة أخرى
+  | 'BS_FIXED_ASSETS' // الأصول الثابتة (بالصافي ومجمع الإهلاك)
+  | 'BS_PROJECTS_UNDER_WAY' // مشروعات تحت التنفيذ
+  | 'BS_INTANGIBLE_ASSETS' // أصول غير ملموسة وشهرة
+  | 'BS_OTHER_NON_CURRENT_ASSETS' // أصول غير متداولة واستثمارات أخرى
+  | 'BS_TRADE_PAYABLES' // الموردون والدائنون التجاريون
+  | 'BS_TAX_AUTHORITY_PAYABLES' // مصلحة الضرائب والجهات السيادية
+  | 'BS_OTHER_CURRENT_LIABILITIES' // التزامات متداولة وأرصدة دائنة أخرى
+  | 'BS_LONG_TERM_LOANS' // قروض وتسهيلات طويلة الأجل
+  | 'BS_OTHER_NON_CURRENT_LIABILITIES' // التزامات غير متداولة ومخصصات طويلة الأجل
+  | 'BS_PAID_UP_CAPITAL' // رأس المال المدفوع
+  | 'BS_RETAINED_EARNINGS' // الأرباح (الخسائر) المرحلة والمحتجزة
+  | 'BS_RESERVES' // الاحتياطيات النظامية والقانونية
+  // Income Statement (قائمة الدخل)
+  | 'IS_OPERATING_REVENUE' // إيرادات النشاط والمبيعات
+  | 'IS_SALES_RETURNS_ALLOWANCES' // مردودات ومسموحات وخصومات المبيعات
+  | 'IS_COGS' // تكلفة المبيعات والمشتريات والخدمات
+  | 'IS_SELLING_DISTRIBUTION' // مصروفات البيع والتسويق والتوزيع
+  | 'IS_GENERAL_ADMIN' // المصروفات العمومية والإدارية
+  | 'IS_DEPRECIATION' // إهلاك الأصول الثابتة
+  | 'IS_FINANCING_COSTS' // الأعباء التمويلية والفوائد
+  | 'IS_FX_GAINS_LOSSES' // أرباح وخسائر فروق العملة
+  | 'IS_OTHER_REVENUES' // إيرادات وأرباح أخرى
+  | 'IS_OTHER_EXPENSES'; // مصروفات وخسائر أخرى
+
+export type ClientStatementMapping = Record<string, FinancialStatementLineKey>;
+
 export interface JournalEntry {
   id: string;
   entryNumber: string | number;
+  serialNumber?: string;
   date: string;
   description: string;
   referenceNumber?: string;
   documentType?: string;
+  invoiceType?: InvoiceType | string;
   lines: JournalEntryLine[];
+  totalDebit?: number;
+  totalCredit?: number;
   isPosted?: boolean;
   status?: 'DRAFT' | 'POSTED' | 'CANCELLED' | string;
   postedAt?: string;
@@ -136,16 +249,17 @@ export interface JournalEntry {
   createdAt?: string;
   updatedAt?: string;
   fiscalYear?: number;
-  clientId?: string;
+  clientId: string;
   clientName?: string;
   currency?: CurrencyCode;
   exchangeRate?: number;
   source?: string;
   sourceInvoiceId?: string;
+  reversalOfEntryId?: string;
+  reversedByEntryId?: string;
   isAutoGenerated?: boolean;
   attachments?: string[];
   notes?: string;
-  [key: string]: any;
 }
 
 export type CompanyType =
@@ -343,6 +457,10 @@ export interface ClientArchiveRecord {
   isWithholdingTaxSubject?: boolean;
   isVatRegistered?: boolean;
   isPayrollTaxSubject?: boolean;
+  activityTemplate?: ClientActivityTemplate;
+  fiscalYear?: number;
+  fiscalYearStart?: string;
+  fiscalYearEnd?: string;
   fiscalYearEndMonth?: number;
   activeFiscalYear?: number;
   assignedAccountant?: string;
@@ -423,10 +541,17 @@ export interface OfficeTreasuryTransaction {
   type: 'INCOME_FEES' | 'EXPENSE_OFFICE' | 'CLIENT_DEPOSIT' | 'GOV_EXPENSE_ON_BEHALF' | 'INCOME' | 'EXPENSE' | string;
   category?: string;
   amount: number;
-  clientId?: string;
+  currency?: CurrencyCode;
+  exchangeRate?: number;
+  foreignAmount?: number;
+  clientId: string;
   clientName?: string;
   feeCollectionId?: string;
   agreementId?: string;
+  procedureId?: string;
+  procedureTitle?: string;
+  voucherNumber?: string;
+  recordedBy?: string;
   paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'INSTAPAY' | 'VODAFONE_CASH' | 'CHEQUE' | string;
   referenceNumber?: string;
   receiptNumber?: string;
@@ -435,7 +560,6 @@ export interface OfficeTreasuryTransaction {
   createdAt?: string;
   isPostedToGeneralLedger?: boolean;
   notes?: string;
-  [key: string]: any;
 }
 
 export type InvoiceDocType = 'I' | 'C' | 'D' | string;
@@ -467,15 +591,18 @@ export interface Invoice {
   id: string;
   invoiceNumber: string;
   internalId?: string;
-  invoiceType: 'SALES' | 'PURCHASE' | 'RETURN_SALES' | 'RETURN_PURCHASE' | string;
+  invoiceType: InvoiceType | string;
   documentType?: InvoiceDocType;
   natureCategory?: InvoiceNatureCategory;
   date: string;
   dueDate?: string;
-  clientId?: string;
+  clientId: string;
   partnerName: string;
   partnerTaxId?: string;
+  partnerTaxNo?: string;
+  partnerNationalId?: string;
   partnerAddress?: string;
+  receiverType?: string;
   currency?: CurrencyCode;
   exchangeRate?: number;
   items: InvoiceItem[];
@@ -535,12 +662,17 @@ export interface TaxDeclarationRecord {
   fiscalYear: number;
   dueDate: string;
   submissionDate?: string;
-  salesOrRevenuesAmount: number;
-  purchasesOrCostsAmount: number;
-  outputTaxAmount: number;
-  inputTaxDeductible: number;
+  salesOrRevenuesAmount?: number;
+  purchasesOrCostsAmount?: number;
+  outputTaxAmount?: number;
+  inputTaxDeductible?: number;
   whtDeductedAmount?: number;
-  netTaxPayable: number;
+  netTaxPayable?: number;
+  taxableBase?: number;
+  taxAmount?: number;
+  penaltiesOrAdjustments?: number;
+  whtDeductions?: number;
+  netPayable?: number;
   creditCarriedForward?: number;
   status: 'DRAFT' | 'READY_TO_SUBMIT' | 'SUBMITTED' | 'PAID' | 'AMENDED' | string;
   etaReceiptNumber?: string;
@@ -612,14 +744,15 @@ export interface FixedAsset {
   assetCode: string;
   name: string;
   category: FixedAssetCategory;
-  clientId?: string;
+  clientId: string;
   purchaseDate: string;
   usageStartDate?: string;
   purchaseCost: number;
   capitalizedAdditions?: number;
   salvageValue: number;
   usefulLifeYears: number;
-  accountingDepreciationRate: number;
+  accountingDepreciationRate?: number;
+  depreciationRate?: number;
   taxDepreciationRate: number;
   depreciationMethod: DepreciationMethod;
   accumulatedDepreciation: number;
@@ -744,6 +877,7 @@ export interface OfficeProfile {
   defaultTaxRate?: number;
   includeOfficeTaxInfo?: boolean;
   sendClientDataToGemini?: boolean;
+  aiDisabled?: boolean;
   showMainOfficeAddress?: boolean;
   mainOfficeAddress?: string;
   showBranchOfficeAddress?: boolean;
@@ -1205,17 +1339,19 @@ export interface AuditEngagementContract {
   contractCode: string;
   clientId: string;
   clientName: string;
-  engagementType: 'ANNUAL_AUDIT' | 'TAX_INSPECTION_DEFENSE' | 'ETA_COMPLIANCE' | 'BOOKKEEPING' | 'FEASIBILITY_ADVISORY' | string;
+  engagementType?: 'ANNUAL_AUDIT' | 'TAX_INSPECTION_DEFENSE' | 'ETA_COMPLIANCE' | 'BOOKKEEPING' | 'FEASIBILITY_ADVISORY' | string;
   fiscalYear: number;
-  contractDate: string;
+  scopeOfWork?: string[];
+  agreedFeeAmount?: number;
+  contractDate?: string;
   startDate: string;
-  endDate: string;
-  totalAgreedFee: number;
+  endDate?: string;
+  totalAgreedFee?: number;
   paidAmount: number;
-  remainingAmount: number;
-  assignedAuditor: string;
+  remainingAmount?: number;
+  assignedAuditor?: string;
   status: 'ACTIVE' | 'COMPLETED' | 'SUSPENDED' | 'CANCELLED';
-  billingSchedule: {
+  billingSchedule?: {
     milestoneName: string;
     dueDate: string;
     amount: number;

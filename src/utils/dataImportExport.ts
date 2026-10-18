@@ -113,10 +113,19 @@ export async function importModelData(
   if (ext === 'json' || ext === 'txt') {
     const text = await file.text();
     if (targetModel === 'ALL_DATA') {
-      const ok = db.importFullBackupJson(text);
-      return ok
-        ? { success: true, message: 'تم استعادة النسخة الاحتياطية الكاملة بنجاح!' }
-        : { success: false, message: 'فشل استعادة النسخة الاحتياطية.' };
+      try {
+        const res = await db.restoreFullBackupJson(text);
+        return {
+          success: true,
+          message: res.message || 'تمت استعادة النسخة الاحتياطية بنجاح!',
+          importedCount: res.clientsRestored + res.entriesRestored,
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          message: err?.message || 'فشلت استعادة النسخة الاحتياطية.',
+        };
+      }
     }
     const parsed = JSON.parse(text);
     const items = Array.isArray(parsed) ? parsed : parsed.data || [];
@@ -125,8 +134,18 @@ export async function importModelData(
       return { success: true, message: `تم استيراد ${items.length} عميل بنجاح.`, importedCount: items.length };
     }
     if (targetModel === 'ACCOUNTS' && Array.isArray(items)) {
-      items.forEach((acc: any) => db.addAccount(acc));
-      return { success: true, message: `تم استيراد ${items.length} حساب بنجاح.`, importedCount: items.length };
+      const result = db.batchImportAccounts(items);
+      if (result.errors.length > 0 && result.imported === 0) {
+        return {
+          success: false,
+          message: `فشل استيراد الحسابات:\n${result.errors.slice(0, 5).join('\n')}`,
+        };
+      }
+      return {
+        success: true,
+        message: `تم استيراد ${result.imported} حساب بنجاح.${result.failed > 0 ? ` (تم تخطي ${result.failed} أخطاء/تكرارات)` : ''}`,
+        importedCount: result.imported,
+      };
     }
     return { success: true, message: 'تم استيراد ملف البيانات بنجاح.' };
   }
@@ -139,19 +158,18 @@ export async function importModelData(
   if (targetModel === 'CLIENTS') {
     db.batchAddClients(rows as any);
   } else if (targetModel === 'ACCOUNTS') {
-    rows.forEach((r) => {
-      if (r.code && r.name) {
-        db.addAccount({
-          code: String(r.code),
-          name: String(r.name),
-          category: r.category || 'ASSETS',
-          nature: r.nature || 'DEBIT',
-          level: Number(r.level || 3),
-          openingBalanceDebit: Number(r.openingBalanceDebit || 0),
-          openingBalanceCredit: Number(r.openingBalanceCredit || 0),
-        });
-      }
-    });
+    const result = db.batchImportAccounts(rows);
+    if (result.errors.length > 0 && result.imported === 0) {
+      return {
+        success: false,
+        message: `فشل استيراد الحسابات من ملف الإكسل:\n${result.errors.slice(0, 5).join('\n')}`,
+      };
+    }
+    return {
+      success: true,
+      message: `تم استيراد ${result.imported} حساب بنجاح.${result.failed > 0 ? ` (تم تخطي ${result.failed} أخطاء/تكرارات)` : ''}`,
+      importedCount: result.imported,
+    };
   }
 
   return {

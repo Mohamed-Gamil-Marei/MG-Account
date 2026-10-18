@@ -36,6 +36,8 @@ import {
   ChevronDown,
   Factory,
   MessageSquare,
+  AlertCircle,
+  Link2,
 } from 'lucide-react';
 import { db, DatabaseState } from '../db/localDatabase';
 import { AppLanguage, OfficeProfile } from '../types';
@@ -73,6 +75,8 @@ export const getParentHub = (tabId: string): string => {
     case 'CURRENCY_EXCHANGE_RATES':
     case 'OCR_INVOICE_SCANNER':
     case 'AUDIT_WORKING_PAPERS':
+    case 'UNASSIGNED_ENTRIES':
+    case 'ACCOUNT_MAPPING':
     case 'ACCOUNTING_HUB':
       return 'ACCOUNTING_HUB';
 
@@ -334,6 +338,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       labelEn: 'SAP ERP Integration',
       icon: Database,
       badge: 'SAP',
+    },
+    {
+      id: 'ACCOUNT_MAPPING',
+      defaultTab: 'ACCOUNT_MAPPING',
+      label: 'ربط الحسابات المحاسبية',
+      labelEn: 'Account Mapping',
+      icon: Link2,
+      badge: 'COA',
+    },
+    {
+      id: 'UNASSIGNED_ENTRIES',
+      defaultTab: 'UNASSIGNED_ENTRIES',
+      label: 'قيود غير منسوبة لمنشأة',
+      labelEn: 'Unassigned Entries',
+      icon: AlertCircle,
+      badge: `${db.getUnassignedJournalEntries().length}`,
     },
     {
       id: 'MOBILE_COMPANION',

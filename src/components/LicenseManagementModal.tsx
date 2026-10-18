@@ -76,7 +76,7 @@ export const LicenseManagementModal: React.FC<LicenseManagementModalProps> = ({
   const [copiedRequestId, setCopiedRequestId] = useState<boolean>(false);
 
   const currentUser = db.getCurrentUser();
-  const isAdmin = currentUser.role === 'ADMIN';
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   const fetchStatus = async () => {
     try {

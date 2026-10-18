@@ -125,6 +125,8 @@ export function calculateBenfordDistribution(entries: JournalEntry[]): {
     });
 
     // Check Friday postings (Weekend anomalies)
+    const entryTotalDebit =
+      entry.totalDebit ?? entry.lines.reduce((sum, l) => sum + (Number(l.debit) || 0), 0);
     if (dayOfWeek === 5 && entry.lines.some((l) => (l.debit || 0) > 30000)) {
       anomalies.push({
         id: `anom-wend-${entry.id}`,
@@ -132,12 +134,12 @@ export function calculateBenfordDistribution(entries: JournalEntry[]): {
         entryNumber: entry.entryNumber,
         entryDate: entry.date,
         accountName: entry.lines[0]?.accountName || 'قيد عطلة',
-        amount: entry.totalDebit,
+        amount: entryTotalDebit,
         severity: 'MEDIUM',
         category: 'WEEKEND',
         title: `قيد مرحل في عطلة أسبوعية رسمية (الجمعة)`,
-        description: `تم تسجيل وترحيل القيد رقم ${entry.entryNumber} في يوم عطلة رسمية بمبلغ ${entry.totalDebit.toLocaleString('ar-EG')} ج.م.`,
-        recommendation: 'التحقق من توقيت وسجل الموظف القائم بالإدخال في سجل المراجعة (Audit Log).',
+        description: `تم تسجيل وترحيل القيد رقم ${entry.entryNumber} في يوم عطلة رسمية بمبلغ ${entryTotalDebit.toLocaleString('ar-EG')} ج.م.`,
+        recommendation: 'التحقق من توقيت وسجل المراجعة للموظف القائم بالإدخال (Audit Log).',
       });
     }
   });
@@ -213,7 +215,7 @@ export function autoMatchBankStatement(
         bankJournalLines.push({
           entryId: entry.id,
           entryNumber: Number(entry.entryNumber) || 0,
-          serialNumber: entry.serialNumber,
+          serialNumber: entry.serialNumber || String(entry.entryNumber),
           date: entry.date,
           debit: line.debit || 0,
           credit: line.credit || 0,

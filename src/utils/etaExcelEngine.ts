@@ -9,12 +9,65 @@ import { formatWorksheetForArabicExport, writeArabicExcelFile } from './excelAra
 import { Invoice, InvoiceItem } from '../types';
 import { etaService } from './etaSdkEngine';
 
+export interface ParseExcelOptions {
+  clientId?: string;
+  existingInvoices?: Invoice[];
+}
+
 export interface ParsedImportResult {
   success: boolean;
   invoices: Omit<Invoice, 'id' | 'createdAt'>[];
   errors: string[];
   warnings: string[];
   totalRowsRead: number;
+}
+
+/**
+ * دالة مساعدة لتحويل وقراءة الأرقام سواء كانت بأرقام عربية-مشرقية أو لاتينية وتطهيرها
+ */
+export function parseArabicOrLatinNumber(val: any): {
+  isBlank: boolean;
+  num?: number;
+  isValid: boolean;
+  originalText: string;
+} {
+  if (val === undefined || val === null || String(val).trim() === '') {
+    return { isBlank: true, isValid: false, originalText: '' };
+  }
+  const originalText = String(val).trim();
+  let s = originalText;
+
+  // تحويل الأرقام المشرقية (٠١٢٣٤٥٦٧٨٩) والفارسية (۰۱۲۳۴۵۶۷۸۹) إلى أرقام لاتينية قياسية
+  s = s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+  s = s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776));
+
+  // إزالة مسميات العملات والنسب المئوية والمسافات
+  s = s.replace(/ج\.م\.?/gi, '');
+  s = s.replace(/\bEGP\b/gi, '');
+  s = s.replace(/[جمEGP%٪\s]/g, '');
+
+  // تحويل الفاصلة العشرية العربية (U+066B) إلى نقطة عشرية
+  s = s.replace(/٫/g, '.');
+
+  // معالجة الفواصل: إذا كانت الفاصلة لاتينية عادية (,)
+  // إذا كانت الفاصلة تستخدم كفاصلة عشرية (مثال 0,5)
+  if (s.includes(',') && !s.includes('.')) {
+    const parts = s.split(',');
+    if (parts.length === 2 && parts[1].length <= 2) {
+      s = `${parts[0]}.${parts[1]}`;
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else {
+    // إزالة فواصل الآلاف
+    s = s.replace(/[,،٬]/g, '');
+  }
+
+  const parsed = Number(s);
+  if (isNaN(parsed)) {
+    return { isBlank: false, isValid: false, originalText };
+  }
+  return { isBlank: false, num: parsed, isValid: true, originalText };
 }
 
 export class EtaExcelEngine {
@@ -27,7 +80,7 @@ export class EtaExcelEngine {
       {
         'رقم الفاتورة': 'INV-2026-0101',
         'تاريخ الفاتورة (YYYY-MM-DD)': '2026-02-28',
-        'نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيصال)': 'I',
+        'نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيراد أتعاب)': 'I',
         'نوع المستلم (B:شركة / P:فرد / F:أجنبي)': 'B',
         'اسم العميل / الشركة': 'شركة الأمل للصناعات الهندسية والتجارة',
         'الرقم الضريبي للعميل (9 أرقام)': '390-182-441',
@@ -42,13 +95,14 @@ export class EtaExcelEngine {
         'نسبة الخصم %': 0,
         'نسبة ضريبة القيمة المضافة T1 %': 14,
         'نسبة الخصم والتحصيل T4 %': 1,
+        'المسدد (اختياري / افتراضياً صفر آجل)': 0,
         'طريقة السداد (BANK / CASH / INSTAPAY)': 'BANK',
         'ملاحظات إضافية': 'فاتورة أتعاب مهنية متوافقة مع منظومة الفاتورة الإلكترونية',
       },
       {
         'رقم الفاتورة': 'INV-2026-0101',
         'تاريخ الفاتورة (YYYY-MM-DD)': '2026-02-28',
-        'نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيصال)': 'I',
+        'نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيراد أتعاب)': 'I',
         'نوع المستلم (B:شركة / P:فرد / F:أجنبي)': 'B',
         'اسم العميل / الشركة': 'شركة الأمل للصناعات الهندسية والتجارة',
         'الرقم الضريبي للعميل (9 أرقام)': '390-182-441',
@@ -58,18 +112,19 @@ export class EtaExcelEngine {
         'نوع التكويد (EGS / GS1)': 'EGS',
         'بيان ووصف الخدمة أو الصنف': 'استشارات وإعداد ملف الفحص الضريبي لكسب العمل',
         'وحدة القياس (EA/C62/JOB/HUR)': 'JOB',
-        'الكمية': 1,
+        'الكمية': 0.5,
         'سعر الوحدة (ج.م)': 15000,
         'نسبة الخصم %': 0,
         'نسبة ضريبة القيمة المضافة T1 %': 14,
         'نسبة الخصم والتحصيل T4 %': 1,
+        'المسدد (اختياري / افتراضياً صفر آجل)': 0,
         'طريقة السداد (BANK / CASH / INSTAPAY)': 'BANK',
-        'ملاحظات إضافية': 'بند ثاني على نفس الفاتورة رقم INV-2026-0101',
+        'ملاحظات إضافية': 'بند بنصف وحدة (كمية كسرية 0.5)',
       },
       {
         'رقم الفاتورة': 'REC-2026-0005',
         'تاريخ الفاتورة (YYYY-MM-DD)': '2026-02-28',
-        'نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيصال)': 'R',
+        'نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيراد أتعاب)': 'R',
         'نوع المستلم (B:شركة / P:فرد / F:أجنبي)': 'P',
         'اسم العميل / الشركة': 'د/ أحمد مصطفى السعيد',
         'الرقم الضريبي للعميل (9 أرقام)': '',
@@ -82,10 +137,11 @@ export class EtaExcelEngine {
         'الكمية': 1,
         'سعر الوحدة (ج.م)': 3500,
         'نسبة الخصم %': 0,
-        'نسبة ضريبة القيمة المضافة T1 %': 14,
+        'نسبة ضريبة القيمة المضافة T1 %': 0,
         'نسبة الخصم والتحصيل T4 %': 0,
+        'المسدد (اختياري / افتراضياً صفر آجل)': 3500,
         'طريقة السداد (BANK / CASH / INSTAPAY)': 'INSTAPAY',
-        'ملاحظات إضافية': 'إيصال إلكتروني B2C لنقطة بيع معتمدة',
+        'ملاحظات إضافية': 'إيراد أتعاب مكتب معفي من القيمة المضافة ومسدد بالكامل',
       },
     ];
 
@@ -94,7 +150,7 @@ export class EtaExcelEngine {
     formatWorksheetForArabicExport(ws1, templateData, [
       { wch: 18 }, // رقم الفاتورة
       { wch: 16 }, // التاريخ
-      { wch: 16 }, // نوع المستند
+      { wch: 18 }, // نوع المستند
       { wch: 14 }, // نوع المستلم
       { wch: 36 }, // اسم العميل
       { wch: 18 }, // الرقم الضريبي
@@ -104,11 +160,12 @@ export class EtaExcelEngine {
       { wch: 12 }, // نوع التكويد
       { wch: 45 }, // البيان
       { wch: 14 }, // الوحدة
-      { wch: 10 }, // الكمية
+      { wch: 12 }, // الكمية
       { wch: 16 }, // سعر الوحدة
       { wch: 12 }, // نسبة الخصم
       { wch: 16 }, // ضريبة القيمة المضافة
       { wch: 16 }, // الخصم والتحصيل
+      { wch: 16 }, // المسدد
       { wch: 14 }, // طريقة السداد
       { wch: 30 }, // ملاحظات
     ]);
@@ -117,10 +174,12 @@ export class EtaExcelEngine {
 
     // Sheet 2: Tax Reference Table & Instructions
     const guideData = [
-      { 'كود الضريبة': 'T1', 'اسم الضريبة': 'ضريبة القيمة المضافة (VAT)', 'النسبة الشائعة': '14%', 'ملاحظات': 'تطبق على السلع والخدمات الخاضعة' },
+      { 'كود الضريبة': 'T1', 'اسم الضريبة': 'ضريبة القيمة المضافة (VAT)', 'النسبة الشائعة': '14% أو 0% معفى', 'ملاحظات': 'تطبق على السلع والخدمات، و0 تعني إعفاء رسمي' },
       { 'كود الضريبة': 'T4', 'اسم الضريبة': 'خصم وتحصيل تحت حساب الضريبة (WHT)', 'النسبة الشائعة': '1% (توريدات وخدمات) / 3% (مهن حرة)', 'ملاحظات': 'تخصم من قيمة الفاتورة لصالح مصلحة الضرائب' },
-      { 'نوع المستند': 'I', 'المسمى': 'فاتورة مبيعات أصلية (Invoice)', 'النظام': 'الفاتورة الإلكترونية B2B', 'ملاحظات': 'تتطلب رقم ضريبي صالح للمستلم' },
-      { 'نوع المستند': 'R', 'المسمى': 'إيصال إلكتروني (e-Receipt)', 'النظام': 'الإيصال الإلكتروني B2C', 'ملاحظات': 'للمستهلك النهائي أو الأفراد' },
+      { 'نوع المستند': 'I', 'المسمى': 'فاتورة مبيعات أصلية (SALES)', 'النظام': 'الفاتورة الإلكترونية B2B', 'ملاحظات': 'تتحول آلياً إلى فاتورة مبيعات' },
+      { 'نوع المستند': 'C', 'المسمى': 'إشعار دائن (CREDIT_NOTE)', 'النظام': 'إشعار دائن لمنظومة الضرائب', 'ملاحظات': 'يخفض رصيد العميل وضريبة المخرجات' },
+      { 'نوع المستند': 'D', 'المسمى': 'إشعار مدين (DEBIT_NOTE)', 'النظام': 'إشعار مدين لمنظومة الضرائب', 'ملاحظات': 'يزيد رصيد العميل وضريبة المخرجات' },
+      { 'نوع المستند': 'R', 'المسمى': 'إيراد أتعاب المكتب (OFFICE_SERVICE)', 'النظام': 'إيراد خدمات مهنية واستشارية', 'ملاحظات': 'يرحل إلى إيراد أتعاب وليس كمصروف' },
       { 'نوع التكويد': 'EGS', 'المسمى': 'Egyptian Goods and Services', 'النمط': 'EG-[الرقم الضريبي]-[كود الصنف الداخلي]', 'ملاحظات': 'مربوط بكود التصنيف العالمي GPC' },
       { 'نوع التكويد': 'GS1', 'المسمى': 'Global Standard 1 Barcode', 'النمط': 'أرقام باركود دولية 13 رقم', 'ملاحظات': 'معتمد دولياً ومسجل تلقائياً' },
     ];
@@ -132,7 +191,10 @@ export class EtaExcelEngine {
   }
 
   // --- 2. Import & Parse Excel File into Invoices ---
-  public static async parseExcelInvoiceFile(file: File): Promise<ParsedImportResult> {
+  public static async parseExcelInvoiceFile(
+    file: File,
+    options?: ParseExcelOptions
+  ): Promise<ParsedImportResult> {
     return new Promise((resolve) => {
       const reader = new FileReader();
 
@@ -160,31 +222,66 @@ export class EtaExcelEngine {
           const warnings: string[] = [];
           const groupedInvoices: Record<string, { header: any; items: InvoiceItem[] }> = {};
 
+          const targetClientId = options?.clientId || '';
+          const existingInvMap = new Set<string>();
+          if (options?.existingInvoices && Array.isArray(options.existingInvoices)) {
+            for (const ex of options.existingInvoices) {
+              const cId = ex.clientId || '';
+              if (!targetClientId || cId === targetClientId) {
+                existingInvMap.add(`${cId}:::${ex.invoiceNumber.trim().toLowerCase()}`);
+              }
+            }
+          }
+
           // Group rows by invoice number
           rawRows.forEach((row, idx) => {
             const rowNum = idx + 2;
 
             // Extract fields with multiple possible column names (Arabic & English)
-            const invNumber = String(row['رقم الفاتورة'] || row['Invoice Number'] || row['رقم المستند'] || row['ID'] || '').trim();
-            const rawDate = row['تاريخ الفاتورة (YYYY-MM-DD)'] || row['تاريخ الفاتورة'] || row['Invoice Date'] || row['التاريخ'] || '';
-            const docType = String(row['نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيصال)'] || row['نوع المستند'] || row['Doc Type'] || 'I').toUpperCase().trim();
-            const receiverType = String(row['نوع المستلم (B:شركة / P:فرد / F:أجنبي)'] || row['نوع المستلم'] || row['Receiver Type'] || 'B').toUpperCase().trim();
-            const partnerName = String(row['اسم العميل / الشركة'] || row['اسم العميل'] || row['Customer Name'] || row['العميل'] || '').trim();
-            const partnerTaxNo = String(row['الرقم الضريبي للعميل (9 أرقام)'] || row['الرقم الضريبي'] || row['Tax ID'] || '').trim();
-            const partnerNatId = String(row['الرقم القومي (للأفراد > 50 ألف)'] || row['الرقم القومي'] || row['National ID'] || '').trim();
+            const invNumber = String(
+              row['رقم الفاتورة'] || row['Invoice Number'] || row['رقم المستند'] || row['ID'] || ''
+            ).trim();
+            const rawDate =
+              row['تاريخ الفاتورة (YYYY-MM-DD)'] ||
+              row['تاريخ الفاتورة'] ||
+              row['Invoice Date'] ||
+              row['التاريخ'] ||
+              '';
+            const rawDocType = String(
+              row['نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيراد أتعاب)'] ||
+                row['نوع المستند (I:فاتورة / C:إشعار دائن / D:إشعار مدين / R:إيصال)'] ||
+                row['نوع المستند'] ||
+                row['Doc Type'] ||
+                'I'
+            ).toUpperCase().trim();
+
+            const receiverType = String(
+              row['نوع المستلم (B:شركة / P:فرد / F:أجنبي)'] ||
+                row['نوع المستلم'] ||
+                row['Receiver Type'] ||
+                'B'
+            ).toUpperCase().trim();
+            const partnerName = String(
+              row['اسم العميل / الشركة'] || row['اسم العميل'] || row['Customer Name'] || row['العميل'] || ''
+            ).trim();
+            const partnerTaxNo = String(
+              row['الرقم الضريبي للعميل (9 أرقام)'] || row['الرقم الضريبي'] || row['Tax ID'] || ''
+            ).trim();
+            const partnerNatId = String(
+              row['الرقم القومي (للأفراد > 50 ألف)'] || row['الرقم القومي'] || row['National ID'] || ''
+            ).trim();
             const partnerAddress = String(row['عنوان العميل'] || row['العنوان'] || row['Address'] || '').trim();
 
-            const itemCode = String(row['كود الصنف (EGS / GS1)'] || row['كود الصنف'] || row['Item Code'] || `EG-SRV-${idx + 1}`).trim();
-            const itemType = String(row['نوع التكويد (EGS / GS1)'] || row['نوع التكويد'] || (itemCode.startsWith('EG-') ? 'EGS' : 'GS1')).trim();
-            const description = String(row['بيان ووصف الخدمة أو الصنف'] || row['وصف البند'] || row['Description'] || row['البيان'] || `خدمة استشارية ${idx + 1}`).trim();
+            const itemCode = String(
+              row['كود الصنف (EGS / GS1)'] || row['كود الصنف'] || row['Item Code'] || `EG-SRV-${idx + 1}`
+            ).trim();
+            const itemType = String(
+              row['نوع التكويد (EGS / GS1)'] || row['نوع التكويد'] || (itemCode.startsWith('EG-') ? 'EGS' : 'GS1')
+            ).trim();
+            const description = String(
+              row['بيان ووصف الخدمة أو الصنف'] || row['وصف البند'] || row['Description'] || row['البيان'] || `بند رقم ${idx + 1}`
+            ).trim();
             const unitType = String(row['وحدة القياس (EA/C62/JOB/HUR)'] || row['الوحدة'] || row['Unit'] || 'EA').trim();
-            const quantity = Math.max(1, Number(row['الكمية'] || row['Quantity'] || row['العدد'] || 1));
-            const unitPrice = Math.max(0, Number(row['سعر الوحدة (ج.م)'] || row['سعر الوحدة'] || row['Unit Price'] || row['السعر'] || 0));
-            const discountRate = Math.max(0, Number(row['نسبة الخصم %'] || row['الخصم %'] || row['Discount %'] || 0));
-            const vatRate = Number((row['نسبة ضريبة القيمة المضافة T1 %'] || row['ضريبة القيمة المضافة %'] || row['VAT %']) ?? 14);
-            const whtRate = Number((row['نسبة الخصم والتحصيل T4 %'] || row['الخصم والتحصيل %'] || row['WHT %']) ?? 0);
-            const paymentMethod = String(row['طريقة السداد (BANK / CASH / INSTAPAY)'] || row['طريقة السداد'] || row['Payment Method'] || 'BANK').toUpperCase().trim();
-            const notes = String(row['ملاحظات إضافية'] || row['ملاحظات'] || row['Notes'] || '').trim();
 
             if (!invNumber) {
               errors.push(`صف (${rowNum}): حقل "رقم الفاتورة" إلزامي ولا يمكن تركه فارغاً.`);
@@ -192,9 +289,122 @@ export class EtaExcelEngine {
             }
 
             if (!partnerName) {
-              errors.push(`صف (${rowNum}) [فاتورة ${invNumber}]: اسم العميل / الشركة مطلوب.`);
+              errors.push(`صف (${rowNum}) [فاتورة ${invNumber}]: اسم العميل / الطرف المتعامل مطلوب.`);
               return;
             }
+
+            // 1. قراءة وتحقق الكمية: تقبل كسور وتُرفض الصفر والسالب مع رسالة بالصف
+            const rawQtyVal = row['الكمية'] ?? row['Quantity'] ?? row['العدد'];
+            const parsedQty = parseArabicOrLatinNumber(rawQtyVal);
+
+            let quantity = 1;
+            if (parsedQty.isBlank || !parsedQty.isValid) {
+              errors.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: قيمة الكمية (${parsedQty.originalText || 'فارغة'}) غير صالحة؛ يجب إدخال قيمة عددية موجبة.`
+              );
+            } else if (parsedQty.num! <= 0) {
+              errors.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: الكمية (${parsedQty.num}) مرفوضة؛ الكمية تقبل الكسور (مثل 0.5) ولكن يجب أن تكون أكبر من الصفر ولا تقبل الصفر أو المبالغ السالبة.`
+              );
+            } else {
+              quantity = Number(parsedQty.num!.toFixed(4));
+            }
+
+            // 2. سعر الوحدة
+            const rawPriceVal = row['سعر الوحدة (ج.م)'] ?? row['سعر الوحدة'] ?? row['Unit Price'] ?? row['السعر'];
+            const parsedPrice = parseArabicOrLatinNumber(rawPriceVal);
+            let unitPrice = 0;
+            if (parsedPrice.isBlank || !parsedPrice.isValid) {
+              errors.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: سعر الوحدة (${parsedPrice.originalText || 'فارغ'}) غير صالح.`
+              );
+            } else if (parsedPrice.num! < 0) {
+              errors.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: سعر الوحدة (${parsedPrice.num}) لا يمكن أن يكون سالباً.`
+              );
+            } else {
+              unitPrice = Number(parsedPrice.num!.toFixed(2));
+            }
+
+            // 3. نسبة الخصم
+            const rawDiscVal = row['نسبة الخصم %'] ?? row['الخصم %'] ?? row['Discount %'];
+            const parsedDisc = parseArabicOrLatinNumber(rawDiscVal);
+            let discountRate = 0;
+            if (!parsedDisc.isBlank) {
+              if (!parsedDisc.isValid || parsedDisc.num! < 0 || parsedDisc.num! > 100) {
+                errors.push(`صف (${rowNum}) [فاتورة ${invNumber}]: نسبة الخصم (${parsedDisc.originalText}) غير صالحة.`);
+              } else {
+                discountRate = Number(parsedDisc.num!.toFixed(2));
+              }
+            }
+
+            // 4. نسبة ضريبة القيمة المضافة: صفر صالح (إعفاء)، والخلية الفارغة تعطي تحذيراً وليس 14% تلقائياً
+            const rawVatVal =
+              row['نسبة ضريبة القيمة المضافة T1 %'] ??
+              row['ضريبة القيمة المضافة %'] ??
+              row['VAT %'] ??
+              row['نسبة الضريبة'];
+            const parsedVat = parseArabicOrLatinNumber(rawVatVal);
+            let vatRate = 0;
+
+            if (parsedVat.isBlank) {
+              warnings.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: خلية نسبة الضريبة فارغة؛ لم يتم تطبيق 14% تلقائياً، واعتُبرت 0% مؤقتاً كإعفاء (يرجى التحقق).`
+              );
+              vatRate = 0;
+            } else if (!parsedVat.isValid) {
+              errors.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: نسبة الضريبة (${parsedVat.originalText}) غير رقمية ولا يمكن قراءتها.`
+              );
+              vatRate = 0;
+            } else if (parsedVat.num! < 0 || parsedVat.num! > 100) {
+              errors.push(
+                `صف (${rowNum}) [فاتورة ${invNumber}]: نسبة الضريبة (${parsedVat.num}%) غير مقبولة؛ يجب أن تكون بين 0% و 100%.`
+              );
+              vatRate = 0;
+            } else {
+              vatRate = Number(parsedVat.num!.toFixed(2));
+            }
+
+            // 5. نسبة الخصم والتحصيل WHT
+            const rawWhtVal = row['نسبة الخصم والتحصيل T4 %'] ?? row['الخصم والتحصيل %'] ?? row['WHT %'];
+            const parsedWht = parseArabicOrLatinNumber(rawWhtVal);
+            let whtRate = 0;
+            if (!parsedWht.isBlank) {
+              if (!parsedWht.isValid || parsedWht.num! < 0 || parsedWht.num! > 100) {
+                errors.push(
+                  `صف (${rowNum}) [فاتورة ${invNumber}]: نسبة الخصم والتحصيل T4 (${parsedWht.originalText}) غير صالحة.`
+                );
+              } else {
+                whtRate = Number(parsedWht.num!.toFixed(2));
+              }
+            }
+
+            // 6. قراءة المبلغ المسدد (اختياري، افتراضيه صفر مع حالة آجل)
+            const rawPaidVal =
+              row['المسدد'] ??
+              row['المدفوع'] ??
+              row['المبلغ المسدد'] ??
+              row['المسدد (اختياري / افتراضياً صفر آجل)'] ??
+              row['Paid Amount'] ??
+              row['paidAmount'];
+            const parsedPaid = parseArabicOrLatinNumber(rawPaidVal);
+            let declaredPaidAmount = 0;
+            if (!parsedPaid.isBlank && parsedPaid.isValid && parsedPaid.num! >= 0) {
+              declaredPaidAmount = Number(parsedPaid.num!.toFixed(2));
+            }
+
+            const paymentMethodStr = String(
+              row['طريقة السداد (BANK / CASH / INSTAPAY)'] ??
+                row['طريقة السداد'] ??
+                row['Payment Method'] ??
+                'CREDIT'
+            ).toUpperCase().trim();
+            const notes = String(row['ملاحظات إضافية'] ?? row['ملاحظات'] ?? row['Notes'] ?? '').trim();
+
+            // فحص إجمالي الفاتورة إن وُجد في الشيت للمطابقة
+            const rawDeclaredTotalVal = row['إجمالي الفاتورة'] ?? row['Grand Total'] ?? row['صافي الفاتورة'];
+            const parsedDeclaredTotal = parseArabicOrLatinNumber(rawDeclaredTotalVal);
 
             // Parse Date
             let formattedDate = new Date().toISOString().slice(0, 10);
@@ -207,13 +417,44 @@ export class EtaExcelEngine {
               }
             }
 
-            // Calculations
-            const salesTotal = quantity * unitPrice;
-            const discountAmount = (salesTotal * discountRate) / 100;
-            const totalBeforeTax = salesTotal - discountAmount;
-            const vatAmount = (totalBeforeTax * vatRate) / 100;
-            const whtAmount = (totalBeforeTax * whtRate) / 100;
-            const netTotal = totalBeforeTax + vatAmount - whtAmount;
+            // 7. تحويل نوع المستند بدقة:
+            // C -> CREDIT_NOTE (إشعار دائن)
+            // D -> DEBIT_NOTE (إشعار مدين)
+            // R -> OFFICE_SERVICE (إيراد أتعاب المكتب)
+            // I -> SALES (فاتورة مبيعات)
+            let resolvedInvType: string = 'SALES';
+            let resolvedDocType: string = 'I';
+
+            if (rawDocType === 'C' || rawDocType.includes('CREDIT') || rawDocType.includes('دائن')) {
+              resolvedInvType = 'CREDIT_NOTE';
+              resolvedDocType = 'C';
+            } else if (rawDocType === 'D' || rawDocType.includes('DEBIT') || rawDocType.includes('مدين')) {
+              resolvedInvType = 'DEBIT_NOTE';
+              resolvedDocType = 'D';
+            } else if (
+              rawDocType === 'R' ||
+              rawDocType.includes('RECEIPT') ||
+              rawDocType.includes('إيصال') ||
+              rawDocType.includes('أتعاب') ||
+              rawDocType.includes('OFFICE')
+            ) {
+              resolvedInvType = 'OFFICE_SERVICE';
+              resolvedDocType = 'I';
+            } else if (rawDocType.includes('PURCHASE') || rawDocType.includes('مشتريات')) {
+              resolvedInvType = 'PURCHASE';
+              resolvedDocType = 'I';
+            } else {
+              resolvedInvType = 'SALES';
+              resolvedDocType = 'I';
+            }
+
+            // 8. حساب البند مع تقريب كل بند لمنزلتين عشريتين
+            const salesTotal = Number((quantity * unitPrice).toFixed(2));
+            const discountAmount = Number(((salesTotal * discountRate) / 100).toFixed(2));
+            const totalBeforeTax = Number((salesTotal - discountAmount).toFixed(2));
+            const vatAmount = Number(((totalBeforeTax * vatRate) / 100).toFixed(2));
+            const whtAmount = Number(((totalBeforeTax * whtRate) / 100).toFixed(2));
+            const netTotal = Number((totalBeforeTax + vatAmount - whtAmount).toFixed(2));
 
             const itemObj: InvoiceItem = {
               id: `itm-imp-${idx}-${Date.now()}`,
@@ -235,22 +476,46 @@ export class EtaExcelEngine {
             };
 
             if (!groupedInvoices[invNumber]) {
+              // التحقق من تكرار الفاتورة للعميل المحدد
+              if (targetClientId && existingInvMap.has(`${targetClientId}:::${invNumber.toLowerCase()}`)) {
+                errors.push(
+                  `فاتورة (${invNumber}): مسجلة بالفعل لدى العميل المحدد (${targetClientId}). يمنع استيراد فاتورة مكررة لنفس العميل.`
+                );
+              }
+
               groupedInvoices[invNumber] = {
                 header: {
                   invoiceNumber: invNumber,
                   date: formattedDate,
-                  docType: docType === 'R' ? 'R' : docType === 'C' ? 'C' : docType === 'D' ? 'D' : 'I',
-                  isReceipt: docType === 'R',
+                  invoiceType: resolvedInvType,
+                  docType: resolvedDocType,
+                  isReceipt: rawDocType === 'R',
                   receiverType: receiverType === 'P' ? 'P' : receiverType === 'F' ? 'F' : 'B',
                   partnerName,
                   partnerTaxNo,
                   partnerNationalId: partnerNatId,
                   partnerAddress,
-                  paymentMethod: paymentMethod.includes('CASH') ? 'CASH' : paymentMethod.includes('INSTA') ? 'INSTAPAY' : 'BANK',
+                  declaredPaidAmount,
+                  declaredGrandTotal: parsedDeclaredTotal.isValid ? parsedDeclaredTotal.num : undefined,
+                  paymentMethod: paymentMethodStr.includes('CASH')
+                    ? 'CASH'
+                    : paymentMethodStr.includes('INSTA')
+                    ? 'INSTAPAY'
+                    : paymentMethodStr.includes('BANK')
+                    ? 'BANK_TRANSFER'
+                    : 'CREDIT',
                   notes,
                 },
                 items: [],
               };
+            } else {
+              // إذا وُجد مدفوع في أسطر لاحقة لنفس الفاتورة يُؤخذ الأكبر أو المجموع
+              if (declaredPaidAmount > 0) {
+                groupedInvoices[invNumber].header.declaredPaidAmount = Math.max(
+                  groupedInvoices[invNumber].header.declaredPaidAmount || 0,
+                  declaredPaidAmount
+                );
+              }
             }
 
             groupedInvoices[invNumber].items.push(itemObj);
@@ -263,17 +528,58 @@ export class EtaExcelEngine {
             const group = groupedInvoices[invKey];
             const items = group.items;
 
-            const subtotal = items.reduce((sum, it) => sum + (it.salesTotal || it.quantity * it.unitPrice), 0);
-            const totalDiscount = items.reduce((sum, it) => sum + (it.discountAmount || 0), 0);
-            const totalVat = items.reduce((sum, it) => sum + it.vatAmount, 0);
-            const totalWht = items.reduce((sum, it) => sum + it.whtAmount, 0);
-            const grandTotal = subtotal - totalDiscount + totalVat - totalWht;
+            const subtotal = Number(items.reduce((sum, it) => sum + (it.salesTotal ?? it.quantity * it.unitPrice), 0).toFixed(2));
+            const totalDiscount = Number(items.reduce((sum, it) => sum + (it.discountAmount || 0), 0).toFixed(2));
+            const totalVat = Number(items.reduce((sum, it) => sum + it.vatAmount, 0).toFixed(2));
+            const totalWht = Number(items.reduce((sum, it) => sum + it.whtAmount, 0).toFixed(2));
+            const grandTotal = Number((subtotal - totalDiscount + totalVat - totalWht).toFixed(2));
+            const itemsSumNet = Number(items.reduce((sum, it) => sum + it.netTotal, 0).toFixed(2));
+
+            // التحقق من أن مجموع البنود = إجمالي الفاتورة
+            const diff = Math.abs(itemsSumNet - grandTotal);
+            if (diff > 0.05) {
+              errors.push(
+                `فاتورة (${invKey}): عدم تطابق بين مجموع صافي البنود (${itemsSumNet.toFixed(2)}) والإجمالي المحسوب للفاتورة (${grandTotal.toFixed(2)}) بفارق (${diff.toFixed(2)} ج.م).`
+              );
+            }
+
+            // التحقق من الإجمالي المصرح به في الشيت إن وُجد
+            if (group.header.declaredGrandTotal !== undefined) {
+              const declaredDiff = Math.abs(group.header.declaredGrandTotal - grandTotal);
+              if (declaredDiff > 0.05) {
+                errors.push(
+                  `فاتورة (${invKey}): إجمالي بنود الفاتورة (${grandTotal.toFixed(2)}) لا يطابق الإجمالي المصرح به في الشيت (${group.header.declaredGrandTotal.toFixed(2)}) بفارق (${declaredDiff.toFixed(2)} ج.م).`
+                );
+              }
+            }
+
+            // معالجة المبلغ المسدد: لا يُفترض كاملاً، افتراضيه صفر مع حالة آجل
+            const paidAmount = Math.max(0, Math.min(grandTotal, group.header.declaredPaidAmount || 0));
+            const remainingAmount = Math.max(0, Number((grandTotal - paidAmount).toFixed(2)));
+
+            let finalStatus: string = 'ISSUED';
+            let finalPaymentMethod: string = group.header.paymentMethod || 'CREDIT';
+
+            if (paidAmount >= grandTotal && grandTotal > 0) {
+              finalStatus = 'PAID';
+              if (finalPaymentMethod === 'CREDIT') {
+                finalPaymentMethod = 'BANK_TRANSFER';
+              }
+            } else if (paidAmount > 0) {
+              finalStatus = 'PARTIALLY_PAID';
+              finalPaymentMethod = 'CREDIT';
+            } else {
+              finalStatus = 'ISSUED';
+              finalPaymentMethod = 'CREDIT';
+            }
 
             const qrPayload = `ETA-EGY|${group.header.invoiceNumber}|${group.header.date}|${grandTotal.toFixed(2)}|VAT_${totalVat.toFixed(2)}`;
 
             compiledInvoices.push({
+              clientId: targetClientId,
               invoiceNumber: group.header.invoiceNumber,
-              invoiceType: group.header.isReceipt ? 'OFFICE_SERVICE' : 'SALES',
+              invoiceType: group.header.invoiceType,
+              documentType: group.header.docType,
               date: group.header.date,
               dueDate: new Date(new Date(group.header.date).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
               partnerName: group.header.partnerName,
@@ -281,18 +587,20 @@ export class EtaExcelEngine {
               partnerNationalId: group.header.partnerNationalId,
               partnerAddress: group.header.partnerAddress,
               receiverType: group.header.receiverType,
+              currency: 'EGP',
+              exchangeRate: 1,
               items: items,
               subtotal,
               totalDiscount,
               totalVat,
               totalWht,
               grandTotal,
-              paidAmount: grandTotal,
-              remainingAmount: 0,
-              status: 'ISSUED',
-              paymentMethod: group.header.paymentMethod as any,
+              paidAmount,
+              remainingAmount,
+              status: finalStatus,
+              paymentMethod: finalPaymentMethod as any,
               qrPayload,
-              notes: group.header.notes || 'مستورد من شيت إكسل ومعتمد محاسبياً',
+              notes: group.header.notes || 'مستورد من شيت إكسل منظومة الضرائب',
               isReceipt: group.header.isReceipt,
               etaDocumentType: group.header.docType,
               etaDocumentVersion: '1.0',

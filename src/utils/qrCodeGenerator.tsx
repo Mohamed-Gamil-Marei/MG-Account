@@ -94,13 +94,14 @@ export function buildHumanReadableDigitalSeal(payload: VerificationPayloadData |
 
 export function generateCode128Svg(
   text: string,
-  heightOrOptions: number | { height?: number; moduleWidth?: number; showText?: boolean; [key: string]: any } = 36,
+  heightOrOptions: number | { height?: number; moduleWidth?: number; showText?: boolean } = 36,
   showText = true
 ): string {
   if (typeof heightOrOptions === 'object' && heightOrOptions !== null) {
     return barcode128Svg(text, heightOrOptions);
   }
-  return barcode128Svg(text, { height: heightOrOptions, showText });
+  const numericHeight = typeof heightOrOptions === 'number' ? heightOrOptions : 36;
+  return barcode128Svg(text, { height: numericHeight, showText });
 }
 
 export function buildFinancialStatementsQrText(params: {
