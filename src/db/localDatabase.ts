@@ -54,6 +54,18 @@ import {
   EncryptedBackupPackage,
 } from '../utils/backupEncryption';
 import { migrateClientTaxSubjectFlagsOnce } from '../config/screenScope';
+import {
+  assertCan as guardAssertCan,
+  canPerform as guardCanPerform,
+  PermissionError,
+  PeriodLockError,
+  registerAccessGuardResolvers,
+  AccessGuardAction,
+  AccessGuardContext,
+} from '../services/accessGuard';
+
+export { PermissionError, PeriodLockError, guardAssertCan as assertCan, guardCanPerform as canPerform };
+export type { AccessGuardAction, AccessGuardContext };
 
 export interface AuditLogEntry {
   id: string;
@@ -84,6 +96,9 @@ export interface AuditChainVerificationResult {
 export interface FiscalPeriodLockRecord {
   clientId: string;
   fiscalYear: number;
+  periodKey?: string;
+  level?: 'SUB_PERIOD' | 'ANNUAL';
+  scope?: 'YEAR' | 'MONTH' | 'QUARTER';
   isLocked: boolean;
   lockedAt?: string;
   lockedBy?: string;
@@ -92,23 +107,9 @@ export interface FiscalPeriodLockRecord {
   reason?: string;
 }
 
-export type PermissionAction =
-  | 'POST'
-  | 'UNPOST'
-  | 'EDIT'
-  | 'EDIT_POSTED'
-  | 'DELETE'
-  | 'TREASURY'
-  | 'TAX'
-  | 'AUDIT_TRAIL'
-  | 'MANAGE_USERS'
-  | 'ADMIN';
+export type PermissionAction = AccessGuardAction;
 
-export interface PermissionContext {
-  clientId?: string | null;
-  requireAdmin?: boolean;
-  allowWithoutClient?: boolean;
-}
+export type PermissionContext = AccessGuardContext;
 
 /**
  * Pure TypeScript synchronous SHA-256 (FIPS 180-4) implementation for tamper-evident audit hash chains
@@ -1460,6 +1461,10 @@ class LocalDatabase {
 
   constructor() {
     this.state = this.loadInitialState();
+    registerAccessGuardResolvers(
+      () => this.getCurrentUser(),
+      () => this.state?.activeClientContext?.clientId || null
+    );
   }
 
   public createDefaultState(): DatabaseState {
@@ -2018,6 +2023,10 @@ class LocalDatabase {
     return user;
   }
 
+  public logout(): void {
+    this.switchUser(null);
+  }
+
   public syncLoggedInUser(
     profile: FirebaseUserProfile,
     source: 'SERVER_AUTH' | 'FIREBASE' | 'OTHER' = 'OTHER'
@@ -2229,7 +2238,7 @@ class LocalDatabase {
     includeTaxSecrets?: boolean;
     encryptPassword?: string;
   }): Promise<string> {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    this.assertPermission('EXPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
 
     // 1. التطهير الأمني للضرائب: لا يحتوي بيانات بوابات الضرائب إلا بخيار صريح مشفر بكلمة مرور
     const isEncrypted = Boolean(options?.encryptPassword && options.encryptPassword.trim().length >= 6);
@@ -2293,7 +2302,7 @@ class LocalDatabase {
       reason?: string;
     }
   ): Promise<{ success: boolean; message: string; clientsRestored: number; entriesRestored: number }> {
-    const adminUser = this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    const adminUser = this.assertPermission('IMPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
 
     // 1. قبل الاستبدال: أخذ نسخة احتياطية تلقائية للطوارئ وحفظها في التخزين
     const autoSnapshot = JSON.stringify(this.state);
@@ -2434,6 +2443,7 @@ class LocalDatabase {
       reason?: string;
     }
   ): Promise<boolean> {
+    this.assertPermission('IMPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
     try {
       const res = await this.restoreFullBackupJson(jsonText, options);
       return res.success;
@@ -2444,7 +2454,7 @@ class LocalDatabase {
 
   public exportClientIsolatedBackup(clientId: string): string {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertPermission('EXPORT_BACKUP', { clientId: resolvedClientId, entityType: 'BACKUP' });
     this.assertNoUnassignedEntriesForReport();
 
     const client = this.state.clients.find((c) => c.id === resolvedClientId);
@@ -2582,99 +2592,25 @@ class LocalDatabase {
   }
 
   // =========================================================================
-  // Permission Enforcement, Period Locking & Append-Only SHA-256 Audit Chain
+  // Permission Enforcement, Two-Level Period Locking & Append-Only SHA-256 Audit Chain
   // =========================================================================
+  public assertCan(
+    action: AccessGuardAction,
+    ctx?: AccessGuardContext | string,
+    userOverride?: SystemUser | null
+  ): SystemUser {
+    const context: AccessGuardContext =
+      typeof ctx === 'string'
+        ? { clientId: ctx, activeClientId: this.state.activeClientContext?.clientId }
+        : { ...(ctx || {}), activeClientId: this.state.activeClientContext?.clientId };
+    return guardAssertCan(action, context, userOverride !== undefined ? userOverride : this.getCurrentUser());
+  }
+
   public assertPermission(
     action: PermissionAction,
     ctx?: PermissionContext | string
   ): SystemUser {
-    const user = this.getCurrentUser();
-    if (!user || user.isActive === false) {
-      throw new Error('عملية مرفوضة: يجب تسجيل الدخول بحساب مستخدم نشط لإجراء أي تعديل على البيانات.');
-    }
-
-    const context: PermissionContext =
-      typeof ctx === 'string' ? { clientId: ctx } : ctx || {};
-
-    if (action === 'ADMIN' || context.requireAdmin) {
-      if (user.role !== 'ADMIN') {
-        throw new Error('عملية مرفوضة: هذه العملية مقيدة بصلاحية مدير النظام (ADMIN) فقط.');
-      }
-      return user;
-    }
-
-    if (user.role !== 'ADMIN') {
-      const targetClientId =
-        context.clientId !== undefined
-          ? context.clientId
-          : !context.allowWithoutClient
-          ? this.state.activeClientContext?.clientId
-          : null;
-
-      if (targetClientId) {
-        if (
-          !Array.isArray(user.permittedClientIds) ||
-          !user.permittedClientIds.includes(targetClientId)
-        ) {
-          throw new Error(
-            `عملية مرفوضة: المستخدم (${user.name}) غير مصرح له بالوصول إلى بيانات العميل (${targetClientId}).`
-          );
-        }
-      } else if (
-        Array.isArray(user.permittedClientIds) &&
-        user.permittedClientIds.length === 0 &&
-        !context.allowWithoutClient
-      ) {
-        throw new Error(`عملية مرفوضة: المستخدم (${user.name}) ليس لديه أي عملاء مصرح بالوصول إليهم.`);
-      }
-
-      switch (action) {
-        case 'POST':
-        case 'UNPOST':
-          if (!user.canPostEntries) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية ترحيل القيود المحاسبية (canPostEntries).');
-          }
-          break;
-        case 'EDIT_POSTED':
-          if (!user.canEditPostedEntries) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية تعديل أو عكس القيود المرحّلة (canEditPostedEntries).');
-          }
-          break;
-        case 'DELETE':
-          if (!user.canDeleteRecords) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية حذف السجلات المحاسبية (canDeleteRecords).');
-          }
-          break;
-        case 'TREASURY':
-          if (!user.canAccessTreasury) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية الوصول إلى الخزينة والأتعاب (canAccessTreasury).');
-          }
-          break;
-        case 'TAX':
-          if (!user.canAccessTaxReports) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية الوصول إلى الإقرارات والتقارير الضريبية (canAccessTaxReports).');
-          }
-          break;
-        case 'AUDIT_TRAIL':
-          if (!user.canAccessAuditTrail) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية الاطلاع على سجل المراجعة (canAccessAuditTrail).');
-          }
-          break;
-        case 'MANAGE_USERS':
-          if (!user.canManageUsers) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية إدارة المستخدمين (canManageUsers).');
-          }
-          break;
-        case 'EDIT':
-        default:
-          if (!user.canPostEntries && !user.canEditPostedEntries) {
-            throw new Error('عملية مرفوضة: ليس لديك صلاحية إضافة أو تعديل البيانات المحاسبية.');
-          }
-          break;
-      }
-    }
-
-    return user;
+    return this.assertCan(action, ctx);
   }
 
   private resolveMandatoryClientId(explicitClientId?: string): string {
@@ -2688,20 +2624,56 @@ class LocalDatabase {
   private normalizeClientAndYear(
     arg1: string | number,
     arg2?: string | number
-  ): { clientId: string; fiscalYear: number } {
+  ): { clientId: string; fiscalYear: number; periodKey: string; level: 'SUB_PERIOD' | 'ANNUAL' } {
     if (typeof arg1 === 'number') {
       const clientId =
         typeof arg2 === 'string' && arg2.trim()
           ? arg2.trim()
           : this.resolveMandatoryClientId();
-      return { clientId, fiscalYear: arg1 };
+      return { clientId, fiscalYear: arg1, periodKey: String(arg1), level: 'ANNUAL' };
     }
-    const clientId = this.resolveMandatoryClientId(arg1);
-    const fiscalYear =
-      typeof arg2 === 'number'
-        ? arg2
-        : Number(arg2) || this.state.activeClientContext?.selectedFiscalYear || getCairoCurrentYear();
-    return { clientId, fiscalYear };
+
+    const arg1Str = String(arg1 || '').trim();
+    const arg2Str = arg2 !== undefined ? String(arg2).trim() : '';
+
+    // Check if arg1 is a date/period string like '2026', '2026-03', '2026-Q1', '2026-03-15' and arg2 is clientId
+    const isArg1DateOrPeriod = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/i.test(arg1Str);
+    const isArg2DateOrPeriod = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/i.test(arg2Str);
+
+    let clientId: string;
+    let rawPeriod: string;
+
+    if (isArg1DateOrPeriod && !isArg2DateOrPeriod) {
+      clientId = this.resolveMandatoryClientId(arg2Str || undefined);
+      rawPeriod = arg1Str.toUpperCase();
+    } else {
+      clientId = this.resolveMandatoryClientId(arg1Str);
+      rawPeriod =
+        arg2Str
+          ? arg2Str.toUpperCase()
+          : String(this.state.activeClientContext?.selectedFiscalYear || getCairoCurrentYear());
+    }
+
+    const yearMatch = rawPeriod.match(/^(\d{4})/);
+    const fiscalYear = yearMatch
+      ? parseInt(yearMatch[1], 10)
+      : this.state.activeClientContext?.selectedFiscalYear || getCairoCurrentYear();
+
+    if (/^\d{4}-Q[1-4]$/i.test(rawPeriod) || /^\d{4}-\d{2}$/.test(rawPeriod)) {
+      return {
+        clientId,
+        fiscalYear,
+        periodKey: rawPeriod.toUpperCase(),
+        level: 'SUB_PERIOD',
+      };
+    }
+
+    return {
+      clientId,
+      fiscalYear,
+      periodKey: String(fiscalYear),
+      level: 'ANNUAL',
+    };
   }
 
   private extractYearFromDate(dateStr?: string, fallbackYear?: number): number {
@@ -2714,34 +2686,166 @@ class LocalDatabase {
     return fallbackYear || this.state.activeClientContext?.selectedFiscalYear || getCairoCurrentYear();
   }
 
-  public isPeriodLocked(arg1: number | string, arg2?: string | number): boolean {
-    const { clientId, fiscalYear } = this.normalizeClientAndYear(arg1, arg2);
+  private resolvePeriodLockDetails(
+    clientId: string,
+    dateOrPeriod?: string | number,
+    explicitFiscalYear?: number
+  ): { isLocked: boolean; periodKey: string; periodLabel: string; level?: 'SUB_PERIOD' | 'ANNUAL' } {
     const locks = this.state.fiscalPeriodLocks || {};
-    const compositeKey = `${clientId}_${fiscalYear}`;
-    const altKey = `${fiscalYear}_${clientId}`;
-    const legacyYearKey = String(fiscalYear);
-    return Boolean(
-      locks[compositeKey]?.isLocked ||
-        locks[altKey]?.isLocked ||
-        (locks as Record<string, { isLocked?: boolean }>)[legacyYearKey]?.isLocked
-    );
+    const rawStr = dateOrPeriod !== undefined ? String(dateOrPeriod).trim().toUpperCase() : '';
+
+    const checkLockKey = (pKey: string): FiscalPeriodLockRecord | undefined => {
+      const k1 = `${clientId}_${pKey}`;
+      const k2 = `${pKey}_${clientId}`;
+      if (locks[k1]?.isLocked) return locks[k1];
+      if (locks[k2]?.isLocked) return locks[k2];
+      if ((locks as Record<string, FiscalPeriodLockRecord>)[pKey]?.isLocked && (!locks[pKey].clientId || locks[pKey].clientId === clientId)) {
+        return locks[pKey];
+      }
+      return undefined;
+    };
+
+    const year = this.extractYearFromDate(rawStr, explicitFiscalYear);
+    const yearsToCheck = new Set<number>([year]);
+    if (explicitFiscalYear && explicitFiscalYear !== year) {
+      yearsToCheck.add(explicitFiscalYear);
+    }
+
+    // 1. فحص المستوى الثاني: قفل السنة المالية الكاملة (ANNUAL)
+    for (const yr of yearsToCheck) {
+      const annualRec = checkLockKey(String(yr));
+      if (annualRec?.isLocked) {
+        return {
+          isLocked: true,
+          periodKey: String(yr),
+          periodLabel: `السنة المالية (${yr})`,
+          level: 'ANNUAL',
+        };
+      }
+    }
+
+    // 2. إذا كان المدخل ربع سنة مباشرة مثل 2026-Q1
+    const quarterDirectMatch = rawStr.match(/^(\d{4})-Q([1-4])$/i);
+    if (quarterDirectMatch) {
+      const qKey = `${quarterDirectMatch[1]}-Q${quarterDirectMatch[2]}`;
+      const qRec = checkLockKey(qKey);
+      if (qRec?.isLocked) {
+        return {
+          isLocked: true,
+          periodKey: qKey,
+          periodLabel: `الفترة الربع سنوية (${qKey})`,
+          level: 'SUB_PERIOD',
+        };
+      }
+    }
+
+    // 3. إذا كان المدخل تاريخاً (YYYY-MM-DD) أو شهراً (YYYY-MM): نفحص قفل الربع وقفل الشهر
+    const monthMatch = rawStr.match(/^(\d{4})-(\d{2})/);
+    if (monthMatch) {
+      const yrStr = monthMatch[1];
+      const moStr = monthMatch[2];
+      const moNum = parseInt(moStr, 10);
+      if (moNum >= 1 && moNum <= 12) {
+        const quarterNum = Math.ceil(moNum / 3);
+        const quarterKey = `${yrStr}-Q${quarterNum}`;
+        const monthKey = `${yrStr}-${moStr}`;
+
+        const qRec = checkLockKey(quarterKey);
+        if (qRec?.isLocked) {
+          return {
+            isLocked: true,
+            periodKey: quarterKey,
+            periodLabel: `الفترة الربع سنوية (${quarterKey})`,
+            level: 'SUB_PERIOD',
+          };
+        }
+
+        const mRec = checkLockKey(monthKey);
+        if (mRec?.isLocked) {
+          return {
+            isLocked: true,
+            periodKey: monthKey,
+            periodLabel: `الفترة الشهرية (${monthKey})`,
+            level: 'SUB_PERIOD',
+          };
+        }
+      }
+    }
+
+    return {
+      isLocked: false,
+      periodKey: rawStr || String(year),
+      periodLabel: rawStr || String(year),
+    };
   }
 
+  public getPeriodLockDetails(
+    clientId: string,
+    dateOrPeriod?: string | number,
+    explicitFiscalYear?: number
+  ): { locked: boolean; isLocked: boolean; periodKey: string; periodLabel: string; level?: 'SUB_PERIOD' | 'ANNUAL' } {
+    if (!clientId || !String(clientId).trim()) {
+      return {
+        locked: false,
+        isLocked: false,
+        periodKey: String(dateOrPeriod || explicitFiscalYear || ''),
+        periodLabel: String(dateOrPeriod || explicitFiscalYear || ''),
+      };
+    }
+    const details = this.resolvePeriodLockDetails(clientId, dateOrPeriod, explicitFiscalYear);
+    return {
+      ...details,
+      locked: details.isLocked,
+    };
+  }
+
+  /**
+   * فحص قفل الفترة على مستويين (شهر/ربع سنة + سنة مالية كاملة)
+   * يدعم الاستدعاء بـ isPeriodLocked(clientId, dateOrPeriod, explicitFiscalYear) أو isPeriodLocked(fiscalYear, clientId)
+   */
+  public isPeriodLocked(arg1: number | string, arg2?: string | number, explicitFiscalYear?: number): boolean {
+    if (typeof arg1 === 'number') {
+      const clientId =
+        typeof arg2 === 'string' && arg2.trim()
+          ? arg2.trim()
+          : this.resolveMandatoryClientId();
+      return this.resolvePeriodLockDetails(clientId, arg1, arg1).isLocked;
+    }
+
+    const arg1Str = String(arg1 || '').trim();
+    const arg2Str = arg2 !== undefined ? String(arg2).trim() : '';
+    const isArg1DateOrPeriod = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/i.test(arg1Str);
+    const isArg2DateOrPeriod = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/i.test(arg2Str);
+
+    if (isArg1DateOrPeriod && !isArg2DateOrPeriod) {
+      const clientId = this.resolveMandatoryClientId(arg2Str || undefined);
+      return this.resolvePeriodLockDetails(clientId, arg1Str, explicitFiscalYear).isLocked;
+    }
+
+    const clientId = this.resolveMandatoryClientId(arg1Str);
+    return this.resolvePeriodLockDetails(clientId, arg2 !== undefined ? arg2 : undefined, explicitFiscalYear).isLocked;
+  }
+
+  /**
+   * قفل فترة محاسبية (شهر YYYY-MM، أو ربع سنة YYYY-Q1..Q4، أو سنة مالية كاملة YYYY)
+   */
   public lockFiscalPeriod(
     arg1: string | number,
     arg2?: number | string,
-    reason = 'إقفال الفترة المالية'
+    reason = 'إقفال الفترة المحاسبية'
   ): FiscalPeriodLockRecord {
-    const { clientId, fiscalYear } = this.normalizeClientAndYear(arg1, arg2);
-    const user = this.assertPermission('POST', { clientId });
+    const { clientId, fiscalYear, periodKey, level } = this.normalizeClientAndYear(arg1, arg2);
+    const user = this.assertCan('POST_ENTRY', { clientId, fiscalYear, entityType: 'FISCAL_PERIOD' });
     if (!this.state.fiscalPeriodLocks) {
       this.state.fiscalPeriodLocks = {};
     }
-    const key = `${clientId}_${fiscalYear}`;
+    const key = `${clientId}_${periodKey}`;
     const before = this.state.fiscalPeriodLocks[key] ? { ...this.state.fiscalPeriodLocks[key] } : null;
     const record: FiscalPeriodLockRecord = {
       clientId,
       fiscalYear,
+      periodKey,
+      level,
       isLocked: true,
       lockedAt: getCairoTimestamp(),
       lockedBy: user.name,
@@ -2749,17 +2853,51 @@ class LocalDatabase {
     };
     this.state.fiscalPeriodLocks[key] = record;
     this.logAudit({
-      action: 'LOCK_FISCAL_PERIOD',
+      action: level === 'SUB_PERIOD' ? 'LOCK_SUB_PERIOD' : 'LOCK_FISCAL_PERIOD',
       entityType: 'FISCAL_PERIOD',
       entityId: key,
       clientId,
       beforeValue: before,
       afterValue: record,
       reason,
-      details: `قفل الفترة المالية (${fiscalYear}) للعميل (${clientId})`,
+      details: `قفل الفترة المحاسبية (${periodKey}) [${level === 'SUB_PERIOD' ? 'شهر/ربع' : 'سنة مالية'}] للعميل (${clientId})`,
     });
     this.saveState('LOCKS');
     return record;
+  }
+
+  public lockPeriod(
+    clientId: string,
+    periodKey: string | number,
+    reason = 'إقفال الفترة المحاسبية'
+  ): FiscalPeriodLockRecord {
+    return this.lockFiscalPeriod(clientId, periodKey, reason);
+  }
+
+  public lockMonthlyPeriod(
+    clientId: string,
+    fiscalYear: number,
+    month: number,
+    reason = 'إقفال الفترة الشهرية'
+  ): FiscalPeriodLockRecord {
+    const cleanMonth = Math.max(1, Math.min(12, Math.floor(Number(month) || 1)));
+    const periodKey = `${fiscalYear}-${String(cleanMonth).padStart(2, '0')}`;
+    const rec = this.lockFiscalPeriod(clientId, periodKey, reason);
+    rec.scope = 'MONTH';
+    return rec;
+  }
+
+  public lockQuarterlyPeriod(
+    clientId: string,
+    fiscalYear: number,
+    quarter: 1 | 2 | 3 | 4,
+    reason = 'إقفال الفترة الربع سنوية'
+  ): FiscalPeriodLockRecord {
+    const cleanQuarter = Math.max(1, Math.min(4, Math.floor(Number(quarter) || 1))) as 1 | 2 | 3 | 4;
+    const periodKey = `${fiscalYear}-Q${cleanQuarter}`;
+    const rec = this.lockFiscalPeriod(clientId, periodKey, reason);
+    rec.scope = 'QUARTER';
+    return rec;
   }
 
   public unlockFiscalPeriod(
@@ -2769,32 +2907,56 @@ class LocalDatabase {
   ): FiscalPeriodLockRecord {
     let clientId: string;
     let fiscalYear: number;
+    let periodKey: string;
+    let level: 'SUB_PERIOD' | 'ANNUAL';
     let unlockReason = reason;
 
     if (typeof arg1 === 'number' && typeof arg2 === 'string' && reason === undefined) {
       // Called as unlockFiscalPeriod(2026, 'سبب فتح الفترة')
       clientId = this.resolveMandatoryClientId();
       fiscalYear = arg1;
+      periodKey = String(arg1);
+      level = 'ANNUAL';
       unlockReason = arg2;
     } else {
       const norm = this.normalizeClientAndYear(arg1, arg2);
       clientId = norm.clientId;
       fiscalYear = norm.fiscalYear;
+      periodKey = norm.periodKey;
+      level = norm.level;
     }
 
-    const user = this.assertPermission('ADMIN', { clientId, requireAdmin: true });
+    const user = this.assertCan('ADMIN', { clientId, fiscalYear, requireAdmin: true, entityType: 'FISCAL_PERIOD' });
     if (!unlockReason || !unlockReason.trim()) {
       throw new Error('عملية مرفوضة: يجب إدخال سبب إلزامي لفتح الفترة المالية المقفولة.');
+    }
+
+    // في حالة فتح فترة فرعية (شهر/ربع) بينما السنة المالية نفسها مقفلة، يُرفض فتح الفرعية قبل فتح السنة
+    if (level === 'SUB_PERIOD') {
+      const annualKey = `${clientId}_${fiscalYear}`;
+      if (this.state.fiscalPeriodLocks?.[annualKey]?.isLocked) {
+        throw new PeriodLockError(
+          `عملية مرفوضة: لا يمكن فتح الفترة الفرعية (${periodKey}) لأن السنة المالية (${fiscalYear}) للعميل (${clientId}) مقفولة بالكامل.`,
+          {
+            clientId,
+            periodKey: String(fiscalYear),
+            fiscalYear,
+            entityType: 'FISCAL_PERIOD',
+          }
+        );
+      }
     }
 
     if (!this.state.fiscalPeriodLocks) {
       this.state.fiscalPeriodLocks = {};
     }
-    const key = `${clientId}_${fiscalYear}`;
+    const key = `${clientId}_${periodKey}`;
     const before = this.state.fiscalPeriodLocks[key] ? { ...this.state.fiscalPeriodLocks[key] } : null;
     const record: FiscalPeriodLockRecord = {
       clientId,
       fiscalYear,
+      periodKey,
+      level,
       isLocked: false,
       lockedAt: before?.lockedAt,
       lockedBy: before?.lockedBy,
@@ -2804,7 +2966,7 @@ class LocalDatabase {
     };
     this.state.fiscalPeriodLocks[key] = record;
     // Also clear any legacy year-only key if present
-    if (this.state.fiscalPeriodLocks[String(fiscalYear)]) {
+    if (level === 'ANNUAL' && this.state.fiscalPeriodLocks[String(fiscalYear)]) {
       this.state.fiscalPeriodLocks[String(fiscalYear)] = {
         ...this.state.fiscalPeriodLocks[String(fiscalYear)],
         isLocked: false,
@@ -2812,29 +2974,46 @@ class LocalDatabase {
     }
 
     this.logAudit({
-      action: 'UNLOCK_FISCAL_PERIOD',
+      action: level === 'SUB_PERIOD' ? 'UNLOCK_SUB_PERIOD' : 'UNLOCK_FISCAL_PERIOD',
       entityType: 'FISCAL_PERIOD',
       entityId: key,
       clientId,
       beforeValue: before,
       afterValue: record,
       reason: unlockReason.trim(),
-      details: `فتح الفترة المالية (${fiscalYear}) للعميل (${clientId}) - السبب: ${unlockReason.trim()}`,
+      details: `فتح الفترة المحاسبية (${periodKey}) للعميل (${clientId}) - السبب: ${unlockReason.trim()}`,
     });
     this.saveState('LOCKS');
     return record;
   }
 
-  private assertPeriodOpen(clientId: string, dateStr?: string, explicitFiscalYear?: number): void {
-    const yearFromDate = this.extractYearFromDate(dateStr, explicitFiscalYear);
-    if (this.isPeriodLocked(yearFromDate, clientId)) {
-      throw new Error(
-        `عملية مرفوضة: الفترة المالية (${yearFromDate}) للعميل (${clientId}) مقفولة ولا يمكن إضافة أو تعديل أو حذف قيود بها.`
-      );
-    }
-    if (explicitFiscalYear && explicitFiscalYear !== yearFromDate && this.isPeriodLocked(explicitFiscalYear, clientId)) {
-      throw new Error(
-        `عملية مرفوضة: الفترة المالية (${explicitFiscalYear}) للعميل (${clientId}) مقفولة ولا يمكن إضافة أو تعديل أو حذف قيود بها.`
+  public unlockPeriod(
+    clientId: string,
+    periodKey: string | number,
+    reason: string
+  ): FiscalPeriodLockRecord {
+    return this.unlockFiscalPeriod(clientId, periodKey, reason);
+  }
+
+  public assertPeriodOpen(
+    clientId: string,
+    dateStr?: string,
+    explicitFiscalYear?: number,
+    entityType = 'JOURNAL_ENTRY'
+  ): void {
+    const resolvedClientId = this.resolveMandatoryClientId(clientId);
+    const lockDetails = this.resolvePeriodLockDetails(resolvedClientId, dateStr, explicitFiscalYear);
+    if (lockDetails.isLocked) {
+      const yearFromDate = this.extractYearFromDate(dateStr, explicitFiscalYear);
+      throw new PeriodLockError(
+        `عملية مرفوضة: ${lockDetails.periodLabel} للعميل (${resolvedClientId}) مقفولة ولا يمكن إنشاء أو تعديل أو حذف أو عكس أي قيد أو فاتورة أو حركة خزنة بتاريخ (${dateStr || yearFromDate}) داخل فترة مقفولة.`,
+        {
+          clientId: resolvedClientId,
+          periodKey: lockDetails.periodKey,
+          fiscalYear: yearFromDate,
+          targetDate: dateStr,
+          entityType,
+        }
       );
     }
   }
@@ -2917,16 +3096,26 @@ class LocalDatabase {
     };
 
     const hash = computeAuditEntryHash(baseEntry, prevHash);
-    const fullEntry: AuditLogEntry = {
+    const fullEntry: AuditLogEntry = Object.freeze({
       ...baseEntry,
       prevHash,
       hash,
-    };
+    });
 
-    // Append-only: never truncate and never delete
+    // Append-only: never truncate (no 1000-item limit) and never delete
     this.state.auditLogs.unshift(fullEntry);
     this.saveState('AUDIT_LOGS');
     return fullEntry;
+  }
+
+  public clearAuditLogs(): never {
+    throw new PermissionError(
+      'عملية مرفوضة: سجل المراجعة (Audit Trail) محمي للإضافة فقط (Append-Only) ولا يُسمح بحذفه أو تصفيره تحت أي ظرف.',
+      {
+        action: 'DELETE_RECORD',
+        entityType: 'AUDIT_TRAIL',
+      }
+    );
   }
 
   public recordAuditMutation(params: {
@@ -5000,10 +5189,20 @@ class LocalDatabase {
   }
 
   public updateJournalEntry(
-    entryId: string,
-    partial: Partial<JournalEntry>,
-    reason = 'تعديل مسودة قيد يومية'
+    entryIdOrEntry: string | (Partial<JournalEntry> & { id: string }),
+    partialInput?: Partial<JournalEntry> | string,
+    reasonInput = 'تعديل مسودة قيد يومية'
   ): JournalEntry | undefined {
+    const entryId = typeof entryIdOrEntry === 'string' ? entryIdOrEntry : entryIdOrEntry.id;
+    const partial: Partial<JournalEntry> =
+      typeof entryIdOrEntry === 'string'
+        ? (typeof partialInput === 'object' && partialInput ? partialInput : {})
+        : entryIdOrEntry;
+    const reason =
+      typeof partialInput === 'string' && partialInput.trim()
+        ? partialInput.trim()
+        : reasonInput;
+
     const idx = this.state.journalEntries.findIndex((j) => j.id === entryId);
     if (idx === -1) {
       this.assertPermission('EDIT');
@@ -5014,12 +5213,25 @@ class LocalDatabase {
 
     // Principle 3: Posted entries cannot be edited
     if (existing.isPosted || existing.status === 'POSTED') {
-      throw new Error('القيود المرحّلة لا تُعدَّل ولا تُحذف. التصحيح يتم بقيد عكسي فقط.');
+      this.assertCan('EDIT_POSTED', {
+        clientId: existing.clientId,
+        fiscalYear: existing.fiscalYear,
+        entityType: 'JOURNAL_ENTRY',
+      });
+      throw new PermissionError(
+        'القيود المرحّلة لا تُعدَّل ولا تُحذف. التصحيح يتم بقيد عكسي فقط.',
+        {
+          action: 'EDIT_POSTED',
+          clientId: existing.clientId,
+          fiscalYear: existing.fiscalYear,
+          entityType: 'JOURNAL_ENTRY',
+        }
+      );
     }
 
-    this.assertPeriodOpen(existing.clientId, existing.date, existing.fiscalYear);
+    this.assertPeriodOpen(existing.clientId, existing.date, existing.fiscalYear, 'JOURNAL_ENTRY');
     if (partial.date || partial.fiscalYear) {
-      this.assertPeriodOpen(existing.clientId, partial.date || existing.date, partial.fiscalYear || existing.fiscalYear);
+      this.assertPeriodOpen(existing.clientId, partial.date || existing.date, partial.fiscalYear || existing.fiscalYear, 'JOURNAL_ENTRY');
     }
 
     let updatedLines = existing.lines;
@@ -5073,17 +5285,29 @@ class LocalDatabase {
   public deleteJournalEntry(entryId: string, reason = 'حذف مسودة قيد غير مرحّل'): boolean {
     const existing = this.state.journalEntries.find((j) => j.id === entryId);
     if (!existing) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE_RECORD', { entityType: 'JOURNAL_ENTRY' });
       return false;
     }
-    this.assertPermission('DELETE', { clientId: existing.clientId });
+    this.assertCan('DELETE_RECORD', {
+      clientId: existing.clientId,
+      fiscalYear: existing.fiscalYear,
+      entityType: 'JOURNAL_ENTRY',
+    });
 
     // Principle 3: Posted entries cannot be deleted
     if (existing.isPosted || existing.status === 'POSTED') {
-      throw new Error('القيود المرحّلة لا تُعدَّل ولا تُحذف. التصحيح يتم بقيد عكسي فقط.');
+      throw new PermissionError(
+        'القيود المرحّلة لا تُعدَّل ولا تُحذف. التصحيح يتم بقيد عكسي فقط.',
+        {
+          action: 'DELETE_RECORD',
+          clientId: existing.clientId,
+          fiscalYear: existing.fiscalYear,
+          entityType: 'JOURNAL_ENTRY',
+        }
+      );
     }
 
-    this.assertPeriodOpen(existing.clientId, existing.date, existing.fiscalYear);
+    this.assertPeriodOpen(existing.clientId, existing.date, existing.fiscalYear, 'JOURNAL_ENTRY');
 
     const before = this.state.journalEntries.length;
     this.state.journalEntries = this.state.journalEntries.filter((j) => j.id !== entryId);
@@ -5106,17 +5330,21 @@ class LocalDatabase {
   public reverseJournalEntry(
     entryId: string,
     reason: string,
-    reversalDate: string = getCairoDateString()
+    reversalDate?: string
   ): JournalEntry {
     const original = this.state.journalEntries.find((j) => j.id === entryId);
     if (!original) {
-      this.assertPermission('POST');
+      this.assertCan('EDIT_POSTED', { entityType: 'JOURNAL_ENTRY' });
       throw new Error('القيد الأصلي المطلوب عكسه غير موجود.');
     }
-    const user = this.assertPermission('POST', { clientId: original.clientId });
-    if (user.role !== 'ADMIN' && !user.canEditPostedEntries && !user.canPostEntries) {
-      throw new Error('عملية مرفوضة: ليس لديك صلاحية إصدار قيود عكسية للقيود المرحّلة.');
-    }
+    const effectiveReversalDate = reversalDate || original.date || getCairoDateString();
+    const revFiscalYear = this.extractYearFromDate(effectiveReversalDate, original.fiscalYear);
+
+    const user = this.assertCan('EDIT_POSTED', {
+      clientId: original.clientId,
+      fiscalYear: revFiscalYear,
+      entityType: 'JOURNAL_ENTRY',
+    });
 
     if (!reason || !reason.trim()) {
       throw new Error('يلزم إدخال سبب واضح لإصدار القيد العكسي.');
@@ -5128,8 +5356,9 @@ class LocalDatabase {
       throw new Error(`تم عكس هذا القيد مسبقاً بالقيد رقم (${original.reversedByEntryId}).`);
     }
 
-    const revFiscalYear = this.extractYearFromDate(reversalDate, original.fiscalYear);
-    this.assertPeriodOpen(original.clientId, reversalDate, revFiscalYear);
+    this.assertPeriodOpen(original.clientId, original.date, original.fiscalYear, 'JOURNAL_ENTRY');
+    this.assertPeriodOpen(original.clientId, effectiveReversalDate, revFiscalYear, 'JOURNAL_ENTRY');
+    reversalDate = effectiveReversalDate;
 
     const beforeOriginal = { ...original };
     const reversalLines = (original.lines || []).map((line, idx) => ({
@@ -5321,14 +5550,32 @@ class LocalDatabase {
     this.saveState('CONTEXT');
   }
 
-  public setActiveClientContext(context: {
-    clientId: string | null;
-    selectedFiscalYear?: number;
-    autoFilter?: boolean;
-  }): void {
-    this.setActiveClient(context.clientId, {
-      fiscalYear: context.selectedFiscalYear,
-      autoFilter: context.autoFilter,
+  public setActiveClientContext(
+    contextOrClientId:
+      | string
+      | null
+      | {
+          clientId: string | null;
+          selectedFiscalYear?: number;
+          autoFilter?: boolean;
+        },
+    selectedFiscalYear?: number
+  ): void {
+    if (contextOrClientId === null) {
+      this.setActiveClient(null, {
+        fiscalYear: selectedFiscalYear,
+      });
+      return;
+    }
+    if (typeof contextOrClientId === 'string') {
+      this.setActiveClient(contextOrClientId, {
+        fiscalYear: selectedFiscalYear,
+      });
+      return;
+    }
+    this.setActiveClient(contextOrClientId.clientId, {
+      fiscalYear: contextOrClientId.selectedFiscalYear,
+      autoFilter: contextOrClientId.autoFilter,
     });
   }
 
@@ -5845,6 +6092,7 @@ class LocalDatabase {
 
     const sharedId = input.id || `fc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const paidAt = input.paidAt || getCairoDateString();
+    this.assertPeriodOpen(resolvedClientId, paidAt, undefined, 'TREASURY');
     const method = input.method || 'CASH';
 
     const collection: ClientFeeCollection = {
@@ -5902,10 +6150,11 @@ class LocalDatabase {
   public deleteFeeCollection(collectionId: string): boolean {
     const target = this.state.feeCollections.find((c) => c.id === collectionId);
     if (!target) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE_RECORD', { entityType: 'FEE_COLLECTION' });
       return false;
     }
-    this.assertPermission('DELETE', { clientId: target.clientId });
+    this.assertCan('DELETE_RECORD', { clientId: target.clientId, entityType: 'FEE_COLLECTION' });
+    this.assertPeriodOpen(target.clientId, target.paidAt, undefined, 'TREASURY');
     this.state.feeCollections = this.state.feeCollections.filter((c) => c.id !== collectionId);
     this.state.treasuryTransactions = this.state.treasuryTransactions.filter(
       (t) => t.id !== collectionId && t.id !== target.treasuryTransactionId && t.feeCollectionId !== collectionId
@@ -5940,7 +6189,9 @@ class LocalDatabase {
     txInput: Partial<OfficeTreasuryTransaction>
   ): OfficeTreasuryTransaction {
     const resolvedClientId = this.resolveMandatoryClientId(txInput.clientId);
-    this.assertPermission('TREASURY', { clientId: resolvedClientId });
+    const txDate = txInput.date || getCairoDateString();
+    this.assertCan('TREASURY', { clientId: resolvedClientId, entityType: 'TREASURY', date: txDate });
+    this.assertPeriodOpen(resolvedClientId, txDate, undefined, 'TREASURY');
 
     if (txInput.type === 'INCOME_FEES' && !txInput.feeCollectionId) {
       const { treasuryTransaction } = this.recordFeeCollection({
@@ -5948,7 +6199,7 @@ class LocalDatabase {
         agreementId: txInput.agreementId,
         clientId: resolvedClientId,
         amount: Number(txInput.amount) || 0,
-        paidAt: txInput.date || getCairoDateString(),
+        paidAt: txDate,
         method: txInput.paymentMethod || 'CASH',
         receiptNo: txInput.receiptNumber || txInput.referenceNumber,
         notes: txInput.description,
@@ -5956,7 +6207,6 @@ class LocalDatabase {
       return treasuryTransaction;
     }
 
-    const txDate = txInput.date || getCairoDateString();
     const txCurrency = (txInput.currency as CurrencyCode) || 'EGP';
     const rawAmount =
       txCurrency !== 'EGP' && txInput.foreignAmount !== undefined
@@ -5995,6 +6245,65 @@ class LocalDatabase {
 
     this.saveState('TREASURY');
     return created;
+  }
+
+  public updateTreasuryTransaction(
+    txId: string,
+    partial: Partial<OfficeTreasuryTransaction>,
+    reason = 'تعديل حركة خزينة'
+  ): OfficeTreasuryTransaction | undefined {
+    const idx = this.state.treasuryTransactions.findIndex((t) => t.id === txId);
+    if (idx === -1) {
+      this.assertCan('TREASURY', { entityType: 'TREASURY' });
+      return undefined;
+    }
+    const before = { ...this.state.treasuryTransactions[idx] };
+    this.assertCan('TREASURY', { clientId: before.clientId, entityType: 'TREASURY' });
+    this.assertPeriodOpen(before.clientId, before.date, undefined, 'TREASURY');
+    if (partial.date) {
+      this.assertPeriodOpen(before.clientId, partial.date, undefined, 'TREASURY');
+    }
+    this.state.treasuryTransactions[idx] = {
+      ...before,
+      ...partial,
+      clientId: before.clientId,
+    };
+    this.logAudit({
+      action: 'UPDATE_TREASURY_TRANSACTION',
+      entityType: 'TREASURY',
+      entityId: txId,
+      clientId: before.clientId,
+      beforeValue: before,
+      afterValue: this.state.treasuryTransactions[idx],
+      reason,
+      details: `تعديل حركة الخزينة (${before.description || txId})`,
+    });
+    this.saveState('TREASURY');
+    return this.state.treasuryTransactions[idx];
+  }
+
+  public deleteTreasuryTransaction(txId: string, reason = 'حذف حركة خزينة'): boolean {
+    const target = this.state.treasuryTransactions.find((t) => t.id === txId);
+    if (!target) {
+      this.assertCan('DELETE_RECORD', { entityType: 'TREASURY' });
+      return false;
+    }
+    this.assertCan('DELETE_RECORD', { clientId: target.clientId, entityType: 'TREASURY' });
+    this.assertPeriodOpen(target.clientId, target.date, undefined, 'TREASURY');
+    const before = this.state.treasuryTransactions.length;
+    this.state.treasuryTransactions = this.state.treasuryTransactions.filter((t) => t.id !== txId);
+    this.logAudit({
+      action: 'DELETE_TREASURY_TRANSACTION',
+      entityType: 'TREASURY',
+      entityId: txId,
+      clientId: target.clientId,
+      beforeValue: target,
+      afterValue: null,
+      reason,
+      details: `حذف حركة الخزينة (${target.description || txId})`,
+    });
+    this.saveState('TREASURY');
+    return this.state.treasuryTransactions.length < before;
   }
 
   // =========================================================================
@@ -6109,7 +6418,11 @@ class LocalDatabase {
     input: Partial<ApprovedStatementsSnapshot> & { clientId: string; fiscalYear: number }
   ): ApprovedStatementsSnapshot {
     const resolvedClientId = this.resolveMandatoryClientId(input.clientId);
-    this.assertPermission('POST', { clientId: resolvedClientId });
+    this.assertCan('APPROVE_STATEMENT', {
+      clientId: resolvedClientId,
+      fiscalYear: input.fiscalYear,
+      entityType: 'APPROVED_STATEMENT',
+    });
     const existingForPeriod = this.getApprovedStatementsForClient(resolvedClientId, input.fiscalYear);
     const nextVersion = input.version || input.versionNo || existingForPeriod.length + 1;
     const snap: ApprovedStatementsSnapshot = {
@@ -6148,7 +6461,11 @@ class LocalDatabase {
   public addCertificate(
     certInput: Partial<ProfessionalCertificate> & { clientName: string; certifiedAmount: number }
   ): ProfessionalCertificate {
-    this.assertPermission('POST', { clientId: certInput.clientId, allowWithoutClient: !certInput.clientId });
+    this.assertCan('ISSUE_CERTIFICATE', {
+      clientId: certInput.clientId,
+      entityType: 'CERTIFICATE',
+      allowWithoutClient: !certInput.clientId,
+    });
     const verificationCode = certInput.verificationCode || generateVerificationCode();
     const cert: ProfessionalCertificate = {
       id: certInput.id || `cert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -6209,11 +6526,15 @@ class LocalDatabase {
   public updateCertificate(id: string, partial: Partial<ProfessionalCertificate>): ProfessionalCertificate | undefined {
     const idx = this.state.certificates.findIndex((c) => c.id === id);
     if (idx === -1) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT_RECORD', { entityType: 'CERTIFICATE' });
       return undefined;
     }
     const before = { ...this.state.certificates[idx] };
-    this.assertPermission('EDIT', { clientId: before.clientId, allowWithoutClient: !before.clientId });
+    this.assertCan('EDIT_RECORD', {
+      clientId: before.clientId,
+      entityType: 'CERTIFICATE',
+      allowWithoutClient: !before.clientId,
+    });
     this.state.certificates[idx] = { ...before, ...partial };
     this.logAudit({
       action: 'UPDATE_CERTIFICATE',
@@ -6231,10 +6552,14 @@ class LocalDatabase {
   public deleteCertificate(id: string): boolean {
     const target = this.state.certificates.find((c) => c.id === id);
     if (!target) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE_RECORD', { entityType: 'CERTIFICATE' });
       return false;
     }
-    this.assertPermission('DELETE', { clientId: target.clientId, allowWithoutClient: !target.clientId });
+    this.assertCan('DELETE_RECORD', {
+      clientId: target.clientId,
+      entityType: 'CERTIFICATE',
+      allowWithoutClient: !target.clientId,
+    });
     const before = this.state.certificates.length;
     this.state.certificates = this.state.certificates.filter((c) => c.id !== id);
     this.logAudit({
@@ -6277,13 +6602,14 @@ class LocalDatabase {
   // =========================================================================
   public addTaxDeclaration(decl: Partial<TaxDeclarationRecord>): TaxDeclarationRecord {
     const resolvedClientId = this.resolveMandatoryClientId(decl.clientId);
-    this.assertPermission('TAX', { clientId: resolvedClientId });
+    const fy = decl.fiscalYear || getCairoCurrentYear();
+    this.assertCan('TAX', { clientId: resolvedClientId, fiscalYear: fy, entityType: 'TAX_DECLARATION' });
 
     const created: TaxDeclarationRecord = {
       id: decl.id || `tax-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       declarationType: decl.declarationType || 'VAT_MONTHLY',
       period: decl.period || '',
-      fiscalYear: decl.fiscalYear || getCairoCurrentYear(),
+      fiscalYear: fy,
       dueDate: decl.dueDate || getCairoDateString(),
       taxableBase: Number(decl.taxableBase) || 0,
       taxAmount: Number(decl.taxAmount) || 0,
@@ -6311,11 +6637,15 @@ class LocalDatabase {
   public updateTaxDeclaration(id: string, partial: Partial<TaxDeclarationRecord>): TaxDeclarationRecord | undefined {
     const idx = this.state.taxDeclarations.findIndex((t) => t.id === id);
     if (idx === -1) {
-      this.assertPermission('TAX');
+      this.assertCan('TAX', { entityType: 'TAX_DECLARATION' });
       return undefined;
     }
     const before = { ...this.state.taxDeclarations[idx] };
-    this.assertPermission('TAX', { clientId: before.clientId });
+    this.assertCan('TAX', {
+      clientId: before.clientId,
+      fiscalYear: before.fiscalYear,
+      entityType: 'TAX_DECLARATION',
+    });
     this.state.taxDeclarations[idx] = { ...before, ...partial };
     this.logAudit({
       action: 'UPDATE_TAX_DECLARATION',
@@ -6333,11 +6663,16 @@ class LocalDatabase {
   public deleteTaxDeclaration(id: string): boolean {
     const idx = this.state.taxDeclarations.findIndex((t) => t.id === id);
     if (idx === -1) {
-      this.assertPermission('TAX', { allowWithoutClient: true });
+      this.assertCan('DELETE_RECORD', { allowWithoutClient: true, entityType: 'TAX_DECLARATION' });
       return false;
     }
     const target = this.state.taxDeclarations[idx];
-    this.assertPermission('TAX', { clientId: target.clientId, allowWithoutClient: !target.clientId });
+    this.assertCan('DELETE_RECORD', {
+      clientId: target.clientId,
+      fiscalYear: target.fiscalYear,
+      allowWithoutClient: !target.clientId,
+      entityType: 'TAX_DECLARATION',
+    });
     this.state.taxDeclarations.splice(idx, 1);
     this.logAudit({
       action: 'DELETE_TAX_DECLARATION',
@@ -6353,7 +6688,11 @@ class LocalDatabase {
   }
 
   public updateTaxMandate(id: string, partial: any): any {
-    this.assertPermission('TAX', { clientId: partial?.clientId, allowWithoutClient: !partial?.clientId });
+    this.assertCan('TAX', {
+      clientId: partial?.clientId,
+      allowWithoutClient: !partial?.clientId,
+      entityType: 'TAX_MANDATE',
+    });
     const idx = this.state.taxMandates.findIndex((m) => m.id === id);
     const before = idx >= 0 ? { ...this.state.taxMandates[idx] } : null;
     if (idx >= 0) {
@@ -6375,15 +6714,40 @@ class LocalDatabase {
     return after;
   }
 
+  public addInvoice(inv: Partial<Invoice>): Invoice {
+    const resolvedClientId = this.resolveMandatoryClientId(inv.clientId);
+    const invDate = inv.date || getCairoDateString();
+    const invYear = this.extractYearFromDate(invDate);
+    this.assertCan(inv.isPosted ? 'POST_ENTRY' : 'EDIT_RECORD', {
+      clientId: resolvedClientId,
+      fiscalYear: invYear,
+      entityType: 'INVOICE',
+      date: invDate,
+    });
+    this.assertPeriodOpen(resolvedClientId, invDate, invYear, 'INVOICE');
+
+    this.batchAddInvoices([{ ...inv, clientId: resolvedClientId, date: invDate }]);
+    const created = this.state.invoices[this.state.invoices.length - 1];
+    return created;
+  }
+
   public batchAddInvoices(invoicesList: Partial<Invoice>[]): number {
     if (invoicesList.length === 0) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT_RECORD', { entityType: 'INVOICE' });
       return 0;
     }
     let added = 0;
     for (const inv of invoicesList) {
       const resolvedClientId = this.resolveMandatoryClientId(inv.clientId);
-      this.assertPermission('EDIT', { clientId: resolvedClientId });
+      const invDate = inv.date || getCairoDateString();
+      const invYear = this.extractYearFromDate(invDate);
+      this.assertCan(inv.isPosted ? 'POST_ENTRY' : 'EDIT_RECORD', {
+        clientId: resolvedClientId,
+        fiscalYear: invYear,
+        entityType: 'INVOICE',
+        date: invDate,
+      });
+      this.assertPeriodOpen(resolvedClientId, invDate, invYear, 'INVOICE');
 
       const invNumClean = (inv.invoiceNumber || '').trim();
       if (!invNumClean) {
@@ -6404,7 +6768,6 @@ class LocalDatabase {
         );
       }
 
-      const invDate = inv.date || getCairoDateString();
       const invCurrency = inv.currency || 'EGP';
       const rate =
         invCurrency === 'EGP'
@@ -6456,11 +6819,20 @@ class LocalDatabase {
   public updateInvoice(id: string, partial: Partial<Invoice>, reason = 'تحديث بيانات الفاتورة'): Invoice | undefined {
     const idx = this.state.invoices.findIndex((i) => i.id === id);
     if (idx === -1) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT_RECORD', { entityType: 'INVOICE' });
       return undefined;
     }
     const before = { ...this.state.invoices[idx] };
-    this.assertPermission('EDIT', { clientId: before.clientId });
+    const invYear = this.extractYearFromDate(before.date);
+    this.assertCan(before.isPosted ? 'EDIT_POSTED' : 'EDIT_RECORD', {
+      clientId: before.clientId,
+      fiscalYear: invYear,
+      entityType: 'INVOICE',
+    });
+    this.assertPeriodOpen(before.clientId, before.date, invYear, 'INVOICE');
+    if (partial.date) {
+      this.assertPeriodOpen(before.clientId, partial.date, this.extractYearFromDate(partial.date), 'INVOICE');
+    }
 
     this.state.invoices[idx] = {
       ...before,
@@ -6481,6 +6853,227 @@ class LocalDatabase {
 
     this.saveState('INVOICES');
     return this.state.invoices[idx];
+  }
+
+  public deleteInvoice(id: string, reason = 'حذف فاتورة غير مرحّلة'): boolean {
+    const target = this.state.invoices.find((i) => i.id === id);
+    if (!target) {
+      this.assertCan('DELETE_RECORD', { entityType: 'INVOICE' });
+      return false;
+    }
+    const invYear = this.extractYearFromDate(target.date);
+    this.assertCan('DELETE_RECORD', {
+      clientId: target.clientId,
+      fiscalYear: invYear,
+      entityType: 'INVOICE',
+    });
+    this.assertPeriodOpen(target.clientId, target.date, invYear, 'INVOICE');
+    if (target.isPosted) {
+      throw new PermissionError(
+        'عملية مرفوضة: الفاتورة المرحّلة لا تُحذف؛ يجب إلغاؤها (VOID_RECORD) أو إصدار قيد عكسي لها.',
+        {
+          action: 'DELETE_RECORD',
+          clientId: target.clientId,
+          fiscalYear: invYear,
+          entityType: 'INVOICE',
+        }
+      );
+    }
+    const before = this.state.invoices.length;
+    this.state.invoices = this.state.invoices.filter((i) => i.id !== id);
+    this.logAudit({
+      action: 'DELETE_INVOICE',
+      entityType: 'INVOICE',
+      entityId: id,
+      clientId: target.clientId,
+      beforeValue: target,
+      afterValue: null,
+      reason,
+      details: `حذف الفاتورة رقم (${target.invoiceNumber}) للعميل (${target.clientId})`,
+    });
+    this.saveState('INVOICES');
+    return this.state.invoices.length < before;
+  }
+
+  public voidInvoice(id: string, reason = 'إلغاء فاتورة'): Invoice | undefined {
+    const idx = this.state.invoices.findIndex((i) => i.id === id);
+    if (idx === -1) {
+      this.assertCan('VOID_RECORD', { entityType: 'INVOICE' });
+      return undefined;
+    }
+    const before = { ...this.state.invoices[idx] };
+    const invYear = this.extractYearFromDate(before.date);
+    this.assertCan('VOID_RECORD', {
+      clientId: before.clientId,
+      fiscalYear: invYear,
+      entityType: 'INVOICE',
+    });
+    this.assertPeriodOpen(before.clientId, before.date, invYear, 'INVOICE');
+
+    this.state.invoices[idx] = {
+      ...before,
+      status: 'CANCELLED',
+    };
+    this.logAudit({
+      action: 'VOID_INVOICE',
+      entityType: 'INVOICE',
+      entityId: id,
+      clientId: before.clientId,
+      beforeValue: before,
+      afterValue: this.state.invoices[idx],
+      reason,
+      details: `إلغاء/إبطال الفاتورة رقم (${before.invoiceNumber}) للعميل (${before.clientId})`,
+    });
+    this.saveState('INVOICES');
+    return this.state.invoices[idx];
+  }
+
+  public postInvoice(invoiceId: string, actingUser?: SystemUser): JournalEntry {
+    const invoice = this.state.invoices.find((inv) => inv.id === invoiceId);
+    if (!invoice) {
+      this.assertCan('POST_ENTRY', { entityType: 'INVOICE' }, actingUser);
+      throw new Error('الفاتورة المطلوب ترحيلها غير موجودة في قاعدة البيانات.');
+    }
+    const resolvedClientId = this.resolveMandatoryClientId(invoice.clientId);
+    const invDate = (invoice.date || getCairoDateString()).slice(0, 10);
+    const fiscalYear = this.extractYearFromDate(invDate);
+
+    const user = this.assertCan(
+      'POST_ENTRY',
+      {
+        clientId: resolvedClientId,
+        fiscalYear,
+        entityType: 'INVOICE',
+        date: invDate,
+      },
+      actingUser
+    );
+    this.assertPeriodOpen(resolvedClientId, invDate, fiscalYear, 'INVOICE');
+
+    if (invoice.isPosted && invoice.journalEntryId) {
+      const existingJe = this.state.journalEntries.find((j) => j.id === invoice.journalEntryId);
+      if (existingJe) {
+        throw new Error(`تم ترحيل هذه الفاتورة مسبقاً (${invoice.invoiceNumber}) بالقيد رقم (${existingJe.entryNumber}).`);
+      }
+    }
+
+    const mapping = this.getClientAccountMapping(resolvedClientId);
+    const invType = String(invoice.invoiceType || 'SALES').toUpperCase();
+    const isPurchaseLike = invType === 'PURCHASE' || invType === 'RETURN_SALES' || invType === 'CREDIT_NOTE';
+    const subtotal = Number(invoice.subtotal) || 0;
+    const discount = Number(invoice.totalDiscount) || 0;
+    const netTaxable = Math.max(0, subtotal - discount);
+    const vat = Number(invoice.totalVat) || 0;
+    const wht = Number(invoice.totalWht) || 0;
+    const grandTotal = Number(invoice.grandTotal) || Math.max(0, netTaxable + vat - wht);
+
+    const lines: JournalEntryLine[] = [];
+    if (!isPurchaseLike) {
+      const arCode = invoice.paymentMethod === 'CASH' ? mapping.cashAccountCode || '1101' : mapping.receivablesAccountCode || '1103';
+      const revCode = invType === 'OFFICE_SERVICE' ? mapping.officeServiceRevenueAccountCode || '4120' : mapping.salesAccountCode || '4101';
+      lines.push({
+        id: `inv-dr-${Date.now()}-1`,
+        accountCode: arCode,
+        accountName: 'العملاء / النقدية',
+        debit: grandTotal,
+        credit: 0,
+      });
+      if (wht > 0) {
+        lines.push({
+          id: `inv-dr-${Date.now()}-2`,
+          accountCode: mapping.whtReceivableAccountCode || '1106',
+          accountName: 'ضريبة خصم وتحصيل مدينة',
+          debit: wht,
+          credit: 0,
+        });
+      }
+      lines.push({
+        id: `inv-cr-${Date.now()}-1`,
+        accountCode: revCode,
+        accountName: 'إيرادات المبيعات / النشاط',
+        debit: 0,
+        credit: netTaxable,
+      });
+      if (vat > 0) {
+        lines.push({
+          id: `inv-cr-${Date.now()}-2`,
+          accountCode: mapping.vatOutputAccountCode || '2104',
+          accountName: 'ضريبة القيمة المضافة مخرجات',
+          debit: 0,
+          credit: vat,
+        });
+      }
+    } else {
+      const expCode = mapping.purchasesAccountCode || '5101';
+      const apCode = invoice.paymentMethod === 'CASH' ? mapping.cashAccountCode || '1101' : mapping.payablesAccountCode || '2101';
+      lines.push({
+        id: `inv-dr-${Date.now()}-1`,
+        accountCode: expCode,
+        accountName: 'المشتريات / التكاليف',
+        debit: netTaxable,
+        credit: 0,
+      });
+      if (vat > 0) {
+        lines.push({
+          id: `inv-dr-${Date.now()}-2`,
+          accountCode: mapping.vatInputAccountCode || '1105',
+          accountName: 'ضريبة القيمة المضافة مدخلات',
+          debit: vat,
+          credit: 0,
+        });
+      }
+      lines.push({
+        id: `inv-cr-${Date.now()}-1`,
+        accountCode: apCode,
+        accountName: 'الموردون / النقدية',
+        debit: 0,
+        credit: grandTotal,
+      });
+      if (wht > 0) {
+        lines.push({
+          id: `inv-cr-${Date.now()}-2`,
+          accountCode: mapping.whtPayableAccountCode || '2105',
+          accountName: 'ضريبة خصم وتحصيل دائنة',
+          debit: 0,
+          credit: wht,
+        });
+      }
+    }
+
+    const beforeInv = { ...invoice };
+    const savedEntry = this.addJournalEntry({
+      clientId: resolvedClientId,
+      date: invDate,
+      fiscalYear,
+      description: `ترحيل فاتورة (${invoice.invoiceNumber}) - ${invoice.partnerName}`,
+      referenceNumber: invoice.invoiceNumber,
+      documentType: 'INVOICE',
+      invoiceType: invoice.invoiceType || 'SALES',
+      sourceInvoiceId: invoice.id,
+      currency: invoice.currency || 'EGP',
+      exchangeRate: invoice.exchangeRate || 1,
+      isPosted: true,
+      status: 'POSTED',
+      postedAt: getCairoTimestamp(),
+      postedBy: user.name,
+      lines,
+    });
+
+    invoice.journalEntryId = savedEntry.id;
+    invoice.isPosted = true;
+
+    this.logAudit({
+      action: 'POST_INVOICE',
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      clientId: resolvedClientId,
+      beforeValue: beforeInv,
+      afterValue: invoice,
+      details: `ترحيل الفاتورة رقم (${invoice.invoiceNumber}) إلى القيد المحاسبي رقم (${savedEntry.entryNumber})`,
+    });
+
+    this.saveState('INVOICES');
+    return savedEntry;
   }
 
   public addFixedAsset(asset: Partial<FixedAsset>): FixedAsset {

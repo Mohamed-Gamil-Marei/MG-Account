@@ -27,6 +27,7 @@ import { EtaExcelImportModal } from './components/invoicing/EtaExcelImportModal'
 import { BackupRestoreModal } from './components/backup/BackupRestoreModal';
 import { importModelData } from './utils/dataImportExport';
 import { db, DatabaseState } from './db/localDatabase';
+import { canPerform } from './services/accessGuard';
 import {
   Account,
   ClientActivityTemplate,
@@ -905,12 +906,32 @@ export const App: React.FC = () => {
                 <span>ترحيل مباشر للأستاذ العام (غير قابل للتعديل بعد الترحيل)</span>
               </label>
             </div>
-            <button
-              type="submit"
-              className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-            >
-              حفظ القيد للعميل النشط
-            </button>
+            {(() => {
+              const savePerm = canPerform(
+                jePostImmediately ? 'POST_ENTRY' : 'CREATE_ENTRY',
+                { clientId: activeClientId, fiscalYear: selectedFiscalYear, entityType: 'قيد يومية' },
+                currentUser
+              );
+              const lockInfo = db.getPeriodLockDetails(
+                activeClientId,
+                jeDate || activeFiscalBounds.startDate,
+                selectedFiscalYear
+              );
+              const isDisabled = !savePerm.allowed || lockInfo.locked;
+              const tooltip = lockInfo.locked
+                ? `الفترة المحاسبية (${lockInfo.periodLabel}) مقفلة`
+                : savePerm.reason || 'حفظ القيد للعميل النشط';
+              return (
+                <button
+                  type="submit"
+                  disabled={isDisabled}
+                  title={tooltip}
+                  className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  حفظ القيد للعميل النشط
+                </button>
+              );
+            })()}
           </div>
         </form>
 
@@ -948,20 +969,34 @@ export const App: React.FC = () => {
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             <span>مرحّل (محمي)</span>
                           </span>
-                          {!entry.reversedByEntryId && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReversalTarget(entry);
-                                setReversalReason('');
-                                setReversalDate(getCairoDateString());
-                              }}
-                              className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                              <span>تصحيح بقيد عكسي</span>
-                            </button>
-                          )}
+                          {!entry.reversedByEntryId && (() => {
+                            const voidPerm = canPerform(
+                              'VOID_RECORD',
+                              { clientId: entry.clientId, fiscalYear: entry.fiscalYear, entityType: 'قيد يومية' },
+                              currentUser
+                            );
+                            const lockInfo = db.getPeriodLockDetails(entry.clientId, entry.date, entry.fiscalYear);
+                            const isDisabled = !voidPerm.allowed || lockInfo.locked;
+                            const tooltip = lockInfo.locked
+                              ? `الفترة المحاسبية (${lockInfo.periodLabel}) مقفلة`
+                              : voidPerm.reason || 'تصحيح بقيد عكسي';
+                            return (
+                              <button
+                                type="button"
+                                disabled={isDisabled}
+                                title={tooltip}
+                                onClick={() => {
+                                  setReversalTarget(entry);
+                                  setReversalReason('');
+                                  setReversalDate(getCairoDateString());
+                                }}
+                                className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                <span>تصحيح بقيد عكسي</span>
+                              </button>
+                            );
+                          })()}
                           {entry.reversedByEntryId && (
                             <span className="rounded bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">
                               معكوس بالقيد ({entry.reversedByEntryId})
@@ -970,34 +1005,66 @@ export const App: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              try {
-                                db.togglePostEntry(entry.id, 'ترحيل القيد للأستاذ العام');
-                                notifyBanner('success', `تم ترحيل القيد #${entry.entryNumber} بنجاح.`);
-                              } catch (err) {
-                                notifyBanner('error', err instanceof Error ? err.message : 'تعذر الترحيل');
-                              }
-                            }}
-                            className="rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-blue-700"
-                          >
-                            ترحيل القيد
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              try {
-                                db.deleteJournalEntry(entry.id, 'حذف مسودة قيد غير مرحل');
-                                notifyBanner('success', 'تم حذف المسودة وتوثيق الحذف في سجل المراجعة.');
-                              } catch (err) {
-                                notifyBanner('error', err instanceof Error ? err.message : 'تعذر الحذف');
-                              }
-                            }}
-                            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100"
-                          >
-                            حذف المسودة
-                          </button>
+                          {(() => {
+                            const postPerm = canPerform(
+                              'POST_ENTRY',
+                              { clientId: entry.clientId, fiscalYear: entry.fiscalYear, entityType: 'قيد يومية' },
+                              currentUser
+                            );
+                            const lockInfo = db.getPeriodLockDetails(entry.clientId, entry.date, entry.fiscalYear);
+                            const isDisabled = !postPerm.allowed || lockInfo.locked;
+                            const tooltip = lockInfo.locked
+                              ? `الفترة المحاسبية (${lockInfo.periodLabel}) مقفلة`
+                              : postPerm.reason || 'ترحيل القيد للأستاذ العام';
+                            return (
+                              <button
+                                type="button"
+                                disabled={isDisabled}
+                                title={tooltip}
+                                onClick={() => {
+                                  try {
+                                    db.togglePostEntry(entry.id, 'ترحيل القيد للأستاذ العام');
+                                    notifyBanner('success', `تم ترحيل القيد #${entry.entryNumber} بنجاح.`);
+                                  } catch (err) {
+                                    notifyBanner('error', err instanceof Error ? err.message : 'تعذر الترحيل');
+                                  }
+                                }}
+                                className="rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                ترحيل القيد
+                              </button>
+                            );
+                          })()}
+                          {(() => {
+                            const delPerm = canPerform(
+                              'DELETE_RECORD',
+                              { clientId: entry.clientId, fiscalYear: entry.fiscalYear, entityType: 'قيد يومية' },
+                              currentUser
+                            );
+                            const lockInfo = db.getPeriodLockDetails(entry.clientId, entry.date, entry.fiscalYear);
+                            const isDisabled = !delPerm.allowed || lockInfo.locked;
+                            const tooltip = lockInfo.locked
+                              ? `الفترة المحاسبية (${lockInfo.periodLabel}) مقفلة`
+                              : delPerm.reason || 'حذف المسودة';
+                            return (
+                              <button
+                                type="button"
+                                disabled={isDisabled}
+                                title={tooltip}
+                                onClick={() => {
+                                  try {
+                                    db.deleteJournalEntry(entry.id, 'حذف مسودة قيد غير مرحل');
+                                    notifyBanner('success', 'تم حذف المسودة وتوثيق الحذف في سجل المراجعة.');
+                                  } catch (err) {
+                                    notifyBanner('error', err instanceof Error ? err.message : 'تعذر الحذف');
+                                  }
+                                }}
+                                className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                حذف المسودة
+                              </button>
+                            );
+                          })()}
                         </>
                       )}
                     </div>
@@ -1406,12 +1473,24 @@ export const App: React.FC = () => {
               onChange={(e) => setInvTableTax(Number(e.target.value))}
               className="w-28 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-mono"
             />
-            <button
-              type="submit"
-              className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-            >
-              حفظ الفاتورة
-            </button>
+            {(() => {
+              const targetClientForInv = activeClientId || invClientId || visibleClients[0]?.id || '';
+              const createInvPerm = canPerform(
+                'CREATE_INVOICE',
+                { clientId: targetClientForInv, fiscalYear: selectedFiscalYear, entityType: 'فاتورة' },
+                currentUser
+              );
+              return (
+                <button
+                  type="submit"
+                  disabled={!createInvPerm.allowed}
+                  title={createInvPerm.reason || 'حفظ الفاتورة'}
+                  className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  حفظ الفاتورة
+                </button>
+              );
+            })()}
           </div>
         </form>
 
@@ -1457,25 +1536,43 @@ export const App: React.FC = () => {
                           <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
                             مرحّلة للقيد
                           </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const res = PostingEngineService.postInvoice(inv.id);
-                              if (res.success) {
-                                notifyBanner(
-                                  'success',
-                                  `تم ترحيل الفاتورة (${inv.invoiceNumber}) إلى القيد رقم #${res.entry?.entryNumber}`
-                                );
-                              } else {
-                                notifyBanner('error', res.error || 'تعذر ترحيل الفاتورة');
-                              }
-                            }}
-                            className="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700"
-                          >
-                            ترحيل القيد
-                          </button>
-                        )}
+                        ) : (() => {
+                          const postInvPerm = canPerform(
+                            'POST_ENTRY',
+                            { clientId: inv.clientId, entityType: 'فاتورة' },
+                            currentUser
+                          );
+                          const lockInfo = db.getPeriodLockDetails(inv.clientId, inv.date);
+                          const isDisabled = !postInvPerm.allowed || lockInfo.locked;
+                          const tooltip = lockInfo.locked
+                            ? `الفترة المحاسبية (${lockInfo.periodLabel}) مقفلة`
+                            : postInvPerm.reason || 'ترحيل القيد للأستاذ العام';
+                          return (
+                            <button
+                              type="button"
+                              disabled={isDisabled}
+                              title={tooltip}
+                              onClick={() => {
+                                try {
+                                  const res = PostingEngineService.postInvoice(inv.id);
+                                  if (res.success) {
+                                    notifyBanner(
+                                      'success',
+                                      `تم ترحيل الفاتورة (${inv.invoiceNumber}) إلى القيد رقم #${res.entry?.entryNumber}`
+                                    );
+                                  } else {
+                                    notifyBanner('error', res.error || 'تعذر ترحيل الفاتورة');
+                                  }
+                                } catch (err) {
+                                  notifyBanner('error', err instanceof Error ? err.message : 'تعذر ترحيل الفاتورة');
+                                }
+                              }}
+                              className="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              ترحيل القيد
+                            </button>
+                          );
+                        })()}
                         {inv.currency && inv.currency !== 'EGP' && inv.status !== 'PAID' && (
                           <button
                             type="button"
@@ -2125,7 +2222,7 @@ export const App: React.FC = () => {
                 </button>
                 <div className="hidden items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 xl:flex">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>{currentUser?.name}</span>
+                  <span>{currentUser?.name || 'يجب تسجيل الدخول'}</span>
                   <span className="text-slate-400">|</span>
                   <span>{formatCairoDateTimeArabic()}</span>
                 </div>

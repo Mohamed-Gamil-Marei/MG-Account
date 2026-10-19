@@ -9,6 +9,7 @@ import {
   JournalEntryLine,
 } from '../types';
 import { createDefaultClientAccountMapping, db } from '../db/localDatabase';
+import { assertCan, PermissionError, PeriodLockError } from './accessGuard';
 import { getCairoDateString, getCairoTimestamp } from '../utils/cairoTime';
 
 export interface PostingResult {
@@ -651,12 +652,19 @@ export class PostingEngineService {
       };
     }
 
+    const invDate = (invoice.date || getCairoDateString()).slice(0, 10);
+    const fiscalYear = parseInt(invDate.slice(0, 4), 10) || 2026;
+
+    // Enforce period lock and centralized permission guard
+    if (!actingUser) {
+      assertCan('POST_ENTRY', { clientId, fiscalYear, entityType: 'فاتورة' });
+    }
+    db.assertPeriodOpen(clientId, invDate, fiscalYear);
+
     const currentUser = actingUser || db.getCurrentUser();
     const userCanPost = Boolean(currentUser?.canPostEntries);
 
     try {
-      const invDate = (invoice.date || getCairoDateString()).slice(0, 10);
-      const fiscalYear = parseInt(invDate.slice(0, 4), 10) || 2026;
       const nextEntryNo = db.peekNextJournalEntryNumber(clientId, fiscalYear);
 
       const builtEntry = this.buildInvoiceJournalEntry(
@@ -695,6 +703,9 @@ export class PostingEngineService {
         errors: [],
       };
     } catch (err: unknown) {
+      if (err instanceof PermissionError || err instanceof PeriodLockError) {
+        throw err;
+      }
       const msg = err instanceof Error ? err.message : 'حدث خطأ أثناء ترحيل الفاتورة.';
       return {
         success: false,
