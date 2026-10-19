@@ -39,18 +39,30 @@ export function ensureUsersAndSessionsSchema(sqliteDb: any): void {
       must_change_password INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      token_hash TEXT UNIQUE NOT NULL,
-      user_id INTEGER NOT NULL,
-      expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS login_attempts (
       email TEXT PRIMARY KEY,
       failed_count INTEGER NOT NULL DEFAULT 0,
       locked_until TEXT,
       last_attempt TEXT NOT NULL
+    );
+  `);
+
+  try {
+    const cols = sqliteDb.prepare("PRAGMA table_info('sessions')").all() as Array<{ name: string }>;
+    if (cols.length > 0 && !cols.some((c) => c.name === 'token_hash')) {
+      sqliteDb.exec('DROP TABLE IF EXISTS sessions;');
+    }
+  } catch {
+    // ignore if table does not exist yet
+  }
+
+  sqliteDb.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT ''
     );
   `);
 }

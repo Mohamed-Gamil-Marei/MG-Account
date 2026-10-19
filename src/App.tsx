@@ -59,16 +59,40 @@ import { SmartCpaTemplateView } from './components/financial/SmartCpaTemplateVie
 import { FeeEstimatorView } from './components/practice/FeeEstimatorView';
 import { WhatsAppLiveChatPanel } from './components/practice/WhatsAppLiveChatPanel';
 import { UnifiedTaxFilingAgendaView } from './components/tax/UnifiedTaxFilingAgendaView';
+import { ClientTaxPortalCredentialsModal } from './components/tax/ClientTaxPortalCredentialsModal';
 import { DensityProvider } from './components/common/CompactDensityContext';
 
 export const App: React.FC = () => {
   const [state, setState] = useState<DatabaseState>(() => db.getState());
-  const [activeTab, setActiveTab] = useState<NavigationTab>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<NavigationTab>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      const tab = params.get('tab');
+      if (view === 'tax-credentials' || tab === 'TAX_AUDIT_HUB' || tab === 'TAX') {
+        return 'TAX_AUDIT_HUB';
+      }
+      if (tab === 'CLIENTS_ARCHIVE' || tab === 'CLIENTS') {
+        return 'CLIENTS_ARCHIVE';
+      }
+    }
+    return 'DASHBOARD';
+  });
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [isClosingWizardOpen, setIsClosingWizardOpen] = useState<boolean>(false);
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
   const [isEtaImportModalOpen, setIsEtaImportModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const [taxCredentialsModalClientId, setTaxCredentialsModalClientId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'tax-credentials') {
+        const s = db.getState();
+        return s.activeClientContext?.clientId || s.clients[0]?.id || null;
+      }
+    }
+    return null;
+  });
   const [bannerMessage, setBannerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Reversal Modal State (Principle 3 & 4)
@@ -1484,6 +1508,13 @@ export const App: React.FC = () => {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setTaxCredentialsModalClientId(client.id)}
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-900 hover:bg-amber-100"
+                      >
+                        اليوزر نيم والباسورد للضرائب والفاتورة
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           try {
                             const json = db.exportClientIsolatedBackup(client.id);
@@ -1631,7 +1662,7 @@ export const App: React.FC = () => {
       return renderFixedAssetsWorkspace();
     }
     if (parentHub === 'TAX_AUDIT_HUB') {
-      return <UnifiedTaxFilingAgendaView state={state} />;
+      return <UnifiedTaxFilingAgendaView state={state} onRefresh={() => setState({ ...db.getState() })} />;
     }
     if (parentHub === 'FINANCIAL_REPORTING_HUB') {
       if (activeTab === 'AUDITOR_REPORT') {
@@ -1753,6 +1784,15 @@ export const App: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 <GlobalSearchBar state={state} onNavigate={(t) => setActiveTab(t)} />
+                <button
+                  type="button"
+                  onClick={() => setTaxCredentialsModalClientId(activeClientId || state.clients[0]?.id || '')}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 shadow-2xs"
+                  title="بيانات اليوزر نيم والباسورد لبوابة الضرائب والفاتورة الإلكترونية"
+                >
+                  <Lock className="h-3.5 w-3.5 text-amber-700" />
+                  <span>بيانات الضرائب والفاتورة</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsBackupModalOpen(true)}
@@ -2038,6 +2078,16 @@ export const App: React.FC = () => {
             setState({ ...db.getState() });
           }}
           currentUserRole={currentUser?.role || 'ADMIN'}
+        />
+
+        <ClientTaxPortalCredentialsModal
+          isOpen={Boolean(taxCredentialsModalClientId)}
+          onClose={() => setTaxCredentialsModalClientId(null)}
+          clientId={taxCredentialsModalClientId || activeClientId}
+          onSaved={() => {
+            setState({ ...db.getState() });
+            notifyBanner('success', 'تم حفظ وتشفير بيانات بوابة الضرائب والفاتورة الإلكترونية بنجاح.');
+          }}
         />
       </div>
     </DensityProvider>

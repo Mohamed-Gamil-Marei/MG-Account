@@ -7030,6 +7030,69 @@ class LocalDatabase {
   public getRecord(recordId: string): { data: any; version: number } | undefined {
     return this.versionedRecords.get(recordId);
   }
+
+  public RevealAndAuditTaxSecrets(clientId: string, details?: string): void {
+    this.logAudit({
+      action: 'REVEAL_TAX_PORTAL_SECRETS',
+      entityType: 'CLIENT_TAX_SECRETS',
+      entityId: clientId,
+      clientId,
+      details: details || `كشف بيانات الدخول السرية لبوابات الضرائب والفاتورة الإلكترونية للعميل (${clientId})`,
+    });
+    this.saveState('AUDIT');
+  }
+
+  public saveClientTaxPortalSecrets(
+    clientId: string,
+    secrets: {
+      taxPortalUsername?: string;
+      taxPortalPassword?: string;
+      etaUsername?: string;
+      etaPassword?: string;
+      etaClientId?: string;
+      etaClientSecret?: string;
+      etaTokenPin?: string;
+      aiDisabled?: boolean;
+    }
+  ): void {
+    const idx = this.state.clients.findIndex((c) => c.id === clientId);
+    if (idx === -1) {
+      throw new Error('لم يتم العثور على المنشأة المحددة لحفظ بيانات البوابات الضريبية.');
+    }
+    const existing = this.state.clients[idx] as any;
+    const prevCreds = existing.portalCredentials || {};
+    const prevEta = existing.etaConfig || {};
+
+    this.state.clients[idx] = {
+      ...existing,
+      taxPortalEmail: secrets.taxPortalUsername ?? existing.taxPortalEmail,
+      aiDisabled: typeof secrets.aiDisabled === 'boolean' ? secrets.aiDisabled : Boolean(existing.aiDisabled),
+      portalCredentials: {
+        ...prevCreds,
+        taxPortalUsername: secrets.taxPortalUsername ?? prevCreds.taxPortalUsername ?? '',
+        taxPortalPassword: secrets.taxPortalPassword ?? prevCreds.taxPortalPassword ?? '',
+        etaUsername: secrets.etaUsername ?? prevCreds.etaUsername ?? '',
+        etaPassword: secrets.etaPassword ?? prevCreds.etaPassword ?? '',
+        etaTokenPin: secrets.etaTokenPin ?? prevCreds.etaTokenPin ?? '',
+        updatedAt: new Date().toISOString(),
+      },
+      etaConfig: {
+        ...prevEta,
+        clientId: secrets.etaClientId ?? prevEta.clientId ?? '',
+        clientSecret: secrets.etaClientSecret ?? prevEta.clientSecret ?? '',
+        tokenPin: secrets.etaTokenPin ?? prevEta.tokenPin ?? '',
+      },
+    } as any;
+
+    this.logAudit({
+      action: 'UPDATE_TAX_PORTAL_SECRETS',
+      entityType: 'CLIENT_TAX_SECRETS',
+      entityId: clientId,
+      clientId,
+      details: `تحديث وحفظ بيانات بوابة الضرائب والفاتورة الإلكترونية للمنشأة (${existing.name || clientId})`,
+    });
+    this.saveState('CLIENTS');
+  }
 }
 
 export const db = new LocalDatabase();
