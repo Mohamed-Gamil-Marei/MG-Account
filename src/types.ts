@@ -454,8 +454,15 @@ export interface ClientArchiveRecord {
   annualAgreedFees?: number;
   paidFees?: number;
   openingBalanceFees?: number;
-  isWithholdingTaxSubject?: boolean;
+  clientCode?: string;
+  taxSystemType?: 'SAP' | 'OLD_PORTAL' | string;
+  isVatSubject?: boolean;
   isVatRegistered?: boolean;
+  isIncomeTaxSubject?: boolean;
+  isWhtSubject?: boolean;
+  isWithholdingTaxSubject?: boolean;
+  isStampTaxSubject?: boolean;
+  hasPayroll?: boolean;
   isPayrollTaxSubject?: boolean;
   activityTemplate?: ClientActivityTemplate;
   fiscalYear?: number;

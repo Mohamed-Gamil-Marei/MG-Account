@@ -1511,8 +1511,13 @@ class LocalDatabase {
           fiscalYearEnd: '2026-12-31',
           fiscalYearEndMonth: 12,
           isVatRegistered: true,
+          isVatSubject: true,
+          isIncomeTaxSubject: true,
           isWithholdingTaxSubject: true,
+          isWhtSubject: true,
+          isStampTaxSubject: true,
           isPayrollTaxSubject: true,
+          hasPayroll: true,
           eInvoiceRegistered: true,
           hasEsealToken: true,
           tokenCustodyStatus: 'IN_OFFICE',
@@ -5367,6 +5372,14 @@ class LocalDatabase {
       documents: clientData.documents || [],
       procedures: clientData.procedures || [],
       createdAt: getCairoDateString(),
+      isVatSubject: clientData.isVatSubject ?? clientData.isVatRegistered ?? false,
+      isVatRegistered: clientData.isVatRegistered ?? clientData.isVatSubject ?? false,
+      isIncomeTaxSubject: clientData.isIncomeTaxSubject ?? true,
+      isWhtSubject: clientData.isWhtSubject ?? clientData.isWithholdingTaxSubject ?? false,
+      isWithholdingTaxSubject: clientData.isWithholdingTaxSubject ?? clientData.isWhtSubject ?? false,
+      isStampTaxSubject: clientData.isStampTaxSubject ?? false,
+      hasPayroll: clientData.hasPayroll ?? clientData.isPayrollTaxSubject ?? false,
+      isPayrollTaxSubject: clientData.isPayrollTaxSubject ?? clientData.hasPayroll ?? false,
       ...clientData,
       id: newId,
       activeFiscalYear: targetFiscalYear,
@@ -6303,6 +6316,28 @@ class LocalDatabase {
     });
     this.saveState('TAXES');
     return this.state.taxDeclarations[idx];
+  }
+
+  public deleteTaxDeclaration(id: string): boolean {
+    const idx = this.state.taxDeclarations.findIndex((t) => t.id === id);
+    if (idx === -1) {
+      this.assertPermission('TAX', { allowWithoutClient: true });
+      return false;
+    }
+    const target = this.state.taxDeclarations[idx];
+    this.assertPermission('TAX', { clientId: target.clientId, allowWithoutClient: !target.clientId });
+    this.state.taxDeclarations.splice(idx, 1);
+    this.logAudit({
+      action: 'DELETE_TAX_DECLARATION',
+      entityType: 'TAX_DECLARATION',
+      entityId: id,
+      clientId: target.clientId,
+      beforeValue: target,
+      afterValue: null,
+      details: `حذف الإقرار الضريبي (${target.declarationType} - ${target.period})`,
+    });
+    this.saveState('TAXES');
+    return true;
   }
 
   public updateTaxMandate(id: string, partial: any): any {

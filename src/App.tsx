@@ -61,6 +61,12 @@ import { WhatsAppLiveChatPanel } from './components/practice/WhatsAppLiveChatPan
 import { UnifiedTaxFilingAgendaView } from './components/tax/UnifiedTaxFilingAgendaView';
 import { ClientTaxPortalCredentialsModal } from './components/tax/ClientTaxPortalCredentialsModal';
 import { DensityProvider } from './components/common/CompactDensityContext';
+import {
+  getVisibleClients,
+  isCrossClientTab,
+  isClientScopedTab,
+  isClientSubjectToTax,
+} from './config/screenScope';
 
 export const App: React.FC = () => {
   const [state, setState] = useState<DatabaseState>(() => db.getState());
@@ -134,8 +140,30 @@ export const App: React.FC = () => {
   const [newClientFiscalEnd, setNewClientFiscalEnd] = useState<string>(
     () => `${getCairoCurrentYear()}-12-31`
   );
+  const [newClientIsVat, setNewClientIsVat] = useState<boolean>(true);
+  const [newClientIsIncome, setNewClientIsIncome] = useState<boolean>(true);
+  const [newClientIsWht, setNewClientIsWht] = useState<boolean>(false);
+  const [newClientIsStamp, setNewClientIsStamp] = useState<boolean>(false);
+  const [newClientHasPayroll, setNewClientHasPayroll] = useState<boolean>(false);
+
+  // Quick Client Picker State for CLIENT_SCOPED_TABS
+  const [isQuickClientPickerOpen, setIsQuickClientPickerOpen] = useState<boolean>(false);
+  const [quickPickerSearch, setQuickPickerSearch] = useState<string>('');
+  const [recentClientIds, setRecentClientIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem('mg_recent_client_ids');
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) return parsed.slice(0, 5);
+      } catch {
+        // ignore
+      }
+    }
+    return [];
+  });
 
   // New Invoice Form State
+  const [invClientId, setInvClientId] = useState<string>('');
   const [invNumber, setInvNumber] = useState<string>('');
   const [invPartner, setInvPartner] = useState<string>('');
   const [invType, setInvType] = useState<InvoiceType>('SALES');
@@ -160,11 +188,17 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  const currentUser = db.getCurrentUser();
+  const visibleClients = useMemo(
+    () => getVisibleClients(state, currentUser),
+    [state.clients, state.users, state.currentUserId, currentUser]
+  );
+
   // Requirement 6: activeClientContext is mandatory for accounting screens (do not silently fallback if null)
   const activeClientId = state.activeClientContext?.clientId || '';
   const activeClient = useMemo(
-    () => (activeClientId ? state.clients.find((c) => c.id === activeClientId) || null : null),
-    [state.clients, activeClientId]
+    () => (activeClientId ? visibleClients.find((c) => c.id === activeClientId) || null : null),
+    [visibleClients, activeClientId]
   );
   const selectedFiscalYear =
     state.activeClientContext?.selectedFiscalYear ||
@@ -181,9 +215,10 @@ export const App: React.FC = () => {
   );
 
   const clientAccounts = useMemo(
-    () => (activeClientId ? db.getClientAccounts(activeClientId, selectedFiscalYear) : []),
+    () => (activeClientId && activeClient ? db.getClientAccounts(activeClientId, selectedFiscalYear) : []),
     [
       activeClientId,
+      activeClient,
       selectedFiscalYear,
       state.accounts,
       state.openingBalances,
@@ -193,7 +228,7 @@ export const App: React.FC = () => {
 
   const clientJournalEntries = useMemo(
     () =>
-      activeClientId
+      activeClientId && activeClient
         ? state.journalEntries.filter((j) => {
             if (j.clientId !== activeClientId) return false;
             if (j.fiscalYear) return j.fiscalYear === selectedFiscalYear;
@@ -203,23 +238,28 @@ export const App: React.FC = () => {
     [
       state.journalEntries,
       activeClientId,
+      activeClient,
       selectedFiscalYear,
       activeFiscalBounds.startDate,
       activeFiscalBounds.endDate,
     ]
   );
 
+  const visibleClientIdSet = useMemo(() => new Set(visibleClients.map((c) => c.id)), [visibleClients]);
+
   const clientInvoices = useMemo(
-    () => (activeClientId ? state.invoices.filter((i) => i.clientId === activeClientId) : []),
-    [state.invoices, activeClientId]
+    () =>
+      activeClientId && activeClient
+        ? state.invoices.filter((i) => i.clientId === activeClientId)
+        : state.invoices.filter((i) => visibleClientIdSet.has(i.clientId)),
+    [state.invoices, activeClientId, activeClient, visibleClientIdSet]
   );
 
   const clientFixedAssets = useMemo(
-    () => (activeClientId ? state.fixedAssets.filter((a) => a.clientId === activeClientId) : []),
-    [state.fixedAssets, activeClientId]
+    () => (activeClientId && activeClient ? state.fixedAssets.filter((a) => a.clientId === activeClientId) : []),
+    [state.fixedAssets, activeClientId, activeClient]
   );
 
-  const currentUser = db.getCurrentUser();
   const parentHub = getParentHub(activeTab);
 
   const notifyBanner = (type: 'success' | 'error', text: string) => {
@@ -229,13 +269,30 @@ export const App: React.FC = () => {
     }, 5000);
   };
 
+  const recordRecentClient = (clientId: string) => {
+    if (!clientId) return;
+    setRecentClientIds((prev) => {
+      const next = [clientId, ...prev.filter((id) => id !== clientId)].slice(0, 5);
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem('mg_recent_client_ids', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+      }
+      return next;
+    });
+  };
+
   const handleSelectClient = (clientId: string) => {
     if (!clientId) {
       db.setActiveClient(null);
-      notifyBanner('error', 'تم إلغاء تحديد المنشأة النشطة. يرجى اختيار منشأة للوصول للشاشات المحاسبية.');
+      setIsQuickClientPickerOpen(true);
       return;
     }
     db.setActiveClient(clientId, { fiscalYear: selectedFiscalYear, autoFilter: true });
+    recordRecentClient(clientId);
+    setIsQuickClientPickerOpen(false);
     notifyBanner('success', 'تم تبديل المنشأة النشطة وعزل البيانات المحاسبية ودليل الحسابات.');
   };
 
@@ -251,6 +308,7 @@ export const App: React.FC = () => {
       const created = db.addClient({
         name: newClientName.trim(),
         taxId: newClientTaxId.trim(),
+        taxCardNo: newClientTaxId.trim(),
         commercialRegister: newClientCommReg.trim(),
         annualAgreedFees: Number(newClientFees) || 0,
         activityTemplate: newClientActivityTemplate,
@@ -259,8 +317,18 @@ export const App: React.FC = () => {
         fiscalYearEndMonth: newClientEndMonth,
         fiscalYearStart: newClientFiscalStart,
         fiscalYearEnd: newClientFiscalEnd,
+        isVatSubject: newClientIsVat,
+        isVatRegistered: newClientIsVat,
+        isIncomeTaxSubject: newClientIsIncome,
+        isWhtSubject: newClientIsWht,
+        isWithholdingTaxSubject: newClientIsWht,
+        isStampTaxSubject: newClientIsStamp,
+        hasPayroll: newClientHasPayroll,
+        isPayrollTaxSubject: newClientHasPayroll,
       });
       db.setActiveClient(created.id, { fiscalYear: newClientFiscalYear, autoFilter: true });
+      recordRecentClient(created.id);
+      setIsQuickClientPickerOpen(false);
       setNewClientName('');
       setNewClientTaxId('');
       setNewClientCommReg('');
@@ -1174,20 +1242,28 @@ export const App: React.FC = () => {
           onSubmit={(e) => {
             e.preventDefault();
             if (!invPartner.trim() || invSubtotal <= 0) return;
+            const targetInvClientId = activeClientId || invClientId || visibleClients[0]?.id || '';
+            if (!targetInvClientId) {
+              notifyBanner('error', 'يرجى تحديد المنشأة التابعة لها الفاتورة.');
+              return;
+            }
             const vat = Number(invVat) >= 0 ? Number(invVat) : Math.round(invSubtotal * 14) / 100;
             const wht = Number(invWht) || 0;
             const tblTax = Number(invTableTax) || 0;
             const netTotal = Math.round((Number(invSubtotal) + vat + tblTax - wht) * 100) / 100;
+            const targetBounds = db.getClientFiscalYearBounds(targetInvClientId, selectedFiscalYear);
             try {
               db.batchAddInvoices([
                 {
-                  clientId: activeClientId,
+                  clientId: targetInvClientId,
                   invoiceNumber: invNumber.trim() || `INV-${Date.now().toString().slice(-5)}`,
                   invoiceType: invType,
                   partnerName: invPartner.trim(),
-                  date: activeFiscalBounds.startDate <= getCairoDateString() && getCairoDateString() <= activeFiscalBounds.endDate
-                    ? getCairoDateString()
-                    : activeFiscalBounds.endDate,
+                  date:
+                    targetBounds.startDate <= getCairoDateString() &&
+                    getCairoDateString() <= targetBounds.endDate
+                      ? getCairoDateString()
+                      : targetBounds.endDate,
                   subtotal: Number(invSubtotal),
                   totalVat: vat,
                   totalWht: wht,
@@ -1210,6 +1286,19 @@ export const App: React.FC = () => {
           }}
           className="mb-6 grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-4"
         >
+          {!activeClientId && (
+            <select
+              value={invClientId || visibleClients[0]?.id || ''}
+              onChange={(e) => setInvClientId(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold md:col-span-4"
+            >
+              {visibleClients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  المنشأة: {c.name} ({c.code})
+                </option>
+              ))}
+            </select>
+          )}
           <input
             type="text"
             placeholder="رقم الفاتورة"
@@ -1455,7 +1544,7 @@ export const App: React.FC = () => {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">سجل الشركات والمصانع والمنشآت ({state.clients.length})</h2>
+              <h2 className="text-lg font-bold text-slate-900">سجل الشركات والمصانع والمنشآت ({visibleClients.length})</h2>
               <p className="text-xs text-slate-500">اختر أي منشأة لتفعيل بيئة العمل المحاسبية المعزولة الخاصة بها</p>
             </div>
             <button
@@ -1468,7 +1557,7 @@ export const App: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {state.clients.map((client) => {
+            {visibleClients.map((client) => {
               const isSelected = client.id === activeClientId;
               const bounds = db.getClientFiscalYearBounds(
                 client.id,
@@ -1493,6 +1582,33 @@ export const App: React.FC = () => {
                           {bounds.fiscalYear} ({bounds.startDate} → {bounds.endDate})
                         </span>
                       </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1">
+                        {isClientSubjectToTax(client, 'VAT') && (
+                          <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
+                            قيمة مضافة
+                          </span>
+                        )}
+                        {isClientSubjectToTax(client, 'INCOME') && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                            ضريبة دخل
+                          </span>
+                        )}
+                        {isClientSubjectToTax(client, 'WHT') && (
+                          <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-700">
+                            خصم وتحصيل
+                          </span>
+                        )}
+                        {isClientSubjectToTax(client, 'STAMP') && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                            دمغة
+                          </span>
+                        )}
+                        {isClientSubjectToTax(client, 'PAYROLL') && (
+                          <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
+                            عمالة ومرتبات
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <button
@@ -1545,13 +1661,197 @@ export const App: React.FC = () => {
     </div>
   );
 
+  // الشريط الثابت أعلى الشاشات المحاسبية باسم العميل والسنة المالية وزر "تغيير"
+  const renderStickyClientScopedBar = () => {
+    if (!activeClient) return null;
+    return (
+      <div className="sticky top-[57px] z-20 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50/95 px-4 py-2.5 shadow-xs backdrop-blur-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-emerald-700" />
+            <span className="text-xs font-bold text-slate-600">ملف المراجعة المحاسبي:</span>
+            <span className="text-sm font-black text-slate-900">{activeClient.name}</span>
+            <span className="rounded bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-800 border border-emerald-200">
+              {activeClient.code}
+            </span>
+          </div>
+          <span className="text-slate-300">|</span>
+          <div className="flex items-center gap-1.5 text-xs">
+            <Calendar className="h-3.5 w-3.5 text-emerald-700" />
+            <span className="font-bold text-slate-700">السنة المالية:</span>
+            <select
+              value={selectedFiscalYear}
+              onChange={(e) => handleSelectFiscalYear(Number(e.target.value))}
+              className="rounded border border-emerald-300 bg-white px-2 py-0.5 font-mono text-xs font-bold text-slate-900"
+            >
+              {[2023, 2024, 2025, 2026, 2027].map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+            <span className="font-mono text-[11px] text-slate-600">
+              ({activeFiscalBounds.startDate} → {activeFiscalBounds.endDate})
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsQuickClientPickerOpen(true)}
+          className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 cursor-pointer shadow-2xs"
+        >
+          تغيير
+        </button>
+      </div>
+    );
+  };
+
+  // المنتقي السريع للعميل والسنة المالية (بحث + آخر 5 عملاء + القائمة الكاملة المسموح بها)
+  const renderQuickClientScopedPicker = () => {
+    const q = quickPickerSearch.trim().toLowerCase();
+    const filteredList = q
+      ? visibleClients.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.code && c.code.toLowerCase().includes(q)) ||
+            (c.taxId && c.taxId.toLowerCase().includes(q)) ||
+            (c.taxCardNo && c.taxCardNo.toLowerCase().includes(q))
+        )
+      : visibleClients;
+
+    const recentClients = recentClientIds
+      .map((id) => visibleClients.find((c) => c.id === id))
+      .filter((c): c is NonNullable<typeof c> => Boolean(c));
+
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-emerald-100 p-2.5 text-emerald-800">
+              <Building2 className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900">
+                المنتقي السريع للمنشأة والسنة المالية
+              </h2>
+              <p className="text-xs text-slate-500">
+                اختر المنشأة والسنة المالية لفتح الدفاتر والموازين والقوائم المالية المعزولة الخاصة بها
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+              <Calendar className="h-4 w-4 text-emerald-700" />
+              <span className="font-bold text-slate-700">السنة المالية:</span>
+              <select
+                value={selectedFiscalYear}
+                onChange={(e) => handleSelectFiscalYear(Number(e.target.value))}
+                className="bg-transparent font-mono text-xs font-bold text-slate-900 focus:outline-none"
+              >
+                {[2023, 2024, 2025, 2026, 2027].map((yr) => (
+                  <option key={yr} value={yr}>
+                    {yr}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {activeClient && (
+              <button
+                type="button"
+                onClick={() => setIsQuickClientPickerOpen(false)}
+                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                إغلاق المنتقي
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* حقل البحث السريع */}
+        <div className="relative">
+          <input
+            type="text"
+            value={quickPickerSearch}
+            onChange={(e) => setQuickPickerSearch(e.target.value)}
+            placeholder="ابحث باسم الشركة، كود المنشأة، أو الرقم الضريبي..."
+            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-xs font-semibold focus:border-emerald-500 focus:bg-white focus:outline-none"
+          />
+        </div>
+
+        {/* آخر 5 عملاء */}
+        {recentClients.length > 0 && !q && (
+          <div className="space-y-2">
+            <div className="text-xs font-bold text-slate-500">آخر 5 عملاء تم العمل عليهم:</div>
+            <div className="flex flex-wrap gap-2">
+              {recentClients.map((rc) => (
+                <button
+                  key={rc.id}
+                  type="button"
+                  onClick={() => handleSelectClient(rc.id)}
+                  className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100 cursor-pointer"
+                >
+                  <Building2 className="h-3.5 w-3.5 text-emerald-700" />
+                  <span>{rc.name}</span>
+                  <span className="font-mono text-[10px] text-emerald-700">({rc.code})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* القائمة الكاملة للعملاء المسموح بهم */}
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-600">
+            قائمة الشركات والمنشآت المتاحة ({filteredList.length}):
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {filteredList.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => handleSelectClient(c.id)}
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-right shadow-2xs transition hover:border-emerald-500 hover:bg-emerald-50/40 cursor-pointer"
+              >
+                <div>
+                  <div className="text-xs font-extrabold text-slate-900">{c.name}</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500 font-mono">
+                    {c.code} | ضريبي: {c.taxCardNo || c.taxId || '—'}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-slate-500 font-mono">
+                    سنة مالية: {c.fiscalYear || c.activeFiscalYear}
+                  </div>
+                </div>
+                <span className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white">
+                  فتح الملف
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => setIsAddClientOpen(true)}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800"
+          >
+            + إنشاء منشأة جديدة بدليل حسابات مستقل
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderActiveWorkspace = () => {
+    // 1. الشاشات التشغيلية العابرة للعملاء (CROSS_CLIENT_TABS) تُعرض قبل فحص activeClientId وبدون أي حجب
     if (activeTab === 'UNASSIGNED_ENTRIES') {
       return (
         <div className="space-y-6">
           {renderAccountingSubNav()}
           <UnassignedEntriesView
-            clients={state.clients}
+            clients={visibleClients}
             onResolvedChange={() => setState({ ...db.getState() })}
             onNavigateToReports={() => setActiveTab('FINANCIAL_STATEMENTS')}
           />
@@ -1559,130 +1859,47 @@ export const App: React.FC = () => {
       );
     }
 
+    if (activeTab === 'DASHBOARD') {
+      return (
+        <CpaAutonomousCommandDeck
+          state={state}
+          onNavigate={(tab) => setActiveTab(tab)}
+          fiscalYear={selectedFiscalYear}
+        />
+      );
+    }
+
+    if (parentHub === 'TAX_AUDIT_HUB') {
+      return (
+        <UnifiedTaxFilingAgendaView
+          state={state}
+          currentUser={currentUser}
+          onRefresh={() => setState({ ...db.getState() })}
+          onOpenClientAuditFile={(clientId) => {
+            handleSelectClient(clientId);
+            setActiveTab('TRIAL_BALANCE');
+          }}
+        />
+      );
+    }
+
     if (parentHub === 'OFFICE_HUB') {
       return renderClientsAndOfficeHub();
     }
+
     if (parentHub === 'AUDIT_SECURITY_HUB' || activeTab === 'AUDIT_TRAIL') {
       return <AuditTrailView state={state} />;
     }
+
     if (activeTab === 'CURRENCY_EXCHANGE_RATES' || activeTab === 'CURRENCY_RATES') {
       return renderExchangeRatesWorkspace();
     }
 
-    // Requirement 6: activeClientContext is mandatory for any accounting screen; show client selection prompt if missing
-    if (!activeClientId || !activeClient) {
-      return (
-        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 p-8 text-amber-950 shadow-sm space-y-5">
-          <div className="flex items-start gap-4">
-            <div className="rounded-xl bg-amber-500/20 p-3 text-amber-800">
-              <Building2 className="h-7 w-7" />
-            </div>
-            <div>
-              <h2 className="text-lg font-extrabold">
-                يرجى اختيار العميل (المنشأة) أولاً لتفعيل الشاشات والتقارير المحاسبية
-              </h2>
-              <p className="mt-1 text-xs text-amber-900 leading-relaxed">
-                سياق العميل النشط (<code className="font-mono">activeClientContext</code>) إلزامي لأي شاشة محاسبية أو ضريبية أو تقرير مالي، لضمان العزل الكامل بين الحسابات والأرصدة الافتتاحية والقيود لكل منشأة.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {state.clients.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => handleSelectClient(c.id)}
-                className="flex items-center justify-between rounded-xl border border-amber-300 bg-white p-4 text-right shadow-2xs transition hover:border-emerald-500 hover:bg-emerald-50/40"
-              >
-                <div>
-                  <div className="text-xs font-extrabold text-slate-900">{c.name}</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500 font-mono">
-                    {c.code} | سنة مالية: {c.fiscalYear || c.activeFiscalYear} ({c.fiscalYearStart || `${c.activeFiscalYear}-01-01`} إلى {c.fiscalYearEnd || `${c.activeFiscalYear}-12-31`})
-                  </div>
-                </div>
-                <span className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white">
-                  اختيار المنشأة
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={() => setIsAddClientOpen(true)}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800"
-            >
-              + إنشاء منشأة جديدة بدليل حسابات مستقل
-            </button>
-          </div>
-        </div>
-      );
+    if (activeTab === 'INVOICING') {
+      return renderInvoicingWorkspace();
     }
 
-    if (activeTab === 'DASHBOARD') {
-      return <CpaAutonomousCommandDeck state={state} onNavigate={(tab) => setActiveTab(tab)} fiscalYear={selectedFiscalYear} />;
-    }
-    if (activeTab === 'CHART_OF_ACCOUNTS') {
-      return renderChartOfAccountsWorkspace();
-    }
-    if (activeTab === 'ACCOUNT_MAPPING') {
-      return (
-        <div className="space-y-6">
-          {renderAccountingSubNav()}
-          <AccountMappingView state={state} onRefresh={() => setState({ ...db.getState() })} />
-        </div>
-      );
-    }
-    if (activeTab === 'JOURNAL_ENTRIES' || activeTab === 'GENERAL_LEDGER' || activeTab === 'ACCOUNTING_HUB') {
-      return renderJournalEntriesWorkspace();
-    }
-    if (activeTab === 'TRIAL_BALANCE') {
-      return (
-        <div className="space-y-6">
-          {renderAccountingSubNav()}
-          <TrialBalanceView
-            state={state}
-            selectedYear={selectedFiscalYear}
-            onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
-          />
-        </div>
-      );
-    }
-    if (activeTab === 'FILE_REVIEW') {
-      return (
-        <div className="space-y-6">
-          {renderAccountingSubNav()}
-          <SmartExcelAuditSentinelView state={state} />
-        </div>
-      );
-    }
-    if (activeTab === 'FIXED_ASSETS') {
-      return renderFixedAssetsWorkspace();
-    }
-    if (parentHub === 'TAX_AUDIT_HUB') {
-      return <UnifiedTaxFilingAgendaView state={state} onRefresh={() => setState({ ...db.getState() })} />;
-    }
-    if (parentHub === 'FINANCIAL_REPORTING_HUB') {
-      if (activeTab === 'AUDITOR_REPORT') {
-        return (
-          <AuditorReportView
-            state={state}
-            selectedYear={selectedFiscalYear}
-            onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
-          />
-        );
-      }
-      if (activeTab === 'FINANCIAL_STATEMENTS') {
-        return (
-          <FinancialStatementsView
-            state={state}
-            fiscalYear={selectedFiscalYear}
-            onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
-          />
-        );
-      }
+    if (activeTab === 'CERTIFICATES') {
       return (
         <UnifiedFinancialReportsView
           state={state}
@@ -1691,22 +1908,105 @@ export const App: React.FC = () => {
         />
       );
     }
-    if (parentHub === 'AUDIT_TOOLS_HUB') {
+
+    // 2. الشاشات المحاسبية المرتبطة بعميل وسنة مالية (CLIENT_SCOPED_TABS)
+    // إذا لم يتم تحديد عميل أو ضغط المستخدم على زر "تغيير"، يُعرض المنتقي السريع (بحث + آخر 5 عملاء + القائمة)
+    if (!activeClientId || !activeClient || isQuickClientPickerOpen) {
+      return renderQuickClientScopedPicker();
+    }
+
+    const renderClientScopedContent = () => {
+      if (activeTab === 'CHART_OF_ACCOUNTS') {
+        return renderChartOfAccountsWorkspace();
+      }
+      if (activeTab === 'ACCOUNT_MAPPING') {
+        return (
+          <div className="space-y-6">
+            {renderAccountingSubNav()}
+            <AccountMappingView state={state} onRefresh={() => setState({ ...db.getState() })} />
+          </div>
+        );
+      }
+      if (activeTab === 'JOURNAL_ENTRIES' || activeTab === 'GENERAL_LEDGER' || activeTab === 'ACCOUNTING_HUB') {
+        return renderJournalEntriesWorkspace();
+      }
+      if (activeTab === 'TRIAL_BALANCE') {
+        return (
+          <div className="space-y-6">
+            {renderAccountingSubNav()}
+            <TrialBalanceView
+              state={state}
+              selectedYear={selectedFiscalYear}
+              onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
+            />
+          </div>
+        );
+      }
+      if (activeTab === 'FILE_REVIEW') {
+        return (
+          <div className="space-y-6">
+            {renderAccountingSubNav()}
+            <SmartExcelAuditSentinelView state={state} />
+          </div>
+        );
+      }
+      if (activeTab === 'FIXED_ASSETS') {
+        return renderFixedAssetsWorkspace();
+      }
+      if (parentHub === 'FINANCIAL_REPORTING_HUB') {
+        if (activeTab === 'AUDITOR_REPORT') {
+          return (
+            <AuditorReportView
+              state={state}
+              selectedYear={selectedFiscalYear}
+              onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
+            />
+          );
+        }
+        if (activeTab === 'FINANCIAL_STATEMENTS') {
+          return (
+            <FinancialStatementsView
+              state={state}
+              fiscalYear={selectedFiscalYear}
+              onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
+            />
+          );
+        }
+        return (
+          <UnifiedFinancialReportsView
+            state={state}
+            selectedYear={selectedFiscalYear}
+            onNavigateToTab={(t) => setActiveTab(t as NavigationTab)}
+          />
+        );
+      }
+      if (parentHub === 'AUDIT_TOOLS_HUB') {
+        return (
+          <div className="space-y-8">
+            <SmartExcelAuditSentinelView state={state} />
+            <AuditConfirmationsGenerator state={state} selectedYear={selectedFiscalYear} />
+            <InternalControlRiskMatrix state={state} selectedYear={selectedFiscalYear} />
+          </div>
+        );
+      }
+      if (parentHub === 'CREDIT_HUB' || parentHub === 'FINANCIAL_PLANNING_HUB') {
+        return <SmartCpaTemplateView companyName={activeClient?.name} />;
+      }
       return (
-        <div className="space-y-8">
-          <SmartExcelAuditSentinelView state={state} />
-          <AuditConfirmationsGenerator state={state} selectedYear={selectedFiscalYear} />
-          <InternalControlRiskMatrix state={state} selectedYear={selectedFiscalYear} />
-        </div>
+        <CpaAutonomousCommandDeck
+          state={state}
+          onNavigate={(tab) => setActiveTab(tab)}
+          fiscalYear={selectedFiscalYear}
+        />
       );
-    }
-    if (parentHub === 'CREDIT_HUB' || parentHub === 'FINANCIAL_PLANNING_HUB') {
-      return <SmartCpaTemplateView companyName={activeClient?.name} />;
-    }
-    if (activeTab === 'INVOICING') {
-      return renderInvoicingWorkspace();
-    }
-    return <CpaAutonomousCommandDeck state={state} onNavigate={(tab) => setActiveTab(tab)} fiscalYear={selectedFiscalYear} />;
+    };
+
+    return (
+      <div>
+        {renderStickyClientScopedBar()}
+        {renderClientScopedContent()}
+      </div>
+    );
   };
 
   return (
@@ -1744,7 +2044,7 @@ export const App: React.FC = () => {
                     className="bg-transparent text-xs font-extrabold text-emerald-900 focus:outline-none"
                   >
                     <option value="">-- اختر المنشأة --</option>
-                    {state.clients.map((c) => (
+                    {visibleClients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({c.code})
                       </option>
@@ -1783,10 +2083,10 @@ export const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
-                <GlobalSearchBar state={state} onNavigate={(t) => setActiveTab(t)} />
+                <GlobalSearchBar state={state} currentUser={currentUser} onNavigate={(t) => setActiveTab(t)} />
                 <button
                   type="button"
-                  onClick={() => setTaxCredentialsModalClientId(activeClientId || state.clients[0]?.id || '')}
+                  onClick={() => setTaxCredentialsModalClientId(activeClientId || visibleClients[0]?.id || '')}
                   className="flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 shadow-2xs"
                   title="بيانات اليوزر نيم والباسورد لبوابة الضرائب والفاتورة الإلكترونية"
                 >
@@ -2030,6 +2330,59 @@ export const App: React.FC = () => {
                   onChange={(e) => setNewClientFees(Number(e.target.value))}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
                 />
+                {/* خيارات الخضوع الضريبي للمنشأة */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                  <div className="font-bold text-slate-700 text-xs">
+                    الخضوع الضريبي للمنشأة (تظهر في شاشة الإقرارات حسب الخضوع):
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={newClientIsVat}
+                        onChange={(e) => setNewClientIsVat(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>خاضع للقيمة المضافة</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={newClientIsIncome}
+                        onChange={(e) => setNewClientIsIncome(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>خاضع لضريبة الدخل</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={newClientIsWht}
+                        onChange={(e) => setNewClientIsWht(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>خاضع للخصم والإضافة (نموذج 41)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={newClientIsStamp}
+                        onChange={(e) => setNewClientIsStamp(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>خاضع لضريبة الدمغة</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={newClientHasPayroll}
+                        onChange={(e) => setNewClientHasPayroll(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>لديه عمالة / خاضع لضريبة المرتبات (نموذج 4)</span>
+                    </label>
+                  </div>
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"

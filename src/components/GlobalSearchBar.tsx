@@ -1,25 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DatabaseState, db } from '../db/localDatabase';
-import { NavigationTab } from '../types';
+import { NavigationTab, SystemUser } from '../types';
 import { Search } from 'lucide-react';
+import { getVisibleClients } from '../config/screenScope';
 
 export interface GlobalSearchBarProps {
   state: DatabaseState;
   onNavigate: (tab: NavigationTab) => void;
+  currentUser?: SystemUser | null;
 }
 
-export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavigate }) => {
+export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
+  state,
+  onNavigate,
+  currentUser,
+}) => {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
 
+  const visibleClients = useMemo(
+    () => getVisibleClients(state, currentUser),
+    [state.clients, state.users, state.currentUserId, currentUser]
+  );
+
   const trimmed = query.trim().toLowerCase();
   const matchedClients = trimmed
-    ? (state.clients || []).filter(
-        (c) =>
-          c.name.toLowerCase().includes(trimmed) ||
-          (c.taxId && c.taxId.toLowerCase().includes(trimmed)) ||
-          (c.code && c.code.toLowerCase().includes(trimmed))
-      ).slice(0, 6)
+    ? visibleClients
+        .filter(
+          (c) =>
+            c.name.toLowerCase().includes(trimmed) ||
+            (c.taxId && c.taxId.toLowerCase().includes(trimmed)) ||
+            (c.taxCardNo && c.taxCardNo.toLowerCase().includes(trimmed)) ||
+            (c.code && c.code.toLowerCase().includes(trimmed)) ||
+            (c.clientCode && c.clientCode.toLowerCase().includes(trimmed))
+        )
+        .slice(0, 6)
     : [];
 
   return (
@@ -48,14 +63,16 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ state, onNavig
               type="button"
               onMouseDown={() => {
                 db.setActiveClient(client.id);
-                onNavigate('PRACTICE_CLIENTS_HUB');
+                onNavigate('CLIENTS_ARCHIVE');
                 setOpen(false);
                 setQuery('');
               }}
               className="w-full px-3 py-2 text-right hover:bg-slate-800 flex items-center justify-between text-xs text-white border-b border-slate-800 last:border-b-0"
             >
               <span className="font-bold">{client.name}</span>
-              <span className="font-mono text-[11px] text-emerald-400">{client.taxId}</span>
+              <span className="font-mono text-[11px] text-emerald-400">
+                {client.taxCardNo || client.taxId}
+              </span>
             </button>
           ))}
         </div>
