@@ -66,6 +66,7 @@ import {
   isCrossClientTab,
   isClientScopedTab,
   isClientSubjectToTax,
+  migrateClientTaxSubjectFlagsOnce,
 } from './config/screenScope';
 
 export const App: React.FC = () => {
@@ -182,7 +183,27 @@ export const App: React.FC = () => {
   const [assetCost, setAssetCost] = useState<number>(0);
   const [assetRate, setAssetRate] = useState<number>(20);
 
+  const [migrationSummaryNotice, setMigrationSummaryNotice] = useState<string | null>(null);
+
   useEffect(() => {
+    const current = db.getState();
+    if (!current.migrationDone) {
+      const res = migrateClientTaxSubjectFlagsOnce(current);
+      current.taxSubjectMigrationNotificationPending = false;
+      db.saveState('CLIENTS');
+      setMigrationSummaryNotice(
+        `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
+      );
+    } else if (current.taxSubjectMigrationNotificationPending) {
+      const count = current.lastTaxSubjectMigrationCount ?? 0;
+      current.taxSubjectMigrationNotificationPending = false;
+      db.saveState('CLIENTS');
+      if (count > 0) {
+        setMigrationSummaryNotice(
+          `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
+        );
+      }
+    }
     return db.subscribe(() => {
       setState({ ...db.getState() });
     });
@@ -2115,6 +2136,22 @@ export const App: React.FC = () => {
               </div>
             </div>
           </header>
+
+          {migrationSummaryNotice && (
+            <div className="mx-6 mt-4 flex items-center justify-between rounded-xl border border-emerald-400 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-950 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>{migrationSummaryNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMigrationSummaryNotice(null)}
+                className="rounded-lg bg-emerald-600 px-3 py-1 text-white hover:bg-emerald-700 cursor-pointer"
+              >
+                حسناً
+              </button>
+            </div>
+          )}
 
           {unassignedEntriesCount > 0 && activeTab !== 'UNASSIGNED_ENTRIES' && (
             <div className="mx-6 mt-4 flex items-center justify-between rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950">

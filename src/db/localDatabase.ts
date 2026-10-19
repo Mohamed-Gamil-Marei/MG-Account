@@ -53,6 +53,7 @@ import {
   sanitizeStateForBackup,
   EncryptedBackupPackage,
 } from '../utils/backupEncryption';
+import { migrateClientTaxSubjectFlagsOnce } from '../config/screenScope';
 
 export interface AuditLogEntry {
   id: string;
@@ -322,6 +323,9 @@ export interface DatabaseState {
   statementMappings?: Record<string, ClientStatementMapping>;
   feeMigrationUnmatchedReport?: UnmatchedFeeMigrationItem[];
   systemSerials?: SystemSerialsConfig;
+  migrationDone?: boolean;
+  lastTaxSubjectMigrationCount?: number;
+  taxSubjectMigrationNotificationPending?: boolean;
 }
 
 export function createDefaultClientAccountMapping(clientId: string): ClientAccountMapping {
@@ -1518,6 +1522,7 @@ class LocalDatabase {
           isStampTaxSubject: true,
           isPayrollTaxSubject: true,
           hasPayroll: true,
+          taxSubjectConfigured: true,
           eInvoiceRegistered: true,
           hasEsealToken: true,
           tokenCustodyStatus: 'IN_OFFICE',
@@ -1916,13 +1921,20 @@ class LocalDatabase {
             feeCollections: parsed.feeCollections || base.feeCollections || [],
           };
           this.migrateMultiEntityState(merged);
+          migrateClientTaxSubjectFlagsOnce(merged);
           reconcileFeeCollectionsAndTreasury(merged);
+          try {
+            localStorage.setItem(FULL_STATE_KEY, JSON.stringify(merged));
+          } catch {
+            // ignore storage errors
+          }
           return merged;
         }
       }
     } catch {
       // ignore corrupted storage
     }
+    migrateClientTaxSubjectFlagsOnce(base);
     return base;
   }
 

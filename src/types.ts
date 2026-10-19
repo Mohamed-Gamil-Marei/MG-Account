@@ -464,6 +464,7 @@ export interface ClientArchiveRecord {
   isStampTaxSubject?: boolean;
   hasPayroll?: boolean;
   isPayrollTaxSubject?: boolean;
+  taxSubjectConfigured?: boolean;
   activityTemplate?: ClientActivityTemplate;
   fiscalYear?: number;
   fiscalYearStart?: string;

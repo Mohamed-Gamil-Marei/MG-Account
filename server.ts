@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import os from 'os';
 import { DatabaseSync as Database } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -14,7 +15,7 @@ import { setupMgDesignerRoutes } from './src/server/mgDesignerRoutes.js';
 import { whatsappServerEngine } from './server/whatsappServerEngine.js';
 
 const PORT = process.env.NODE_ENV === 'production' ? (Number(process.env.PORT) || 3000) : 3000;
-const DB_PATH = process.env.SQLITE_DB_PATH || path.join(process.cwd(), 'mg_account.sqlite');
+const DB_PATH = process.env.SQLITE_DB_PATH || path.join(os.tmpdir(), 'mg_account.sqlite');
 
 export const sqliteDb = new Database(DB_PATH);
 ensureUsersAndSessionsSchema(sqliteDb);

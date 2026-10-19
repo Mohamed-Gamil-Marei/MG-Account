@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+mg_account.sqlite
+mg_account.sqlite-shm
+mg_account.sqlite-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store

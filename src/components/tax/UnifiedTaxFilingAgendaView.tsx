@@ -37,7 +37,13 @@ import { getCairoDateString } from '../../utils/cairoTime';
 import { EgyptianTaxDeclarationPdfModal } from '../EgyptianTaxDeclarationPdfModal';
 import { ScreenActionToolbar } from '../common/ScreenActionToolbar';
 import { ClientTaxPortalCredentialsModal } from './ClientTaxPortalCredentialsModal';
-import { getVisibleClients, isClientSubjectToTax } from '../../config/screenScope';
+import {
+  getVisibleClients,
+  isClientSubjectToTax,
+  isClientTaxSubjectUnspecified,
+  migrateClientTaxSubjectFlagsOnce,
+  TaxSubjectKind,
+} from '../../config/screenScope';
 
 export const OFFICIAL_SAP_PORTAL_URL =
   'https://auth.eta.gov.eg:8080/auth/realms/e-tax/protocol/saml?SAMLRequest=fZFBa8JAEIX%2FStj7uhut0S4mIJVCoC1SSw%2B9jclEA8luujOx9t93E2mxF2FPj5n33je7Imibzqx7PtpX%2FOyROMo3qdhpPdfzBO7lXRKXMq4wllDttVzEMJvfl8l%2BUZUiekdPtbOpmE60iHKiHnNLDJaDpKeJjLXU8VuszWwW3oeINiGhtsDj1pG5I6MUhPgJMkwO7jTBg1nqpR5F5RGalhRKhrPqvGNXuEYNpUX06HyBY%2FNUVNAQDg22QFSf8E85t40lM1KmovfWOKCajIUWyXBhduvnJxPam19zka2GaTPC%2BKv92%2BshFv1AJbKqAyroimelrhwv9p15CRb5ZuuauvgeUFrg2wmDUpeyGkdNN1yeGC2LaN007ushnIoDN%2Fsehcoumf9%2FNvsB&RelayState=oucqqvqvwazouwrdorferoafbqoxratvzdwbxfd&SigAlg=http%3A%2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=Djou9cgY%2FYDnax7L%2B5j3Vex%2BFNM7GotG0rntgsxbzLx%2BnpgGJPQcjrXKWNAr6ihpxzZpBqOEQgw5ClxuPBFclBUt5QiMJQMhDgdJp5a5LFLk%2FfFkjKA5RtJx12tzb76%2FBAS%2BnsR3G%2BVrEPNGlUk3qz9%2FLpHx2RXv7p2BlVZ7R%2FA5Kos0ZL%2F3NyR9I5rtU4mxtQV%2FjurnuRv%2FnDNrPIA6dgdb9MQ3%2FQUNzRzhEEe131ZSLVC5CO%2BkW1JTBNdS210ldYxzYZFkDX91MhUL3FpGHvxCCP74cJQXA6f7MrGLXec7prjrEK2lmN5DKxg%2FegfZGxy0mBNPUurWLOsQYaL%2BLw%3D%3D#/home';
@@ -252,7 +258,89 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // قائمة "عملاء غير محدد خضوعهم" لتحديد الخضوع الضريبي بنقرة واحدة
+  const [showUnspecifiedModal, setShowUnspecifiedModal] = useState(false);
+  const [showAllClientsInSubjectQuickList, setShowAllClientsInSubjectQuickList] = useState(false);
+  const [migrationBannerMsg, setMigrationBannerMsg] = useState<string | null>(null);
+
+  // التحقق من إشعار الترحيل التلقائي لعلامات الخضوع لمرة واحدة عند تحميل الحالة
+  useEffect(() => {
+    const currentState = db.getState();
+    if (!currentState.migrationDone) {
+      const res = migrateClientTaxSubjectFlagsOnce(currentState);
+      db.saveState('CLIENTS');
+      const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
+      setMigrationBannerMsg(msg);
+      showToast(msg);
+      currentState.taxSubjectMigrationNotificationPending = false;
+      db.saveState('CLIENTS');
+      if (onRefresh) onRefresh();
+    } else if (currentState.taxSubjectMigrationNotificationPending) {
+      const count = currentState.lastTaxSubjectMigrationCount ?? 0;
+      const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
+      setMigrationBannerMsg(msg);
+      showToast(msg);
+      currentState.taxSubjectMigrationNotificationPending = false;
+      db.saveState('CLIENTS');
+    }
+  }, []);
+
+  // العملاء غير المحدد خضوعهم الضريبي ضمن الشركات المرئية للمستخدم
+  const unspecifiedClients = useMemo(
+    () => visibleClients.filter((c) => isClientTaxSubjectUnspecified(c)),
+    [visibleClients, state.clients]
+  );
+
+  // تبديل خضوع العميل لنوع ضريبة معين بنقرة واحدة مباشرة
+  const handleQuickToggleClientSubject = (client: ClientArchiveRecord, taxKind: TaxSubjectKind) => {
+    const nextVal = !isClientSubjectToTax(client, taxKind);
+    const patch: Partial<ClientArchiveRecord> = {
+      taxSubjectConfigured: true,
+    };
+    if (taxKind === 'VAT') {
+      patch.isVatSubject = nextVal;
+      patch.isVatRegistered = nextVal;
+    } else if (taxKind === 'INCOME') {
+      patch.isIncomeTaxSubject = nextVal;
+    } else if (taxKind === 'WHT') {
+      patch.isWhtSubject = nextVal;
+      patch.isWithholdingTaxSubject = nextVal;
+    } else if (taxKind === 'STAMP') {
+      patch.isStampTaxSubject = nextVal;
+    } else if (taxKind === 'PAYROLL') {
+      patch.hasPayroll = nextVal;
+      patch.isPayrollTaxSubject = nextVal;
+    }
+
+    db.updateClient(client.id, patch);
+    if (onRefresh) onRefresh();
+    const taxLabels: Record<TaxSubjectKind, string> = {
+      VAT: 'القيمة المضافة',
+      INCOME: 'ضريبة الدخل',
+      WHT: 'الخصم والإضافة',
+      STAMP: 'الدمغة',
+      PAYROLL: 'المرتبات وكسب العمل',
+    };
+    showToast(
+      `✓ ${client.name}: ${nextVal ? 'تم تفعيل الخضوع لـ' : 'تم إلغاء الخضوع لـ'} (${taxLabels[taxKind]})`
+    );
+  };
+
+  // تأكيد عدم الخضوع للضرائب الإضافية بنقرة واحدة
+  const handleConfirmClientSubjectAsConfigured = (client: ClientArchiveRecord) => {
+    db.updateClient(client.id, {
+      taxSubjectConfigured: true,
+      isVatSubject: Boolean(client.isVatSubject ?? client.isVatRegistered ?? false),
+      isIncomeTaxSubject: client.isIncomeTaxSubject !== undefined ? Boolean(client.isIncomeTaxSubject) : true,
+      isWhtSubject: Boolean(client.isWhtSubject ?? client.isWithholdingTaxSubject ?? false),
+      isStampTaxSubject: Boolean(client.isStampTaxSubject ?? false),
+      hasPayroll: Boolean(client.hasPayroll ?? client.isPayrollTaxSubject ?? false),
+    });
+    if (onRefresh) onRefresh();
+    showToast(`✓ تم اعتماد إعدادات الخضوع الضريبي لشركة: ${client.name}`);
   };
 
   // نسخ إلى الحافظة
@@ -979,6 +1067,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
         isStampTaxSubject: clientModalForm.isStampTaxSubject,
         hasPayroll: clientModalForm.hasPayroll,
         isPayrollTaxSubject: clientModalForm.hasPayroll,
+        taxSubjectConfigured: true,
         taxSystemType: clientModalForm.taxSystemType,
         contactPerson: '',
         phone: '',
@@ -1013,6 +1102,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
           isStampTaxSubject: clientModalForm.isStampTaxSubject,
           hasPayroll: clientModalForm.hasPayroll,
           isPayrollTaxSubject: clientModalForm.hasPayroll,
+          taxSubjectConfigured: true,
           taxSystemType: clientModalForm.taxSystemType,
           portalCredentials: {
             ...existing.portalCredentials,
@@ -1471,8 +1561,217 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
         </div>
       </div>
 
+      {/* إشعار ملخص الترحيل التلقائي لعلامات الخضوع لمرة واحدة */}
+      {migrationBannerMsg && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-emerald-900 dark:text-emerald-200 shadow-2xs">
+          <div className="flex items-center gap-2 font-bold">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{migrationBannerMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMigrationBannerMsg(null)}
+            className="text-emerald-700 dark:text-emerald-300 hover:underline text-[11px] font-bold cursor-pointer shrink-0"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
+
       {/* 3. قائمة الشركات الخاضعة كأشرطة تحت بعضها مع تناوب ألوان السطور (Zebra Striping) */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
+        {/* رأس نوع الضريبة الحالي: يعرض عداد "عدد الشركات الخاضعة" ورابط "عملاء غير محدد خضوعهم" */}
+        <div className="px-3.5 py-2.5 bg-blue-50/70 dark:bg-slate-800/95 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-extrabold text-slate-900 dark:text-white">
+              {taxFilter === 'ALL'
+                ? 'كافة الأوعية الضريبية'
+                : taxFilter === 'VAT'
+                ? 'ضريبة القيمة المضافة (نموذج 10)'
+                : taxFilter === 'INCOME'
+                ? 'ضرائب الدخل السنوية (نموذج 101 / 105)'
+                : taxFilter === 'WHT'
+                ? 'ضريبة الخصم والتحصيل تحت حساب الضريبة (نموذج 41)'
+                : taxFilter === 'STAMP'
+                ? 'ضريبة الدمغة النسبية والنوعية'
+                : 'ضريبة كسب العمل والمرتبات (نموذج 4)'}
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-blue-600 text-white text-xs font-bold shadow-2xs">
+              <span>عدد الشركات الخاضعة:</span>
+              <span className="font-mono text-sm">
+                {taxFilter === 'ALL'
+                  ? filteredClients.length
+                  : taxFilter === 'VAT'
+                  ? summary.vatCount
+                  : taxFilter === 'INCOME'
+                  ? summary.incomeCount
+                  : taxFilter === 'WHT'
+                  ? summary.whtCount
+                  : taxFilter === 'STAMP'
+                  ? summary.stampCount
+                  : summary.payrollCount}
+              </span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowUnspecifiedModal((prev) => !prev)}
+              className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 border border-amber-300 dark:border-amber-700 px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span className="underline">عملاء غير محدد خضوعهم</span>
+              <span className="px-1.5 py-0.2 rounded bg-amber-200/80 dark:bg-amber-800 text-amber-900 dark:text-amber-100 font-mono text-[11px]">
+                {unspecifiedClients.length}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* القائمة المنسدلة السريعة لتحديد الخضوع بنقرة واحدة للعملاء غير المحدد خضوعهم */}
+        {showUnspecifiedModal && (
+          <div className="p-3.5 bg-amber-50/40 dark:bg-slate-900 border-b border-amber-200 dark:border-slate-700 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span>تحديد الخضوع الضريبي السريع للعملاء بنقرة واحدة</span>
+                  <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                    (انقر على نوع الضريبة لتفعيل أو إلغاء خضوع الشركة فوراً)
+                  </span>
+                </h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAllClientsInSubjectQuickList((p) => !p)}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 cursor-pointer"
+                >
+                  {showAllClientsInSubjectQuickList
+                    ? `عرض غير المحدد خضوعهم فقط (${unspecifiedClients.length})`
+                    : `عرض جميع العملاء المرئيين (${visibleClients.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUnspecifiedModal(false)}
+                  className="px-2 py-1 rounded-md text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  إغلاق ✕
+                </button>
+              </div>
+            </div>
+
+            {(showAllClientsInSubjectQuickList ? visibleClients : unspecifiedClients).length === 0 ? (
+              <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-emerald-700 dark:text-emerald-400 font-bold flex items-center justify-between">
+                <span>جميع العملاء المرئيين تم تحديد علامات خضوعهم الضريبي بالكامل.</span>
+                {!showAllClientsInSubjectQuickList && visibleClients.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllClientsInSubjectQuickList(true)}
+                    className="underline text-blue-600 dark:text-blue-400 cursor-pointer"
+                  >
+                    عرض وتعديل جميع العملاء ({visibleClients.length})
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 max-h-72 overflow-y-auto">
+                {(showAllClientsInSubjectQuickList ? visibleClients : unspecifiedClients).map((c) => {
+                  const vatOn = isClientSubjectToTax(c, 'VAT');
+                  const incOn = isClientSubjectToTax(c, 'INCOME');
+                  const whtOn = isClientSubjectToTax(c, 'WHT');
+                  const stampOn = isClientSubjectToTax(c, 'STAMP');
+                  const payrollOn = isClientSubjectToTax(c, 'PAYROLL');
+
+                  return (
+                    <div
+                      key={c.id}
+                      className="px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/40"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                          {c.name}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          بطاقة ضريبية: {c.taxCardNo || c.taxId || '—'}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleClientSubject(c, 'VAT')}
+                          className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                            vatOn
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-blue-400'
+                          }`}
+                        >
+                          {vatOn ? '✓ قيمة مضافة' : '+ قيمة مضافة'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleClientSubject(c, 'INCOME')}
+                          className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                            incOn
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-emerald-400'
+                          }`}
+                        >
+                          {incOn ? '✓ ضريبة دخل' : '+ ضريبة دخل'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleClientSubject(c, 'WHT')}
+                          className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                            whtOn
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-purple-400'
+                          }`}
+                        >
+                          {whtOn ? '✓ خصم وإضافة' : '+ خصم وإضافة'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleClientSubject(c, 'STAMP')}
+                          className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                            stampOn
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-amber-400'
+                          }`}
+                        >
+                          {stampOn ? '✓ دمغة' : '+ دمغة'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleClientSubject(c, 'PAYROLL')}
+                          className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                            payrollOn
+                              ? 'bg-rose-600 text-white border-rose-600'
+                              : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-rose-400'
+                          }`}
+                        >
+                          {payrollOn ? '✓ مرتبات' : '+ مرتبات'}
+                        </button>
+                        {isClientTaxSubjectUnspecified(c) && (
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmClientSubjectAsConfigured(c)}
+                            className="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-white hover:bg-slate-700 cursor-pointer"
+                            title="تأكيد إعدادات الخضوع الحالية وإخفاء العميل من قائمة غير المحددين"
+                          >
+                            تأكيد
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* شريط عناوين الأعمدة الأفقي */}
         <div className="hidden lg:grid grid-cols-12 items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700/80 text-[11px] font-bold text-slate-600 dark:text-slate-300 select-none">
           <div className="col-span-3 flex items-center gap-2">
