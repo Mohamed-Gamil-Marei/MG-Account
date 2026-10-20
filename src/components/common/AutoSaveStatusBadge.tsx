@@ -34,6 +34,7 @@ export const AutoSaveStatusBadge: React.FC<AutoSaveStatusBadgeProps> = ({
     const handleWriteError = (ev: Event) => {
       const customEv = ev as CustomEvent<{ message?: string }>;
       setLiveStorageError(customEv.detail?.message || 'فشل حفظ البيانات في التخزين المحلي');
+      setLiveLastSuccessTime(null);
     };
     const handleWriteSuccess = (ev: Event) => {
       const customEv = ev as CustomEvent<{ timestamp?: string }>;
@@ -53,9 +54,9 @@ export const AutoSaveStatusBadge: React.FC<AutoSaveStatusBadgeProps> = ({
     };
   }, []);
 
-  const isFailed = hasStorageError !== undefined ? hasStorageError : Boolean(liveStorageError || db.hasStorageWriteFailure());
+  const isFailed = Boolean(hasStorageError || liveStorageError || db.hasStorageWriteFailure());
   const errorTooltip = storageErrorMessage || liveStorageError || db.getLastStorageWriteError() || 'فشل الحفظ في التخزين المحلي';
-  const effectiveSavedTime = lastSavedTime ?? liveLastSuccessTime;
+  const effectiveSavedTime = isFailed ? null : (lastSavedTime ?? liveLastSuccessTime);
 
   return (
     <div

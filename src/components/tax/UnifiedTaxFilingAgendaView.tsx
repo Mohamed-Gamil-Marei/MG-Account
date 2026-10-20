@@ -323,22 +323,25 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
   // التحقق من إشعار الترحيل التلقائي لعلامات الخضوع لمرة واحدة عند تحميل الحالة
   useEffect(() => {
     const currentState = db.getState();
-    if (!currentState.taxSubjectMigrationDone && !currentState.migrationDone) {
-      const res = migrateClientTaxSubjectFlagsOnce(currentState);
-      db.saveState('CLIENTS');
-      const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
-      setMigrationBannerMsg(msg);
-      showToast(msg);
-      currentState.taxSubjectMigrationNotificationPending = false;
-      db.saveState('CLIENTS');
-      if (onRefresh) onRefresh();
-    } else if (currentState.taxSubjectMigrationNotificationPending) {
-      const count = currentState.lastTaxSubjectMigrationCount ?? 0;
-      const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
-      setMigrationBannerMsg(msg);
-      showToast(msg);
-      currentState.taxSubjectMigrationNotificationPending = false;
-      db.saveState('CLIENTS');
+    try {
+      if (!currentState.taxSubjectMigrationDone && !currentState.migrationDone) {
+        const res = migrateClientTaxSubjectFlagsOnce(currentState);
+        currentState.taxSubjectMigrationNotificationPending = false;
+        db.saveState('CLIENTS');
+        const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
+        setMigrationBannerMsg(msg);
+        showToast(msg);
+        if (onRefresh) onRefresh();
+      } else if (currentState.taxSubjectMigrationNotificationPending) {
+        const count = currentState.lastTaxSubjectMigrationCount ?? 0;
+        currentState.taxSubjectMigrationNotificationPending = false;
+        db.saveState('CLIENTS');
+        const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
+        setMigrationBannerMsg(msg);
+        showToast(msg);
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'فشل حفظ البيانات في التخزين المحلي');
     }
   }, []);
 
@@ -410,7 +413,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
     if (!text) return;
 
     if (isPassword && clientId) {
-      if (!canPerform(currentUser, 'VIEW_PORTAL_SECRETS', clientId)) {
+      if (!canPerform('VIEW_PORTAL_SECRETS', clientId, currentUser).allowed) {
         showToast('عفواً، لا تملك صلاحية نسخ كلمات المرور (VIEW_PORTAL_SECRETS)');
         return;
       }
@@ -450,7 +453,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
     }
 
     // التحقق من الصلاحية الخاصة VIEW_PORTAL_SECRETS
-    if (!canPerform(currentUser, 'VIEW_PORTAL_SECRETS', clientId)) {
+    if (!canPerform('VIEW_PORTAL_SECRETS', clientId, currentUser).allowed) {
       showToast('عفواً، لا تملك صلاحية الاطلاع على كلمات المرور والبوابات (VIEW_PORTAL_SECRETS)');
       return;
     }

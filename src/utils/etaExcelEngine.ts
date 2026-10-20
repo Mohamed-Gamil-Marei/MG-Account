@@ -640,10 +640,18 @@ export class EtaExcelEngine {
     });
   }
 
-  // --- 3. Export Single Invoice to Official ETA JSON ---
+  // --- 3. Export Single Invoice to Simulated ETA JSON (Unsigned) ---
   public static exportInvoiceToEtaJson(invoice: Invoice) {
     const signedData = etaService.generateFullSignedPayload(invoice);
-    const jsonString = JSON.stringify(signedData.payload, null, 2);
+    const jsonString = JSON.stringify(
+      {
+        ...signedData.payload,
+        signatureSimulated: signedData.signatureSimulated,
+        signatureNotice: signedData.signatureNotice,
+      },
+      null,
+      2
+    );
     const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -696,6 +704,7 @@ export class EtaExcelEngine {
       { 'البيان': 'نوع المستند', 'القيمة': invoice.isReceipt ? 'إيصال إلكتروني B2C' : 'فاتورة إلكترونية B2B' },
       { 'البيان': 'المعرف الفريد ETA UUID', 'القيمة': invoice.etaUuid || 'قيد الإرسال' },
       { 'البيان': 'حالة المنظومة', 'القيمة': invoice.etaStatus || 'غير مرسل' },
+      { 'البيان': 'حالة التوقيع الإلكتروني', 'القيمة': 'محاكاة (غير موقّعة) — الإصدار الفعلي يتم من بوابة ETA بالتوكن' },
       { 'البيان': 'إجمالي المبيعات', 'القيمة': invoice.subtotal },
       { 'البيان': 'إجمالي الخصم', 'القيمة': invoice.totalDiscount },
       { 'البيان': 'ضريبة القيمة المضافة (14%)', 'القيمة': invoice.totalVat },

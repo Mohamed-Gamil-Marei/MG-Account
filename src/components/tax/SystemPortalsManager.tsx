@@ -109,12 +109,13 @@ export interface EditPortalUrlsModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser?: SystemUser | null;
+  onSaved?: () => void;
 }
 
 export const EditPortalUrlsModal: React.FC<EditPortalUrlsModalProps> = ({
   isOpen,
   onClose,
-  currentUser,
+  onSaved,
 }) => {
   const [urls, setUrls] = useState<SystemPortalUrlsConfig>(() => db.getSystemPortalUrls());
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -127,6 +128,7 @@ export const EditPortalUrlsModal: React.FC<EditPortalUrlsModalProps> = ({
       db.updateSystemPortalUrls(urls, 'تعديل روابط بوابات المنظومات الضريبية والجمركية من الإعدادات');
       setSaveSuccess(true);
       setErrorMessage(null);
+      if (onSaved) onSaved();
       setTimeout(() => {
         setSaveSuccess(false);
         onClose();
@@ -232,20 +234,26 @@ export const EditPortalUrlsModal: React.FC<EditPortalUrlsModalProps> = ({
 export interface QuickAddSystemActionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  clientId: string;
-  clientName: string;
+  clientId?: string;
+  clientName?: string;
+  client?: ClientArchiveRecord;
   kind: SystemKind;
   onActionAdded?: (action: ClientSystemAction) => void;
+  onSaved?: (action: ClientSystemAction) => void;
 }
 
 export const QuickAddSystemActionModal: React.FC<QuickAddSystemActionModalProps> = ({
   isOpen,
   onClose,
-  clientId,
-  clientName,
+  clientId: propClientId,
+  clientName: propClientName,
+  client,
   kind,
   onActionAdded,
+  onSaved,
 }) => {
+  const clientId = propClientId || client?.id || '';
+  const clientName = propClientName || client?.name || '';
   const [actionType, setActionType] = useState<string>(
     SYSTEM_ACTION_TYPES[kind]?.[0] || 'إجراء عام'
   );
@@ -326,6 +334,9 @@ export const QuickAddSystemActionModal: React.FC<QuickAddSystemActionModalProps>
 
       if (onActionAdded) {
         onActionAdded(created);
+      }
+      if (onSaved) {
+        onSaved(created);
       }
       onClose();
     } catch (err: any) {
@@ -711,7 +722,12 @@ export const RegisterClientSystemModal: React.FC<RegisterClientSystemModalProps>
     return false;
   }, [client.id, client.taxSystemType, client.portalCredentials]);
 
-  const [proceedDespiteNoSap, setProceedDespiteNoSap] = useState(false);
+  const [proceedDespiteNoSap, setProceedDespiteNoSap] = useState(
+    Boolean(existingRegistration?.extra?.sapDependencyAcknowledged)
+  );
+  const [sapBypassReason, setSapBypassReason] = useState<string>(
+    existingRegistration?.extra?.sapBypassReason || ''
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -720,11 +736,19 @@ export const RegisterClientSystemModal: React.FC<RegisterClientSystemModalProps>
     e.preventDefault();
 
     // Check SAP dependency for PAYROLL_NEW
-    if (kind === 'PAYROLL_NEW' && !isClientRegisteredInSap && !proceedDespiteNoSap) {
-      setErrorMessage(
-        'تنبيه نظام: الشركة غير مسجلة في منظومة SAP. وفقاً لقواعد مصلحة الضرائب المصرية يجب التسجيل في SAP أولاً. يمكنك المتابعة بالنقر على زر المتابعة بعد التأكيد.'
-      );
-      return;
+    if (kind === 'PAYROLL_NEW' && !isClientRegisteredInSap) {
+      if (!proceedDespiteNoSap) {
+        setErrorMessage(
+          'تنبيه نظام: الشركة غير مسجلة في منظومة SAP. وفقاً لقواعد مصلحة الضرائب المصرية يجب التسجيل في SAP أولاً، أو اختيار المتابعة بسبب مكتوب.'
+        );
+        return;
+      }
+      if (!sapBypassReason.trim()) {
+        setErrorMessage(
+          'يرجى كتابة السبب المكتوب للمتابعة بتسجيل منظومة كسب العمل رغم عدم التسجيل في منظومة SAP.'
+        );
+        return;
+      }
     }
 
     try {
@@ -751,6 +775,9 @@ export const RegisterClientSystemModal: React.FC<RegisterClientSystemModalProps>
         extra.enrolledDate = enrolledDate;
         extra.facilityNumber = facilityNumber.trim() || undefined;
         extra.sapDependencyAcknowledged = !isClientRegisteredInSap;
+        if (!isClientRegisteredInSap && sapBypassReason.trim()) {
+          extra.sapBypassReason = sapBypassReason.trim();
+        }
       }
 
       const regToSave: ClientSystemRegistration = {
@@ -771,10 +798,12 @@ export const RegisterClientSystemModal: React.FC<RegisterClientSystemModalProps>
         updatedAt: new Date().toISOString(),
       };
 
-      const saved = db.saveClientSystemRegistration(
-        regToSave,
-        `تحديث تسجيل المنظومة ${kind} للمنشأة (${client.name})`
-      );
+      const auditReason =
+        kind === 'PAYROLL_NEW' && !isClientRegisteredInSap && sapBypassReason.trim()
+          ? `تحديث تسجيل المنظومة ${kind} للمنشأة (${client.name}) [سبب تجاوز SAP: ${sapBypassReason.trim()}]`
+          : `تحديث تسجيل المنظومة ${kind} للمنشأة (${client.name})`;
+
+      const saved = db.saveClientSystemRegistration(regToSave, auditReason);
 
       if (onSaved) {
         onSaved(saved);
@@ -832,7 +861,7 @@ export const RegisterClientSystemModal: React.FC<RegisterClientSystemModalProps>
                     }}
                     className="px-3 py-1 rounded bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 cursor-pointer shadow-xs"
                   >
-                    الانتقال لتسجيلها في SAP أولاً
+                    التسجيل في SAP أولاً
                   </button>
                 )}
                 <button
@@ -844,9 +873,24 @@ export const RegisterClientSystemModal: React.FC<RegisterClientSystemModalProps>
                       : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  {proceedDespiteNoSap ? '✓ تم تأكيد المتابعة بدون SAP' : 'المتابعة بتسجيل كسب العمل على أية حال'}
+                  {proceedDespiteNoSap ? '✓ المتابعة بسبب مكتوب' : 'المتابعة بسبب مكتوب (استثناء)'}
                 </button>
               </div>
+
+              {proceedDespiteNoSap && (
+                <div className="pt-2 space-y-1">
+                  <label className="block text-[11px] font-extrabold text-amber-900 dark:text-amber-200">
+                    السبب المكتوب للمتابعة بدون التسجيل في SAP *
+                  </label>
+                  <input
+                    type="text"
+                    value={sapBypassReason}
+                    onChange={(e) => setSapBypassReason(e.target.value)}
+                    placeholder="اكتب سبب التجاوز (مثال: جهة معفاة مؤقتاً أو التسجيل جارٍ بالمأمورية)..."
+                    className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg font-semibold"
+                  />
+                </div>
+              )}
             </div>
           )}
 

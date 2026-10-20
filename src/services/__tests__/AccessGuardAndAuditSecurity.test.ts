@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../../db/localDatabase';
 import {
   assertCan,
   canPerform,
   PermissionError,
   PeriodLockError,
+  StorageWriteError,
 } from '../accessGuard';
 import { PostingEngineService } from '../PostingEngineService';
+import { etaService, ETA_SIMULATED_SIGNATURE_NOTICE } from '../../utils/etaSdkEngine';
 
 describe('AccessGuard, Two-Level Period Locking, and Tamper-Evident Audit Log', () => {
   const clientId = 'client-1';
@@ -386,7 +388,7 @@ describe('AccessGuard, Two-Level Period Locking, and Tamper-Evident Audit Log', 
       ).toThrowError(PermissionError);
 
       // Switch back to ADMIN and unlock with reason
-      db.switchUser('user-admin');
+      db.switchUser('user-admin', 'Admin@1234');
       const unlocked = db.unlockFiscalPeriod(
         clientId,
         2026,
@@ -488,6 +490,188 @@ describe('AccessGuard, Two-Level Period Locking, and Tamper-Evident Audit Log', 
       }
 
       expect(unprotected).toEqual([]);
+    });
+  });
+
+  describe('6) switchUser: إثبات الهوية، البصمة المملحة (crypto.subtle)، ترحيل كلمات المرور، والقفل المتضاعف', () => {
+    it('يرفض تبديل المستخدم لمستخدم بلا كلمة مرور مخزنة من غير أدمن ويطلب تعيين كلمة مرور أولًا', () => {
+      const userWithoutPass = db.addUser({
+        name: 'مراجع بدون كلمة مرور',
+        email: 'nopass@office.eg',
+        role: 'AUDITOR',
+        roleTitleArabic: 'مراجع حسابات',
+        permittedClientIds: [clientId],
+        createdAt: '2026-01-01',
+      });
+
+      const nonAdminCaller = db.addUser({
+        name: 'محاسب حالي غير أدمن',
+        email: 'caller@office.eg',
+        role: 'SENIOR_ACCOUNTANT',
+        roleTitleArabic: 'محاسب أول',
+        password: 'CallerPass123',
+        permittedClientIds: [clientId],
+        createdAt: '2026-01-01',
+      });
+
+      // Switch to non-admin caller (currently admin, so allowed)
+      db.switchUser(nonAdminCaller.id);
+      expect(db.getCurrentUser()?.id).toBe(nonAdminCaller.id);
+
+      // Attempting to switch from non-admin to userWithoutPass (even without or with password) must be rejected
+      expect(() => db.switchUser(userWithoutPass.id)).toThrowError(PermissionError);
+      expect(() => db.switchUser(userWithoutPass.id)).toThrow(/لا يُسمح بالدخول بلا كلمة مرور/);
+      expect(() => db.switchUser(userWithoutPass.id, 'any-pass')).toThrow(/لا يُسمح بالدخول بلا كلمة مرور/);
+      expect(db.getCurrentUser()?.id).toBe(nonAdminCaller.id);
+    });
+
+    it('يقارن كلمة المرور عبر بصمة مملّحة (SHA-256 + salt عبر crypto.subtle) ويرحّل كلمة المرور النصية عند أول دخول ناجح ويحذف النص العادي', async () => {
+      const legacyUser = db.addUser({
+        name: 'مستخدم بكلمة مرور نصية قديمة',
+        email: 'legacy@office.eg',
+        role: 'SENIOR_ACCOUNTANT',
+        roleTitleArabic: 'محاسب أول',
+        permittedClientIds: [clientId],
+        createdAt: '2026-01-01',
+      });
+
+      // Simulate legacy state where password was stored as plain text in state
+      (legacyUser as any).password = 'LegacySecret99';
+      delete legacyUser.passwordHash;
+      delete legacyUser.passwordSalt;
+
+      db.logout();
+      expect(db.getCurrentUser()).toBeNull();
+
+      // First successful login migrates plain-text password to salted SHA-256 hash and deletes plain-text
+      const loggedIn = db.switchUser(legacyUser.id, 'LegacySecret99');
+      expect(loggedIn?.id).toBe(legacyUser.id);
+      expect((legacyUser as any).password).toBeUndefined();
+      expect(legacyUser.passwordSalt).toBeTruthy();
+      expect(legacyUser.passwordHash).toBeTruthy();
+      expect(legacyUser.passwordHash).not.toBe('LegacySecret99');
+
+      // Verify hash matches Web Crypto crypto.subtle.digest('SHA-256', salt + ':' + password)
+      const subtleRes = await db.hashUserPasswordWithSubtle('LegacySecret99', legacyUser.passwordSalt);
+      expect(legacyUser.passwordHash).toBe(subtleRes.hash);
+
+      // Verify stored JSON in localStorage does not contain the plain-text password
+      const storedRaw = localStorage.getItem('mg_cpa_full_state_v1') || '';
+      expect(storedRaw).not.toContain('LegacySecret99');
+    });
+
+    it('يقفل حساب المستخدم بعد 5 محاولات فاشلة متتالية لمدة دقيقة ثم تتضاعف المدة ويسجل في سجل المراجعة', () => {
+      const target = db.addUser({
+        name: 'محاسب مستهدف',
+        email: 'target@office.eg',
+        role: 'SENIOR_ACCOUNTANT',
+        roleTitleArabic: 'محاسب أول',
+        password: 'CorrectPassword123',
+        permittedClientIds: [clientId],
+        createdAt: '2026-01-01',
+      });
+
+      db.logout();
+      const baseTime = 1_700_000_000_000;
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
+
+      try {
+        // 4 failed attempts: rejected, not locked yet
+        for (let i = 1; i <= 4; i++) {
+          expect(() => db.switchUser(target.id, `WrongPass-${i}`)).toThrow(/غير صحيحة/);
+          expect(target.failedLoginAttempts).toBe(i);
+          expect(target.lockedUntil).toBeFalsy();
+        }
+
+        // 5th failed attempt: locks user for 1 minute (60,000 ms)
+        expect(() => db.switchUser(target.id, 'WrongPass-5')).toThrow(/تم قفل حساب المستخدم/);
+        expect(target.failedLoginAttempts).toBe(5);
+        expect(target.lockedUntil).toBe(baseTime + 60_000);
+
+        // Even with the CORRECT password during lock period, login is rejected
+        nowSpy.mockReturnValue(baseTime + 30_000);
+        expect(() => db.switchUser(target.id, 'CorrectPassword123')).toThrow(/مقفل مؤقتاً/);
+
+        // Audit log contains USER_LOCKED_OUT and LOGIN_FAILED entries
+        const auditActions = db.getAuditLogs().map((l) => l.action);
+        expect(auditActions).toContain('LOGIN_FAILED');
+        expect(auditActions).toContain('USER_LOCKED_OUT');
+        expect(auditActions).toContain('USER_LOGIN_BLOCKED_LOCKED');
+
+        // Advance past 1 minute lock (baseTime + 61,000) and fail again -> lock doubles to 2 minutes (120,000 ms)
+        const afterFirstLock = baseTime + 61_000;
+        nowSpy.mockReturnValue(afterFirstLock);
+        expect(() => db.switchUser(target.id, 'WrongPass-6')).toThrow(/تم قفل حساب المستخدم/);
+        expect(target.lockedUntil).toBe(afterFirstLock + 120_000);
+
+        // Advance past 2 minute lock and log in with correct password -> succeeds and resets counters
+        nowSpy.mockReturnValue(afterFirstLock + 121_000);
+        const switched = db.switchUser(target.id, 'CorrectPassword123');
+        expect(switched?.id).toBe(target.id);
+        expect(target.failedLoginAttempts).toBe(0);
+        expect(target.lockoutCount).toBe(0);
+        expect(target.lockedUntil).toBeNull();
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('7) etaSdkEngine: generateFullSignedPayload محاكاة غير موقعة صراحةً', () => {
+    it('يُرجع signatureSimulated: true ويكتب بوضوح: "محاكاة (غير موقّعة) — الإصدار الفعلي يتم من بوابة ETA بالتوكن"', () => {
+      const sampleInvoice = db.addInvoice({
+        clientId,
+        invoiceNumber: 'INV-SIM-001',
+        invoiceType: 'SALES',
+        date: '2026-02-20',
+        partnerName: 'شركة الاختبار',
+        subtotal: 1000,
+        totalVat: 140,
+        grandTotal: 1140,
+      });
+
+      const res = etaService.generateFullSignedPayload(sampleInvoice);
+      expect(res.signatureSimulated).toBe(true);
+      expect(res.signatureNotice).toBe('محاكاة (غير موقّعة) — الإصدار الفعلي يتم من بوابة ETA بالتوكن');
+      expect(res.signatureHash).toBe(ETA_SIMULATED_SIGNATURE_NOTICE);
+      expect(res.payload.signatureSimulated).toBe(true);
+      expect(res.payload.signatureNotice).toBe('محاكاة (غير موقّعة) — الإصدار الفعلي يتم من بوابة ETA بالتوكن');
+      expect(JSON.stringify(res)).not.toContain('CADES-BES');
+    });
+  });
+
+  describe('8) saveRecord & saveState (QuotaExceededError)', () => {
+    it('يحمي saveRecord بـ assertCan ويرفض الاستدعاء بدون تسجيل دخول', () => {
+      const r1 = db.saveRecord('temp-rec-1', { draft: true }, 1);
+      expect(r1.success).toBe(true);
+      expect(r1.version).toBe(1);
+
+      db.logout();
+      expect(() => db.saveRecord('temp-rec-1', { draft: false }, 1)).toThrowError(PermissionError);
+    });
+
+    it('محاكاة QuotaExceededError ← saveState ترمي StorageWriteError ولا تستدعي notify ولا يظهر "تم الحفظ"', () => {
+      let notifyCalled = false;
+      const unsub = db.subscribe(() => {
+        notifyCalled = true;
+      });
+
+      const quotaErr = new DOMException('QuotaExceededError: Storage limit reached', 'QuotaExceededError');
+      const setItemSpy = vi.spyOn(globalThis.localStorage, 'setItem').mockImplementation(() => {
+        throw quotaErr;
+      });
+
+      try {
+        expect(() => db.saveState('CLIENTS')).toThrowError(StorageWriteError);
+        expect(notifyCalled).toBe(false);
+        expect(db.hasStorageWriteFailure()).toBe(true);
+        expect(db.getLastStorageSaveSuccessAt()).toBeNull();
+        expect(db.getStorageStatusLabel()).not.toContain('تم الحفظ');
+        expect(db.getStorageStatusLabel()).toContain('فشل حفظ البيانات');
+      } finally {
+        setItemSpy.mockRestore();
+        unsub();
+      }
     });
   });
 });

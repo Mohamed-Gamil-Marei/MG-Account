@@ -1,12 +1,22 @@
 import { Invoice } from '../types';
 import { getCairoTimestamp } from './cairoTime';
 
+export const ETA_SIMULATED_SIGNATURE_NOTICE =
+  'محاكاة (غير موقّعة) — الإصدار الفعلي يتم من بوابة ETA بالتوكن';
+
 export interface EtaSignedPayloadResult {
   payload: Record<string, unknown>;
+  signatureSimulated: true;
+  signatureNotice: string;
   signatureHash: string;
 }
 
 class EtaSdkEngine {
+  /**
+   * توليد هيكل JSON للمعاينة والتصدير المحلي فقط.
+   * محاكاة (غير موقّعة) — الإصدار الفعلي يتم من بوابة ETA بالتوكن.
+   * لا يوجد إصدار أو توقيع فعلي في البرنامج.
+   */
   public generateFullSignedPayload(invoice: Invoice): EtaSignedPayloadResult {
     const issuedAt = getCairoTimestamp();
     const payload: Record<string, unknown> = {
@@ -43,11 +53,15 @@ class EtaSdkEngine {
       totalDiscountAmount: invoice.totalDiscount,
       netAmount: invoice.subtotal - invoice.totalDiscount,
       totalAmount: invoice.grandTotal,
+      signatureSimulated: true,
+      signatureNotice: ETA_SIMULATED_SIGNATURE_NOTICE,
     };
 
     return {
       payload,
-      signatureHash: `CADES-BES-${invoice.invoiceNumber}`,
+      signatureSimulated: true,
+      signatureNotice: ETA_SIMULATED_SIGNATURE_NOTICE,
+      signatureHash: ETA_SIMULATED_SIGNATURE_NOTICE,
     };
   }
 
@@ -67,15 +81,19 @@ class EtaSdkEngine {
       totalSales: invoice.subtotal,
       netAmount: invoice.subtotal - invoice.totalDiscount,
       totalAmount: invoice.grandTotal,
+      signatureSimulated: true,
+      signatureNotice: ETA_SIMULATED_SIGNATURE_NOTICE,
     };
   }
 
   public generateEtaXml(invoice: Invoice): string {
     return `<?xml version="1.0" encoding="UTF-8"?>
+<!-- ${ETA_SIMULATED_SIGNATURE_NOTICE} -->
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">
   <ID>${invoice.invoiceNumber}</ID>
   <IssueDate>${invoice.date}</IssueDate>
   <DocumentCurrencyCode>${invoice.currency || 'EGP'}</DocumentCurrencyCode>
+  <Note>${ETA_SIMULATED_SIGNATURE_NOTICE}</Note>
   <AccountingCustomerParty>
     <PartyName>${invoice.partnerName}</PartyName>
   </AccountingCustomerParty>

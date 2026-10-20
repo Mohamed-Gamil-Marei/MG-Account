@@ -219,23 +219,27 @@ export const App: React.FC = () => {
       current.taxSubjectMigrationNotificationPending = false;
       try {
         db.saveState('CLIENTS');
-      } catch {
-        // StorageWriteError handled via global event
+        setMigrationSummaryNotice(
+          `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
+        );
+      } catch (err) {
+        setStorageFailureError(
+          err instanceof Error ? err.message : 'فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن'
+        );
       }
-      setMigrationSummaryNotice(
-        `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
-      );
     } else if (current.taxSubjectMigrationNotificationPending) {
       const count = current.lastTaxSubjectMigrationCount ?? 0;
       current.taxSubjectMigrationNotificationPending = false;
       try {
         db.saveState('CLIENTS');
-      } catch {
-        // StorageWriteError handled via global event
-      }
-      if (count > 0) {
-        setMigrationSummaryNotice(
-          `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
+        if (count > 0) {
+          setMigrationSummaryNotice(
+            `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
+          );
+        }
+      } catch (err) {
+        setStorageFailureError(
+          err instanceof Error ? err.message : 'فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن'
         );
       }
     }

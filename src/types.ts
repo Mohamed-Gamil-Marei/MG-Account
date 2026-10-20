@@ -961,6 +961,10 @@ export interface SystemUser {
   email: string;
   pin?: string;
   passwordHash?: string;
+  passwordSalt?: string;
+  failedLoginAttempts?: number;
+  lockoutCount?: number;
+  lockedUntil?: number | null;
   role: UserRole;
   roleTitleArabic: string;
   isActive?: boolean;

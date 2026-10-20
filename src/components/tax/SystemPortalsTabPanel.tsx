@@ -4,6 +4,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  CheckCircle2,
   Eye,
   EyeOff,
   Search,
@@ -61,6 +62,7 @@ export interface SystemPortalsTabPanelProps {
   onRefresh?: () => void;
   onOpenClientAuditFile?: (clientId: string) => void;
   onShowToast: (msg: string) => void;
+  onSwitchToSap?: () => void;
 }
 
 export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
@@ -71,6 +73,7 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
   onRefresh,
   onOpenClientAuditFile,
   onShowToast,
+  onSwitchToSap,
 }) => {
   const [statusFilter, setStatusFilter] = useState<SystemStatusFilter>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,6 +85,7 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
 
   // Modals
   const [registerModalClient, setRegisterModalClient] = useState<ClientArchiveRecord | null>(null);
+  const [registerSapClient, setRegisterSapClient] = useState<ClientArchiveRecord | null>(null);
   const [actionModalClient, setActionModalClient] = useState<ClientArchiveRecord | null>(null);
   const [isEditUrlsModalOpen, setIsEditUrlsModalOpen] = useState(false);
 
@@ -252,7 +256,7 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
     }
 
     // Check permission
-    if (!canPerform(currentUser, 'VIEW_PORTAL_SECRETS', clientId)) {
+    if (!canPerform('VIEW_PORTAL_SECRETS', clientId, currentUser).allowed) {
       onShowToast('عفواً، لا تملك صلاحية الاطلاع على كلمات المرور والبوابات (VIEW_PORTAL_SECRETS)');
       return;
     }
@@ -272,7 +276,7 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
       return;
     }
 
-    if (!canPerform(currentUser, 'VIEW_PORTAL_SECRETS', clientId)) {
+    if (!canPerform('VIEW_PORTAL_SECRETS', clientId, currentUser).allowed) {
       onShowToast('عفواً، لا تملك صلاحية نسخ كلمات المرور (VIEW_PORTAL_SECRETS)');
       return;
     }
@@ -1026,7 +1030,15 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
                                   <th className="py-1.5 px-2 text-right">التاريخ (القاهرة)</th>
                                   <th className="py-1.5 px-2 text-right">نوع الإجراء</th>
                                   <th className="py-1.5 px-2 text-right">المرجع / ACID</th>
-                                  <th className="py-1.5 px-2 text-right">العدد</th>
+                                  {kind === 'NAFEZA' ? (
+                                    <>
+                                      <th className="py-1.5 px-2 text-right">نوع الطلب والمرحلة</th>
+                                      <th className="py-1.5 px-2 text-right">المصدّر والموانئ</th>
+                                      <th className="py-1.5 px-2 text-right">الصلاحية وحالة الشحنة</th>
+                                    </>
+                                  ) : (
+                                    <th className="py-1.5 px-2 text-right">العدد</th>
+                                  )}
                                   <th className="py-1.5 px-2 text-right">الملاحظات والتفاصيل</th>
                                   <th className="py-1.5 px-2 text-right">المستخدم المنفذ</th>
                                 </tr>
@@ -1038,19 +1050,72 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
                                     <td className="py-1.5 px-2 font-bold text-blue-700 dark:text-blue-300">
                                       {act.type}
                                     </td>
-                                    <td className="py-1.5 px-2 font-mono">
+                                    <td className="py-1.5 px-2 font-mono font-bold">
                                       {act.extra?.acidNumber || act.reference || '-'}
                                     </td>
-                                    <td className="py-1.5 px-2 font-bold">{act.count || 1}</td>
+                                    {kind === 'NAFEZA' ? (
+                                      <>
+                                        <td className="py-1.5 px-2">
+                                          <div className="space-y-0.5">
+                                            <span className="block font-semibold text-slate-700 dark:text-slate-300">
+                                              {act.extra?.orderType === 'SECURITY'
+                                                ? 'جهة أمنية'
+                                                : act.extra?.orderType === 'PERSONAL'
+                                                ? 'استخدام شخصي'
+                                                : 'تجاري / صناعي'}
+                                            </span>
+                                            <span
+                                              className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                                act.extra?.stage === 'FINAL'
+                                                  ? 'bg-emerald-100 text-emerald-700'
+                                                  : act.extra?.stage === 'REJECTED'
+                                                  ? 'bg-rose-100 text-rose-700'
+                                                  : 'bg-amber-100 text-amber-700'
+                                              }`}
+                                            >
+                                              {act.extra?.stage === 'FINAL'
+                                                ? 'رقم نهائي'
+                                                : act.extra?.stage === 'REJECTED'
+                                                ? `مرفوض (${act.extra?.rejectionReason || 'بدون سبب'})`
+                                                : 'رقم مبدئي'}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="py-1.5 px-2 text-[10px]">
+                                          {act.extra?.exporterName && (
+                                            <div className="font-bold text-slate-800 dark:text-slate-200">
+                                              {act.extra.exporterName}
+                                              {act.extra.exporterCountry ? ` (${act.extra.exporterCountry})` : ''}
+                                            </div>
+                                          )}
+                                          {(act.extra?.portOfLoading || act.extra?.portOfArrival) && (
+                                            <div className="text-slate-500">
+                                              {act.extra.portOfLoading || '—'} ← {act.extra.portOfArrival || '—'}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="py-1.5 px-2 font-mono text-[10px]">
+                                          {act.extra?.issueDate && (
+                                            <div>إصدار: {act.extra.issueDate}</div>
+                                          )}
+                                          {act.extra?.expiryDate && (
+                                            <div className="font-bold text-indigo-600 dark:text-indigo-400">
+                                              انتهاء: {act.extra.expiryDate}
+                                            </div>
+                                          )}
+                                          {act.extra?.shipmentStatus && (
+                                            <div className="font-sans font-semibold text-slate-600 dark:text-slate-300">
+                                              {act.extra.shipmentStatus}
+                                            </div>
+                                          )}
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <td className="py-1.5 px-2 font-bold">{act.count || 1}</td>
+                                    )}
                                     <td className="py-1.5 px-2">
                                       <div className="max-w-xs space-y-0.5">
                                         {act.notes && <div>{act.notes}</div>}
-                                        {act.extra?.stage && (
-                                          <div className="text-[10px] text-slate-500">
-                                            المرحلة: {act.extra.stage}
-                                            {act.extra.expiryDate && ` • انتهاء: ${act.extra.expiryDate}`}
-                                          </div>
-                                        )}
                                       </div>
                                     </td>
                                     <td className="py-1.5 px-2 text-slate-500">{act.performedBy}</td>
@@ -1078,10 +1143,33 @@ export const SystemPortalsTabPanel: React.FC<SystemPortalsTabPanelProps> = ({
           client={registerModalClient}
           kind={kind}
           existingRegistration={db.getClientSystemRegistration(registerModalClient.id, kind)}
+          onSwitchToSap={() => {
+            const targetClient = registerModalClient;
+            setRegisterModalClient(null);
+            setRegisterSapClient(targetClient);
+            if (onSwitchToSap) onSwitchToSap();
+          }}
           onSaved={() => {
             setRegisterModalClient(null);
             onShowToast('تم حفظ وتحديث بيانات التسجيل بنجاح وتوثيقها في سجل المراجعة');
             if (onRefresh) onRefresh();
+          }}
+        />
+      )}
+
+      {registerSapClient && (
+        <RegisterClientSystemModal
+          isOpen={true}
+          onClose={() => setRegisterSapClient(null)}
+          client={registerSapClient}
+          kind="SAP"
+          existingRegistration={db.getClientSystemRegistration(registerSapClient.id, 'SAP')}
+          onSaved={() => {
+            const targetClient = registerSapClient;
+            setRegisterSapClient(null);
+            onShowToast('تم تسجيل المنشأة في منظومة SAP بنجاح، يمكنك الآن استكمال تسجيل كسب العمل');
+            if (onRefresh) onRefresh();
+            setRegisterModalClient(targetClient);
           }}
         />
       )}
