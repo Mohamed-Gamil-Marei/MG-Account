@@ -229,7 +229,7 @@ export interface TaxSubjectMigrationResult {
 }
 
 /**
- * ترحيل لمرة واحدة عند تحميل الحالة (مع علم migrationDone لعدم التكرار):
+ * ترحيل لمرة واحدة عند تحميل الحالة (مع علم taxSubjectMigrationDone لعدم التكرار، وقراءة migrationDone القديمة للتوافق):
  * لكل عميل لم تُحدَّد له علامات الخضوع، يفعّل تلقائيًا:
  * - isWhtSubject إذا وُجدت له فواتير بخصم وإضافة أو إقرارات خصم.
  * - isStampTaxSubject إذا وُجدت إقرارات دمغة.
@@ -238,12 +238,26 @@ export interface TaxSubjectMigrationResult {
  */
 export function migrateClientTaxSubjectFlagsOnce(
   state: Partial<DatabaseState> & {
+    taxSubjectMigrationDone?: boolean;
     migrationDone?: boolean;
     lastTaxSubjectMigrationCount?: number;
     taxSubjectMigrationNotificationPending?: boolean;
   }
 ): TaxSubjectMigrationResult {
-  if (!state || state.migrationDone === true) {
+  if (!state) {
+    return {
+      migratedCount: 0,
+      updatedClientIds: [],
+      alreadyDone: true,
+    };
+  }
+
+  // قراءة العلم القديم migrationDone مرة واحدة للتوافق مع النسخ السابقة
+  if (state.migrationDone === true && state.taxSubjectMigrationDone !== true) {
+    state.taxSubjectMigrationDone = true;
+  }
+
+  if (state.taxSubjectMigrationDone === true) {
     return {
       migratedCount: 0,
       updatedClientIds: [],
@@ -395,7 +409,7 @@ export function migrateClientTaxSubjectFlagsOnce(
     }
   }
 
-  state.migrationDone = true;
+  state.taxSubjectMigrationDone = true;
   state.lastTaxSubjectMigrationCount = updatedClientIds.length;
   state.taxSubjectMigrationNotificationPending = true;
 

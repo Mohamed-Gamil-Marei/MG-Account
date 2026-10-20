@@ -352,6 +352,65 @@ export interface PortalCredentials {
   [key: string]: any;
 }
 
+export type SystemKind =
+  | 'GENERAL_TAX'
+  | 'SAP'
+  | 'PAYROLL_NEW'
+  | 'E_INVOICE'
+  | 'NAFEZA';
+
+export type SystemRegistrationStatus =
+  | 'REGISTERED'
+  | 'NOT_REGISTERED'
+  | 'PENDING'
+  | 'SUSPENDED';
+
+export interface ClientSystemCredentials {
+  username?: string;
+  password?: string;
+  email?: string;
+  registeredMobile?: string;
+  notes?: string;
+  pinOtp?: string;
+  [key: string]: any;
+}
+
+export interface ClientSystemRegistration {
+  id: string;
+  clientId: string;
+  kind: SystemKind;
+  status: SystemRegistrationStatus;
+  registeredAt?: string;
+  credentials: ClientSystemCredentials;
+  extra: Record<string, any>;
+  createdBy?: string;
+  updatedAt: string;
+}
+
+export interface ClientSystemAction {
+  id: string;
+  clientId: string;
+  kind: SystemKind;
+  type: string;
+  date: string; // بتوقيت القاهرة YYYY-MM-DD
+  reference?: string;
+  count?: number;
+  notes?: string;
+  performedBy: string; // المستخدم الحالي تلقائيًا
+  createdAt: string;
+  extra?: Record<string, any>;
+}
+
+export type SystemPortalUrlsConfig = Record<SystemKind, string>;
+
+export const DEFAULT_SYSTEM_PORTAL_URLS: SystemPortalUrlsConfig = {
+  GENERAL_TAX: 'https://eservice.incometax.gov.eg/etax',
+  SAP: 'https://auth.eta.gov.eg:8080/auth/realms/e-tax/protocol/saml?SAMLRequest=fZFBa8JAEIX%2FStj7uhut0S4mIJVCoC1SSw%2B9jclEA8luujOx9t93E2mxF2FPj5n33je7Imibzqx7PtpX%2FOyROMo3qdhpPdfzBO7lXRKXMq4wllDttVzEMJvfl8l%2BUZUiekdPtbOpmE60iHKiHnNLDJaDpKeJjLXU8VuszWwW3oeINiGhtsDj1pG5I6MUhPgJMkwO7jTBg1nqpR5F5RGalhRKhrPqvGNXuEYNpUX06HyBY%2FNUVNAQDg22QFSf8E85t40lM1KmovfWOKCajIUWyXBhduvnJxPam19zka2GaTPC%2BKv92%2BshFv1AJbKqAyroimelrhwv9p15CRb5ZuuauvgeUFrg2wmDUpeyGkdNN1yeGC2LaN007ushnIoDN%2Fsehcoumf9%2FNvsB&RelayState=oucqqvqvwazouwrdorferoafbqoxratvzdwbxfd&SigAlg=http%3A%2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=Djou9cgY%2FYDnax7L%2B5j3Vex%2BFNM7GotG0rntgsxbzLx%2BnpgGJPQcjrXKWNAr6ihpxzZpBqOEQgw5ClxuPBFclBUt5QiMJQMhDgdJp5a5LFLk%2FfFkjKA5RtJx12tzb76%2FBAS%2BnsR3G%2BVrEPNGlUk3qz9%2FLpHx2RXv7p2BlVZ7R%2FA5Kos0ZL%2F3NyR9I5rtU4mxtQV%2FjurnuRv%2FnDNrPIA6dgdb9MQ3%2FQUNzRzhEEe131ZSLVC5CO%2BkW1JTBNdS210ldYxzYZFkDX91MhUL3FpGHvxCCP74cJQXA6f7MrGLXec7prjrEK2lmN5DKxg%2FegfZGxy0mBNPUurWLOsQYaL%2BLw%3D%3D#/home',
+  PAYROLL_NEW: 'https://payroll.eta.gov.eg',
+  E_INVOICE: 'https://invoicing.eta.gov.eg',
+  NAFEZA: 'https://www.nafeza.gov.eg',
+};
+
 export type ClientDocumentCategory =
   | 'TAX_CARD'
   | 'COMMERCIAL_REGISTER'

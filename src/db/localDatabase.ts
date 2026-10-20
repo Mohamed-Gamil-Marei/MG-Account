@@ -35,6 +35,13 @@ import {
   WhatsAppBotSettings,
   WhatsAppMessage,
   WhatsAppMessageTemplate,
+  SystemKind,
+  SystemRegistrationStatus,
+  ClientSystemCredentials,
+  ClientSystemRegistration,
+  ClientSystemAction,
+  SystemPortalUrlsConfig,
+  DEFAULT_SYSTEM_PORTAL_URLS,
 } from '../types';
 import { FirebaseUserProfile } from '../services/firebaseAuthService';
 import { IssuedDocumentService } from '../services/issuedDocumentService';
@@ -59,12 +66,19 @@ import {
   canPerform as guardCanPerform,
   PermissionError,
   PeriodLockError,
+  StorageWriteError,
   registerAccessGuardResolvers,
   AccessGuardAction,
   AccessGuardContext,
 } from '../services/accessGuard';
 
-export { PermissionError, PeriodLockError, guardAssertCan as assertCan, guardCanPerform as canPerform };
+export {
+  PermissionError,
+  PeriodLockError,
+  StorageWriteError,
+  guardAssertCan as assertCan,
+  guardCanPerform as canPerform,
+};
 export type { AccessGuardAction, AccessGuardContext };
 
 export interface AuditLogEntry {
@@ -324,9 +338,14 @@ export interface DatabaseState {
   statementMappings?: Record<string, ClientStatementMapping>;
   feeMigrationUnmatchedReport?: UnmatchedFeeMigrationItem[];
   systemSerials?: SystemSerialsConfig;
+  taxSubjectMigrationDone?: boolean;
   migrationDone?: boolean;
   lastTaxSubjectMigrationCount?: number;
   taxSubjectMigrationNotificationPending?: boolean;
+  clientSystemRegistrations: ClientSystemRegistration[];
+  clientSystemActions: ClientSystemAction[];
+  systemRegistrationsMigrationDone?: boolean;
+  systemPortalUrls?: Partial<SystemPortalUrlsConfig>;
 }
 
 export function createDefaultClientAccountMapping(clientId: string): ClientAccountMapping {
@@ -1458,6 +1477,9 @@ class LocalDatabase {
   private listeners: Set<() => void> = new Set();
   private dirtySlices: Set<string> = new Set();
   private versionedRecords: Map<string, { data: any; version: number }> = new Map();
+  private lastStorageWriteError: string | null = null;
+  private lastStorageSaveSuccessAt: string | null = null;
+  private userPasswords: Map<string, string> = new Map();
 
   constructor() {
     this.state = this.loadInitialState();
@@ -1717,9 +1739,14 @@ class LocalDatabase {
         treasuryPrefix: 'TR-2026-',
         treasuryNextNumber: 201,
       },
+      clientSystemRegistrations: [],
+      clientSystemActions: [],
+      systemRegistrationsMigrationDone: false,
+      systemPortalUrls: { ...DEFAULT_SYSTEM_PORTAL_URLS },
     };
 
     this.migrateMultiEntityState(initialState);
+    this.migrateSystemRegistrationsOnce(initialState);
     reconcileFeeCollectionsAndTreasury(initialState);
     return initialState;
   }
@@ -1907,6 +1934,204 @@ class LocalDatabase {
     // they remain in state.journalEntries so getUnassignedJournalEntries() surfaces them in the UI.
   }
 
+  public migrateSystemRegistrationsOnce(state: DatabaseState): void {
+    if (state.systemRegistrationsMigrationDone) {
+      return;
+    }
+    if (!Array.isArray(state.clientSystemRegistrations)) {
+      state.clientSystemRegistrations = [];
+    }
+    if (!Array.isArray(state.clientSystemActions)) {
+      state.clientSystemActions = [];
+    }
+    if (!state.systemPortalUrls) {
+      state.systemPortalUrls = { ...DEFAULT_SYSTEM_PORTAL_URLS };
+    }
+
+    const existingMap = new Map<string, ClientSystemRegistration>();
+    for (const reg of state.clientSystemRegistrations) {
+      existingMap.set(`${reg.clientId}:${reg.kind}`, reg);
+    }
+
+    const nowTimestamp = getCairoTimestamp();
+    const nowCairoDate = getCairoDateString();
+
+    for (const client of state.clients || []) {
+      const creds = client.portalCredentials || {};
+
+      // 1. SAP
+      const sapKey = `${client.id}:SAP`;
+      if (!existingMap.has(sapKey)) {
+        const sapCredEntry = creds.sapPortal || creds.sapTaxPortal;
+        const isClientSap = (client as any).taxSystemType === 'SAP';
+        const hasSapCreds = !!(sapCredEntry?.username || (isClientSap && (client.taxPortalUsername || (client as any).portalUsername)));
+        const sapUsername = sapCredEntry?.username || (isClientSap ? client.taxPortalUsername : '') || '';
+        const sapPassword = sapCredEntry?.password || (isClientSap ? client.taxPortalPassword : '') || '';
+        const isRegistered = hasSapCreds || isClientSap;
+
+        const sapReg: ClientSystemRegistration = {
+          id: `reg-${client.id}-SAP`,
+          clientId: client.id,
+          kind: 'SAP',
+          status: isRegistered ? 'REGISTERED' : 'NOT_REGISTERED',
+          registeredAt: isRegistered ? (sapCredEntry?.updatedAt || client.createdAt || nowCairoDate) : undefined,
+          credentials: {
+            username: sapUsername,
+            password: sapPassword,
+            email: sapCredEntry?.email || client.email || '',
+            registeredMobile: sapCredEntry?.registeredMobile || client.phone || client.whatsappPhone || '',
+            notes: sapCredEntry?.notes || '',
+            pinOtp: sapCredEntry?.pinOtp || '',
+            portalUrl: sapCredEntry?.portalUrl || '',
+          },
+          extra: {
+            isClientPreferred: isClientSap,
+          },
+          createdBy: 'migration',
+          updatedAt: nowTimestamp,
+        };
+        state.clientSystemRegistrations.push(sapReg);
+        existingMap.set(sapKey, sapReg);
+      }
+
+      // 2. GENERAL_TAX
+      const genKey = `${client.id}:GENERAL_TAX`;
+      if (!existingMap.has(genKey)) {
+        const genCredEntry = creds.etaGeneralTax;
+        const isOldPortal = (client as any).taxSystemType === 'OLD_PORTAL';
+        const hasGenCreds = !!(genCredEntry?.username || (isOldPortal && (client.taxPortalUsername || (client as any).portalUsername)));
+        const genUsername = genCredEntry?.username || (isOldPortal ? client.taxPortalUsername : '') || '';
+        const genPassword = genCredEntry?.password || (isOldPortal ? client.taxPortalPassword : '') || '';
+        const isRegistered = hasGenCreds || isOldPortal;
+
+        const genReg: ClientSystemRegistration = {
+          id: `reg-${client.id}-GENERAL_TAX`,
+          clientId: client.id,
+          kind: 'GENERAL_TAX',
+          status: isRegistered ? 'REGISTERED' : 'NOT_REGISTERED',
+          registeredAt: isRegistered ? (genCredEntry?.updatedAt || client.createdAt || nowCairoDate) : undefined,
+          credentials: {
+            username: genUsername,
+            password: genPassword,
+            email: genCredEntry?.email || client.email || '',
+            registeredMobile: genCredEntry?.registeredMobile || client.phone || client.whatsappPhone || '',
+            notes: genCredEntry?.notes || '',
+            pinOtp: genCredEntry?.pinOtp || '',
+            portalUrl: genCredEntry?.portalUrl || '',
+          },
+          extra: {},
+          createdBy: 'migration',
+          updatedAt: nowTimestamp,
+        };
+        state.clientSystemRegistrations.push(genReg);
+        existingMap.set(genKey, genReg);
+      }
+
+      // 3. E_INVOICE
+      const einvKey = `${client.id}:E_INVOICE`;
+      if (!existingMap.has(einvKey)) {
+        const einvCredEntry = creds.etaEInvoicing;
+        const esigCredEntry = creds.eSignatureToken;
+        const isRegistered = !!(client.eInvoiceRegistered || einvCredEntry?.username || client.eInvoicePortalEmail);
+        const hasToken = !!(client.hasEsealToken || client.tokenSerial || esigCredEntry?.tokenSerial || creds.tokenSerial);
+
+        const einvReg: ClientSystemRegistration = {
+          id: `reg-${client.id}-E_INVOICE`,
+          clientId: client.id,
+          kind: 'E_INVOICE',
+          status: isRegistered ? 'REGISTERED' : 'NOT_REGISTERED',
+          registeredAt: isRegistered ? (client.createdAt || nowCairoDate) : undefined,
+          credentials: {
+            username: einvCredEntry?.username || client.eInvoicePortalEmail || '',
+            password: einvCredEntry?.password || client.eInvoicePortalPassword || '',
+            email: einvCredEntry?.email || client.eInvoicePortalEmail || client.email || '',
+            registeredMobile: einvCredEntry?.registeredMobile || client.phone || '',
+            notes: einvCredEntry?.notes || '',
+          },
+          extra: {
+            eInvoiceRegistered: isRegistered,
+            hasToken: hasToken,
+            tokenIssuer: esigCredEntry?.issuer || client.tokenIssuer || 'شركة مصر للمقاصة والإيداع والقيد المركزي (MCDR)',
+            tokenSerial: esigCredEntry?.tokenSerial || client.tokenSerial || creds.tokenSerial || '',
+            tokenPin: esigCredEntry?.tokenPin || client.tokenPin || creds.tokenPin || '',
+            tokenExpiryDate: esigCredEntry?.expiryDate || client.tokenExpiryDate || creds.expiryDate || '',
+            issuerUsername: esigCredEntry?.issuerUsername || '',
+            issuerPassword: esigCredEntry?.issuerPassword || '',
+          },
+          createdBy: 'migration',
+          updatedAt: nowTimestamp,
+        };
+        state.clientSystemRegistrations.push(einvReg);
+        existingMap.set(einvKey, einvReg);
+      }
+
+      // 4. NAFEZA
+      const nafezaKey = `${client.id}:NAFEZA`;
+      if (!existingMap.has(nafezaKey)) {
+        const nafezaCredEntry = creds.nafeza;
+        const isRegistered = !!(nafezaCredEntry?.username || (client as any).nafezaRegistered);
+
+        const nafezaReg: ClientSystemRegistration = {
+          id: `reg-${client.id}-NAFEZA`,
+          clientId: client.id,
+          kind: 'NAFEZA',
+          status: isRegistered ? 'REGISTERED' : 'NOT_REGISTERED',
+          registeredAt: isRegistered ? (nafezaCredEntry?.updatedAt || client.createdAt || nowCairoDate) : undefined,
+          credentials: {
+            username: nafezaCredEntry?.username || '',
+            password: nafezaCredEntry?.password || '',
+            email: nafezaCredEntry?.email || client.email || '',
+            registeredMobile: nafezaCredEntry?.registeredMobile || client.phone || '',
+            notes: nafezaCredEntry?.notes || '',
+          },
+          extra: {
+            eSignatureEnabled: !!(nafezaCredEntry?.eSignatureEnabled || client.hasEsealToken),
+            registrantType: nafezaCredEntry?.registrantType || 'IMPORTER',
+            importerRegistrationNumber: nafezaCredEntry?.importerRegistrationNumber || '',
+            authMethod: nafezaCredEntry?.authMethod || (client.hasEsealToken ? 'TOKEN' : 'ACCOUNT'),
+          },
+          createdBy: 'migration',
+          updatedAt: nowTimestamp,
+        };
+        state.clientSystemRegistrations.push(nafezaReg);
+        existingMap.set(nafezaKey, nafezaReg);
+      }
+
+      // 5. PAYROLL_NEW
+      const payrollKey = `${client.id}:PAYROLL_NEW`;
+      if (!existingMap.has(payrollKey)) {
+        const payrollCredEntry = creds.etaPayrollTax;
+        const isRegistered = !!(payrollCredEntry?.username || (client as any).payrollRegistered);
+
+        const payrollReg: ClientSystemRegistration = {
+          id: `reg-${client.id}-PAYROLL_NEW`,
+          clientId: client.id,
+          kind: 'PAYROLL_NEW',
+          status: isRegistered ? 'REGISTERED' : 'NOT_REGISTERED',
+          registeredAt: isRegistered ? (payrollCredEntry?.updatedAt || client.createdAt || nowCairoDate) : undefined,
+          credentials: {
+            username: payrollCredEntry?.username || '',
+            password: payrollCredEntry?.password || '',
+            email: payrollCredEntry?.email || client.email || '',
+            registeredMobile: payrollCredEntry?.registeredMobile || client.phone || '',
+            notes: payrollCredEntry?.notes || '',
+          },
+          extra: {
+            enrolledStatus: isRegistered ? 'ENROLLED' : 'NOT_ENROLLED',
+            enrolledDate: payrollCredEntry?.updatedAt || '',
+            facilityNumber: payrollCredEntry?.facilityNumber || (client as any).facilityNumber || '',
+          },
+          createdBy: 'migration',
+          updatedAt: nowTimestamp,
+        };
+        state.clientSystemRegistrations.push(payrollReg);
+        existingMap.set(payrollKey, payrollReg);
+      }
+    }
+
+    state.systemRegistrationsMigrationDone = true;
+  }
+
   public loadInitialState(): DatabaseState {
     const base = this.createDefaultState();
     try {
@@ -1924,9 +2149,14 @@ class LocalDatabase {
             approvedStatements: parsed.approvedStatements || base.approvedStatements || [],
             feeAgreements: parsed.feeAgreements || base.feeAgreements || [],
             feeCollections: parsed.feeCollections || base.feeCollections || [],
+            clientSystemRegistrations: parsed.clientSystemRegistrations || base.clientSystemRegistrations || [],
+            clientSystemActions: parsed.clientSystemActions || base.clientSystemActions || [],
+            systemRegistrationsMigrationDone: parsed.systemRegistrationsMigrationDone ?? base.systemRegistrationsMigrationDone ?? false,
+            systemPortalUrls: parsed.systemPortalUrls || base.systemPortalUrls || { ...DEFAULT_SYSTEM_PORTAL_URLS },
           };
           this.migrateMultiEntityState(merged);
           migrateClientTaxSubjectFlagsOnce(merged);
+          this.migrateSystemRegistrationsOnce(merged);
           reconcileFeeCollectionsAndTreasury(merged);
           try {
             localStorage.setItem(FULL_STATE_KEY, JSON.stringify(merged));
@@ -1940,6 +2170,7 @@ class LocalDatabase {
       // ignore corrupted storage
     }
     migrateClientTaxSubjectFlagsOnce(base);
+    this.migrateSystemRegistrationsOnce(base);
     return base;
   }
 
@@ -1947,9 +2178,14 @@ class LocalDatabase {
     return this.state;
   }
 
+  // @public-readonly-safe: دالة تهيئة داخلية للاختبارات فقط (Testing Harness Reset)
   public resetToInitialStateForTesting(): void {
     this.state = this.createDefaultState();
+    this.migrateSystemRegistrationsOnce(this.state);
     this.dirtySlices.clear();
+    this.lastStorageWriteError = null;
+    this.lastStorageSaveSuccessAt = getCairoTimestamp();
+    this.userPasswords.clear();
   }
 
   public subscribe(listener: () => void): () => void {
@@ -1969,6 +2205,19 @@ class LocalDatabase {
     }
   }
 
+  public hasStorageWriteFailure(): boolean {
+    return this.lastStorageWriteError !== null;
+  }
+
+  public getLastStorageWriteError(): string | null {
+    return this.lastStorageWriteError;
+  }
+
+  public getLastStorageSaveSuccessAt(): string | null {
+    return this.lastStorageSaveSuccessAt;
+  }
+
+  // @public-readonly-safe: دالة حفظ الحالة في التخزين المحلي وإطلاق حدث StorageWriteError عند امتلاء المساحة
   public saveState(sliceName = 'ALL'): void {
     this.dirtySlices.add(sliceName);
     this.flushDirtyStorage();
@@ -1984,20 +2233,108 @@ class LocalDatabase {
         }
       }
       this.dirtySlices.clear();
-    } catch {
-      // ignore storage quota errors in test/browser
+      this.lastStorageWriteError = null;
+      this.lastStorageSaveSuccessAt = getCairoTimestamp();
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(
+          new CustomEvent('mg:storage-write-success', {
+            detail: { timestamp: this.lastStorageSaveSuccessAt },
+          })
+        );
+      }
+    } catch (err) {
+      const errMsg =
+        err instanceof Error
+          ? `فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن (${err.name}: ${err.message})`
+          : 'فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن';
+      this.lastStorageWriteError = errMsg;
+      console.error('[StorageWriteError] فشل حفظ حالة قاعدة البيانات في localStorage:', err);
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(
+          new CustomEvent('mg:storage-write-error', {
+            detail: {
+              message: 'فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن',
+              error: err,
+              timestamp: getCairoTimestamp(),
+            },
+          })
+        );
+      }
+      throw new StorageWriteError('فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن', {
+        cause: err,
+        sliceName: Array.from(this.dirtySlices).join(','),
+      });
     }
   }
 
   // =========================================================================
-  // Users & Auth Management (getCurrentUser returns null when no user is active)
+  // Users & Auth Management (getCurrentUser returns null when no user is active; getUsers never recreates default admin when empty)
   // =========================================================================
   public getUsers(): SystemUser[] {
-    if (!Array.isArray(this.state.users) || this.state.users.length === 0) {
-      const fallback = this.createDefaultState().users;
-      this.state.users = fallback;
+    if (!Array.isArray(this.state.users)) {
+      this.state.users = [];
     }
     return this.state.users;
+  }
+
+  public isStrongPassword(password: string): boolean {
+    if (!password || password.length < 8) return false;
+    const hasLetter = /[a-zA-Z\u0600-\u06FF]/.test(password);
+    const hasNumber = /\d/.test(password);
+    return hasLetter && hasNumber;
+  }
+
+  public setupFirstAdmin(input: {
+    name: string;
+    email?: string;
+    username?: string;
+    password: string;
+  }): SystemUser {
+    if (this.getUsers().length > 0) {
+      throw new PermissionError(
+        'عملية مرفوضة: يوجد مستخدمون مسجلون بالفعل؛ لا يمكن تشغيل إعداد أول أدمن إلا عند فراغ قائمة المستخدمين.',
+        { action: 'MANAGE_USERS', entityType: 'USER' }
+      );
+    }
+    const cleanName = (input.name || '').trim();
+    if (!cleanName) {
+      throw new Error('يرجى إدخال اسم المدير العام (الأدمن الأول).');
+    }
+    if (!this.isStrongPassword(input.password)) {
+      throw new Error('كلمة المرور غير قوية: يجب ألا تقل عن 8 أحرف وتجمع بين الحروف والأرقام.');
+    }
+    const firstAdmin: SystemUser = {
+      id: 'user-admin',
+      username: input.username || (input.email ? input.email.split('@')[0] : 'admin'),
+      name: cleanName,
+      email: input.email || 'admin@office.eg',
+      role: 'ADMIN',
+      roleTitleArabic: 'الشريك المدير ومراقب الحسابات',
+      isActive: true,
+      canManageUsers: true,
+      canAccessTreasury: true,
+      canAccessAuditTrail: true,
+      canPostEntries: true,
+      canEditPostedEntries: true,
+      canDeleteRecords: true,
+      canAccessCreditFiles: true,
+      canAccessTaxReports: true,
+      mustChangePassword: false,
+      createdAt: getCairoTimestamp(),
+    };
+    this.state.users = [firstAdmin];
+    this.state.currentUserId = firstAdmin.id;
+    this.userPasswords.set(firstAdmin.id, input.password);
+    this.recordAuditMutation({
+      action: 'SETUP_FIRST_ADMIN',
+      entityType: 'USER',
+      entityId: firstAdmin.id,
+      beforeValue: null,
+      afterValue: firstAdmin,
+      details: `إعداد أول أدمن للنظام (${firstAdmin.name}) بكلمة مرور قوية`,
+    });
+    this.saveState('USERS');
+    return firstAdmin;
   }
 
   public getCurrentUser(): SystemUser | null {
@@ -2007,20 +2344,50 @@ class LocalDatabase {
     return found || null;
   }
 
-  public switchUser(userId: string | null): SystemUser | null {
+  public switchUser(
+    userId: string | null,
+    authOptions?: { password?: string } | string
+  ): SystemUser | null {
     if (!userId) {
       this.state.currentUserId = '';
       this.saveState('USERS');
       return null;
     }
-    const user = this.getUsers().find((u) => u.id === userId) || null;
-    if (user) {
-      this.state.currentUserId = user.id;
-    } else {
+    const targetUser = this.getUsers().find((u) => u.id === userId) || null;
+    if (!targetUser) {
       this.state.currentUserId = '';
+      this.saveState('USERS');
+      return null;
     }
+
+    const currentUser = this.getCurrentUser();
+    const providedPassword =
+      typeof authOptions === 'string' ? authOptions : authOptions?.password;
+    const isCurrentAdmin = currentUser?.role === 'ADMIN';
+    const isSameUser = currentUser?.id === targetUser.id;
+
+    if (!isCurrentAdmin && !isSameUser) {
+      const storedTargetPassword =
+        this.userPasswords.get(targetUser.id) || (targetUser as any).password;
+      if (storedTargetPassword) {
+        if (!providedPassword) {
+          throw new PermissionError(
+            'عملية مرفوضة: تبديل المستخدم يتطلب صلاحية المدير العام (ADMIN) أو إدخال كلمة مرور المستخدم الهدف لإثبات الهوية.',
+            { action: 'MANAGE_USERS', entityType: 'USER' }
+          );
+        }
+        if (providedPassword !== storedTargetPassword) {
+          throw new PermissionError(
+            'عملية مرفوضة: كلمة مرور المستخدم الهدف غير صحيحة.',
+            { action: 'MANAGE_USERS', entityType: 'USER' }
+          );
+        }
+      }
+    }
+
+    this.state.currentUserId = targetUser.id;
     this.saveState('USERS');
-    return user;
+    return targetUser;
   }
 
   public logout(): void {
@@ -2080,12 +2447,12 @@ class LocalDatabase {
   }
 
   public setMustChangePassword(userId: string, mustChange: boolean): void {
-    this.assertPermission('MANAGE_USERS', { allowWithoutClient: true });
+    this.assertCan('MANAGE_USERS', { allowWithoutClient: true, entityType: 'USER' });
     const user = this.state.users.find((u) => u.id === userId);
     if (user) {
       const before = { ...user };
       user.mustChangePassword = Boolean(mustChange);
-      this.logAudit({
+      this.recordAuditMutation({
         action: 'SET_MUST_CHANGE_PASSWORD',
         entityType: 'USER',
         entityId: userId,
@@ -2097,8 +2464,16 @@ class LocalDatabase {
     }
   }
 
-  public addUser(userInput: Partial<SystemUser> & { name: string; email: string; role: string }): SystemUser {
-    this.assertPermission('MANAGE_USERS', { allowWithoutClient: true });
+  public addUser(
+    userInput: Partial<SystemUser> & { name: string; email: string; role: string; password?: string }
+  ): SystemUser {
+    const actingUser = this.assertCan('MANAGE_USERS', { allowWithoutClient: true, entityType: 'USER' });
+    if (userInput.role === 'ADMIN' && actingUser.role !== 'ADMIN') {
+      throw new PermissionError(
+        'عملية مرفوضة: لا يمكن لمستخدم غير أدمن إنشاء حساب بدور المدير العام (ADMIN).',
+        { action: 'MANAGE_USERS', entityType: 'USER' }
+      );
+    }
     const isAdmin = userInput.role === 'ADMIN';
     const newUser: SystemUser = {
       id: userInput.id || `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -2120,8 +2495,11 @@ class LocalDatabase {
       mustChangePassword: Boolean(userInput.mustChangePassword),
       createdAt: getCairoTimestamp(),
     };
+    if (userInput.password) {
+      this.userPasswords.set(newUser.id, userInput.password);
+    }
     this.state.users.push(newUser);
-    this.logAudit({
+    this.recordAuditMutation({
       action: 'ADD_USER',
       entityType: 'USER',
       entityId: newUser.id,
@@ -2134,12 +2512,60 @@ class LocalDatabase {
   }
 
   public updateUser(userId: string, partial: Partial<SystemUser>): SystemUser | undefined {
-    this.assertPermission('MANAGE_USERS', { allowWithoutClient: true });
+    const actingUser = this.assertCan('MANAGE_USERS', { allowWithoutClient: true, entityType: 'USER' });
     const idx = this.state.users.findIndex((u) => u.id === userId);
     if (idx === -1) return undefined;
     const before = { ...this.state.users[idx] };
+
+    // منع المستخدم من رفع دوره أو صلاحياته بنفسه
+    if (actingUser.id === userId) {
+      const isRoleEscalated = partial.role !== undefined && partial.role !== before.role;
+      const isPermEscalated =
+        (partial.canManageUsers === true && !before.canManageUsers) ||
+        (partial.canPostEntries === true && !before.canPostEntries) ||
+        (partial.canEditPostedEntries === true && !before.canEditPostedEntries) ||
+        (partial.canDeleteRecords === true && !before.canDeleteRecords) ||
+        (partial.canAccessTreasury === true && !before.canAccessTreasury) ||
+        (partial.canAccessAuditTrail === true && !before.canAccessAuditTrail) ||
+        (Array.isArray(partial.permittedClientIds) &&
+          Array.isArray(before.permittedClientIds) &&
+          partial.permittedClientIds.some((cid) => !before.permittedClientIds!.includes(cid)));
+
+      if (isRoleEscalated || isPermEscalated) {
+        throw new PermissionError(
+          'عملية مرفوضة: يُمنع على المستخدم رفع دوره أو توسيع صلاحياته بنفسه.',
+          { action: 'MANAGE_USERS', entityType: 'USER' }
+        );
+      }
+    }
+
+    // منع غير الأدمن من ترقية أي مستخدم إلى ADMIN
+    if (partial.role === 'ADMIN' && before.role !== 'ADMIN' && actingUser.role !== 'ADMIN') {
+      throw new PermissionError(
+        'عملية مرفوضة: ترقية مستخدم إلى دور المدير العام (ADMIN) تقتصر على المدير العام فقط.',
+        { action: 'MANAGE_USERS', entityType: 'USER' }
+      );
+    }
+
+    // منع تعطيل أو خفض دور آخر أدمن نشط
+    if (before.role === 'ADMIN' && before.isActive !== false) {
+      const willNotBeActiveAdmin =
+        (partial.role !== undefined && partial.role !== 'ADMIN') || partial.isActive === false;
+      if (willNotBeActiveAdmin) {
+        const otherActiveAdmins = this.state.users.filter(
+          (u) => u.id !== userId && u.role === 'ADMIN' && u.isActive !== false
+        );
+        if (otherActiveAdmins.length === 0) {
+          throw new PermissionError(
+            'عملية مرفوضة: لا يمكن تعطيل أو خفض دور آخر مدير عام (ADMIN) نشط في النظام.',
+            { action: 'MANAGE_USERS', entityType: 'USER' }
+          );
+        }
+      }
+    }
+
     this.state.users[idx] = { ...this.state.users[idx], ...partial };
-    this.logAudit({
+    this.recordAuditMutation({
       action: 'UPDATE_USER',
       entityType: 'USER',
       entityId: userId,
@@ -2152,12 +2578,27 @@ class LocalDatabase {
   }
 
   public deleteUser(userId: string): boolean {
-    this.assertPermission('MANAGE_USERS', { allowWithoutClient: true });
+    this.assertCan('MANAGE_USERS', { allowWithoutClient: true, entityType: 'USER' });
     const target = this.state.users.find((u) => u.id === userId);
     if (!target) return false;
+
+    // منع حذف آخر أدمن نشط
+    if (target.role === 'ADMIN' && target.isActive !== false) {
+      const remainingActiveAdmins = this.state.users.filter(
+        (u) => u.id !== userId && u.role === 'ADMIN' && u.isActive !== false
+      );
+      if (remainingActiveAdmins.length === 0) {
+        throw new PermissionError(
+          'عملية مرفوضة: يُمنع حذف آخر مدير عام (ADMIN) نشط في النظام.',
+          { action: 'MANAGE_USERS', entityType: 'USER' }
+        );
+      }
+    }
+
     const before = this.state.users.length;
     this.state.users = this.state.users.filter((u) => u.id !== userId);
-    this.logAudit({
+    this.userPasswords.delete(userId);
+    this.recordAuditMutation({
       action: 'DELETE_USER',
       entityType: 'USER',
       entityId: userId,
@@ -2170,10 +2611,7 @@ class LocalDatabase {
   }
 
   public changeUserPassword(userId: string, newPasswordPlain: string): { success: boolean; message: string } {
-    const actingUser = this.getCurrentUser();
-    if (!actingUser || (actingUser.id !== userId && !actingUser.canManageUsers && actingUser.role !== 'ADMIN')) {
-      throw new Error('عملية مرفوضة: غير مصرح لك بتغيير كلمة مرور هذا المستخدم.');
-    }
+    this.assertCan('MANAGE_USERS', { allowWithoutClient: true, entityType: 'USER' });
     if (!newPasswordPlain || newPasswordPlain.length < 6) {
       return { success: false, message: 'كلمة المرور يجب أن لا تقل عن 6 أحرف' };
     }
@@ -2181,7 +2619,8 @@ class LocalDatabase {
     if (!user) return { success: false, message: 'المستخدم غير موجود' };
     const before = { ...user };
     user.mustChangePassword = false;
-    this.logAudit({
+    this.userPasswords.set(userId, newPasswordPlain);
+    this.recordAuditMutation({
       action: 'CHANGE_PASSWORD',
       entityType: 'USER',
       entityId: userId,
@@ -2238,7 +2677,7 @@ class LocalDatabase {
     includeTaxSecrets?: boolean;
     encryptPassword?: string;
   }): Promise<string> {
-    this.assertPermission('EXPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
+    this.assertCan('EXPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
 
     // 1. التطهير الأمني للضرائب: لا يحتوي بيانات بوابات الضرائب إلا بخيار صريح مشفر بكلمة مرور
     const isEncrypted = Boolean(options?.encryptPassword && options.encryptPassword.trim().length >= 6);
@@ -2302,7 +2741,7 @@ class LocalDatabase {
       reason?: string;
     }
   ): Promise<{ success: boolean; message: string; clientsRestored: number; entriesRestored: number }> {
-    const adminUser = this.assertPermission('IMPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
+    const adminUser = this.assertCan('IMPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
 
     // 1. قبل الاستبدال: أخذ نسخة احتياطية تلقائية للطوارئ وحفظها في التخزين
     const autoSnapshot = JSON.stringify(this.state);
@@ -2443,7 +2882,7 @@ class LocalDatabase {
       reason?: string;
     }
   ): Promise<boolean> {
-    this.assertPermission('IMPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
+    this.assertCan('IMPORT_BACKUP', { requireAdmin: true, allowWithoutClient: true, entityType: 'BACKUP' });
     try {
       const res = await this.restoreFullBackupJson(jsonText, options);
       return res.success;
@@ -2454,7 +2893,7 @@ class LocalDatabase {
 
   public exportClientIsolatedBackup(clientId: string): string {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    this.assertPermission('EXPORT_BACKUP', { clientId: resolvedClientId, entityType: 'BACKUP' });
+    this.assertCan('EXPORT_BACKUP', { clientId: resolvedClientId, entityType: 'BACKUP' });
     this.assertNoUnassignedEntriesForReport();
 
     const client = this.state.clients.find((c) => c.id === resolvedClientId);
@@ -2484,7 +2923,7 @@ class LocalDatabase {
       approvedStatements: this.state.approvedStatements.filter((s) => s.clientId === resolvedClientId),
       fixedAssets: this.state.fixedAssets.filter((a) => a.clientId === resolvedClientId),
     };
-    this.logAudit({
+    this.recordAuditMutation({
       action: 'EXPORT_CLIENT_BACKUP',
       entityType: 'BACKUP',
       entityId: resolvedClientId,
@@ -2505,7 +2944,7 @@ class LocalDatabase {
     confirmationText?: string;
     reason?: string;
   }): Promise<{ success: boolean; message: string; backupJson?: string }> {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    this.assertCan('ADMIN', { requireAdmin: true, allowWithoutClient: true, entityType: 'SYSTEM' });
     if (options?.confirmationText && options.confirmationText !== 'تفريغ' && options.confirmationText !== 'RESET') {
       return { success: false, message: 'كلمة التأكيد غير صحيحة.' };
     }
@@ -2550,7 +2989,7 @@ class LocalDatabase {
       email: '',
     };
 
-    this.logAudit({
+    this.recordAuditMutation({
       action: 'RESET_FOR_PRODUCTION',
       entityType: 'SYSTEM',
       beforeValue: beforeSnapshot,
@@ -2567,25 +3006,77 @@ class LocalDatabase {
     };
   }
 
-  public resetToDemoData(): boolean {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+  public resetToDemoData(options?: {
+    reason?: string;
+    confirmReset?: boolean;
+    doubleConfirmText?: string;
+  }): boolean {
+    this.assertCan('ADMIN', { requireAdmin: true, allowWithoutClient: true, entityType: 'SYSTEM' });
+    const cleanReason = options?.reason?.trim();
+    if (!cleanReason) {
+      throw new Error('عملية مرفوضة: استعادة البيانات التجريبية تتطلب إدخال سبب مكتوب.');
+    }
+
+    const hasRealData =
+      this.state.journalEntries.length > 0 ||
+      this.state.invoices.length > 0 ||
+      this.state.taxDeclarations.length > 0 ||
+      this.state.approvedStatements.length > 0 ||
+      this.state.treasuryTransactions.length > 0 ||
+      this.state.clients.some((c) => c.id !== 'client-1');
+
+    let autoBackupJson: string | undefined;
+    if (hasRealData) {
+      const isDoubleConfirmed =
+        options?.confirmReset === true &&
+        (options?.doubleConfirmText === 'تأكيد المسح' || options?.doubleConfirmText === 'CONFIRM_RESET');
+      if (!isDoubleConfirmed) {
+        throw new Error(
+          'عملية مرفوضة: توجد بيانات محاسبية حقيقية مسجلة. يلزم تأكيد مزدوج (confirmReset: true و doubleConfirmText: "تأكيد المسح" أو "CONFIRM_RESET") قبل استعادة البيانات التجريبية.'
+        );
+      }
+      // تصدير نسخة احتياطية آليًا قبل إعادة الضبط
+      autoBackupJson = JSON.stringify(this.state, null, 2);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('mg_auto_backup_before_demo_reset', autoBackupJson);
+        }
+      } catch {
+        // ignore quota during emergency pre-reset snapshot
+      }
+      this.recordAuditMutation({
+        action: 'AUTO_EXPORT_BACKUP_BEFORE_DEMO_RESET',
+        entityType: 'BACKUP',
+        beforeValue: {
+          clientsCount: this.state.clients.length,
+          journalEntriesCount: this.state.journalEntries.length,
+          invoicesCount: this.state.invoices.length,
+        },
+        afterValue: { autoBackupSaved: true, backupLength: autoBackupJson.length },
+        reason: cleanReason,
+        details: 'تصدير نسخة احتياطية تلقائية قبل إعادة الضبط إلى البيانات التجريبية',
+      });
+    }
+
     const preservedAuditLogs = [...(this.state.auditLogs || [])];
     const beforeSummary = {
       clientsCount: this.state.clients.length,
       journalEntriesCount: this.state.journalEntries.length,
+      invoicesCount: this.state.invoices.length,
     };
     this.state = this.createDefaultState();
     this.state.auditLogs = preservedAuditLogs;
-    this.logAudit({
+    this.recordAuditMutation({
       action: 'RESET_TO_DEMO_DATA',
       entityType: 'SYSTEM',
       beforeValue: beforeSummary,
       afterValue: {
         clientsCount: this.state.clients.length,
         journalEntriesCount: this.state.journalEntries.length,
+        autoBackupExported: Boolean(autoBackupJson),
       },
-      reason: 'استعادة البيانات التجريبية',
-      details: 'إعادة ضبط النظام إلى البيانات التجريبية مع الحفاظ على سجل المراجعة',
+      reason: cleanReason,
+      details: `إعادة ضبط النظام إلى البيانات التجريبية مع الحفاظ على سجل المراجعة - السبب: ${cleanReason}`,
     });
     this.saveState('ALL');
     return true;
@@ -2866,6 +3357,7 @@ class LocalDatabase {
     return record;
   }
 
+  // @public-readonly-safe: دالة تفويض فرعية لقفل الفترة المحاسبية (محمية ومفحوصة بالكامل داخل lockFiscalPeriod)
   public lockPeriod(
     clientId: string,
     periodKey: string | number,
@@ -2874,6 +3366,7 @@ class LocalDatabase {
     return this.lockFiscalPeriod(clientId, periodKey, reason);
   }
 
+  // @public-readonly-safe: دالة تفويض فرعية لقفل الفترة الشهرية (محمية ومفحوصة بالكامل داخل lockFiscalPeriod)
   public lockMonthlyPeriod(
     clientId: string,
     fiscalYear: number,
@@ -2887,6 +3380,7 @@ class LocalDatabase {
     return rec;
   }
 
+  // @public-readonly-safe: دالة تفويض فرعية لقفل الفترة الربع سنوية (محمية ومفحوصة بالكامل داخل lockFiscalPeriod)
   public lockQuarterlyPeriod(
     clientId: string,
     fiscalYear: number,
@@ -2987,6 +3481,7 @@ class LocalDatabase {
     return record;
   }
 
+  // @public-readonly-safe: دالة تفويض فرعية لفك قفل الفترة المحاسبية (محمية ومفحوصة بالكامل داخل unlockFiscalPeriod)
   public unlockPeriod(
     clientId: string,
     periodKey: string | number,
@@ -3346,7 +3841,7 @@ class LocalDatabase {
     reason = 'تحديث الرصيد الافتتاحي للسنة المالية'
   ): ClientOpeningBalanceRecord {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    const user = this.assertPermission('EDIT', { clientId: resolvedClientId });
+    const user = this.assertCan('EDIT', { clientId: resolvedClientId });
     this.assertPeriodOpen(resolvedClientId, undefined, fiscalYear);
 
     if (!Array.isArray(this.state.clientOpeningBalances)) {
@@ -3447,7 +3942,7 @@ class LocalDatabase {
     netIncomeTransferred: number;
   } {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    const user = this.assertPermission('POST', { clientId: resolvedClientId });
+    const user = this.assertCan('POST', { clientId: resolvedClientId });
 
     const clientObj = this.state.clients.find((c) => c.id === resolvedClientId);
     const fromYear =
@@ -3616,7 +4111,7 @@ class LocalDatabase {
     reason = 'تطبيق قالب دليل الحسابات حسب النشاط'
   ): { added: number; template: ClientActivityTemplate; message: string } {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertCan('EDIT', { clientId: resolvedClientId });
 
     const templateAccounts = getStandardEgyptianChartOfAccounts(resolvedClientId, template);
     const addedAccounts: Account[] = [];
@@ -3687,7 +4182,7 @@ class LocalDatabase {
     if (!targetClientId || !targetClientId.trim()) {
       throw new Error('يجب اختيار المنشأة (العميل) المراد نسب القيد إليها.');
     }
-    this.assertPermission('EDIT', { clientId: targetClientId });
+    this.assertCan('EDIT', { clientId: targetClientId });
     const client = this.state.clients.find((c) => c.id === targetClientId);
     if (!client) {
       throw new Error('العميل المختار غير موجود في قاعدة البيانات.');
@@ -3745,7 +4240,7 @@ class LocalDatabase {
     if (!targetClientId || !targetClientId.trim()) {
       throw new Error('يجب اختيار المنشأة (العميل) المراد نسب القيود إليها.');
     }
-    this.assertPermission('EDIT', { clientId: targetClientId });
+    this.assertCan('EDIT', { clientId: targetClientId });
     const unassigned = this.getUnassignedJournalEntries();
     let count = 0;
     for (const entry of unassigned) {
@@ -3760,7 +4255,7 @@ class LocalDatabase {
   // =========================================================================
   public addAccount(acc: Partial<Account> & { code: string; name: string }): Account {
     const resolvedClientId = this.resolveMandatoryClientId(acc.clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertCan('EDIT', { clientId: resolvedClientId });
 
     const codeClean = String(acc.code || '').trim();
     if (!codeClean) {
@@ -3874,7 +4369,7 @@ class LocalDatabase {
     options?: { clientId?: string; reason?: string }
   ): { imported: number; failed: number; errors: string[]; accounts: Account[] } {
     const defaultClientId = this.resolveMandatoryClientId(options?.clientId);
-    this.assertPermission('EDIT', { clientId: defaultClientId });
+    this.assertCan('EDIT', { clientId: defaultClientId });
 
     const errors: string[] = [];
     const addedAccounts: Account[] = [];
@@ -4015,11 +4510,11 @@ class LocalDatabase {
   public updateAccount(accountId: string, partial: Partial<Account>, reason = 'تحديث بيانات الحساب'): Account | undefined {
     const idx = this.state.accounts.findIndex((a) => a.id === accountId);
     if (idx === -1) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT');
       return undefined;
     }
     const before = { ...this.state.accounts[idx] };
-    this.assertPermission('EDIT', { clientId: before.clientId });
+    this.assertCan('EDIT', { clientId: before.clientId });
 
     this.state.accounts[idx] = {
       ...this.state.accounts[idx],
@@ -4045,10 +4540,10 @@ class LocalDatabase {
   public deleteAccount(accountId: string, reason = 'حذف حساب غير مستخدم'): boolean {
     const target = this.state.accounts.find((a) => a.id === accountId);
     if (!target) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE');
       return false;
     }
-    this.assertPermission('DELETE', { clientId: target.clientId });
+    this.assertCan('DELETE', { clientId: target.clientId });
 
     // 1. يُرفض لحسابات النظام الأساسية
     if (target.isSystem) {
@@ -4139,7 +4634,7 @@ class LocalDatabase {
 
   public applyIndustrialChartOfAccounts(clientId?: string): { added: number; message: string } {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertCan('EDIT', { clientId: resolvedClientId });
 
     const industrialAccounts: Account[] = [
       {
@@ -4215,7 +4710,7 @@ class LocalDatabase {
     reason = 'تحديث ربط الحسابات المحاسبية للعميل'
   ): ClientAccountMapping {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    const user = this.assertPermission('EDIT', { clientId: resolvedClientId });
+    const user = this.assertCan('EDIT', { clientId: resolvedClientId });
 
     if (!this.state.accountMappings || typeof this.state.accountMappings !== 'object') {
       this.state.accountMappings = {};
@@ -4311,7 +4806,7 @@ class LocalDatabase {
     reason = 'تحديث تخطيط بنود القوائم المالية للعميل'
   ): ClientStatementMapping {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    const user = this.assertPermission('EDIT', { clientId: resolvedClientId });
+    const user = this.assertCan('EDIT', { clientId: resolvedClientId });
 
     if (!this.state.statementMappings || typeof this.state.statementMappings !== 'object') {
       this.state.statementMappings = {};
@@ -4700,7 +5195,7 @@ class LocalDatabase {
     postClosingTrialBalance: TrialBalanceSummary;
   } {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    const user = this.assertPermission('POST', { clientId: resolvedClientId });
+    const user = this.assertCan('POST', { clientId: resolvedClientId });
 
     const preview = this.previewYearEndClosing(resolvedClientId, fiscalYear);
     if (!preview.canClose) {
@@ -5094,9 +5589,9 @@ class LocalDatabase {
     }
     const resolvedClientId = this.resolveMandatoryClientId(entry.clientId);
     if (entry.isPosted || entry.status === 'POSTED') {
-      this.assertPermission('POST', { clientId: resolvedClientId });
+      this.assertCan('POST', { clientId: resolvedClientId });
     } else {
-      this.assertPermission('EDIT', { clientId: resolvedClientId });
+      this.assertCan('EDIT', { clientId: resolvedClientId });
     }
 
     const entryDate = entry.date || getCairoDateString();
@@ -5205,11 +5700,11 @@ class LocalDatabase {
 
     const idx = this.state.journalEntries.findIndex((j) => j.id === entryId);
     if (idx === -1) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT');
       return undefined;
     }
     const existing = this.state.journalEntries[idx];
-    this.assertPermission('EDIT', { clientId: existing.clientId });
+    this.assertCan('EDIT', { clientId: existing.clientId });
 
     // Principle 3: Posted entries cannot be edited
     if (existing.isPosted || existing.status === 'POSTED') {
@@ -5422,7 +5917,7 @@ class LocalDatabase {
 
   public deleteGeneratedAuditEntries(fiscalYear: number, clientId?: string): number {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    this.assertPermission('DELETE', { clientId: resolvedClientId });
+    this.assertCan('DELETE', { clientId: resolvedClientId });
     this.assertPeriodOpen(resolvedClientId, undefined, fiscalYear);
 
     const removedEntries = this.state.journalEntries.filter((j) => {
@@ -5449,10 +5944,10 @@ class LocalDatabase {
   public togglePostEntry(entryId: string, reason = 'ترحيل القيد للأستاذ العام'): JournalEntry | undefined {
     const entry = this.state.journalEntries.find((j) => j.id === entryId);
     if (!entry) {
-      this.assertPermission('POST');
+      this.assertCan('POST');
       return undefined;
     }
-    const user = this.assertPermission('POST', { clientId: entry.clientId });
+    const user = this.assertCan('POST', { clientId: entry.clientId });
 
     if (entry.isPosted || entry.status === 'POSTED') {
       throw new Error('القيود المرحّلة لا يجوز فك ترحيلها أو تعديلها. التصحيح يتم بقيد عكسي فقط.');
@@ -5482,11 +5977,11 @@ class LocalDatabase {
   }
 
   public postBatchJournalEntries(entryIds: string[], reason = 'ترحيل جماعي للقيود'): number {
-    this.assertPermission('POST');
+    this.assertCan('POST');
     let count = 0;
     for (const j of this.state.journalEntries) {
       if (entryIds.includes(j.id) && !j.isPosted) {
-        const user = this.assertPermission('POST', { clientId: j.clientId });
+        const user = this.assertCan('POST', { clientId: j.clientId });
         this.assertPeriodOpen(j.clientId, j.date, j.fiscalYear);
         const before = { ...j };
         j.isPosted = true;
@@ -5607,7 +6102,7 @@ class LocalDatabase {
   }
 
   public addClient(clientData: Partial<ClientArchiveRecord>): ClientArchiveRecord {
-    const user = this.assertPermission('EDIT', { allowWithoutClient: true });
+    const user = this.assertCan('EDIT', { allowWithoutClient: true });
     const newId = clientData.id || `client-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const targetFiscalYear = clientData.fiscalYear || clientData.activeFiscalYear || getCairoCurrentYear();
     const targetEndMonth = clientData.fiscalYearEndMonth || 12;
@@ -5710,7 +6205,7 @@ class LocalDatabase {
   }
 
   public batchAddClients(clientsList: Partial<ClientArchiveRecord>[]): number {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     let count = 0;
     for (const c of clientsList) {
       if (c.name) {
@@ -5722,7 +6217,7 @@ class LocalDatabase {
   }
 
   public updateClient(clientId: string, partial: Partial<ClientArchiveRecord>): ClientArchiveRecord | undefined {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const idx = this.state.clients.findIndex((c) => c.id === clientId);
     if (idx === -1) return undefined;
     const before = { ...this.state.clients[idx] };
@@ -5800,7 +6295,7 @@ class LocalDatabase {
   }
 
   public addClientFolder(clientId: string, folderInput: Partial<ClientDocumentFolder> & { name: string }): ClientDocumentFolder | undefined {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client) return undefined;
     if (!Array.isArray(client.folders)) client.folders = [];
@@ -5826,7 +6321,7 @@ class LocalDatabase {
   }
 
   public updateClientFolder(clientId: string, folderId: string, partial: Partial<ClientDocumentFolder>): void {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client || !Array.isArray(client.folders)) return;
     const idx = client.folders.findIndex((f) => f.id === folderId);
@@ -5847,7 +6342,7 @@ class LocalDatabase {
   }
 
   public deleteClientFolder(clientId: string, folderId: string): void {
-    this.assertPermission('DELETE', { clientId });
+    this.assertCan('DELETE', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client) return;
     const target = (client.folders || []).find((f) => f.id === folderId);
@@ -5865,7 +6360,7 @@ class LocalDatabase {
   }
 
   public addClientDocument(clientId: string, docInput: Partial<ClientDocument>): ClientDocument | undefined {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client) return undefined;
     if (!Array.isArray(client.documents)) client.documents = [];
@@ -5897,7 +6392,7 @@ class LocalDatabase {
     targetFolderId: string | null,
     _targetFolderName?: string
   ): void {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client || !Array.isArray(client.documents)) return;
     const doc = client.documents.find((d) => d.id === docId);
@@ -5918,7 +6413,7 @@ class LocalDatabase {
   }
 
   public deleteClientDocument(clientId: string, docId: string): void {
-    this.assertPermission('DELETE', { clientId });
+    this.assertCan('DELETE', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client || !Array.isArray(client.documents)) return;
     const target = client.documents.find((d) => d.id === docId);
@@ -5940,7 +6435,7 @@ class LocalDatabase {
     procInput: Partial<ClientProcedureTask> & { title: string; category: string },
     _financialOptions?: any
   ): ClientProcedureTask | undefined {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client) return undefined;
     if (!Array.isArray(client.procedures)) client.procedures = [];
@@ -5970,7 +6465,7 @@ class LocalDatabase {
     partial: Partial<ClientProcedureTask>,
     _financialOptions?: any
   ): ClientProcedureTask | undefined {
-    this.assertPermission('EDIT', { clientId });
+    this.assertCan('EDIT', { clientId });
     const client = this.state.clients.find((c) => c.id === clientId);
     if (!client || !Array.isArray(client.procedures)) return undefined;
     const idx = client.procedures.findIndex((p) => p.id === procedureId);
@@ -5995,7 +6490,7 @@ class LocalDatabase {
   // =========================================================================
   public saveFeeAgreement(agreementInput: Partial<ClientFeeAgreement> & { clientId: string; amount: number }): ClientFeeAgreement {
     const resolvedClientId = this.resolveMandatoryClientId(agreementInput.clientId);
-    this.assertPermission('TREASURY', { clientId: resolvedClientId });
+    this.assertCan('TREASURY', { clientId: resolvedClientId });
 
     const existingIdx = agreementInput.id
       ? this.state.feeAgreements.findIndex((a) => a.id === agreementInput.id)
@@ -6037,10 +6532,10 @@ class LocalDatabase {
   public deleteFeeAgreement(agreementId: string): boolean {
     const target = this.state.feeAgreements.find((a) => a.id === agreementId);
     if (!target) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE');
       return false;
     }
-    this.assertPermission('DELETE', { clientId: target.clientId });
+    this.assertCan('DELETE', { clientId: target.clientId });
     this.state.feeAgreements = this.state.feeAgreements.filter((a) => a.id !== agreementId);
     this.syncClientFeeTotals(target.clientId);
     this.logAudit({
@@ -6067,7 +6562,7 @@ class LocalDatabase {
     notes?: string;
   }): { collection: ClientFeeCollection; treasuryTransaction: OfficeTreasuryTransaction } {
     const resolvedClientId = this.resolveMandatoryClientId(input.clientId);
-    this.assertPermission('TREASURY', { clientId: resolvedClientId });
+    this.assertCan('TREASURY', { clientId: resolvedClientId });
 
     const client = this.state.clients.find((c) => c.id === resolvedClientId);
     let agreementId = input.agreementId;
@@ -6316,7 +6811,7 @@ class LocalDatabase {
 
   public addOpenItem(item: Partial<OpenItem> & { clientId: string; text: string }): OpenItem {
     const resolvedClientId = this.resolveMandatoryClientId(item.clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertCan('EDIT', { clientId: resolvedClientId });
     const created: OpenItem = {
       id: item.id || `oi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clientId: resolvedClientId,
@@ -6343,11 +6838,11 @@ class LocalDatabase {
   public updateOpenItem(id: string, partial: Partial<OpenItem>): OpenItem | undefined {
     const idx = this.state.openItems.findIndex((i) => i.id === id);
     if (idx === -1) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT');
       return undefined;
     }
     const before = { ...this.state.openItems[idx] };
-    this.assertPermission('EDIT', { clientId: before.clientId });
+    this.assertCan('EDIT', { clientId: before.clientId });
     this.state.openItems[idx] = { ...before, ...partial };
     this.logAudit({
       action: 'UPDATE_OPEN_ITEM',
@@ -6365,10 +6860,10 @@ class LocalDatabase {
   public deleteOpenItem(id: string): boolean {
     const target = this.state.openItems.find((i) => i.id === id);
     if (!target) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE');
       return false;
     }
-    this.assertPermission('DELETE', { clientId: target.clientId });
+    this.assertCan('DELETE', { clientId: target.clientId });
     const before = this.state.openItems.length;
     this.state.openItems = this.state.openItems.filter((i) => i.id !== id);
     this.logAudit({
@@ -6391,7 +6886,7 @@ class LocalDatabase {
 
   public saveChecklist(clientId: string, fiscalYear: number, items: any[]): void {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertCan('EDIT', { clientId: resolvedClientId });
     const key = `${resolvedClientId}_${fiscalYear}`;
     if (!this.state.closingChecklists) this.state.closingChecklists = {};
     const before = this.state.closingChecklists[key] || [];
@@ -7078,7 +7573,7 @@ class LocalDatabase {
 
   public addFixedAsset(asset: Partial<FixedAsset>): FixedAsset {
     const resolvedClientId = this.resolveMandatoryClientId(asset.clientId);
-    this.assertPermission('EDIT', { clientId: resolvedClientId });
+    this.assertCan('EDIT', { clientId: resolvedClientId });
 
     const created: FixedAsset = {
       id: asset.id || `fa-asset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -7118,11 +7613,11 @@ class LocalDatabase {
   public updateFixedAsset(id: string, partial: Partial<FixedAsset>, reason = 'تحديث بيانات أصل ثابت'): FixedAsset | undefined {
     const idx = this.state.fixedAssets.findIndex((a) => a.id === id);
     if (idx === -1) {
-      this.assertPermission('EDIT');
+      this.assertCan('EDIT');
       return undefined;
     }
     const before = { ...this.state.fixedAssets[idx] };
-    this.assertPermission('EDIT', { clientId: before.clientId });
+    this.assertCan('EDIT', { clientId: before.clientId });
 
     this.state.fixedAssets[idx] = {
       ...before,
@@ -7148,10 +7643,10 @@ class LocalDatabase {
   public deleteFixedAsset(id: string, reason = 'حذف أصل ثابت'): boolean {
     const target = this.state.fixedAssets.find((a) => a.id === id);
     if (!target) {
-      this.assertPermission('DELETE');
+      this.assertCan('DELETE');
       return false;
     }
-    this.assertPermission('DELETE', { clientId: target.clientId });
+    this.assertCan('DELETE', { clientId: target.clientId });
 
     const before = this.state.fixedAssets.length;
     this.state.fixedAssets = this.state.fixedAssets.filter((a) => a.id !== id);
@@ -7175,7 +7670,16 @@ class LocalDatabase {
     id: string,
     disposalInfo: { disposalDate: string; disposalValue?: number; disposalAmount?: number; notes?: string }
   ): FixedAsset | undefined {
-    return this.updateFixedAsset(
+    const asset = this.state.fixedAssets.find((a) => a.id === id);
+    if (!asset) return undefined;
+    this.assertCan('EDIT_RECORD', {
+      clientId: asset.clientId,
+      entityType: 'أصل ثابت',
+      date: disposalInfo.disposalDate,
+    });
+    this.assertPeriodOpen(asset.clientId, disposalInfo.disposalDate, undefined, 'أصل ثابت');
+
+    const updated = this.updateFixedAsset(
       id,
       {
         status: 'DISPOSED',
@@ -7183,8 +7687,20 @@ class LocalDatabase {
         disposalValue: disposalInfo.disposalValue ?? disposalInfo.disposalAmount ?? 0,
         notes: disposalInfo.notes,
       },
-      disposalInfo.notes || 'استبعاد أصل ثابت'
+      disposalInfo.notes || 'استبعاد وتخريد أصل ثابت'
     );
+
+    this.recordAuditMutation({
+      action: 'DISPOSE_FIXED_ASSET',
+      entityType: 'FIXED_ASSET',
+      entityId: id,
+      clientId: asset.clientId,
+      beforeValue: { status: asset.status },
+      afterValue: { status: 'DISPOSED', disposalDate: disposalInfo.disposalDate },
+      details: `استبعاد وتخريد الأصل الثابت (${asset.assetName || asset.assetCode}) بقيمة تخريد (${disposalInfo.disposalValue ?? 0})`,
+    });
+
+    return updated;
   }
 
   public postDepreciationJournalEntry(params: {
@@ -7195,14 +7711,22 @@ class LocalDatabase {
     description?: string;
   }): JournalEntry {
     const fy = params.fiscalYear || params.year || getCairoCurrentYear();
-    return this.addJournalEntry({
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    this.assertCan('POST_ENTRY', {
+      clientId: resolvedClientId,
+      fiscalYear: fy,
+      entityType: 'قيد إهلاك أصول ثابتة',
+    });
+    this.assertPeriodOpen(resolvedClientId, `${fy}-12-31`, fy, 'قيد إهلاك');
+
+    const entry = this.addJournalEntry({
       entryNumber: `DEP-${fy}`,
       date: `${fy}-12-31`,
       description: params.description || `قيد إهلاك الأصول الثابتة السنوي لعام ${fy}`,
       documentType: 'DEPRECIATION',
       isPosted: true,
       status: 'POSTED',
-      clientId: params.clientId,
+      clientId: resolvedClientId,
       fiscalYear: fy,
       lines: [
         {
@@ -7221,6 +7745,18 @@ class LocalDatabase {
         },
       ],
     });
+
+    this.recordAuditMutation({
+      action: 'POST_DEPRECIATION_ENTRY',
+      entityType: 'JOURNAL_ENTRY',
+      entityId: entry.id,
+      clientId: resolvedClientId,
+      beforeValue: null,
+      afterValue: { entryNumber: entry.entryNumber, totalDepreciation: params.totalDepreciation },
+      details: `ترحيل قيد إهلاك الأصول الثابتة السنوي (${entry.entryNumber}) بمبلغ إجمالي (${params.totalDepreciation})`,
+    });
+
+    return entry;
   }
 
   public getDailyExchangeRate(currency: CurrencyCode, date?: string): DailyExchangeRateRecord | undefined {
@@ -7259,7 +7795,7 @@ class LocalDatabase {
   }
 
   public saveExchangeRate(rate: Partial<DailyExchangeRateRecord> & { currency: CurrencyCode }): DailyExchangeRateRecord {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     const now = getCairoTimestamp();
     const normCurr = String(rate.currency).trim().toUpperCase();
     const normDate = (rate.date || getCairoDateString()).slice(0, 10);
@@ -7305,7 +7841,7 @@ class LocalDatabase {
   }
 
   public saveBulkExchangeRates(records: Partial<DailyExchangeRateRecord>[]): number {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     let count = 0;
     for (const r of records) {
       if (r.currency) {
@@ -7317,7 +7853,7 @@ class LocalDatabase {
   }
 
   public deleteExchangeRate(id: string): void {
-    this.assertPermission('DELETE', { allowWithoutClient: true });
+    this.assertCan('DELETE', { allowWithoutClient: true });
     const target = this.state.exchangeRates.find((r) => r.id === id);
     this.state.exchangeRates = this.state.exchangeRates.filter((r) => r.id !== id);
     this.logAudit({
@@ -7335,7 +7871,7 @@ class LocalDatabase {
   // Office Profile, Preferences, WhatsApp, Logs & Locks
   // =========================================================================
   public updateOfficeProfile(partial: Partial<OfficeProfile>): OfficeProfile {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     const before = { ...this.state.officeProfile };
     this.state.officeProfile = { ...this.state.officeProfile, ...partial };
     this.logAudit({
@@ -7350,7 +7886,7 @@ class LocalDatabase {
   }
 
   public updatePreferences(partial: Partial<UserPreferences>): UserPreferences {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     const before = { ...this.state.preferences };
     this.state.preferences = { ...this.state.preferences, ...partial };
     this.logAudit({
@@ -7392,7 +7928,7 @@ class LocalDatabase {
   }
 
   public saveWhatsAppTemplate(tpl: WhatsAppMessageTemplate): WhatsAppMessageTemplate {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     const settings = this.getWhatsAppBotSettings();
     const idx = settings.templates.findIndex((t) => t.id === tpl.id);
     const before = idx >= 0 ? { ...settings.templates[idx] } : null;
@@ -7414,7 +7950,7 @@ class LocalDatabase {
   }
 
   public deleteWhatsAppTemplate(id: string): void {
-    this.assertPermission('DELETE', { allowWithoutClient: true });
+    this.assertCan('DELETE', { allowWithoutClient: true });
     const settings = this.getWhatsAppBotSettings();
     const target = settings.templates.find((t) => t.id === id);
     settings.templates = settings.templates.filter((t) => t.id !== id);
@@ -7430,7 +7966,7 @@ class LocalDatabase {
   }
 
   public resetWhatsAppTemplatesToDefault(): void {
-    this.assertPermission('EDIT', { allowWithoutClient: true });
+    this.assertCan('EDIT', { allowWithoutClient: true });
     const settings = this.getWhatsAppBotSettings();
     const before = [...settings.templates];
     settings.templates = [...DEFAULT_WHATSAPP_TEMPLATES];
@@ -7445,7 +7981,7 @@ class LocalDatabase {
   }
 
   public sendWhatsAppMessage(msgInput: Partial<WhatsAppMessage> & { phoneNumber: string; messageBody: string }): WhatsAppMessage {
-    this.assertPermission('EDIT', { clientId: msgInput.clientId, allowWithoutClient: !msgInput.clientId });
+    this.assertCan('EDIT', { clientId: msgInput.clientId, allowWithoutClient: !msgInput.clientId });
     const msg: WhatsAppMessage = {
       id: msgInput.id || `wa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clientId: msgInput.clientId,
@@ -7476,7 +8012,7 @@ class LocalDatabase {
   }
 
   public addFinancialActivityLog(logInput: Partial<FinancialActivityLog>): FinancialActivityLog {
-    this.assertPermission('EDIT', { clientId: logInput.clientId, allowWithoutClient: !logInput.clientId });
+    this.assertCan('EDIT', { clientId: logInput.clientId, allowWithoutClient: !logInput.clientId });
     const entry: FinancialActivityLog = {
       id: logInput.id || `fal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: logInput.timestamp || getCairoTimestamp(),
@@ -7503,7 +8039,7 @@ class LocalDatabase {
     clientId?: string,
     options?: { confirmationText?: string; reason?: string }
   ): void {
-    this.assertPermission('ADMIN', { clientId, requireAdmin: true, allowWithoutClient: true });
+    this.assertCan('ADMIN', { clientId, requireAdmin: true, allowWithoutClient: true });
     if (
       !options?.confirmationText ||
       (options.confirmationText !== 'تأكيد' && options.confirmationText !== 'CONFIRM') ||
@@ -7534,7 +8070,7 @@ class LocalDatabase {
   }
 
   public clearLocalAccountingData(options?: { confirmationText?: string; reason?: string }): void {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    this.assertCan('ADMIN', { requireAdmin: true, allowWithoutClient: true });
     if (
       !options?.confirmationText ||
       (options.confirmationText !== 'تأكيد' && options.confirmationText !== 'CONFIRM') ||
@@ -7573,7 +8109,7 @@ class LocalDatabase {
     confirmationText?: string;
     reason?: string;
   }): { success: boolean; message: string } {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    this.assertCan('ADMIN', { requireAdmin: true, allowWithoutClient: true });
     if (
       !options?.confirmationText ||
       (options.confirmationText !== 'تأكيد' && options.confirmationText !== 'CONFIRM') ||
@@ -7618,7 +8154,7 @@ class LocalDatabase {
   }
 
   public updateSystemSerials(serials: Partial<SystemSerialsConfig>): { success: boolean; message: string } {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    this.assertCan('ADMIN', { requireAdmin: true, allowWithoutClient: true });
     const before = { ...this.getSystemSerials() };
     this.state.systemSerials = { ...before, ...serials };
     this.logAudit({
@@ -7633,7 +8169,7 @@ class LocalDatabase {
   }
 
   public resetDeviceSecurityBindings(): { success: boolean; message: string } {
-    this.assertPermission('ADMIN', { requireAdmin: true, allowWithoutClient: true });
+    this.assertCan('ADMIN', { requireAdmin: true, allowWithoutClient: true });
     this.logAudit({
       action: 'RESET_DEVICE_SECURITY_BINDINGS',
       entityType: 'SECURITY',
@@ -7672,6 +8208,10 @@ class LocalDatabase {
   }
 
   public RevealAndAuditTaxSecrets(clientId: string, details?: string): void {
+    this.assertCan('VIEW_PORTAL_SECRETS', {
+      clientId,
+      entityType: 'بيانات دخول المنظومة السرية',
+    });
     this.logAudit({
       action: 'REVEAL_TAX_PORTAL_SECRETS',
       entityType: 'CLIENT_TAX_SECRETS',
@@ -7695,6 +8235,15 @@ class LocalDatabase {
       aiDisabled?: boolean;
     }
   ): void {
+    this.assertCan('EDIT_RECORD', {
+      clientId,
+      entityType: 'بيانات بوابات الضرائب والفاتورة الإلكترونية',
+    });
+    this.assertCan('VIEW_PORTAL_SECRETS', {
+      clientId,
+      entityType: 'أسرار بوابات الضرائب والفاتورة الإلكترونية',
+    });
+
     const idx = this.state.clients.findIndex((c) => c.id === clientId);
     if (idx === -1) {
       throw new Error('لم يتم العثور على المنشأة المحددة لحفظ بيانات البوابات الضريبية.');
@@ -7703,7 +8252,7 @@ class LocalDatabase {
     const prevCreds = existing.portalCredentials || {};
     const prevEta = existing.etaConfig || {};
 
-    this.state.clients[idx] = {
+    const updatedClient = {
       ...existing,
       taxPortalEmail: secrets.taxPortalUsername ?? existing.taxPortalEmail,
       aiDisabled: typeof secrets.aiDisabled === 'boolean' ? secrets.aiDisabled : Boolean(existing.aiDisabled),
@@ -7714,7 +8263,7 @@ class LocalDatabase {
         etaUsername: secrets.etaUsername ?? prevCreds.etaUsername ?? '',
         etaPassword: secrets.etaPassword ?? prevCreds.etaPassword ?? '',
         etaTokenPin: secrets.etaTokenPin ?? prevCreds.etaTokenPin ?? '',
-        updatedAt: new Date().toISOString(),
+        updatedAt: getCairoTimestamp(),
       },
       etaConfig: {
         ...prevEta,
@@ -7724,14 +8273,302 @@ class LocalDatabase {
       },
     } as any;
 
-    this.logAudit({
-      action: 'UPDATE_TAX_PORTAL_SECRETS',
+    this.state.clients[idx] = updatedClient;
+
+    this.recordAuditMutation({
+      action: 'UPDATE',
       entityType: 'CLIENT_TAX_SECRETS',
       entityId: clientId,
       clientId,
+      beforeValue: { hasEtaCreds: Boolean(prevCreds.etaUsername) },
+      afterValue: { hasEtaCreds: Boolean(secrets.etaUsername) },
       details: `تحديث وحفظ بيانات بوابة الضرائب والفاتورة الإلكترونية للمنشأة (${existing.name || clientId})`,
     });
+
     this.saveState('CLIENTS');
+  }
+
+  // @public-readonly-safe: دالة قراءة تسجيلات المنظومات الضريبية والجمركية
+  public getClientSystemRegistrations(clientId?: string, kind?: SystemKind): ClientSystemRegistration[] {
+    let list = this.state.clientSystemRegistrations || [];
+    if (clientId) {
+      list = list.filter((r) => r.clientId === clientId);
+    }
+    if (kind) {
+      list = list.filter((r) => r.kind === kind);
+    }
+    return list;
+  }
+
+  // @public-readonly-safe: دالة قراءة تسجيل منظومة محددة لشركة
+  public getClientSystemRegistration(clientId: string, kind: SystemKind): ClientSystemRegistration | undefined {
+    return (this.state.clientSystemRegistrations || []).find(
+      (r) => r.clientId === clientId && r.kind === kind
+    );
+  }
+
+  public saveClientSystemRegistration(
+    registration: ClientSystemRegistration,
+    reason?: string
+  ): ClientSystemRegistration {
+    this.assertCan('EDIT_RECORD', {
+      clientId: registration.clientId,
+      entityType: 'تسجيل المنظومة الضريبية',
+    });
+
+    const existingIdx = (this.state.clientSystemRegistrations || []).findIndex(
+      (r) => r.id === registration.id || (r.clientId === registration.clientId && r.kind === registration.kind)
+    );
+    const existing = existingIdx >= 0 ? this.state.clientSystemRegistrations[existingIdx] : undefined;
+
+    // فحص صلاحية الأسرار إذا تغيرت كلمة المرور أو تم إدخالها
+    const passwordChanged =
+      registration.credentials?.password &&
+      (!existing || existing.credentials?.password !== registration.credentials?.password);
+    if (passwordChanged) {
+      this.assertCan('VIEW_PORTAL_SECRETS', {
+        clientId: registration.clientId,
+        entityType: 'بيانات دخول المنظومة السرية',
+      });
+    }
+
+    const updatedRecord: ClientSystemRegistration = {
+      ...registration,
+      id: registration.id || (existing ? existing.id : `reg-${registration.clientId}-${registration.kind}`),
+      updatedAt: getCairoTimestamp(),
+    };
+
+    if (existingIdx >= 0) {
+      this.state.clientSystemRegistrations[existingIdx] = updatedRecord;
+    } else {
+      if (!Array.isArray(this.state.clientSystemRegistrations)) {
+        this.state.clientSystemRegistrations = [];
+      }
+      this.state.clientSystemRegistrations.push(updatedRecord);
+    }
+
+    // مزامنة الحقول القديمة للقراءة فقط والتوافق العكسي
+    const client = this.state.clients.find((c) => c.id === registration.clientId);
+    if (client) {
+      if (!client.portalCredentials) client.portalCredentials = {};
+      if (registration.kind === 'SAP') {
+        client.portalCredentials.sapPortal = {
+          ...client.portalCredentials.sapPortal,
+          username: registration.credentials.username,
+          password: registration.credentials.password,
+          registeredMobile: registration.credentials.registeredMobile,
+          email: registration.credentials.email,
+          notes: registration.credentials.notes,
+          pinOtp: registration.credentials.pinOtp,
+        };
+      } else if (registration.kind === 'GENERAL_TAX') {
+        client.portalCredentials.etaGeneralTax = {
+          ...client.portalCredentials.etaGeneralTax,
+          username: registration.credentials.username,
+          password: registration.credentials.password,
+          registeredMobile: registration.credentials.registeredMobile,
+          email: registration.credentials.email,
+          notes: registration.credentials.notes,
+          pinOtp: registration.credentials.pinOtp,
+        };
+      } else if (registration.kind === 'E_INVOICE') {
+        client.portalCredentials.etaEInvoicing = {
+          ...client.portalCredentials.etaEInvoicing,
+          username: registration.credentials.username,
+          password: registration.credentials.password,
+          email: registration.credentials.email,
+          notes: registration.credentials.notes,
+        };
+        client.eInvoiceRegistered = registration.status === 'REGISTERED';
+        if (registration.extra?.hasToken) {
+          client.hasEsealToken = true;
+          client.tokenSerial = registration.extra.tokenSerial || client.tokenSerial;
+          client.tokenPin = registration.extra.tokenPin || client.tokenPin;
+          client.tokenExpiryDate = registration.extra.tokenExpiryDate || client.tokenExpiryDate;
+          client.tokenIssuer = registration.extra.tokenIssuer || client.tokenIssuer;
+          client.portalCredentials.eSignatureToken = {
+            ...client.portalCredentials.eSignatureToken,
+            tokenSerial: registration.extra.tokenSerial,
+            tokenPin: registration.extra.tokenPin,
+            expiryDate: registration.extra.tokenExpiryDate,
+            issuer: registration.extra.tokenIssuer,
+            issuerUsername: registration.extra.issuerUsername,
+            issuerPassword: registration.extra.issuerPassword,
+          };
+        }
+      } else if (registration.kind === 'NAFEZA') {
+        client.portalCredentials.nafeza = {
+          ...client.portalCredentials.nafeza,
+          username: registration.credentials.username,
+          password: registration.credentials.password,
+          email: registration.credentials.email,
+          registeredMobile: registration.credentials.registeredMobile,
+          notes: registration.credentials.notes,
+          eSignatureEnabled: registration.extra?.eSignatureEnabled,
+          registrantType: registration.extra?.registrantType,
+          importerRegistrationNumber: registration.extra?.importerRegistrationNumber,
+          authMethod: registration.extra?.authMethod,
+        };
+      } else if (registration.kind === 'PAYROLL_NEW') {
+        client.portalCredentials.etaPayrollTax = {
+          ...client.portalCredentials.etaPayrollTax,
+          username: registration.credentials.username,
+          password: registration.credentials.password,
+          email: registration.credentials.email,
+          registeredMobile: registration.credentials.registeredMobile,
+          notes: registration.credentials.notes,
+          facilityNumber: registration.extra?.facilityNumber,
+        };
+      }
+    }
+
+    this.recordAuditMutation({
+      action: existing ? 'UPDATE' : 'CREATE',
+      entityType: 'CLIENT_SYSTEM_REGISTRATION',
+      entityId: updatedRecord.id,
+      clientId: updatedRecord.clientId,
+      beforeValue: existing
+        ? {
+            kind: existing.kind,
+            status: existing.status,
+            username: existing.credentials.username,
+            extra: existing.extra,
+          }
+        : null,
+      afterValue: {
+        kind: updatedRecord.kind,
+        status: updatedRecord.status,
+        username: updatedRecord.credentials.username,
+        extra: updatedRecord.extra,
+      },
+      reason,
+      details: reason || `تحديث تسجيل المنظومة ${registration.kind} للشركة (${client?.name || registration.clientId})`,
+    });
+
+    this.saveState('CLIENTS');
+    return updatedRecord;
+  }
+
+  // @public-readonly-safe: دالة قراءة سجل إجراءات المنظومات
+  public getClientSystemActions(clientId?: string, kind?: SystemKind): ClientSystemAction[] {
+    let list = this.state.clientSystemActions || [];
+    if (clientId) {
+      list = list.filter((a) => a.clientId === clientId);
+    }
+    if (kind) {
+      list = list.filter((a) => a.kind === kind);
+    }
+    return list;
+  }
+
+  public addClientSystemAction(
+    action: Omit<ClientSystemAction, 'id' | 'performedBy' | 'createdAt'>,
+    reason?: string
+  ): ClientSystemAction {
+    this.assertCan('EDIT_RECORD', {
+      clientId: action.clientId,
+      entityType: 'إجراء منظومة ضريبية أو جمركية',
+    });
+
+    const currentUser = this.getCurrentUser();
+    const newAction: ClientSystemAction = {
+      ...action,
+      id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      performedBy: currentUser?.name || currentUser?.username || 'system',
+      createdAt: getCairoTimestamp(),
+      date: action.date || getCairoDateString(),
+    };
+
+    if (!Array.isArray(this.state.clientSystemActions)) {
+      this.state.clientSystemActions = [];
+    }
+    this.state.clientSystemActions.unshift(newAction);
+
+    const client = this.state.clients.find((c) => c.id === action.clientId);
+
+    this.recordAuditMutation({
+      action: 'CREATE',
+      entityType: 'CLIENT_SYSTEM_ACTION',
+      entityId: newAction.id,
+      clientId: newAction.clientId,
+      beforeValue: null,
+      afterValue: {
+        kind: newAction.kind,
+        type: newAction.type,
+        date: newAction.date,
+        reference: newAction.reference,
+        count: newAction.count,
+        performedBy: newAction.performedBy,
+        extra: newAction.extra,
+      },
+      reason,
+      details: reason || `تسجيل إجراء جديد على منظومة ${newAction.kind}: ${newAction.type} للشركة (${client?.name || newAction.clientId})`,
+    });
+
+    this.saveState('CLIENTS');
+    return newAction;
+  }
+
+  // @public-readonly-safe: دالة قراءة روابط المنظومات القابلة للتعديل
+  public getSystemPortalUrls(): SystemPortalUrlsConfig {
+    return {
+      ...DEFAULT_SYSTEM_PORTAL_URLS,
+      ...(this.state.systemPortalUrls || {}),
+    };
+  }
+
+  public updateSystemPortalUrls(
+    urls: Partial<SystemPortalUrlsConfig>,
+    reason?: string
+  ): SystemPortalUrlsConfig {
+    this.assertCan('MANAGE_USERS', {
+      entityType: 'إعدادات روابط بوابات المنظومات',
+    });
+
+    const prev = this.getSystemPortalUrls();
+    const next: SystemPortalUrlsConfig = {
+      ...prev,
+      ...urls,
+    };
+    this.state.systemPortalUrls = next;
+
+    this.recordAuditMutation({
+      action: 'UPDATE',
+      entityType: 'SYSTEM_PORTAL_URLS',
+      entityId: 'system-portal-urls',
+      clientId: undefined,
+      beforeValue: prev,
+      afterValue: next,
+      reason,
+      details: reason || 'تحديث روابط بوابات المنظومات الضريبية والجمركية',
+    });
+
+    this.saveState('SETTINGS');
+    return next;
+  }
+
+  public logPortalSecretAccess(
+    clientId: string,
+    kind: SystemKind | string,
+    action: 'VIEW' | 'COPY'
+  ): void {
+    this.assertCan('VIEW_PORTAL_SECRETS', {
+      clientId,
+      entityType: 'بيانات دخول المنظومة',
+    });
+
+    const user = this.getCurrentUser();
+    const client = this.state.clients.find((c) => c.id === clientId);
+    const actionLabel = action === 'VIEW' ? 'كشف' : 'نسخ';
+
+    this.logAudit({
+      action: action === 'VIEW' ? 'VIEW_PORTAL_SECRET' : 'COPY_PORTAL_SECRET',
+      entityType: `SYSTEM_PORTAL_SECRET_${kind}`,
+      entityId: `${clientId}:${kind}`,
+      clientId,
+      details: `${actionLabel} كلمة مرور منظومة ${kind} للمنشأة (${client?.name || clientId}) بواسطة المستخدم (${user?.name || user?.username || 'غير معروف'})`,
+    });
+    this.saveState('AUDIT');
   }
 }
 

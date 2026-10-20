@@ -450,4 +450,44 @@ describe('AccessGuard, Two-Level Period Locking, and Tamper-Evident Audit Log', 
       expect(db.verifyAuditChain().valid).toBe(true);
     });
   });
+
+  describe('5) فحص أمني آلي: كل دالة تغيير في قاعدة البيانات محمية بـ assertCan أو موسومة بـ @public-readonly-safe', () => {
+    it('يمر على كافة دوال db العامة التي تبدأ بـ add|update|delete|void|post|save|batch|import|reset|dispose|lock|unlock ويفشل إذا وُجدت دالة بدون حماية', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const dbFilePath = path.resolve(__dirname, '../../db/localDatabase.ts');
+      const content = fs.readFileSync(dbFilePath, 'utf-8');
+      const lines = content.split('\n');
+      const mutationPrefixes =
+        /^(add|update|delete|void|post|save|batch|import|reset|dispose|lock|unlock)/;
+      const unprotected: string[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const match = /^\s*public\s+(?:async\s+)?([a-zA-Z0-9_]+)\s*\(/.exec(line);
+        if (match) {
+          const methodName = match[1];
+          if (mutationPrefixes.test(methodName)) {
+            const prevLine = i > 0 ? lines[i - 1] : '';
+            const prevPrevLine = i > 1 ? lines[i - 2] : '';
+            const isMarkedSafe =
+              prevLine.includes('@public-readonly-safe') ||
+              prevPrevLine.includes('@public-readonly-safe');
+
+            let body = '';
+            for (let j = i; j < Math.min(i + 40, lines.length); j++) {
+              body += lines[j] + '\n';
+            }
+            const hasAssertCan = body.includes('assertCan(');
+
+            if (!isMarkedSafe && !hasAssertCan) {
+              unprotected.push(methodName);
+            }
+          }
+        }
+      }
+
+      expect(unprotected).toEqual([]);
+    });
+  });
 });

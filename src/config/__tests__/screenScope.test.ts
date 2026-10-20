@@ -108,7 +108,7 @@ describe('getVisibleClients - Default Deny & 4 Core Access Cases', () => {
 });
 
 describe('migrateClientTaxSubjectFlagsOnce - ترحيل علامات الخضوع لمرة واحدة', () => {
-  it('يفعّل علامات الخضوع تلقائيًا من الفواتير والإقرارات والمرتبات ولا يتكرر عند وجود migrationDone', () => {
+  it('يفعّل علامات الخضوع تلقائيًا من الفواتير والإقرارات والمرتبات ولا يتكرر عند وجود taxSubjectMigrationDone', () => {
     const mockState: any = {
       clients: [
         { id: 'c1', code: 'C1', name: 'شركة 1', taxId: '1', commercialRegister: '1' },
@@ -144,13 +144,13 @@ describe('migrateClientTaxSubjectFlagsOnce - ترحيل علامات الخضو�
     const firstRun = migrateClientTaxSubjectFlagsOnce(mockState);
     expect(firstRun.alreadyDone).toBe(false);
     expect(firstRun.migratedCount).toBe(2);
-    expect(mockState.migrationDone).toBe(true);
+    expect(mockState.taxSubjectMigrationDone).toBe(true);
     expect(mockState.clients[0].isVatSubject).toBe(true);
     expect(mockState.clients[0].isWhtSubject).toBe(true);
     expect(mockState.clients[1].isStampTaxSubject).toBe(true);
     expect(mockState.clients[1].hasPayroll).toBe(true);
 
-    // محاولة تشغيل ثانية لا تتكرر بسبب migrationDone
+    // محاولة تشغيل ثانية لا تتكرر بسبب taxSubjectMigrationDone
     mockState.clients[2].isVatSubject = false;
     mockState.invoices.push({ id: 'inv-2', clientId: 'c3', totalVat: 500, totalWht: 0, items: [] });
     const secondRun = migrateClientTaxSubjectFlagsOnce(mockState);
@@ -158,4 +158,20 @@ describe('migrateClientTaxSubjectFlagsOnce - ترحيل علامات الخضو�
     expect(secondRun.migratedCount).toBe(0);
     expect(mockState.clients[2].isVatSubject).toBe(false);
   });
+
+  it('يقرأ العلم القديم migrationDone مرة واحدة للتوافق ويحوّله إلى taxSubjectMigrationDone دون إعادة الترحيل', () => {
+    const legacyState: any = {
+      migrationDone: true,
+      clients: [{ id: 'c1', code: 'C1', name: 'شركة قديمة', taxId: '1', commercialRegister: '1' }],
+      invoices: [{ id: 'inv-1', clientId: 'c1', totalVat: 1400, totalWht: 0, items: [] }],
+      taxDeclarations: [],
+      journalEntries: [],
+    };
+
+    const res = migrateClientTaxSubjectFlagsOnce(legacyState);
+    expect(res.alreadyDone).toBe(true);
+    expect(res.migratedCount).toBe(0);
+    expect(legacyState.taxSubjectMigrationDone).toBe(true);
+  });
 });
+

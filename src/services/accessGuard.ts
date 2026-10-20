@@ -10,6 +10,7 @@ export type AccessGuardAction =
   | 'MANAGE_USERS'
   | 'EXPORT_BACKUP'
   | 'IMPORT_BACKUP'
+  | 'VIEW_PORTAL_SECRETS'
   | 'CREATE_ENTRY'
   | 'CREATE_INVOICE'
   | 'CREATE_RECORD'
@@ -90,6 +91,26 @@ export class PeriodLockError extends PermissionError {
     this.periodKey = meta.periodKey;
     this.targetDate = meta.targetDate;
     Object.setPrototypeOf(this, PeriodLockError.prototype);
+  }
+}
+
+export class StorageWriteError extends Error {
+  public readonly code: string = 'STORAGE_WRITE_ERROR';
+  public readonly causeError?: unknown;
+  public readonly sliceName?: string;
+
+  constructor(
+    message: string,
+    options?: {
+      cause?: unknown;
+      sliceName?: string;
+    }
+  ) {
+    super(message);
+    this.name = 'StorageWriteError';
+    this.causeError = options?.cause;
+    this.sliceName = options?.sliceName;
+    Object.setPrototypeOf(this, StorageWriteError.prototype);
   }
 }
 
@@ -478,6 +499,24 @@ export function assertCan(
             clientId: targetClientId,
             fiscalYear: context.fiscalYear,
             entityType: context.entityType || 'AUDIT_TRAIL',
+          }
+        );
+      }
+      break;
+
+    case 'VIEW_PORTAL_SECRETS':
+      if (
+        !isAdminRole &&
+        !Boolean((user as { canViewPortalSecrets?: boolean }).canViewPortalSecrets) &&
+        !Boolean((user as { canManagePortalSecrets?: boolean }).canManagePortalSecrets)
+      ) {
+        throw new PermissionError(
+          'عملية مرفوضة: ليس لديك الصلاحية الخاصة بعرض أو تعديل أسرار البوابات الضريبية والفاتورة الإلكترونية (VIEW_PORTAL_SECRETS).',
+          {
+            action: normalizedAction,
+            clientId: targetClientId,
+            fiscalYear: context.fiscalYear,
+            entityType: context.entityType || 'CLIENT_TAX_SECRETS',
           }
         );
       }

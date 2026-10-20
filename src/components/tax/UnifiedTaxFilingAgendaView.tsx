@@ -29,14 +29,40 @@ import {
   KeyRound,
   FolderOpen,
   ShieldCheck,
+  Settings,
+  AlertTriangle,
+  Ship,
+  ShieldAlert,
+  Sparkles,
+  Lock,
+  Unlock,
+  Layers,
+  Globe,
 } from 'lucide-react';
-import { ClientArchiveRecord, TaxDeclarationRecord, CompanyType, SystemUser } from '../../types';
+import {
+  ClientArchiveRecord,
+  TaxDeclarationRecord,
+  CompanyType,
+  SystemUser,
+  SystemKind,
+  SystemRegistrationStatus,
+  ClientSystemRegistration,
+  ClientSystemAction,
+} from '../../types';
 import { db, DatabaseState } from '../../db/localDatabase';
+import { canPerform } from '../../services/accessGuard';
 import { formatEgyptianCurrency } from '../../utils/qrCodeGenerator';
 import { getCairoDateString } from '../../utils/cairoTime';
 import { EgyptianTaxDeclarationPdfModal } from '../EgyptianTaxDeclarationPdfModal';
 import { ScreenActionToolbar } from '../common/ScreenActionToolbar';
 import { ClientTaxPortalCredentialsModal } from './ClientTaxPortalCredentialsModal';
+import {
+  EditPortalUrlsModal,
+  QuickAddSystemActionModal,
+  RegisterClientSystemModal,
+  SYSTEM_KIND_LABELS,
+} from './SystemPortalsManager';
+import { SystemPortalsTabPanel } from './SystemPortalsTabPanel';
 import {
   getVisibleClients,
   isClientSubjectToTax,
@@ -129,6 +155,7 @@ export function getNextMonthIso(isoMonth: string): string {
 export type TaxFilter = 'ALL' | 'VAT' | 'INCOME' | 'WHT' | 'STAMP' | 'PAYROLL';
 export type SystemFilter = 'ALL' | 'SAP' | 'OLD_PORTAL';
 export type StatusFilter = 'ALL' | 'SUBMITTED' | 'PENDING';
+export type MainSystemTab = 'GENERAL_TAX' | 'SAP' | 'PAYROLL_NEW' | 'E_INVOICE' | 'NAFEZA';
 
 export type DeclarationTypeCode =
   | 'VAT_10'
@@ -155,6 +182,10 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
   onOpenClientAuditFile,
   onRefresh,
 }) => {
+  // تبويب المنظومة الرئيسي النشط (المنظومات الخمسة الموحدة)
+  const [activeMainTab, setActiveMainTab] = useState<MainSystemTab>('GENERAL_TAX');
+  const [isEditPortalUrlsModalOpen, setIsEditPortalUrlsModalOpen] = useState(false);
+
   // الفلاتر الأساسية
   const [taxFilter, setTaxFilter] = useState<TaxFilter>('ALL');
   const [systemFilter, setSystemFilter] = useState<SystemFilter>('ALL');
@@ -171,6 +202,29 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
     () => getVisibleClients(state, currentUser),
     [state.clients, state.users, state.currentUserId, currentUser]
   );
+
+  // إحصائيات سريعة للتبويبات الخمسة
+  const systemTabStats = useMemo(() => {
+    let payrollReg = 0;
+    let einvReg = 0;
+    let nafezaReg = 0;
+
+    visibleClients.forEach((c) => {
+      const p = db.getClientSystemRegistration(c.id, 'PAYROLL_NEW');
+      if (p?.status === 'REGISTERED') payrollReg++;
+      const e = db.getClientSystemRegistration(c.id, 'E_INVOICE');
+      if (e?.status === 'REGISTERED') einvReg++;
+      const n = db.getClientSystemRegistration(c.id, 'NAFEZA');
+      if (n?.status === 'REGISTERED') nafezaReg++;
+    });
+
+    return {
+      payrollReg,
+      einvReg,
+      nafezaReg,
+      total: visibleClients.length,
+    };
+  }, [visibleClients, state.clientSystemRegistrations]);
 
   // النسخ وإظهار كلمات المرور
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -269,7 +323,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
   // التحقق من إشعار الترحيل التلقائي لعلامات الخضوع لمرة واحدة عند تحميل الحالة
   useEffect(() => {
     const currentState = db.getState();
-    if (!currentState.migrationDone) {
+    if (!currentState.taxSubjectMigrationDone && !currentState.migrationDone) {
       const res = migrateClientTaxSubjectFlagsOnce(currentState);
       db.saveState('CLIENTS');
       const msg = `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`;
@@ -343,22 +397,74 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
     showToast(`✓ تم اعتماد إعدادات الخضوع الضريبي لشركة: ${client.name}`);
   };
 
-  // نسخ إلى الحافظة
-  const handleCopy = (text: string, keyId: string, e?: React.MouseEvent) => {
+  // نسخ إلى الحافظة مع التدقيق الأمني لكلمات المرور
+  const handleCopy = (
+    text: string,
+    keyId: string,
+    e?: React.MouseEvent,
+    isPassword = false,
+    clientId?: string,
+    systemKind: SystemKind = 'GENERAL_TAX'
+  ) => {
     if (e) e.stopPropagation();
     if (!text) return;
+
+    if (isPassword && clientId) {
+      if (!canPerform(currentUser, 'VIEW_PORTAL_SECRETS', clientId)) {
+        showToast('عفواً، لا تملك صلاحية نسخ كلمات المرور (VIEW_PORTAL_SECRETS)');
+        return;
+      }
+      try {
+        db.logPortalSecretAccess(clientId, systemKind, 'COPY');
+      } catch (err: any) {
+        showToast(err.message || 'فشل توثيق نسخ كلمة المرور في سجل المراجعة');
+        return;
+      }
+    }
+
     navigator.clipboard.writeText(text);
     setCopiedKey(keyId);
     setTimeout(() => setCopiedKey(null), 1500);
+
+    if (isPassword) {
+      showToast('تم نسخ كلمة المرور وتوثيق العملية في سجل المراجعة');
+    }
   };
 
-  // إظهار / إخفاء كلمة المرور
-  const togglePasswordVisibility = (clientId: string, e?: React.MouseEvent) => {
+  // إظهار / إخفاء كلمة المرور مع التحقق من الصلاحية والتوثيق بسجل المراجعة
+  const togglePasswordVisibility = (
+    clientId: string,
+    e?: React.MouseEvent,
+    systemKind: SystemKind = 'GENERAL_TAX'
+  ) => {
     if (e) e.stopPropagation();
-    setVisiblePasswords((prev) => ({
-      ...prev,
-      [clientId]: !prev[clientId],
-    }));
+
+    const isCurrentlyVisible = !!visiblePasswords[clientId];
+    if (isCurrentlyVisible) {
+      // إخفاء كلمة المرور
+      setVisiblePasswords((prev) => ({
+        ...prev,
+        [clientId]: false,
+      }));
+      return;
+    }
+
+    // التحقق من الصلاحية الخاصة VIEW_PORTAL_SECRETS
+    if (!canPerform(currentUser, 'VIEW_PORTAL_SECRETS', clientId)) {
+      showToast('عفواً، لا تملك صلاحية الاطلاع على كلمات المرور والبوابات (VIEW_PORTAL_SECRETS)');
+      return;
+    }
+
+    try {
+      db.logPortalSecretAccess(clientId, systemKind, 'VIEW');
+      setVisiblePasswords((prev) => ({
+        ...prev,
+        [clientId]: true,
+      }));
+      showToast('تم كشف كلمة المرور وتوثيق العملية في سجل المراجعة');
+    } catch (err: any) {
+      showToast(err.message || 'فشل كشف كلمة المرور لعدم وجود الصلاحية الكافية');
+    }
   };
 
   // قراءة بيانات الدخول والمنظومة للعميل من قاعدة البيانات الحقيقية فقط (بدون أي بيانات وهمية)
@@ -368,6 +474,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
       (client.taxSystemType as 'SAP' | 'OLD_PORTAL') ||
       (creds.sapPortal?.username || creds.sapTaxPortal?.username ? 'SAP' : 'OLD_PORTAL');
 
+    const dynamicUrls = db.getSystemPortalUrls();
     let username = '';
     let password = '';
     let pinOtp = '';
@@ -395,7 +502,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
         creds.etaTokenPin ||
         client.tokenPin ||
         '';
-      portalUrl = creds.sapPortal?.portalUrl || OFFICIAL_SAP_PORTAL_URL;
+      portalUrl = creds.sapPortal?.portalUrl || dynamicUrls.SAP || OFFICIAL_SAP_PORTAL_URL;
     } else {
       username =
         creds.etaGeneralTax?.username ||
@@ -411,7 +518,7 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
         client.taxPortalPassword ||
         '';
       pinOtp = creds.etaGeneralTax?.pinOtp || creds.etaTokenPin || client.tokenPin || '';
-      portalUrl = creds.etaGeneralTax?.portalUrl || OFFICIAL_GENERAL_TAX_PORTAL_URL;
+      portalUrl = creds.etaGeneralTax?.portalUrl || dynamicUrls.GENERAL_TAX || OFFICIAL_GENERAL_TAX_PORTAL_URL;
     }
 
     return {
@@ -1283,6 +1390,15 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
+              onClick={() => setIsEditPortalUrlsModalOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 cursor-pointer"
+              title="تعديل الروابط المعتمدة للمنظومات الخمس"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>إعدادات روابط البوابات</span>
+            </button>
+            <button
+              type="button"
               onClick={handleExportCsv}
               className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
@@ -1349,8 +1465,127 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
         </div>
       </div>
 
-      {/* 2. شريط الفلاتر والبحث (سريع ومرن بنقرة واحدة) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
+      {/* صف تبويبات المنظومات الخمسة جنب بعض */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-1.5 border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
+          {/* تبويب 1: الضرائب العامة */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMainTab('GENERAL_TAX');
+              setSystemFilter('OLD_PORTAL');
+            }}
+            className={`px-3 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeMainTab === 'GENERAL_TAX'
+                ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-600/30'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5" />
+              <span>الضرائب العامة (القديمة)</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] opacity-90">
+              <span>{summary.oldPortalCount} منشأة</span>
+              <span>•</span>
+              <span className="text-emerald-200 font-mono">قدمت {summary.submitted}</span>
+            </div>
+          </button>
+
+          {/* تبويب 2: SAP */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMainTab('SAP');
+              setSystemFilter('SAP');
+            }}
+            className={`px-3 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeMainTab === 'SAP'
+                ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600/30'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5" />
+              <span>منظومة SAP الحديثة</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] opacity-90">
+              <span>{summary.sapCount} منشأة</span>
+              <span>•</span>
+              <span className="text-emerald-200 font-mono">قدمت {summary.submitted}</span>
+            </div>
+          </button>
+
+          {/* تبويب 3: كسب العمل (جديدة) */}
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('PAYROLL_NEW')}
+            className={`px-3 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeMainTab === 'PAYROLL_NEW'
+                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/30'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              <span>كسب العمل (جديدة)</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] opacity-90">
+              <span>مسجلة {systemTabStats.payrollReg}</span>
+              <span>/</span>
+              <span>{systemTabStats.total}</span>
+            </div>
+          </button>
+
+          {/* تبويب 4: الفاتورة الإلكترونية */}
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('E_INVOICE')}
+            className={`px-3 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeMainTab === 'E_INVOICE'
+                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/30'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <FileCheck className="w-3.5 h-3.5" />
+              <span>الفاتورة الإلكترونية</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] opacity-90">
+              <span>مسجلة {systemTabStats.einvReg}</span>
+              <span>/</span>
+              <span>{systemTabStats.total}</span>
+            </div>
+          </button>
+
+          {/* تبويب 5: نافذة الجمارك */}
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('NAFEZA')}
+            className={`col-span-2 sm:col-span-1 px-3 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeMainTab === 'NAFEZA'
+                ? 'bg-cyan-700 text-white shadow-sm ring-2 ring-cyan-700/30'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <Ship className="w-3.5 h-3.5" />
+              <span>نافذة - الجمارك</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] opacity-90">
+              <span>مسجلة {systemTabStats.nafezaReg}</span>
+              <span>/</span>
+              <span>{systemTabStats.total}</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* عرض المنظومة النشطة: التبويبان الأولان للإقرارات كما هما بلا تغيير، وباقي المنظومات بالنموذج الموحد */}
+      {activeMainTab === 'GENERAL_TAX' || activeMainTab === 'SAP' ? (
+        <>
+          {/* 2. شريط الفلاتر والبحث (سريع ومرن بنقرة واحدة) */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* فلتر نوع الضريبة - يعرض فقط الشركات الخاضعة لكل نوع ضريبة */}
           <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs">
@@ -1961,9 +2196,15 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
                             <>
                               <button
                                 type="button"
-                                onClick={(e) => togglePasswordVisibility(client.id, e)}
+                                onClick={(e) =>
+                                  togglePasswordVisibility(
+                                    client.id,
+                                    e,
+                                    sys.isSap ? 'SAP' : 'GENERAL_TAX'
+                                  )
+                                }
                                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                                title="إظهار / إخفاء"
+                                title="إظهار / إخفاء (VIEW_PORTAL_SECRETS)"
                               >
                                 {visiblePasswords[client.id] ? (
                                   <EyeOff className="w-3 h-3" />
@@ -1973,9 +2214,18 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
                               </button>
                               <button
                                 type="button"
-                                onClick={(e) => handleCopy(sys.password, `${client.id}_pass`, e)}
+                                onClick={(e) =>
+                                  handleCopy(
+                                    sys.password,
+                                    `${client.id}_pass`,
+                                    e,
+                                    true,
+                                    client.id,
+                                    sys.isSap ? 'SAP' : 'GENERAL_TAX'
+                                  )
+                                }
                                 className="text-slate-400 hover:text-blue-600 cursor-pointer"
-                                title="نسخ كلمة المرور"
+                                title="نسخ كلمة المرور مع توثيق بسجل المراجعة"
                               >
                                 {copiedKey === `${client.id}_pass` ? (
                                   <Check className="w-3 h-3 text-emerald-600" />
@@ -2987,6 +3237,18 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
           )}
         </div>
       </div>
+        </>
+      ) : (
+        <SystemPortalsTabPanel
+          kind={activeMainTab}
+          state={state}
+          currentUser={currentUser}
+          visibleClients={visibleClients}
+          onRefresh={onRefresh}
+          onOpenClientAuditFile={onOpenClientAuditFile}
+          onShowToast={showToast}
+        />
+      )}
 
       {/* 4. نافذة تعديل / إضافة شركة وبيانات الدخول والخضوع الضريبي */}
       {isClientModalOpen && (
@@ -3286,6 +3548,19 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
           showToast('✓ تم حفظ وتشفير بيانات بوابة الضرائب والفاتورة الإلكترونية بنجاح');
         }}
       />
+
+      {/* 7. نافذة تعديل الروابط المعتمدة للمنظومات والبوابات الخمس */}
+      {isEditPortalUrlsModalOpen && (
+        <EditPortalUrlsModal
+          isOpen={true}
+          onClose={() => setIsEditPortalUrlsModalOpen(false)}
+          onSaved={() => {
+            setIsEditPortalUrlsModalOpen(false);
+            showToast('✓ تم تحديث روابط المنظومات بنجاح');
+            if (onRefresh) onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 };

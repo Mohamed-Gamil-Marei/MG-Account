@@ -28,6 +28,7 @@ import { BackupRestoreModal } from './components/backup/BackupRestoreModal';
 import { importModelData } from './utils/dataImportExport';
 import { db, DatabaseState } from './db/localDatabase';
 import { canPerform } from './services/accessGuard';
+import { AutoSaveStatusBadge } from './components/common/AutoSaveStatusBadge';
 import {
   Account,
   ClientActivityTemplate,
@@ -185,29 +186,70 @@ export const App: React.FC = () => {
   const [assetRate, setAssetRate] = useState<number>(20);
 
   const [migrationSummaryNotice, setMigrationSummaryNotice] = useState<string | null>(null);
+  const [storageFailureError, setStorageFailureError] = useState<string | null>(() =>
+    db.hasStorageWriteFailure()
+      ? db.getLastStorageWriteError() || 'فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن'
+      : null
+  );
+  const [firstAdminName, setFirstAdminName] = useState<string>('');
+  const [firstAdminEmail, setFirstAdminEmail] = useState<string>('admin@office.eg');
+  const [firstAdminPassword, setFirstAdminPassword] = useState<string>('');
+  const [firstAdminConfirmPassword, setFirstAdminConfirmPassword] = useState<string>('');
+  const [firstAdminError, setFirstAdminError] = useState<string | null>(null);
 
   useEffect(() => {
+    const handleStorageError = (ev: Event) => {
+      const customEv = ev as CustomEvent<{ message?: string }>;
+      setStorageFailureError(
+        customEv.detail?.message || 'فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن'
+      );
+    };
+    const handleStorageSuccess = () => {
+      setStorageFailureError(null);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mg:storage-write-error', handleStorageError);
+      window.addEventListener('mg:storage-write-success', handleStorageSuccess);
+    }
+
     const current = db.getState();
-    if (!current.migrationDone) {
+    if (!current.taxSubjectMigrationDone && !current.migrationDone) {
       const res = migrateClientTaxSubjectFlagsOnce(current);
       current.taxSubjectMigrationNotificationPending = false;
-      db.saveState('CLIENTS');
+      try {
+        db.saveState('CLIENTS');
+      } catch {
+        // StorageWriteError handled via global event
+      }
       setMigrationSummaryNotice(
         `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${res.migratedCount}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
       );
     } else if (current.taxSubjectMigrationNotificationPending) {
       const count = current.lastTaxSubjectMigrationCount ?? 0;
       current.taxSubjectMigrationNotificationPending = false;
-      db.saveState('CLIENTS');
+      try {
+        db.saveState('CLIENTS');
+      } catch {
+        // StorageWriteError handled via global event
+      }
       if (count > 0) {
         setMigrationSummaryNotice(
           `تم ترحيل وتحديث علامات الخضوع الضريبي تلقائياً لعدد (${count}) من العملاء بناءً على الفواتير والإقرارات وبيانات المرتبات المسجلة.`
         );
       }
     }
-    return db.subscribe(() => {
+    const unsub = db.subscribe(() => {
       setState({ ...db.getState() });
     });
+
+    return () => {
+      unsub();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mg:storage-write-error', handleStorageError);
+        window.removeEventListener('mg:storage-write-success', handleStorageSuccess);
+      }
+    };
   }, []);
 
   const currentUser = db.getCurrentUser();
@@ -2201,6 +2243,11 @@ export const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                <AutoSaveStatusBadge
+                  lastSavedTime={db.getLastStorageSaveSuccessAt()}
+                  hasStorageError={Boolean(storageFailureError)}
+                  storageErrorMessage={storageFailureError}
+                />
                 <GlobalSearchBar state={state} currentUser={currentUser} onNavigate={(t) => setActiveTab(t)} />
                 <button
                   type="button"
@@ -2233,6 +2280,42 @@ export const App: React.FC = () => {
               </div>
             </div>
           </header>
+
+          {/* شريط أحمر ثابت أعلى التطبيق عند فشل حفظ البيانات في التخزين المحلي */}
+          {storageFailureError && (
+            <div
+              role="alert"
+              data-testid="storage-failure-banner"
+              className="sticky top-[57px] z-40 flex flex-wrap items-center justify-between gap-3 bg-rose-700 px-6 py-3 text-xs font-bold text-white shadow-lg"
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 shrink-0 text-white" />
+                <span>فشل حفظ البيانات. لا تغلق البرنامج وصدّر نسخة احتياطية الآن</span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const backupStr = await db.exportFullBackupJson();
+                    const blob = new Blob([backupStr], { type: 'application/json;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `نسخة_طوارئ_احتياطية_${getCairoDateString()}.json`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  } catch {
+                    setIsBackupModalOpen(true);
+                  }
+                }}
+                className="rounded-lg bg-white px-4 py-1.5 text-xs font-black text-rose-800 shadow-xs hover:bg-rose-50 cursor-pointer"
+              >
+                تصدير فوري للنسخة الاحتياطية الآن
+              </button>
+            </div>
+          )}
 
           {migrationSummaryNotice && (
             <div className="mx-6 mt-4 flex items-center justify-between rounded-xl border border-emerald-400 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-950 shadow-2xs">
@@ -2576,6 +2659,110 @@ export const App: React.FC = () => {
             notifyBanner('success', 'تم حفظ وتشفير بيانات بوابة الضرائب والفاتورة الإلكترونية بنجاح.');
           }}
         />
+
+        {/* شاشة إعداد أول أدمن عند فراغ قائمة المستخدمين */}
+        {db.getUsers().length === 0 && (
+          <div
+            data-testid="first-admin-setup-modal"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4"
+            dir="rtl"
+          >
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900">إعداد أول أدمن</h2>
+                  <p className="text-xs text-slate-500">
+                    لا يوجد مستخدمون مسجلون في النظام. يرجى إنشاء حساب المدير العام الأول بكلمة مرور قوية.
+                  </p>
+                </div>
+              </div>
+
+              {firstAdminError && (
+                <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-900">
+                  {firstAdminError}
+                </div>
+              )}
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setFirstAdminError(null);
+                  if (firstAdminPassword !== firstAdminConfirmPassword) {
+                    setFirstAdminError('كلمتا المرور غير متطابقتين.');
+                    return;
+                  }
+                  try {
+                    db.setupFirstAdmin({
+                      name: firstAdminName,
+                      email: firstAdminEmail,
+                      password: firstAdminPassword,
+                    });
+                    setState({ ...db.getState() });
+                    notifyBanner('success', 'تم إعداد أول أدمن وتفعيل النظام بنجاح.');
+                  } catch (err) {
+                    setFirstAdminError(err instanceof Error ? err.message : 'تعذر إعداد أول أدمن');
+                  }
+                }}
+                className="space-y-3 text-xs"
+              >
+                <div>
+                  <label className="mb-1 block font-bold text-slate-700">اسم المدير العام (الأدمن الأول)</label>
+                  <input
+                    type="text"
+                    required
+                    value={firstAdminName}
+                    onChange={(e) => setFirstAdminName(e.target.value)}
+                    placeholder="مثال: د. محمد جميل مرعي"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-slate-700">البريد الإلكتروني</label>
+                  <input
+                    type="email"
+                    required
+                    value={firstAdminEmail}
+                    onChange={(e) => setFirstAdminEmail(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-slate-700">
+                    كلمة المرور القوية (8 أحرف على الأقل تشمل حروفاً كبيرة وصغيرة وأرقاماً)
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={firstAdminPassword}
+                    onChange={(e) => setFirstAdminPassword(e.target.value)}
+                    placeholder="أدخل كلمة مرور قوية..."
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-slate-700">تأكيد كلمة المرور</label>
+                  <input
+                    type="password"
+                    required
+                    value={firstAdminConfirmPassword}
+                    onChange={(e) => setFirstAdminConfirmPassword(e.target.value)}
+                    placeholder="أعد إدخال كلمة المرور..."
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white hover:bg-emerald-700 cursor-pointer"
+                >
+                  إنشاء حساب الأدمن الأول والدخول للنظام
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </DensityProvider>
   );
