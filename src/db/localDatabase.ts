@@ -42,10 +42,17 @@ import {
   ClientSystemAction,
   SystemPortalUrlsConfig,
   DEFAULT_SYSTEM_PORTAL_URLS,
+  ManagerAdjustmentLayer,
+  ManagerStatementAdjustment,
+  StatementAdjustmentPeriod,
+  StatementModel,
+  StatementNoteRecord,
+  StatementVersionDiffItem,
 } from '../types';
 import { FirebaseUserProfile } from '../services/firebaseAuthService';
 import { IssuedDocumentService } from '../services/issuedDocumentService';
 import { generateVerificationCode } from '../utils/verificationCode';
+import { buildFinancialStatementsQrText } from '../utils/qrCodeGenerator';
 import { computeSingleClientFeeSummary } from '../utils/clientFees';
 import { getCairoCurrentYear, getCairoDateString, getCairoTimestamp } from '../utils/cairoTime';
 import {
@@ -53,6 +60,9 @@ import {
   TrialBalanceSummary,
   TrialBalanceRow,
   GeneratedFinancialStatements,
+  GeneralLedgerSummary,
+  computeFiscalYearBoundsByStartMonth,
+  STATEMENT_LINE_LABELS_AR,
 } from '../services/AccountingCalculator';
 import {
   decryptBackupData,
@@ -310,6 +320,7 @@ export interface SystemSerialsConfig {
   treasuryPrefix: string;
   treasuryNextNumber: number;
   clientYearJournalCounters?: Record<string, number>;
+  clientYearInvoiceCounters?: Record<string, number>;
 }
 
 export interface UnmatchedFeeMigrationItem {
@@ -319,6 +330,17 @@ export interface UnmatchedFeeMigrationItem {
   amount: number;
   date: string;
   reason: string;
+}
+
+export interface OpeningBalanceRolloverMetadata {
+  clientId: string;
+  fromYear: number;
+  toYear: number;
+  rolledOverAt: string;
+  rolledOverBy: string;
+  postRolloverModifiedAt?: string;
+  postRolloverModifiedBy?: string;
+  postRolloverWarning?: string;
 }
 
 export interface DatabaseState {
@@ -350,6 +372,23 @@ export interface DatabaseState {
   clientDeadlines: any[];
   openItems: OpenItem[];
   approvedStatements: ApprovedStatementsSnapshot[];
+  managerAdjustmentLayers?: Record<string, ManagerAdjustmentLayer>;
+  statementNotes?: Record<
+    string,
+    Record<
+      string,
+      {
+        manualParagraph?: string;
+        customTitle?: string;
+        baselineNumbers?: Record<string, number>;
+        lastConfirmedAt?: string;
+        lastConfirmedBy?: string;
+        updatedAt?: string;
+        updatedBy?: string;
+      }
+    >
+  >;
+  openingBalanceRollovers?: Record<string, OpeningBalanceRolloverMetadata>;
   feeAgreements: ClientFeeAgreement[];
   feeCollections: ClientFeeCollection[];
   openingBalances: NestedOpeningBalancesMap;
@@ -508,10 +547,34 @@ export function computeClientFiscalYearBounds(
       client?.activeFiscalYear ||
       getCairoCurrentYear();
 
-  const rawStart = (explicitStart || client?.fiscalYearStart || '').trim();
-  const rawEnd = (explicitEnd || client?.fiscalYearEnd || '').trim();
+  const hasExplicitBounds = Boolean(explicitStart && explicitEnd);
+  const rawStart =
+    explicitStart ||
+    (client as any)?.fiscalYearStartDate ||
+    (client as any)?.fiscalYearStart ||
+    '';
+  const rawEnd =
+    explicitEnd ||
+    (client as any)?.fiscalYearEndDate ||
+    (client as any)?.fiscalYearEnd ||
+    '';
+  const clientStartMonth =
+    client && typeof (client as any).fiscalYearStartMonth === 'number'
+      ? Number((client as any).fiscalYearStartMonth)
+      : undefined;
+  const clientEndMonth =
+    client && typeof client.fiscalYearEndMonth === 'number'
+      ? Number(client.fiscalYearEndMonth)
+      : undefined;
+  const hasCustomFiscalMonth =
+    (clientStartMonth !== undefined && clientStartMonth >= 1 && clientStartMonth <= 12 && clientStartMonth !== 1) ||
+    (clientEndMonth !== undefined && clientEndMonth >= 1 && clientEndMonth <= 12 && clientEndMonth !== 12);
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(rawStart) && /^\d{4}-\d{2}-\d{2}$/.test(rawEnd)) {
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(rawStart) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) &&
+    (hasExplicitBounds || !hasCustomFiscalMonth || !rawStart.endsWith('-01-01'))
+  ) {
     const startYearParsed = parseInt(rawStart.slice(0, 4), 10);
     const endYearParsed = parseInt(rawEnd.slice(0, 4), 10);
     const yearSpan = Math.max(0, endYearParsed - startYearParsed);
@@ -531,44 +594,31 @@ export function computeClientFiscalYearBounds(
     };
   }
 
-  const rawMonth = isNumberFirst ? targetFiscalYearOrEndMonth : client?.fiscalYearEndMonth;
-  const endMonth = rawMonth && rawMonth >= 1 && rawMonth <= 12 ? rawMonth : 12;
-
-  if (endMonth === 6) {
-    const startDate = `${baseYear - 1}-07-01`;
-    const endDate = `${baseYear}-06-30`;
-    return {
-      fiscalYear: baseYear,
-      startDate,
-      endDate,
-      start: startDate,
-      end: endDate,
-      labelAr: formatFiscalDateArabic(endDate),
-    };
+  let resolvedStartMonth = 1;
+  if (clientStartMonth !== undefined && clientStartMonth >= 1 && clientStartMonth <= 12) {
+    resolvedStartMonth = clientStartMonth;
+  } else if (clientEndMonth !== undefined && clientEndMonth >= 1 && clientEndMonth <= 12) {
+    resolvedStartMonth = clientEndMonth === 12 ? 1 : clientEndMonth + 1;
+  } else if (rawStart) {
+    const startMatch = /^(?:\d{4}-)?(\d{2})-\d{2}$/.exec(rawStart);
+    if (startMatch) {
+      const sm = parseInt(startMatch[1], 10);
+      if (sm >= 1 && sm <= 12) resolvedStartMonth = sm;
+    }
+  } else {
+    const rawEndMonth = isNumberFirst ? targetFiscalYearOrEndMonth : client?.fiscalYearEndMonth;
+    const endMonth = rawEndMonth && rawEndMonth >= 1 && rawEndMonth <= 12 ? rawEndMonth : 12;
+    resolvedStartMonth = endMonth === 12 ? 1 : endMonth + 1;
   }
 
-  if (endMonth === 3) {
-    const startDate = `${baseYear - 1}-04-01`;
-    const endDate = `${baseYear}-03-31`;
-    return {
-      fiscalYear: baseYear,
-      startDate,
-      endDate,
-      start: startDate,
-      end: endDate,
-      labelAr: formatFiscalDateArabic(endDate),
-    };
-  }
-
-  const startDate = `${baseYear}-01-01`;
-  const endDate = `${baseYear}-12-31`;
+  const computedBounds = computeFiscalYearBoundsByStartMonth(baseYear, resolvedStartMonth);
   return {
     fiscalYear: baseYear,
-    startDate,
-    endDate,
-    start: startDate,
-    end: endDate,
-    labelAr: formatFiscalDateArabic(endDate),
+    startDate: computedBounds.startDate,
+    endDate: computedBounds.endDate,
+    start: computedBounds.startDate,
+    end: computedBounds.endDate,
+    labelAr: formatFiscalDateArabic(computedBounds.endDate),
   };
 }
 
@@ -1507,9 +1557,48 @@ class LocalDatabase {
       () => this.getCurrentUser(),
       () => this.state?.activeClientContext?.clientId || null
     );
+    AccountingCalculator.registerFiscalYearBoundsResolver((cId, fy) => {
+      const b = this.getClientFiscalYearBounds(cId, fy);
+      const startMonth = parseInt((b.startDate || '').slice(5, 7), 10) || 1;
+      return {
+        startDate: b.startDate,
+        endDate: b.endDate,
+        startMonth,
+        labelAr: b.labelAr,
+      };
+    });
+    AccountingCalculator.registerStatementModelDataSource({
+      getClientById: (cId) => this.state.clients.find((c) => c.id === cId),
+      getClientFiscalYearBounds: (cId, fy) => {
+        const b = this.getClientFiscalYearBounds(cId, fy);
+        const startMonth = parseInt((b.startDate || '').slice(5, 7), 10) || 1;
+        return {
+          startDate: b.startDate,
+          endDate: b.endDate,
+          startMonth,
+          labelAr: b.labelAr,
+        };
+      },
+      getClientAccounts: (cId, fy) => this.getClientAccounts(cId, fy),
+      getClientJournalEntries: (cId) =>
+        (this.state.journalEntries || []).filter((j) => j && j.clientId === cId),
+      getClientStatementMapping: (cId) => this.getClientStatementMapping(cId),
+      getOpeningBalancesMap: () => this.state.openingBalances || {},
+      getManagerAdjustmentLayer: (cId, fy, ver) => this.getManagerAdjustmentLayer(cId, fy, ver),
+      getStoredStatementNotes: (cId, fy) =>
+        this.state.statementNotes?.[`${cId}:${fy}`] || {},
+      getApprovedStatementSnapshot: (cId, fy, ver) =>
+        (this.state.approvedStatements || []).find(
+          (s) => s.clientId === cId && s.fiscalYear === fy && (s.version === ver || s.versionNo === ver)
+        ),
+      getLatestApprovedStatementSnapshot: (cId, fy) =>
+        this.getLatestApprovedStatementForClient(cId, fy),
+    });
   }
 
   public createDefaultState(): DatabaseState {
+    const defaultFyBounds = computeFiscalYearBoundsByStartMonth(2026, 1);
+    const defaultStartTs = `${defaultFyBounds.startDate}T00:00:00.000Z`;
     const defaultAdminSalt = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
     const defaultAdmin: SystemUser = {
       id: 'user-admin',
@@ -1527,13 +1616,14 @@ class LocalDatabase {
       canDeleteRecords: true,
       canAccessCreditFiles: true,
       canAccessTaxReports: true,
+      canEditFinalStatements: true,
       mustChangePassword: false,
       passwordSalt: defaultAdminSalt,
       passwordHash: this.computeSaltedPasswordHash('Admin@1234', defaultAdminSalt),
       failedLoginAttempts: 0,
       lockoutCount: 0,
       lockedUntil: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
+      createdAt: defaultStartTs,
     };
 
     const initialState: DatabaseState = {
@@ -1564,8 +1654,8 @@ class LocalDatabase {
           paidFees: 35000,
           fiscalYear: 2026,
           activeFiscalYear: 2026,
-          fiscalYearStart: '2026-01-01',
-          fiscalYearEnd: '2026-12-31',
+          fiscalYearStart: defaultFyBounds.startDate,
+          fiscalYearEnd: defaultFyBounds.endDate,
           fiscalYearEndMonth: 12,
           isVatRegistered: true,
           isVatSubject: true,
@@ -1608,8 +1698,8 @@ class LocalDatabase {
       },
       exchangeRates: [
         {
-          id: 'fx-usd-2026-01-01',
-          date: '2026-01-01',
+          id: 'fx-usd-default-1',
+          date: defaultFyBounds.startDate,
           currency: 'USD',
           baseCurrency: 'EGP',
           buyRate: 48.55,
@@ -1619,8 +1709,8 @@ class LocalDatabase {
           code: 'USD',
           name: 'دولار أمريكي',
           source: 'CBE',
-          createdAt: '2026-01-01T00:00:00Z',
-          updatedAt: '2026-01-01T00:00:00Z',
+          createdAt: defaultStartTs,
+          updatedAt: defaultStartTs,
         },
         {
           id: 'fx-usd-2026-02-01',
@@ -1638,8 +1728,8 @@ class LocalDatabase {
           updatedAt: '2026-02-01T00:00:00Z',
         },
         {
-          id: 'fx-eur-2026-01-01',
-          date: '2026-01-01',
+          id: 'fx-eur-default-1',
+          date: defaultFyBounds.startDate,
           currency: 'EUR',
           baseCurrency: 'EGP',
           buyRate: 52.4,
@@ -1649,12 +1739,12 @@ class LocalDatabase {
           code: 'EUR',
           name: 'يورو أوروبي',
           source: 'CBE',
-          createdAt: '2026-01-01T00:00:00Z',
-          updatedAt: '2026-01-01T00:00:00Z',
+          createdAt: defaultStartTs,
+          updatedAt: defaultStartTs,
         },
         {
-          id: 'fx-sar-2026-01-01',
-          date: '2026-01-01',
+          id: 'fx-sar-default-1',
+          date: defaultFyBounds.startDate,
           currency: 'SAR',
           baseCurrency: 'EGP',
           buyRate: 12.95,
@@ -1664,8 +1754,8 @@ class LocalDatabase {
           code: 'SAR',
           name: 'ريال سعودي',
           source: 'CBE',
-          createdAt: '2026-01-01T00:00:00Z',
-          updatedAt: '2026-01-01T00:00:00Z',
+          createdAt: defaultStartTs,
+          updatedAt: defaultStartTs,
         },
       ],
       officeProfile: {
@@ -1707,23 +1797,26 @@ class LocalDatabase {
       clientDeadlines: [],
       openItems: [],
       approvedStatements: [],
+      managerAdjustmentLayers: {},
+      statementNotes: {},
+      openingBalanceRollovers: {},
       openingBalances: {
         'client-1': {
           2026: {
-            'acc-1101': { debit: 250000, credit: 0, accountCode: '1101', updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-            'acc-1102': { debit: 850000, credit: 0, accountCode: '1102', updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-            'acc-1103': { debit: 320000, credit: 0, accountCode: '1103', updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-            'acc-2101': { debit: 0, credit: 420000, accountCode: '2101', updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-            'acc-3101': { debit: 0, credit: 1000000, accountCode: '3101', updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
+            'acc-1101': { debit: 250000, credit: 0, accountCode: '1101', updatedAt: defaultStartTs, updatedBy: 'system' },
+            'acc-1102': { debit: 850000, credit: 0, accountCode: '1102', updatedAt: defaultStartTs, updatedBy: 'system' },
+            'acc-1103': { debit: 320000, credit: 0, accountCode: '1103', updatedAt: defaultStartTs, updatedBy: 'system' },
+            'acc-2101': { debit: 0, credit: 420000, accountCode: '2101', updatedAt: defaultStartTs, updatedBy: 'system' },
+            'acc-3101': { debit: 0, credit: 1000000, accountCode: '3101', updatedAt: defaultStartTs, updatedBy: 'system' },
           },
         },
       },
       clientOpeningBalances: [
-        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-1101', accountCode: '1101', openingBalanceDebit: 250000, openingBalanceCredit: 0, updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-1102', accountCode: '1102', openingBalanceDebit: 850000, openingBalanceCredit: 0, updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-1103', accountCode: '1103', openingBalanceDebit: 320000, openingBalanceCredit: 0, updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-2101', accountCode: '2101', openingBalanceDebit: 0, openingBalanceCredit: 420000, updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
-        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-3101', accountCode: '3101', openingBalanceDebit: 0, openingBalanceCredit: 1000000, updatedAt: '2026-01-01T00:00:00Z', updatedBy: 'system' },
+        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-1101', accountCode: '1101', openingBalanceDebit: 250000, openingBalanceCredit: 0, updatedAt: defaultStartTs, updatedBy: 'system' },
+        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-1102', accountCode: '1102', openingBalanceDebit: 850000, openingBalanceCredit: 0, updatedAt: defaultStartTs, updatedBy: 'system' },
+        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-1103', accountCode: '1103', openingBalanceDebit: 320000, openingBalanceCredit: 0, updatedAt: defaultStartTs, updatedBy: 'system' },
+        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-2101', accountCode: '2101', openingBalanceDebit: 0, openingBalanceCredit: 420000, updatedAt: defaultStartTs, updatedBy: 'system' },
+        { clientId: 'client-1', fiscalYear: 2026, accountId: 'acc-3101', accountCode: '3101', openingBalanceDebit: 0, openingBalanceCredit: 1000000, updatedAt: defaultStartTs, updatedBy: 'system' },
       ],
       feeAgreements: [
         {
@@ -1732,7 +1825,7 @@ class LocalDatabase {
           fiscalYear: 2026,
           description: 'اتفاقية المراجعة السنوية والإقرارات الضريبية لعام 2026',
           amount: 60000,
-          dueDate: '2026-12-31',
+          dueDate: defaultFyBounds.endDate,
           status: 'ACTIVE',
           createdAt: '2026-01-10',
         },
@@ -2173,6 +2266,9 @@ class LocalDatabase {
             clientDeadlines: parsed.clientDeadlines || base.clientDeadlines || [],
             openItems: parsed.openItems || base.openItems || [],
             approvedStatements: parsed.approvedStatements || base.approvedStatements || [],
+            managerAdjustmentLayers: parsed.managerAdjustmentLayers || base.managerAdjustmentLayers || {},
+            statementNotes: parsed.statementNotes || base.statementNotes || {},
+            openingBalanceRollovers: parsed.openingBalanceRollovers || base.openingBalanceRollovers || {},
             feeAgreements: parsed.feeAgreements || base.feeAgreements || [],
             feeCollections: parsed.feeCollections || base.feeCollections || [],
             clientSystemRegistrations: parsed.clientSystemRegistrations || base.clientSystemRegistrations || [],
@@ -2263,9 +2359,20 @@ class LocalDatabase {
   public flushDirtyStorage(): void {
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(FULL_STATE_KEY, JSON.stringify(this.state));
-        for (const slice of this.dirtySlices) {
-          localStorage.setItem(`${STORAGE_PREFIX}${slice}`, '1');
+        const isBulkAuditOnly =
+          this.dirtySlices.size === 1 &&
+          this.dirtySlices.has('AUDIT') &&
+          (this.state.auditLogs?.length || 0) > 25 &&
+          (this.state.auditLogs?.length || 0) % 50 !== 0;
+
+        if (isBulkAuditOnly) {
+          const lastAudit = this.state.auditLogs[this.state.auditLogs.length - 1];
+          localStorage.setItem(`${STORAGE_PREFIX}AUDIT`, JSON.stringify(lastAudit || '1'));
+        } else {
+          localStorage.setItem(FULL_STATE_KEY, JSON.stringify(this.state));
+          for (const slice of this.dirtySlices) {
+            localStorage.setItem(`${STORAGE_PREFIX}${slice}`, '1');
+          }
         }
       }
       this.dirtySlices.clear();
@@ -2518,6 +2625,30 @@ class LocalDatabase {
     const users = this.getUsers();
     const found = users.find((u) => u.id === this.state.currentUserId);
     return found || null;
+  }
+
+  public setCurrentUser(user: Partial<SystemUser> & { id: string; name: string }): void {
+    const existing = this.state.users.find((u) => u.id === user.id);
+    if (!existing) {
+      const newUser: SystemUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email || `${user.id}@example.com`,
+        role: user.role || 'AUDITOR',
+        roleTitleArabic: (user as any).roleTitleArabic || 'مستخدم النظام',
+        canAccessTreasury: (user as any).canAccessTreasury !== false,
+        canAccessAuditTrail: (user as any).canAccessAuditTrail !== false,
+        permissions: user.permissions || ['VIEW'],
+        permittedClientIds: user.permittedClientIds,
+        isActive: user.isActive !== false,
+        createdAt: getCairoTimestamp(),
+        ...user,
+      };
+      this.state.users.push(newUser);
+    } else {
+      Object.assign(existing, user);
+    }
+    this.state.currentUserId = user.id;
   }
 
   public switchUser(
@@ -3983,6 +4114,8 @@ class LocalDatabase {
     fiscalYear: number;
     startDate: string;
     endDate: string;
+    start: string;
+    end: string;
     endMonth: number;
     endDay: number;
     labelAr: string;
@@ -3996,7 +4129,6 @@ class LocalDatabase {
       client?.fiscalYear ||
       client?.activeFiscalYear ||
       getCairoCurrentYear();
-    const endMonth = client?.fiscalYearEndMonth || 12;
 
     const monthNamesAr = [
       'يناير',
@@ -4013,29 +4145,7 @@ class LocalDatabase {
       'ديسمبر',
     ];
 
-    if (
-      (client?.fiscalYear === targetYear || client?.activeFiscalYear === targetYear) &&
-      client?.fiscalYearStart &&
-      client?.fiscalYearEnd &&
-      /^\d{4}-\d{2}-\d{2}$/.test(client.fiscalYearStart) &&
-      /^\d{4}-\d{2}-\d{2}$/.test(client.fiscalYearEnd)
-    ) {
-      const endParts = client.fiscalYearEnd.split('-').map(Number);
-      const eMonth = endParts[1] || 12;
-      const eDay = endParts[2] || 31;
-      const monthLabel = monthNamesAr[(eMonth - 1 + 12) % 12] || 'ديسمبر';
-      return {
-        fiscalYear: targetYear,
-        startDate: client.fiscalYearStart,
-        endDate: client.fiscalYearEnd,
-        endMonth: eMonth,
-        endDay: eDay,
-        labelAr: `${eDay} ${monthLabel} ${endParts[0] || targetYear}`,
-        isCalendarYear: eMonth === 12 && eDay === 31,
-      };
-    }
-
-    const computed = computeClientFiscalYearBounds(targetYear, endMonth);
+    const computed = computeClientFiscalYearBounds(client || targetYear, targetYear);
     const endParts = computed.end.split('-').map(Number);
     const eMonth = endParts[1] || 12;
     const eDay = endParts[2] || 31;
@@ -4045,11 +4155,35 @@ class LocalDatabase {
       fiscalYear: targetYear,
       startDate: computed.start,
       endDate: computed.end,
+      start: computed.start,
+      end: computed.end,
       endMonth: eMonth,
       endDay: eDay,
       labelAr: `${eDay} ${monthLabel} ${endParts[0] || targetYear}`,
       isCalendarYear: eMonth === 12 && eDay === 31,
     };
+  }
+
+  public resolveClientFiscalYearForDate(clientId: string, dateStr?: string): number {
+    const cleanDate = (dateStr || getCairoDateString()).trim().slice(0, 10);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanDate);
+    if (!m) {
+      const client = this.state.clients.find((c) => c.id === clientId);
+      return (
+        this.state.activeClientContext?.selectedFiscalYear ||
+        client?.fiscalYear ||
+        client?.activeFiscalYear ||
+        getCairoCurrentYear()
+      );
+    }
+    const calYear = parseInt(m[1], 10);
+    const calMonth = parseInt(m[2], 10);
+    const sampleBounds = this.getClientFiscalYearBounds(clientId, calYear);
+    const startMonth = parseInt((sampleBounds.startDate || '').slice(5, 7), 10) || 1;
+    if (startMonth === 1) {
+      return calYear;
+    }
+    return calMonth >= startMonth ? calYear + 1 : calYear;
   }
 
   public getClientAccounts(clientId: string, fiscalYear?: number): Account[] {
@@ -4125,7 +4259,7 @@ class LocalDatabase {
     debit: number,
     credit: number,
     reason = 'تحديث الرصيد الافتتاحي للسنة المالية'
-  ): ClientOpeningBalanceRecord {
+  ): ClientOpeningBalanceRecord & { postRolloverWarning?: string } {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
     const user = this.assertCan('EDIT', { clientId: resolvedClientId });
     this.assertPeriodOpen(resolvedClientId, undefined, fiscalYear);
@@ -4165,7 +4299,27 @@ class LocalDatabase {
         (r.accountId === accountId || r.accountCode === resolvedCode)
     );
 
-    const record: ClientOpeningBalanceRecord = {
+    const rolloverKey = `${resolvedClientId}:${fiscalYear}`;
+    const currentYearRollover = this.state.openingBalanceRollovers?.[rolloverKey];
+    const subsequentRollover = Object.values(this.state.openingBalanceRollovers || {}).find(
+      (r) => r.clientId === resolvedClientId && r.fromYear === fiscalYear
+    );
+    const existingRollover = currentYearRollover || subsequentRollover;
+    const hasSubsequentRolloverWarning = Boolean(existingRollover);
+    let postRolloverWarning: string | undefined;
+    if (existingRollover) {
+      const fromYr = existingRollover.fromYear;
+      const toYr = existingRollover.toYear;
+      postRolloverWarning = `تحذير: تم تعديل الرصيد الافتتاحي للحساب (${resolvedCode}) في السنة (${fiscalYear}) بعد ترحيل الأرصدة (من ${fromYr} إلى ${toYr}). سيؤثر هذا التعديل على مطابقة الأرصدة مع إقفال السنة السابقة وعلى الأرصدة التراكمية للسنوات المالية اللاحقة (${toYr} وما بعدها).`;
+      existingRollover.postRolloverModifiedAt = getCairoTimestamp();
+      existingRollover.postRolloverModifiedBy = user.name;
+      existingRollover.postRolloverWarning = postRolloverWarning;
+    }
+
+    const record: ClientOpeningBalanceRecord & {
+      postRolloverWarning?: string;
+      hasSubsequentRolloverWarning?: boolean;
+    } = {
       clientId: resolvedClientId,
       fiscalYear,
       accountId,
@@ -4174,6 +4328,8 @@ class LocalDatabase {
       openingBalanceCredit: cleanCredit,
       updatedAt: getCairoTimestamp(),
       updatedBy: user.name,
+      hasSubsequentRolloverWarning,
+      ...(postRolloverWarning ? { postRolloverWarning } : {}),
     };
 
     if (existingIdx >= 0) {
@@ -4195,41 +4351,72 @@ class LocalDatabase {
       };
     }
 
-    this.logAudit({
-      action: 'UPDATE_OPENING_BALANCE',
+    this.recordAuditMutation({
+      action: postRolloverWarning ? 'UPDATE_OPENING_BALANCE_POST_ROLLOVER' : 'UPDATE_OPENING_BALANCE',
       entityType: 'ACCOUNT',
       entityId: accountId,
       clientId: resolvedClientId,
       beforeValue: beforeNested,
-      afterValue: { accountId, accountCode: resolvedCode, debit: cleanDebit, credit: cleanCredit, fiscalYear },
+      afterValue: {
+        accountId,
+        accountCode: resolvedCode,
+        debit: cleanDebit,
+        credit: cleanCredit,
+        fiscalYear,
+        ...(postRolloverWarning ? { postRolloverWarning } : {}),
+      },
       reason,
-      details: `تعديل الرصيد الافتتاحي للحساب (${resolvedCode}) للعميل (${resolvedClientId}) للسنة (${fiscalYear}) في مصفوفة الأرصدة الافتتاحية المستقلة`,
+      details: postRolloverWarning
+        ? `${postRolloverWarning} — السبب: ${reason}`
+        : `تعديل الرصيد الافتتاحي للحساب (${resolvedCode}) للعميل (${resolvedClientId}) للسنة (${fiscalYear}) في مصفوفة الأرصدة الافتتاحية المستقلة`,
     });
 
     this.saveState('ACCOUNTS');
     return record;
   }
 
+  public getOpeningBalanceRolloverMetadata(
+    clientId: string,
+    fiscalYear: number
+  ): OpeningBalanceRolloverMetadata | undefined {
+    return this.state.openingBalanceRollovers?.[`${clientId}:${fiscalYear}`];
+  }
+
   /**
-   * Requirement 2: Rollover year-end closing balances of Balance Sheet accounts (Assets, Liabilities, Equity + Net Profit/Loss)
-   * into openingBalances[clientId][closedFiscalYear + 1][accountId] after closing.
+   * Alias for previewRolloverClosingBalancesToNextYear (Requirement أ-4).
    */
-  public rolloverClosingBalancesToNextYear(
+  public previewRolloverClosingBalances(clientId?: string, closedFiscalYear?: number) {
+    return this.previewRolloverClosingBalancesToNextYear(clientId, closedFiscalYear);
+  }
+
+  /**
+   * Preview of year-end closing balances rollover into next fiscal year before execution (Requirement أ-4).
+   */
+  public previewRolloverClosingBalancesToNextYear(
     clientId?: string,
-    closedFiscalYear?: number,
-    reason = 'ترحيل أرصدة آخر المدة كأرصدة افتتاحية للسنة المالية التالية بعد الإقفال'
+    closedFiscalYear?: number
   ): {
     clientId: string;
     fromFiscalYear: number;
     toFiscalYear: number;
+    alreadyRolledOver: boolean;
+    previousRollover?: OpeningBalanceRolloverMetadata;
     rolledAccountsCount: number;
     totalOpeningDebit: number;
     totalOpeningCredit: number;
     netIncomeTransferred: number;
+    previewRows: Array<{
+      accountId: string;
+      accountCode: string;
+      accountName: string;
+      category: Account['category'];
+      closingDebit: number;
+      closingCredit: number;
+      currentNextYearOpeningDebit: number;
+      currentNextYearOpeningCredit: number;
+    }>;
   } {
     const resolvedClientId = this.resolveMandatoryClientId(clientId);
-    const user = this.assertCan('POST', { clientId: resolvedClientId });
-
     const clientObj = this.state.clients.find((c) => c.id === resolvedClientId);
     const fromYear =
       closedFiscalYear ||
@@ -4239,10 +4426,10 @@ class LocalDatabase {
       getCairoCurrentYear();
     const toYear = fromYear + 1;
 
-    this.assertPeriodOpen(resolvedClientId, undefined, toYear);
-
     const bounds = this.getClientFiscalYearBounds(resolvedClientId, fromYear);
     const accountsWithOpening = this.getClientAccounts(resolvedClientId, fromYear);
+    const nextYearAccounts = this.getClientAccounts(resolvedClientId, toYear);
+    const nextYearMapById = new Map(nextYearAccounts.map((a) => [a.id, a]));
 
     const clientYearEntries = this.state.journalEntries.filter((e) => {
       if (e.clientId !== resolvedClientId) return false;
@@ -4273,10 +4460,16 @@ class LocalDatabase {
       }
     }
 
-    let unclosedNetIncome = 0; // Credit - Debit across Revenues & Expenses if no closing entry was posted yet
+    let unclosedNetIncome = 0;
     if (!hasClosingEntry) {
       for (const acc of accountsWithOpening) {
-        if (acc.category === 'REVENUE' || acc.category === 'EXPENSES') {
+        if (
+          acc.category === 'REVENUE' ||
+          acc.category === 'REVENUES' ||
+          acc.category === 'EXPENSE' ||
+          acc.category === 'EXPENSES' ||
+          acc.category === 'COGS'
+        ) {
           const opDebit = Number(acc.openingBalanceDebit) || 0;
           const opCredit = Number(acc.openingBalanceCredit) || 0;
           const mov = movementByAccountId[acc.id] || { debit: 0, credit: 0 };
@@ -4287,19 +4480,8 @@ class LocalDatabase {
       }
     }
 
-    if (!this.state.openingBalances || typeof this.state.openingBalances !== 'object') {
-      this.state.openingBalances = {};
-    }
-    if (!this.state.openingBalances[resolvedClientId]) {
-      this.state.openingBalances[resolvedClientId] = {};
-    }
-    const nextYearKey = String(toYear);
-    const beforeNextYearBalances = {
-      ...(this.state.openingBalances[resolvedClientId][nextYearKey] || {}),
-    };
-    const nextYearMap: Record<string, OpeningBalanceEntry> = {};
-
     const retainedEarningsAcc =
+      accountsWithOpening.find((a) => a.code === '3102') ||
       accountsWithOpening.find((a) => a.code === '3200') ||
       accountsWithOpening.find((a) => a.category === 'EQUITY' && a.level > 1) ||
       accountsWithOpening.find((a) => a.category === 'EQUITY');
@@ -4307,14 +4489,25 @@ class LocalDatabase {
     let rolledAccountsCount = 0;
     let totalOpeningDebit = 0;
     let totalOpeningCredit = 0;
-
-    if (!Array.isArray(this.state.clientOpeningBalances)) {
-      this.state.clientOpeningBalances = [];
-    }
+    const previewRows: Array<{
+      accountId: string;
+      accountCode: string;
+      accountName: string;
+      category: Account['category'];
+      closingDebit: number;
+      closingCredit: number;
+      currentNextYearOpeningDebit: number;
+      currentNextYearOpeningCredit: number;
+    }> = [];
 
     for (const acc of accountsWithOpening) {
-      if (acc.category === 'REVENUE' || acc.category === 'EXPENSES') {
-        nextYearMap[acc.id] = { debit: 0, credit: 0 };
+      if (
+        acc.category === 'REVENUE' ||
+        acc.category === 'REVENUES' ||
+        acc.category === 'EXPENSE' ||
+        acc.category === 'EXPENSES' ||
+        acc.category === 'COGS'
+      ) {
         continue;
       }
 
@@ -4330,6 +4523,141 @@ class LocalDatabase {
       const roundedNet = Math.round(net * 100) / 100;
       const nextDebit = roundedNet > 0.009 ? Number(roundedNet.toFixed(2)) : 0;
       const nextCredit = roundedNet < -0.009 ? Number(Math.abs(roundedNet).toFixed(2)) : 0;
+
+      if (nextDebit > 0 || nextCredit > 0) {
+        rolledAccountsCount += 1;
+        totalOpeningDebit += nextDebit;
+        totalOpeningCredit += nextCredit;
+        const nextAcc = nextYearMapById.get(acc.id);
+        previewRows.push({
+          accountId: acc.id,
+          accountCode: acc.code,
+          accountName: acc.name,
+          category: acc.category,
+          closingDebit: nextDebit,
+          closingCredit: nextCredit,
+          currentNextYearOpeningDebit: Number(nextAcc?.openingBalanceDebit) || 0,
+          currentNextYearOpeningCredit: Number(nextAcc?.openingBalanceCredit) || 0,
+        });
+      }
+    }
+
+    const rolloverKey = `${resolvedClientId}:${toYear}`;
+    const previousRollover = this.state.openingBalanceRollovers?.[rolloverKey];
+
+    return {
+      clientId: resolvedClientId,
+      fromFiscalYear: fromYear,
+      toFiscalYear: toYear,
+      alreadyRolledOver: Boolean(previousRollover),
+      previousRollover,
+      rolledAccountsCount,
+      totalOpeningDebit: Number(totalOpeningDebit.toFixed(2)),
+      totalOpeningCredit: Number(totalOpeningCredit.toFixed(2)),
+      netIncomeTransferred: Number(unclosedNetIncome.toFixed(2)),
+      previewRows,
+    };
+  }
+
+  /**
+   * Requirement أ-4: Rollover year-end closing balances of Balance Sheet accounts (Assets, Liabilities, Equity + Net Profit/Loss)
+   * into openingBalances[clientId][closedFiscalYear + 1][accountId].
+   * Prevents duplicate execution unless confirmRepeat is true, supports preview, and logs to audit trail.
+   */
+  public rolloverClosingBalancesToNextYear(
+    clientId?: string,
+    closedFiscalYear?: number,
+    reasonOrOptions?:
+      | string
+      | boolean
+      | { reason?: string; confirmRepeat?: boolean },
+    options?: boolean | string | { confirmRepeat?: boolean; reason?: string }
+  ): {
+    clientId: string;
+    fromFiscalYear: number;
+    toFiscalYear: number;
+    targetYear: number;
+    count: number;
+    rolledAccountsCount: number;
+    totalOpeningDebit: number;
+    totalOpeningCredit: number;
+    netIncomeTransferred: number;
+    previewRows: Array<{
+      accountId: string;
+      accountCode: string;
+      accountName: string;
+      category: Account['category'];
+      closingDebit: number;
+      closingCredit: number;
+      currentNextYearOpeningDebit: number;
+      currentNextYearOpeningCredit: number;
+    }>;
+  } {
+    const resolvedClientId = this.resolveMandatoryClientId(clientId);
+    const user = this.assertCan('POST', { clientId: resolvedClientId });
+
+    const confirmRepeat =
+      typeof reasonOrOptions === 'boolean'
+        ? reasonOrOptions
+        : typeof options === 'boolean'
+        ? options
+        : typeof reasonOrOptions === 'object' && reasonOrOptions !== null
+        ? Boolean(reasonOrOptions.confirmRepeat)
+        : typeof options === 'object' && options !== null
+        ? Boolean(options.confirmRepeat)
+        : false;
+
+    const reason =
+      typeof reasonOrOptions === 'string'
+        ? reasonOrOptions
+        : typeof options === 'string'
+        ? options
+        : typeof reasonOrOptions === 'object' && reasonOrOptions !== null && reasonOrOptions.reason
+        ? reasonOrOptions.reason
+        : typeof options === 'object' && options !== null && options.reason
+        ? options.reason
+        : 'ترحيل أرصدة آخر المدة كأرصدة افتتاحية للسنة المالية التالية بعد الإقفال';
+
+    const preview = this.previewRolloverClosingBalancesToNextYear(resolvedClientId, closedFiscalYear);
+    const { fromFiscalYear: fromYear, toFiscalYear: toYear } = preview;
+
+    this.assertPeriodOpen(resolvedClientId, undefined, toYear);
+
+    const rolloverKey = `${resolvedClientId}:${toYear}`;
+    if (!this.state.openingBalanceRollovers || typeof this.state.openingBalanceRollovers !== 'object') {
+      this.state.openingBalanceRollovers = {};
+    }
+    const existingRollover = this.state.openingBalanceRollovers[rolloverKey];
+    if (existingRollover && !confirmRepeat) {
+      throw new Error(
+        `تم ترحيل الأرصدة الافتتاحية للسنة (${toYear}) مسبقاً بتاريخ (${existingRollover.rolledOverAt}) بواسطة (${existingRollover.rolledOverBy}). يُمنع تكرار الترحيل إلا بتأكيد صريح (confirmRepeat: true).`
+      );
+    }
+
+    const accountsWithOpening = this.getClientAccounts(resolvedClientId, fromYear);
+
+    if (!this.state.openingBalances || typeof this.state.openingBalances !== 'object') {
+      this.state.openingBalances = {};
+    }
+    if (!this.state.openingBalances[resolvedClientId]) {
+      this.state.openingBalances[resolvedClientId] = {};
+    }
+    const nextYearKey = String(toYear);
+    const beforeNextYearBalances = {
+      ...(this.state.openingBalances[resolvedClientId][nextYearKey] || {}),
+    };
+    const nextYearMap: Record<string, OpeningBalanceEntry> = {};
+
+    if (!Array.isArray(this.state.clientOpeningBalances)) {
+      this.state.clientOpeningBalances = [];
+    }
+
+    const previewByAccountId = new Map(preview.previewRows.map((r) => [r.accountId, r]));
+
+    for (const acc of accountsWithOpening) {
+      const pRow = previewByAccountId.get(acc.id);
+      const nextDebit = pRow ? pRow.closingDebit : 0;
+      const nextCredit = pRow ? pRow.closingCredit : 0;
 
       nextYearMap[acc.id] = { debit: nextDebit, credit: nextCredit };
 
@@ -4351,18 +4679,19 @@ class LocalDatabase {
       } else if (nextDebit > 0 || nextCredit > 0) {
         this.state.clientOpeningBalances.push(flatRecord);
       }
-
-      if (nextDebit > 0 || nextCredit > 0) {
-        rolledAccountsCount += 1;
-        totalOpeningDebit += nextDebit;
-        totalOpeningCredit += nextCredit;
-      }
     }
 
     this.state.openingBalances[resolvedClientId][nextYearKey] = nextYearMap;
+    this.state.openingBalanceRollovers[rolloverKey] = {
+      clientId: resolvedClientId,
+      fromYear,
+      toYear,
+      rolledOverAt: getCairoTimestamp(),
+      rolledOverBy: user.name,
+    };
 
-    this.logAudit({
-      action: 'ROLLOVER_OPENING_BALANCES_NEXT_YEAR',
+    this.recordAuditMutation({
+      action: existingRollover ? 'RE_ROLLOVER_OPENING_BALANCES_CONFIRMED' : 'ROLLOVER_OPENING_BALANCES_NEXT_YEAR',
       entityType: 'ACCOUNT',
       entityId: `${resolvedClientId}:${fromYear}->${toYear}`,
       clientId: resolvedClientId,
@@ -4370,12 +4699,14 @@ class LocalDatabase {
       afterValue: {
         fromFiscalYear: fromYear,
         toFiscalYear: toYear,
-        rolledAccountsCount,
-        totalOpeningDebit: Number(totalOpeningDebit.toFixed(2)),
-        totalOpeningCredit: Number(totalOpeningCredit.toFixed(2)),
+        rolledAccountsCount: preview.rolledAccountsCount,
+        totalOpeningDebit: preview.totalOpeningDebit,
+        totalOpeningCredit: preview.totalOpeningCredit,
+        netIncomeTransferred: preview.netIncomeTransferred,
+        confirmRepeat,
       },
       reason,
-      details: `ترحيل أرصدة آخر المدة للسنة (${fromYear}) كأرصدة افتتاحية للسنة (${toYear}) للعميل (${resolvedClientId}) بعدد (${rolledAccountsCount}) حساب`,
+      details: `ترحيل أرصدة آخر المدة للسنة (${fromYear}) كأرصدة افتتاحية للسنة (${toYear}) للعميل (${resolvedClientId}) بعدد (${preview.rolledAccountsCount}) حساب`,
     });
 
     this.saveState('ACCOUNTS');
@@ -4384,10 +4715,13 @@ class LocalDatabase {
       clientId: resolvedClientId,
       fromFiscalYear: fromYear,
       toFiscalYear: toYear,
-      rolledAccountsCount,
-      totalOpeningDebit: Number(totalOpeningDebit.toFixed(2)),
-      totalOpeningCredit: Number(totalOpeningCredit.toFixed(2)),
-      netIncomeTransferred: Number(unclosedNetIncome.toFixed(2)),
+      targetYear: toYear,
+      count: preview.rolledAccountsCount,
+      rolledAccountsCount: preview.rolledAccountsCount,
+      totalOpeningDebit: preview.totalOpeningDebit,
+      totalOpeningCredit: preview.totalOpeningCredit,
+      netIncomeTransferred: preview.netIncomeTransferred,
+      previewRows: preview.previewRows,
     };
   }
 
@@ -4447,15 +4781,71 @@ class LocalDatabase {
     );
   }
 
+  public getUnassignedInvoices(): Invoice[] {
+    const validClientIds = new Set(this.state.clients.map((c) => c.id));
+    return (this.state.invoices || []).filter(
+      (i) => !i.clientId || !i.clientId.trim() || !validClientIds.has(i.clientId)
+    );
+  }
+
+  public getUnassignedTreasuryTransactions(): OfficeTreasuryTransaction[] {
+    const validClientIds = new Set(this.state.clients.map((c) => c.id));
+    return (this.state.treasuryTransactions || []).filter(
+      (t) => !t.clientId || !t.clientId.trim() || !validClientIds.has(t.clientId)
+    );
+  }
+
+  public getUnassignedFixedAssets(): FixedAsset[] {
+    const validClientIds = new Set(this.state.clients.map((c) => c.id));
+    return (this.state.fixedAssets || []).filter(
+      (a) => !a.clientId || !a.clientId.trim() || !validClientIds.has(a.clientId)
+    );
+  }
+
+  public getUnassignedTaxDeclarations(): TaxDeclarationRecord[] {
+    const validClientIds = new Set(this.state.clients.map((c) => c.id));
+    return (this.state.taxDeclarations || []).filter(
+      (d) => !d.clientId || !d.clientId.trim() || !validClientIds.has(d.clientId)
+    );
+  }
+
+  public getUnassignedRecordsSummary(): {
+    journalEntriesCount: number;
+    invoicesCount: number;
+    treasuryTransactionsCount: number;
+    fixedAssetsCount: number;
+    taxDeclarationsCount: number;
+    totalCount: number;
+  } {
+    const journalEntriesCount = this.getUnassignedJournalEntries().length;
+    const invoicesCount = this.getUnassignedInvoices().length;
+    const treasuryTransactionsCount = this.getUnassignedTreasuryTransactions().length;
+    const fixedAssetsCount = this.getUnassignedFixedAssets().length;
+    const taxDeclarationsCount = this.getUnassignedTaxDeclarations().length;
+    return {
+      journalEntriesCount,
+      invoicesCount,
+      treasuryTransactionsCount,
+      fixedAssetsCount,
+      taxDeclarationsCount,
+      totalCount:
+        journalEntriesCount +
+        invoicesCount +
+        treasuryTransactionsCount +
+        fixedAssetsCount +
+        taxDeclarationsCount,
+    };
+  }
+
   public hasUnassignedJournalEntries(): boolean {
-    return this.getUnassignedJournalEntries().length > 0;
+    return this.getUnassignedRecordsSummary().totalCount > 0;
   }
 
   public assertNoUnassignedEntriesForReport(): void {
-    const unassigned = this.getUnassignedJournalEntries();
-    if (unassigned.length > 0) {
+    const summary = this.getUnassignedRecordsSummary();
+    if (summary.totalCount > 0) {
       throw new Error(
-        `يوجد (${unassigned.length}) قيد محاسبي غير منسوب لعميل محدد. يرجى الانتقال إلى شاشة "قيود غير منسوبة" ونسبتها إلى المنشأة المختصة قبل استخراج أو تصدير أي تقرير.`
+        `يوجد (${summary.totalCount}) سجل غير منسوب لعميل محدد (قيود: ${summary.journalEntriesCount}، فواتير: ${summary.invoicesCount}، خزنة: ${summary.treasuryTransactionsCount}، أصول: ${summary.fixedAssetsCount}، إقرارات: ${summary.taxDeclarationsCount}). يرجى الانتقال إلى شاشة "قيود غير منسوبة" ونسبتها إلى المنشأة المختصة قبل استخراج أو تصدير أي تقرير.`
       );
     }
   }
@@ -4481,10 +4871,13 @@ class LocalDatabase {
 
     const existing = this.state.journalEntries[idx];
     const before = { ...existing };
-    const clientAccounts = this.getClientAccounts(
-      targetClientId,
-      existing.fiscalYear || client.fiscalYear || client.activeFiscalYear
-    );
+    const resolvedFy =
+      existing.fiscalYear ||
+      this.resolveClientFiscalYearForDate(targetClientId, existing.date) ||
+      client.fiscalYear ||
+      client.activeFiscalYear ||
+      getCairoCurrentYear();
+    const clientAccounts = this.getClientAccounts(targetClientId, resolvedFy);
     const accByCode = new Map(clientAccounts.map((a) => [a.code, a]));
 
     const remappedLines = (existing.lines || []).map((line) => {
@@ -4500,11 +4893,12 @@ class LocalDatabase {
       ...existing,
       clientId: targetClientId,
       clientName: client.name,
+      fiscalYear: resolvedFy,
       lines: remappedLines,
       updatedAt: getCairoTimestamp(),
     };
 
-    this.logAudit({
+    this.recordAuditMutation({
       action: 'ASSIGN_UNASSIGNED_JOURNAL_TO_CLIENT',
       entityType: 'JOURNAL_ENTRY',
       entityId: entryId,
@@ -4512,25 +4906,145 @@ class LocalDatabase {
       beforeValue: before,
       afterValue: this.state.journalEntries[idx],
       reason,
-      details: `نسب القيد رقم (${existing.entryNumber}) إلى العميل (${client.name})`,
+      details: `نسب القيد رقم (${existing.entryNumber}) إلى العميل (${client.name}) للسنة المالية (${resolvedFy})`,
     });
 
     this.saveState('JOURNAL');
     return this.state.journalEntries[idx];
   }
 
+  public assignUnassignedRecordToClient(
+    entityType: 'JOURNAL_ENTRY' | 'INVOICE' | 'TREASURY' | 'FIXED_ASSET' | 'TAX_DECLARATION',
+    recordId: string,
+    targetClientId: string,
+    reason = 'نسب سجل غير منسوب إلى المنشأة المختصة'
+  ): void {
+    if (!targetClientId || !targetClientId.trim()) {
+      throw new Error('يجب اختيار المنشأة (العميل) المراد نسب السجل إليها.');
+    }
+    this.assertCan('EDIT', { clientId: targetClientId });
+    const client = this.state.clients.find((c) => c.id === targetClientId);
+    if (!client) {
+      throw new Error('العميل المختار غير موجود في قاعدة البيانات.');
+    }
+
+    if (entityType === 'JOURNAL_ENTRY') {
+      this.assignJournalEntryToClient(recordId, targetClientId, reason);
+      return;
+    }
+
+    if (entityType === 'INVOICE') {
+      const idx = this.state.invoices.findIndex((i) => i.id === recordId);
+      if (idx === -1) throw new Error('الفاتورة المطلوب نسبها غير موجودة.');
+      const before = { ...this.state.invoices[idx] };
+      const fy = before.fiscalYear || this.resolveClientFiscalYearForDate(targetClientId, before.date);
+      this.state.invoices[idx] = { ...before, clientId: targetClientId, fiscalYear: fy };
+      this.recordAuditMutation({
+        action: 'ASSIGN_UNASSIGNED_INVOICE_TO_CLIENT',
+        entityType: 'INVOICE',
+        entityId: recordId,
+        clientId: targetClientId,
+        beforeValue: before,
+        afterValue: this.state.invoices[idx],
+        reason,
+        details: `نسب الفاتورة رقم (${before.invoiceNumber}) إلى العميل (${client.name})`,
+      });
+      this.saveState('INVOICES');
+      return;
+    }
+
+    if (entityType === 'TREASURY') {
+      const idx = this.state.treasuryTransactions.findIndex((t) => t.id === recordId);
+      if (idx === -1) throw new Error('حركة الخزنة المطلوب نسبها غير موجودة.');
+      const before = { ...this.state.treasuryTransactions[idx] };
+      const fy = before.fiscalYear || this.resolveClientFiscalYearForDate(targetClientId, before.date);
+      this.state.treasuryTransactions[idx] = {
+        ...before,
+        clientId: targetClientId,
+        clientName: client.name,
+        fiscalYear: fy,
+      };
+      this.recordAuditMutation({
+        action: 'ASSIGN_UNASSIGNED_TREASURY_TO_CLIENT',
+        entityType: 'TREASURY',
+        entityId: recordId,
+        clientId: targetClientId,
+        beforeValue: before,
+        afterValue: this.state.treasuryTransactions[idx],
+        reason,
+        details: `نسب حركة الخزنة (${recordId}) إلى العميل (${client.name})`,
+      });
+      this.saveState('TREASURY');
+      return;
+    }
+
+    if (entityType === 'FIXED_ASSET') {
+      const idx = this.state.fixedAssets.findIndex((a) => a.id === recordId);
+      if (idx === -1) throw new Error('الأصل الثابت المطلوب نسبه غير موجود.');
+      const before = { ...this.state.fixedAssets[idx] };
+      const fy = before.fiscalYear || this.resolveClientFiscalYearForDate(targetClientId, before.purchaseDate);
+      this.state.fixedAssets[idx] = { ...before, clientId: targetClientId, fiscalYear: fy };
+      this.recordAuditMutation({
+        action: 'ASSIGN_UNASSIGNED_ASSET_TO_CLIENT',
+        entityType: 'FIXED_ASSET',
+        entityId: recordId,
+        clientId: targetClientId,
+        beforeValue: before,
+        afterValue: this.state.fixedAssets[idx],
+        reason,
+        details: `نسب الأصل الثابت (${before.name}) إلى العميل (${client.name})`,
+      });
+      this.saveState('FIXED_ASSETS');
+      return;
+    }
+
+    if (entityType === 'TAX_DECLARATION') {
+      const idx = this.state.taxDeclarations.findIndex((d) => d.id === recordId);
+      if (idx === -1) throw new Error('الإقرار الضريبي المطلوب نسبه غير موجود.');
+      const before = { ...this.state.taxDeclarations[idx] };
+      const fy = before.fiscalYear || this.resolveClientFiscalYearForDate(targetClientId, before.dueDate);
+      this.state.taxDeclarations[idx] = { ...before, clientId: targetClientId, fiscalYear: fy };
+      this.recordAuditMutation({
+        action: 'ASSIGN_UNASSIGNED_TAX_TO_CLIENT',
+        entityType: 'TAX_DECLARATION',
+        entityId: recordId,
+        clientId: targetClientId,
+        beforeValue: before,
+        afterValue: this.state.taxDeclarations[idx],
+        reason,
+        details: `نسب الإقرار الضريبي (${before.declarationType}) إلى العميل (${client.name})`,
+      });
+      this.saveState('TAXES');
+    }
+  }
+
   public assignAllUnassignedEntriesToClient(
     targetClientId: string,
-    reason = 'نسب كافة القيود غير المنسوبة إلى المنشأة المختارة'
+    reason = 'نسب كافة السجلات غير المنسوبة إلى المنشأة المختارة'
   ): number {
     if (!targetClientId || !targetClientId.trim()) {
       throw new Error('يجب اختيار المنشأة (العميل) المراد نسب القيود إليها.');
     }
     this.assertCan('EDIT', { clientId: targetClientId });
-    const unassigned = this.getUnassignedJournalEntries();
     let count = 0;
-    for (const entry of unassigned) {
+    for (const entry of this.getUnassignedJournalEntries()) {
       this.assignJournalEntryToClient(entry.id, targetClientId, reason);
+      count += 1;
+    }
+    for (const inv of this.getUnassignedInvoices()) {
+      this.assignUnassignedRecordToClient('INVOICE', inv.id, targetClientId, reason);
+      count += 1;
+    }
+    for (const tx of this.getUnassignedTreasuryTransactions()) {
+      this.assignUnassignedRecordToClient('TREASURY', tx.id, targetClientId, reason);
+      count += 1;
+    }
+    for (const ast of this.getUnassignedFixedAssets()) {
+      this.assignUnassignedRecordToClient('FIXED_ASSET', ast.id, targetClientId, reason);
+      count += 1;
+    }
+    for (const decl of this.getUnassignedTaxDeclarations()) {
+      this.assignUnassignedRecordToClient('TAX_DECLARATION', decl.id, targetClientId, reason);
       count += 1;
     }
     return count;
@@ -5597,7 +6111,10 @@ class LocalDatabase {
       const rollRes = this.rolloverClosingBalancesToNextYear(
         resolvedClientId,
         targetYear,
-        options?.reason || `ترحيل الأرصدة الختامية بعد الإقفال للسنة (${targetYear}) كافتتاحية للسنة (${targetYear + 1})`
+        {
+          reason: options?.reason || `ترحيل الأرصدة الختامية بعد الإقفال للسنة (${targetYear}) كافتتاحية للسنة (${targetYear + 1})`,
+          confirmRepeat: true,
+        }
       );
       rolledAccountsCount = rollRes.rolledAccountsCount;
     }
@@ -5869,7 +6386,9 @@ class LocalDatabase {
     return { lines: normalizedLines, totalDebit, totalCredit };
   }
 
-  public addJournalEntry(entry: Partial<JournalEntry>): JournalEntry {
+  public addJournalEntry(
+    entry: Partial<JournalEntry> & { relocateOutOfBoundsDate?: boolean }
+  ): JournalEntry {
     if (entry.clientId !== undefined && !String(entry.clientId).trim()) {
       throw new Error('ممنوع تسجيل قيد بدون تحديد العميل (clientId إلزامي).');
     }
@@ -5880,8 +6399,33 @@ class LocalDatabase {
       this.assertCan('EDIT', { clientId: resolvedClientId });
     }
 
-    const entryDate = entry.date || getCairoDateString();
-    const entryFiscalYear = entry.fiscalYear || this.extractYearFromDate(entryDate);
+    const entryDate = (entry.date || getCairoDateString()).trim().slice(0, 10);
+    const derivedFiscalYear = this.resolveClientFiscalYearForDate(resolvedClientId, entryDate);
+    let entryFiscalYear = derivedFiscalYear;
+    let relocatedFiscalYearWarning: string | undefined = entry.relocatedFiscalYearWarning;
+
+    const hasExplicitFiscalYear =
+      entry.fiscalYear !== undefined &&
+      entry.fiscalYear !== null &&
+      Number.isFinite(Number(entry.fiscalYear));
+
+    if (hasExplicitFiscalYear) {
+      const requestedFy = Number(entry.fiscalYear);
+      const reqBounds = this.getClientFiscalYearBounds(resolvedClientId, requestedFy);
+      if (entryDate < reqBounds.startDate || entryDate > reqBounds.endDate) {
+        if (entry.relocateOutOfBoundsDate) {
+          entryFiscalYear = derivedFiscalYear;
+          relocatedFiscalYearWarning = `تنبيه: تاريخ القيد (${entryDate}) يقع خارج حدود السنة المالية المختارة (${requestedFy}: من ${reqBounds.startDate} إلى ${reqBounds.endDate})؛ تم نقل القيد تلقائياً إلى سنته المالية الصحيحة (${derivedFiscalYear}).`;
+        } else {
+          throw new Error(
+            `رفض حفظ القيد: تاريخ القيد (${entryDate}) يقع خارج حدود السنة المالية (${requestedFy}) المعتمدة للعميل (${reqBounds.startDate} إلى ${reqBounds.endDate}). يرجى تصحيح التاريخ أو نقله للسنة المالية الصحيحة (${derivedFiscalYear}).`
+          );
+        }
+      } else {
+        entryFiscalYear = requestedFy;
+      }
+    }
+
     this.assertPeriodOpen(resolvedClientId, entryDate, entryFiscalYear);
 
     const entryCurrency = entry.currency || 'EGP';
@@ -5908,7 +6452,7 @@ class LocalDatabase {
       const isDuplicate = this.state.journalEntries.some(
         (j) =>
           j.clientId === resolvedClientId &&
-          (j.fiscalYear || this.extractYearFromDate(j.date)) === entryFiscalYear &&
+          (j.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, j.date)) === entryFiscalYear &&
           String(j.entryNumber) === String(candidate)
       );
       if (isDuplicate) {
@@ -5949,6 +6493,7 @@ class LocalDatabase {
       exchangeRate: rate,
       createdAt: entry.createdAt || getCairoTimestamp(),
       clientId: resolvedClientId,
+      ...(relocatedFiscalYearWarning ? { relocatedFiscalYearWarning } : {}),
     };
 
     this.state.journalEntries.unshift(created);
@@ -6378,7 +6923,7 @@ class LocalDatabase {
     if (activeClient) {
       activeClient.activeFiscalYear = year;
       activeClient.fiscalYear = year;
-      const bounds = computeClientFiscalYearBounds(year, activeClient.fiscalYearEndMonth || 12);
+      const bounds = computeClientFiscalYearBounds(activeClient, year);
       activeClient.fiscalYearStart = bounds.start;
       activeClient.fiscalYearEnd = bounds.end;
       this.state.activeClientContext.fiscalYearStart = bounds.start;
@@ -6391,13 +6936,35 @@ class LocalDatabase {
     const user = this.assertCan('EDIT', { allowWithoutClient: true });
     const newId = clientData.id || `client-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const targetFiscalYear = clientData.fiscalYear || clientData.activeFiscalYear || getCairoCurrentYear();
-    const targetEndMonth = clientData.fiscalYearEndMonth || 12;
-    const computedBounds = computeClientFiscalYearBounds(targetFiscalYear, targetEndMonth);
+    const rawStartMonth =
+      typeof (clientData as any).fiscalYearStartMonth === 'number'
+        ? Number((clientData as any).fiscalYearStartMonth)
+        : undefined;
+    const targetEndMonth =
+      clientData.fiscalYearEndMonth ||
+      (rawStartMonth && rawStartMonth >= 1 && rawStartMonth <= 12
+        ? rawStartMonth === 1
+          ? 12
+          : rawStartMonth - 1
+        : 12);
+    const computedBounds = computeClientFiscalYearBounds(
+      { ...clientData, fiscalYear: targetFiscalYear, fiscalYearEndMonth: targetEndMonth },
+      targetFiscalYear
+    );
     const resolvedTemplate: ClientActivityTemplate =
       clientData.activityTemplate || inferActivityTemplateFromText(clientData.industrySector);
 
+    let maxClientSeq = this.state.clients.length;
+    for (const existingClient of this.state.clients) {
+      const m = /(\d+)$/.exec(String(existingClient.code || '').trim());
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxClientSeq) maxClientSeq = n;
+      }
+    }
+
     const created: ClientArchiveRecord = {
-      code: clientData.code || `CL-${getCairoCurrentYear()}-${String(this.state.clients.length + 1).padStart(3, '0')}`,
+      code: clientData.code || `CL-${getCairoCurrentYear()}-${String(maxClientSeq + 1).padStart(3, '0')}`,
       name: clientData.name || 'عميل جديد',
       taxId: clientData.taxId || clientData.taxCardNo || '',
       taxCardNo: clientData.taxCardNo || clientData.taxId || '',
@@ -6514,14 +7081,30 @@ class LocalDatabase {
       before.fiscalYear ??
       before.activeFiscalYear ??
       getCairoCurrentYear();
-    const targetEndMonth = partial.fiscalYearEndMonth ?? before.fiscalYearEndMonth ?? 12;
-    const recomputedBounds = computeClientFiscalYearBounds(targetYear, targetEndMonth);
+    const rawStartMonth =
+      typeof (partial as any).fiscalYearStartMonth === 'number'
+        ? Number((partial as any).fiscalYearStartMonth)
+        : typeof (before as any).fiscalYearStartMonth === 'number'
+        ? Number((before as any).fiscalYearStartMonth)
+        : undefined;
+    const targetEndMonth =
+      partial.fiscalYearEndMonth ??
+      (rawStartMonth && rawStartMonth >= 1 && rawStartMonth <= 12
+        ? rawStartMonth === 1
+          ? 12
+          : rawStartMonth - 1
+        : before.fiscalYearEndMonth ?? 12);
+    const recomputedBounds = computeClientFiscalYearBounds(
+      { ...before, ...partial, fiscalYear: targetYear, fiscalYearEndMonth: targetEndMonth },
+      targetYear
+    );
 
     const nextStart =
       partial.fiscalYearStart ||
       (partial.fiscalYear !== undefined ||
       partial.activeFiscalYear !== undefined ||
-      partial.fiscalYearEndMonth !== undefined
+      partial.fiscalYearEndMonth !== undefined ||
+      (partial as any).fiscalYearStartMonth !== undefined
         ? recomputedBounds.start
         : before.fiscalYearStart || recomputedBounds.start);
     const nextEnd =
@@ -6889,9 +7472,11 @@ class LocalDatabase {
       createdAt: getCairoTimestamp(),
     };
 
+    const txFiscalYear = this.resolveClientFiscalYearForDate(resolvedClientId, paidAt);
     const treasuryTx: OfficeTreasuryTransaction = {
       id: sharedId,
       date: paidAt,
+      fiscalYear: txFiscalYear,
       type: 'INCOME_FEES',
       category: 'تحصيل أتعاب مهنية',
       amount: Number(input.amount) || 0,
@@ -6969,10 +7554,19 @@ class LocalDatabase {
   public addTreasuryTransaction(
     txInput: Partial<OfficeTreasuryTransaction>
   ): OfficeTreasuryTransaction {
+    if (txInput.clientId !== undefined && !String(txInput.clientId).trim()) {
+      throw new Error('ممنوع تسجيل حركة خزنة بدون تحديد العميل (clientId إلزامي).');
+    }
     const resolvedClientId = this.resolveMandatoryClientId(txInput.clientId);
-    const txDate = txInput.date || getCairoDateString();
-    this.assertCan('TREASURY', { clientId: resolvedClientId, entityType: 'TREASURY', date: txDate });
-    this.assertPeriodOpen(resolvedClientId, txDate, undefined, 'TREASURY');
+    const txDate = (txInput.date || getCairoDateString()).trim().slice(0, 10);
+    const txFiscalYear = txInput.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, txDate);
+    this.assertCan('TREASURY', {
+      clientId: resolvedClientId,
+      fiscalYear: txFiscalYear,
+      entityType: 'TREASURY',
+      date: txDate,
+    });
+    this.assertPeriodOpen(resolvedClientId, txDate, txFiscalYear, 'TREASURY');
 
     if (txInput.type === 'INCOME_FEES' && !txInput.feeCollectionId) {
       const { treasuryTransaction } = this.recordFeeCollection({
@@ -6985,6 +7579,7 @@ class LocalDatabase {
         receiptNo: txInput.receiptNumber || txInput.referenceNumber,
         notes: txInput.description,
       });
+      treasuryTransaction.fiscalYear = txFiscalYear;
       return treasuryTransaction;
     }
 
@@ -7001,6 +7596,7 @@ class LocalDatabase {
     const created: OfficeTreasuryTransaction = {
       id: txInput.id || `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       date: txDate,
+      fiscalYear: txFiscalYear,
       type: txInput.type || 'EXPENSE_OFFICE',
       amount: txCurrency !== 'EGP' && txInput.foreignAmount !== undefined ? amountEgp : Number(txInput.amount) || amountEgp,
       currency: txCurrency,
@@ -7021,7 +7617,7 @@ class LocalDatabase {
       beforeValue: null,
       afterValue: created,
       reason: created.description || 'حركة خزينة',
-      details: `تسجيل حركة خزينة (${created.type}) بمبلغ ${created.amount} ج.م للعميل (${resolvedClientId})`,
+      details: `تسجيل حركة خزينة (${created.type}) بمبلغ ${created.amount} ج.م للعميل (${resolvedClientId}) للسنة (${txFiscalYear})`,
     });
 
     this.saveState('TREASURY');
@@ -7195,42 +7791,130 @@ class LocalDatabase {
     );
   }
 
+  public getLatestApprovedStatementForClient(
+    clientId: string,
+    fiscalYear: number
+  ): ApprovedStatementsSnapshot | undefined {
+    const list = this.getApprovedStatementsForClient(clientId, fiscalYear).filter(
+      (s) => s.status !== 'SUPERSEDED'
+    );
+    if (list.length === 0) return undefined;
+    return list.reduce((best, cur) => ((cur.version || 0) >= (best.version || 0) ? cur : best), list[0]);
+  }
+
   public addApprovedStatement(
     input: Partial<ApprovedStatementsSnapshot> & { clientId: string; fiscalYear: number }
   ): ApprovedStatementsSnapshot {
     const resolvedClientId = this.resolveMandatoryClientId(input.clientId);
-    this.assertCan('APPROVE_STATEMENT', {
+    const existingForPeriod = this.getApprovedStatementsForClient(resolvedClientId, input.fiscalYear);
+    const isReissue = existingForPeriod.length > 0;
+
+    if (isReissue) {
+      this.assertCan('EDIT_FINAL_STATEMENTS', {
+        clientId: resolvedClientId,
+        fiscalYear: input.fiscalYear,
+        entityType: 'APPROVED_STATEMENT',
+      });
+    } else {
+      this.assertCan('APPROVE_STATEMENT', {
+        clientId: resolvedClientId,
+        fiscalYear: input.fiscalYear,
+        entityType: 'APPROVED_STATEMENT',
+      });
+    }
+
+    const maxExistingVersion = existingForPeriod.reduce(
+      (maxV, s) => Math.max(maxV, Number(s.version || s.versionNo || 0)),
+      0
+    );
+    const nextVersion = input.version || input.versionNo || maxExistingVersion + 1;
+    const verificationCode = input.verificationCode || generateVerificationCode();
+    const nowTs = input.approvedAt || getCairoTimestamp();
+    const user = this.getCurrentUser();
+    const client = this.state.clients.find((c) => c.id === resolvedClientId);
+
+    const canonicalFingerprintInput = JSON.stringify({
       clientId: resolvedClientId,
       fiscalYear: input.fiscalYear,
-      entityType: 'APPROVED_STATEMENT',
+      version: nextVersion,
+      verificationCode,
+      incomeStatement: input.incomeStatement || {},
+      balanceSheet: input.balanceSheet || {},
+      cashFlow: input.cashFlow || {},
+      adjustmentLayer: input.adjustmentLayer || null,
     });
-    const existingForPeriod = this.getApprovedStatementsForClient(resolvedClientId, input.fiscalYear);
-    const nextVersion = input.version || input.versionNo || existingForPeriod.length + 1;
+    const sha256Fingerprint = input.sha256Fingerprint || computeSha256Hex(canonicalFingerprintInput);
+
     const snap: ApprovedStatementsSnapshot = {
       id: input.id || `as-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clientId: resolvedClientId,
       fiscalYear: input.fiscalYear,
       version: nextVersion,
       versionNo: nextVersion,
-      approvedAt: input.approvedAt || getCairoTimestamp(),
-      approvedBy: input.approvedBy || 'مراقب الحسابات',
+      status: input.status || 'APPROVED',
+      approvedAt: nowTs,
+      approvedBy: input.approvedBy || user?.name || this.state.officeProfile?.auditorName || 'مراقب الحسابات',
       source: input.source || 'LEDGER',
       trialBalanceRows: input.trialBalanceRows || [],
       incomeStatement: input.incomeStatement || {},
       balanceSheet: input.balanceSheet || {},
       cashFlow: input.cashFlow || {},
-      verificationCode: input.verificationCode || generateVerificationCode(),
+      verificationCode,
+      sha256Fingerprint,
       ...input,
     };
+
+    // Mark any prior active versions for the same (clientId, fiscalYear) as SUPERSEDED (never deleted)
+    for (const prev of existingForPeriod) {
+      if (prev.status !== 'SUPERSEDED' && prev.id !== snap.id) {
+        prev.status = 'SUPERSEDED';
+        prev.supersededById = snap.id;
+        prev.supersededByVersion = nextVersion;
+        prev.supersededAt = nowTs;
+        if (input.reissueReason) {
+          prev.reissueReason = input.reissueReason;
+        }
+        if (prev.verificationCode) {
+          IssuedDocumentService.markDocumentSuperseded(prev.verificationCode, {
+            supersededAt: nowTs,
+            supersededByVersion: nextVersion,
+            supersededByVerificationCode: verificationCode,
+            supersededByDocNumber: `FS-${input.fiscalYear}-V${nextVersion}`,
+          } as any);
+        }
+      }
+    }
+
     this.state.approvedStatements.unshift(snap);
-    this.logAudit({
-      action: 'APPROVE_FINANCIAL_STATEMENT',
+
+    Promise.resolve(
+      IssuedDocumentService.recordIssuedDocument({
+        verificationCode,
+        documentType: 'FINANCIAL_STATEMENTS',
+        issueDate: nowTs.slice(0, 10),
+        firmName: this.state.officeProfile?.firmName || client?.name || '—',
+        status: 'ACTIVE',
+        displayDocNumber: `FS-${input.fiscalYear}-V${nextVersion}`,
+        version: nextVersion,
+        clientId: resolvedClientId,
+        fiscalYear: input.fiscalYear,
+        sha256Fingerprint,
+      } as any)
+    ).catch(() => {
+      // ignore registry sync error
+    });
+
+    this.recordAuditMutation({
+      action: isReissue ? 'REISSUE_APPROVED_FINANCIAL_STATEMENT' : 'APPROVE_FINANCIAL_STATEMENT',
       entityType: 'APPROVED_STATEMENT',
       entityId: snap.id,
       clientId: resolvedClientId,
-      beforeValue: null,
+      beforeValue: isReissue ? existingForPeriod[0] : null,
       afterValue: snap,
-      details: `اعتماد القوائم المالية للعميل (${resolvedClientId}) للسنة (${input.fiscalYear}) - الإصدار (${nextVersion})`,
+      reason: input.reissueReason || `اعتماد الإصدار (${nextVersion}) للقوائم المالية`,
+      details: isReissue
+        ? `إعادة إصدار واعتماد القوائم المالية للعميل (${resolvedClientId}) للسنة (${input.fiscalYear}) - الإصدار (${nextVersion}) مع وسم الإصدار السابق SUPERSEDED. السبب: ${input.reissueReason || '—'}`
+        : `اعتماد القوائم المالية للعميل (${resolvedClientId}) للسنة (${input.fiscalYear}) - الإصدار (${nextVersion})`,
     });
     this.saveState('APPROVED_STATEMENTS');
     return snap;
@@ -7248,10 +7932,13 @@ class LocalDatabase {
       allowWithoutClient: !certInput.clientId,
     });
     const verificationCode = certInput.verificationCode || generateVerificationCode();
+    const serials = this.getSystemSerials();
+    const nextCertSeq = Math.max(serials.certificateNextNumber || 501, 101);
+    serials.certificateNextNumber = nextCertSeq + 1;
     const cert: ProfessionalCertificate = {
       id: certInput.id || `cert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       certificateNumber:
-        certInput.certificateNumber || `CERT-${getCairoCurrentYear()}-${this.state.certificates.length + 101}`,
+        certInput.certificateNumber || `CERT-${getCairoCurrentYear()}-${nextCertSeq}`,
       certificateType: certInput.certificateType || 'INCOME_PROOF',
       beneficiaryType: certInput.beneficiaryType || 'NATURAL_PERSON',
       clientName: certInput.clientName,
@@ -7382,16 +8069,19 @@ class LocalDatabase {
   // Tax Declarations, Mandates, Invoices, Fixed Assets, Exchange Rates
   // =========================================================================
   public addTaxDeclaration(decl: Partial<TaxDeclarationRecord>): TaxDeclarationRecord {
+    if (decl.clientId !== undefined && !String(decl.clientId).trim()) {
+      throw new Error('ممنوع تسجيل إقرار ضريبي بدون تحديد العميل (clientId إلزامي).');
+    }
     const resolvedClientId = this.resolveMandatoryClientId(decl.clientId);
-    const fy = decl.fiscalYear || getCairoCurrentYear();
+    const dueDate = (decl.dueDate || getCairoDateString()).trim().slice(0, 10);
+    const fy = decl.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, dueDate);
     this.assertCan('TAX', { clientId: resolvedClientId, fiscalYear: fy, entityType: 'TAX_DECLARATION' });
 
     const created: TaxDeclarationRecord = {
       id: decl.id || `tax-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       declarationType: decl.declarationType || 'VAT_MONTHLY',
       period: decl.period || '',
-      fiscalYear: fy,
-      dueDate: decl.dueDate || getCairoDateString(),
+      dueDate,
       taxableBase: Number(decl.taxableBase) || 0,
       taxAmount: Number(decl.taxAmount) || 0,
       penaltiesOrAdjustments: Number(decl.penaltiesOrAdjustments) || 0,
@@ -7400,6 +8090,7 @@ class LocalDatabase {
       status: decl.status || 'DRAFT',
       ...decl,
       clientId: resolvedClientId,
+      fiscalYear: fy,
     };
     this.state.taxDeclarations.unshift(created);
     this.logAudit({
@@ -7409,7 +8100,7 @@ class LocalDatabase {
       clientId: resolvedClientId,
       beforeValue: null,
       afterValue: created,
-      details: `إضافة إقرار ضريبي (${created.declarationType}) للفترة (${created.period}) للعميل (${resolvedClientId})`,
+      details: `إضافة إقرار ضريبي (${created.declarationType}) للفترة (${created.period}) للعميل (${resolvedClientId}) للسنة (${fy})`,
     });
     this.saveState('TAXES');
     return created;
@@ -7495,10 +8186,53 @@ class LocalDatabase {
     return after;
   }
 
+  public peekNextInvoiceNumber(clientId: string, fiscalYear: number): string {
+    const resolvedClientId = this.resolveMandatoryClientId(clientId);
+    const serials = this.getSystemSerials();
+    if (!serials.clientYearInvoiceCounters) {
+      serials.clientYearInvoiceCounters = {};
+    }
+    const key = `${resolvedClientId}:${fiscalYear}`;
+    let maxExisting = serials.clientYearInvoiceCounters[key] || 0;
+
+    for (const inv of this.state.invoices) {
+      if (inv.clientId !== resolvedClientId) continue;
+      const invFy = inv.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, inv.date);
+      if (invFy !== fiscalYear) continue;
+      const m = /(\d+)$/.exec(String(inv.invoiceNumber || '').trim());
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num > maxExisting) {
+          maxExisting = num;
+        }
+      }
+    }
+    const nextSeq = maxExisting + 1;
+    return `INV-${fiscalYear}-${String(nextSeq).padStart(4, '0')}`;
+  }
+
+  public getNextInvoiceNumber(clientId: string, fiscalYear: number): string {
+    const resolvedClientId = this.resolveMandatoryClientId(clientId);
+    const formatted = this.peekNextInvoiceNumber(resolvedClientId, fiscalYear);
+    const m = /(\d+)$/.exec(formatted);
+    const nextNum = m ? parseInt(m[1], 10) : 1;
+    const serials = this.getSystemSerials();
+    if (!serials.clientYearInvoiceCounters) {
+      serials.clientYearInvoiceCounters = {};
+    }
+    const key = `${resolvedClientId}:${fiscalYear}`;
+    serials.clientYearInvoiceCounters[key] = nextNum;
+    serials.invoiceNextNumber = Math.max((serials.invoiceNextNumber || 100) + 1, nextNum + 100);
+    return formatted;
+  }
+
   public addInvoice(inv: Partial<Invoice>): Invoice {
+    if (inv.clientId !== undefined && !String(inv.clientId).trim()) {
+      throw new Error('ممنوع تسجيل فاتورة بدون تحديد العميل (clientId إلزامي).');
+    }
     const resolvedClientId = this.resolveMandatoryClientId(inv.clientId);
-    const invDate = inv.date || getCairoDateString();
-    const invYear = this.extractYearFromDate(invDate);
+    const invDate = (inv.date || getCairoDateString()).trim().slice(0, 10);
+    const invYear = inv.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, invDate);
     this.assertCan(inv.isPosted ? 'POST_ENTRY' : 'EDIT_RECORD', {
       clientId: resolvedClientId,
       fiscalYear: invYear,
@@ -7507,7 +8241,7 @@ class LocalDatabase {
     });
     this.assertPeriodOpen(resolvedClientId, invDate, invYear, 'INVOICE');
 
-    this.batchAddInvoices([{ ...inv, clientId: resolvedClientId, date: invDate }]);
+    this.batchAddInvoices([{ ...inv, clientId: resolvedClientId, date: invDate, fiscalYear: invYear }]);
     const created = this.state.invoices[this.state.invoices.length - 1];
     return created;
   }
@@ -7519,9 +8253,12 @@ class LocalDatabase {
     }
     let added = 0;
     for (const inv of invoicesList) {
+      if (inv.clientId !== undefined && !String(inv.clientId).trim()) {
+        throw new Error('ممنوع تسجيل فاتورة بدون تحديد العميل (clientId إلزامي).');
+      }
       const resolvedClientId = this.resolveMandatoryClientId(inv.clientId);
-      const invDate = inv.date || getCairoDateString();
-      const invYear = this.extractYearFromDate(invDate);
+      const invDate = (inv.date || getCairoDateString()).trim().slice(0, 10);
+      const invYear = inv.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, invDate);
       this.assertCan(inv.isPosted ? 'POST_ENTRY' : 'EDIT_RECORD', {
         clientId: resolvedClientId,
         fiscalYear: invYear,
@@ -7530,10 +8267,8 @@ class LocalDatabase {
       });
       this.assertPeriodOpen(resolvedClientId, invDate, invYear, 'INVOICE');
 
-      const invNumClean = (inv.invoiceNumber || '').trim();
-      if (!invNumClean) {
-        throw new Error('رقم الفاتورة إلزامي ولا يمكن حفظ فاتورة بدون رقم.');
-      }
+      const rawInvNum = (inv.invoiceNumber || '').trim();
+      const invNumClean = rawInvNum || this.getNextInvoiceNumber(resolvedClientId, invYear);
 
       // منع استيراد أو تسجيل فاتورة مكررة لنفس العميل ونوع الفاتورة (clientId + invoiceNumber + invoiceType)
       const invType = inv.invoiceType || 'SALES';
@@ -7549,6 +8284,20 @@ class LocalDatabase {
         );
       }
 
+      // Advance sequential counter if explicit invoiceNumber ends with digits
+      const seqMatch = /(\d+)$/.exec(invNumClean);
+      if (seqMatch) {
+        const numericSeq = parseInt(seqMatch[1], 10);
+        const serials = this.getSystemSerials();
+        if (!serials.clientYearInvoiceCounters) {
+          serials.clientYearInvoiceCounters = {};
+        }
+        const counterKey = `${resolvedClientId}:${invYear}`;
+        if (numericSeq > (serials.clientYearInvoiceCounters[counterKey] || 0)) {
+          serials.clientYearInvoiceCounters[counterKey] = numericSeq;
+        }
+      }
+
       const invCurrency = inv.currency || 'EGP';
       const rate =
         invCurrency === 'EGP'
@@ -7559,7 +8308,6 @@ class LocalDatabase {
 
       const created: Invoice = {
         id: inv.id || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        invoiceNumber: invNumClean,
         invoiceType: inv.invoiceType || 'SALES',
         date: invDate,
         partnerName: inv.partnerName || 'عميل / مورد',
@@ -7577,7 +8325,9 @@ class LocalDatabase {
         paymentMethod: inv.paymentMethod || 'CASH',
         createdAt: inv.createdAt || getCairoTimestamp(),
         ...inv,
+        invoiceNumber: invNumClean,
         clientId: resolvedClientId,
+        fiscalYear: invYear,
       };
       this.state.invoices.push(created);
 
@@ -7589,11 +8339,12 @@ class LocalDatabase {
         beforeValue: null,
         afterValue: created,
         reason: `إصدار فاتورة (${created.invoiceNumber})`,
-        details: `إضافة فاتورة رقم (${created.invoiceNumber}) للعميل (${resolvedClientId}) بإجمالي ${created.grandTotal} ج.م`,
+        details: `إضافة فاتورة رقم (${created.invoiceNumber}) للعميل (${resolvedClientId}) للسنة (${invYear}) بإجمالي ${created.grandTotal} ج.م`,
       });
       added++;
     }
     this.saveState('INVOICES');
+    this.saveState('SERIALS');
     return added;
   }
 
@@ -7858,15 +8609,31 @@ class LocalDatabase {
   }
 
   public addFixedAsset(asset: Partial<FixedAsset>): FixedAsset {
+    if (asset.clientId !== undefined && !String(asset.clientId).trim()) {
+      throw new Error('ممنوع تسجيل أصل ثابت بدون تحديد العميل (clientId إلزامي).');
+    }
     const resolvedClientId = this.resolveMandatoryClientId(asset.clientId);
     this.assertCan('EDIT', { clientId: resolvedClientId });
 
+    const purchaseDate = (asset.purchaseDate || getCairoDateString()).trim().slice(0, 10);
+    const assetFiscalYear = asset.fiscalYear || this.resolveClientFiscalYearForDate(resolvedClientId, purchaseDate);
+
+    let maxAssetSeq = 0;
+    for (const fa of this.state.fixedAssets) {
+      if (fa.clientId !== resolvedClientId) continue;
+      const m = /(\d+)$/.exec(String(fa.assetCode || '').trim());
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxAssetSeq) maxAssetSeq = n;
+      }
+    }
+
     const created: FixedAsset = {
       id: asset.id || `fa-asset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      assetCode: asset.assetCode || `AST-${this.state.fixedAssets.length + 1}`,
+      assetCode: asset.assetCode || `AST-${assetFiscalYear}-${String(maxAssetSeq + 1).padStart(3, '0')}`,
       name: asset.name || 'أصل ثابت',
       category: asset.category || 'COMPUTERS_SOFTWARE',
-      purchaseDate: asset.purchaseDate || getCairoDateString(),
+      purchaseDate,
       purchaseCost: Number(asset.purchaseCost) || 0,
       salvageValue: Number(asset.salvageValue) || 0,
       usefulLifeYears: Number(asset.usefulLifeYears) || 5,
@@ -7878,6 +8645,7 @@ class LocalDatabase {
       status: asset.status || 'ACTIVE',
       ...asset,
       clientId: resolvedClientId,
+      fiscalYear: assetFiscalYear,
     };
     this.state.fixedAssets.push(created);
 
@@ -7889,7 +8657,7 @@ class LocalDatabase {
       beforeValue: null,
       afterValue: created,
       reason: `إضافة أصل ثابت (${created.name})`,
-      details: `إضافة الأصل (${created.assetCode} - ${created.name}) للعميل (${resolvedClientId}) بتكلفة ${created.purchaseCost} ج.م`,
+      details: `إضافة الأصل (${created.assetCode} - ${created.name}) للعميل (${resolvedClientId}) للسنة (${assetFiscalYear}) بتكلفة ${created.purchaseCost} ج.م`,
     });
 
     this.saveState('FIXED_ASSETS');
@@ -7998,16 +8766,17 @@ class LocalDatabase {
   }): JournalEntry {
     const fy = params.fiscalYear || params.year || getCairoCurrentYear();
     const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const fyBounds = this.getClientFiscalYearBounds(resolvedClientId, fy);
     this.assertCan('POST_ENTRY', {
       clientId: resolvedClientId,
       fiscalYear: fy,
       entityType: 'قيد إهلاك أصول ثابتة',
     });
-    this.assertPeriodOpen(resolvedClientId, `${fy}-12-31`, fy, 'قيد إهلاك');
+    this.assertPeriodOpen(resolvedClientId, fyBounds.endDate, fy, 'قيد إهلاك');
 
     const entry = this.addJournalEntry({
       entryNumber: `DEP-${fy}`,
-      date: `${fy}-12-31`,
+      date: fyBounds.endDate,
       description: params.description || `قيد إهلاك الأصول الثابتة السنوي لعام ${fy}`,
       documentType: 'DEPRECIATION',
       isPosted: true,
@@ -8858,6 +9627,1036 @@ class LocalDatabase {
     });
     this.saveState('AUDIT');
   }
+
+  // =========================================================================
+  // Part أ: Scoped Entity & Ledger Queries (Mandatory clientId + Fiscal Bounds)
+  // =========================================================================
+
+  // @public-readonly-safe: استعلام قيود اليومية مفلترة بالعميل وحدود السنة المالية دون السجلات غير المنسوبة
+  public getJournalEntries(clientId: string, fiscalYear?: number): JournalEntry[] {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استعلام قيود اليومية بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const validClientIds = new Set(this.state.clients.map((c) => c.id));
+    if (!validClientIds.has(cleanClientId)) return [];
+
+    const bounds = fiscalYear ? this.getClientFiscalYearBounds(cleanClientId, fiscalYear) : null;
+    return (this.state.journalEntries || []).filter((j) => {
+      if (j.clientId !== cleanClientId) return false;
+      if (!bounds || !fiscalYear) return true;
+      const d = (j.date || '').trim().slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        return d >= bounds.startDate && d <= bounds.endDate;
+      }
+      return j.fiscalYear === fiscalYear;
+    });
+  }
+
+  // @public-readonly-safe: استعلام الفواتير مفلترة بالعميل وحدود السنة المالية
+  public getInvoices(clientId: string, fiscalYear?: number): Invoice[] {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استعلام الفواتير بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const bounds = fiscalYear ? this.getClientFiscalYearBounds(cleanClientId, fiscalYear) : null;
+    return (this.state.invoices || []).filter((inv) => {
+      if (inv.clientId !== cleanClientId) return false;
+      if (!bounds || !fiscalYear) return true;
+      const d = (inv.date || '').trim().slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        return d >= bounds.startDate && d <= bounds.endDate;
+      }
+      return inv.fiscalYear === fiscalYear;
+    });
+  }
+
+  // @public-readonly-safe: استعلام حركات الخزنة مفلترة بالعميل وحدود السنة المالية
+  public getTreasuryTransactions(clientId: string, fiscalYear?: number): OfficeTreasuryTransaction[] {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استعلام حركات الخزنة بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const bounds = fiscalYear ? this.getClientFiscalYearBounds(cleanClientId, fiscalYear) : null;
+    return (this.state.treasuryTransactions || []).filter((tx) => {
+      if (tx.clientId !== cleanClientId) return false;
+      if (!bounds || !fiscalYear) return true;
+      const d = (tx.date || '').trim().slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        return d >= bounds.startDate && d <= bounds.endDate;
+      }
+      return tx.fiscalYear === fiscalYear;
+    });
+  }
+
+  // @public-readonly-safe: استعلام الأصول الثابتة مفلترة بالعميل
+  public getFixedAssets(clientId: string, fiscalYear?: number): FixedAsset[] {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استعلام الأصول الثابتة بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const bounds = fiscalYear ? this.getClientFiscalYearBounds(cleanClientId, fiscalYear) : null;
+    return (this.state.fixedAssets || []).filter((fa) => {
+      if (fa.clientId !== cleanClientId) return false;
+      if (!bounds || !fiscalYear) return true;
+      const d = (fa.purchaseDate || '').trim().slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        return d <= bounds.endDate;
+      }
+      return !fa.fiscalYear || fa.fiscalYear <= fiscalYear;
+    });
+  }
+
+  // @public-readonly-safe: استعلام الإقرارات الضريبية مفلترة بالعميل والسنة المالية
+  public getTaxDeclarations(clientId: string, fiscalYear?: number): TaxDeclarationRecord[] {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استعلام الإقرارات الضريبية بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    return (this.state.taxDeclarations || []).filter((decl) => {
+      if (decl.clientId !== cleanClientId) return false;
+      if (fiscalYear !== undefined && decl.fiscalYear !== fiscalYear) return false;
+      return true;
+    });
+  }
+
+  // @public-readonly-safe: استخراج ميزان المراجعة للعميل والسنة المالية بحدود السنة الفعلية
+  public getTrialBalance(
+    clientId: string,
+    fiscalYear?: number,
+    options?: { postedOnly?: boolean; fromDate?: string; toDate?: string }
+  ): TrialBalanceSummary {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استخراج ميزان المراجعة بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const client = this.state.clients.find((c) => c.id === cleanClientId);
+    const targetYear =
+      fiscalYear ||
+      this.state.activeClientContext?.selectedFiscalYear ||
+      client?.fiscalYear ||
+      client?.activeFiscalYear ||
+      getCairoCurrentYear();
+    const bounds = this.getClientFiscalYearBounds(cleanClientId, targetYear);
+    const clientAccounts = this.getClientAccounts(cleanClientId, targetYear);
+    const clientEntries = this.state.journalEntries.filter((j) => j.clientId === cleanClientId);
+
+    return AccountingCalculator.computeTrialBalance(clientAccounts, clientEntries, {
+      clientId: cleanClientId,
+      fiscalYear: targetYear,
+      fiscalYearBounds: bounds,
+      fromDate: options?.fromDate || bounds.startDate,
+      toDate: options?.toDate || bounds.endDate,
+      postedOnly: options?.postedOnly ?? true,
+    });
+  }
+
+  // @public-readonly-safe: استخراج دفتر الأستاذ العام للعميل والسنة المالية بحدود السنة الفعلية
+  public getGeneralLedger(
+    clientId: string,
+    fiscalYear?: number,
+    accountIdOrCode?: string,
+    options?: { postedOnly?: boolean; fromDate?: string; toDate?: string }
+  ): GeneralLedgerSummary {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع استخراج دفتر الأستاذ بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const client = this.state.clients.find((c) => c.id === cleanClientId);
+    const targetYear =
+      fiscalYear ||
+      this.state.activeClientContext?.selectedFiscalYear ||
+      client?.fiscalYear ||
+      client?.activeFiscalYear ||
+      getCairoCurrentYear();
+    const bounds = this.getClientFiscalYearBounds(cleanClientId, targetYear);
+    const clientAccounts = this.getClientAccounts(cleanClientId, targetYear);
+    const clientEntries = this.state.journalEntries.filter((j) => j.clientId === cleanClientId);
+
+    return AccountingCalculator.computeGeneralLedger(clientAccounts, clientEntries, {
+      clientId: cleanClientId,
+      fiscalYear: targetYear,
+      fiscalYearBounds: bounds,
+      fromDate: options?.fromDate || bounds.startDate,
+      toDate: options?.toDate || bounds.endDate,
+      postedOnly: options?.postedOnly ?? true,
+      accountIdOrCode,
+    });
+  }
+
+  // =========================================================================
+  // Part ب, ج, د, هـ: Unified StatementModel, ManagerAdjustmentLayer, Notes & Versioning
+  // =========================================================================
+
+  private getAdjustmentLayerStorageKey(clientId: string, fiscalYear: number, version?: number): string {
+    if (version !== undefined && version !== null && Number.isFinite(Number(version)) && Number(version) > 0) {
+      return `${clientId}:${fiscalYear}:v${Number(version)}`;
+    }
+    return `${clientId}:${fiscalYear}:WORKING`;
+  }
+
+  // @public-readonly-safe: جلب طبقة تعديلات المدير للعميل والسنة والإصدار
+  public getManagerAdjustmentLayer(
+    clientId: string,
+    fiscalYear: number,
+    version?: number
+  ): ManagerAdjustmentLayer {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع قراءة طبقة تعديلات القوائم بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    if (!this.state.managerAdjustmentLayers || typeof this.state.managerAdjustmentLayers !== 'object') {
+      this.state.managerAdjustmentLayers = {};
+    }
+
+    if (version !== undefined && version !== null && Number(version) > 0) {
+      const vKey = this.getAdjustmentLayerStorageKey(cleanClientId, fiscalYear, version);
+      const fromLayerMap = this.state.managerAdjustmentLayers[vKey];
+      if (fromLayerMap) return fromLayerMap;
+
+      const snap = this.getApprovedStatementsForClient(cleanClientId, fiscalYear).find(
+        (s) => s.version === Number(version) || s.versionNo === Number(version)
+      );
+      if (snap?.adjustmentLayer) {
+        return snap.adjustmentLayer;
+      }
+      return {
+        clientId: cleanClientId,
+        fiscalYear,
+        version: Number(version),
+        status: snap?.status || 'APPROVED',
+        adjustments: [],
+        customLineLabels: {},
+        updatedAt: snap?.approvedAt || getCairoTimestamp(),
+        updatedBy: 'system',
+      };
+    }
+
+    const workingKey = this.getAdjustmentLayerStorageKey(cleanClientId, fiscalYear);
+    if (this.state.managerAdjustmentLayers[workingKey]) {
+      return this.state.managerAdjustmentLayers[workingKey];
+    }
+
+    const latestApproved = this.getLatestApprovedStatementForClient(cleanClientId, fiscalYear);
+    if (latestApproved?.adjustmentLayer) {
+      return latestApproved.adjustmentLayer;
+    }
+
+    return {
+      clientId: cleanClientId,
+      fiscalYear,
+      version: latestApproved?.version || 1,
+      status: latestApproved ? 'APPROVED' : 'DRAFT',
+      adjustments: [],
+      customLineLabels: {},
+      updatedAt: getCairoTimestamp(),
+      updatedBy: 'system',
+    };
+  }
+
+  /**
+   * Requirement ب-1: Single Unified StatementModel builder for (clientId, fiscalYear, version?)
+   */
+  // @public-readonly-safe: بناء النموذج الموحد للقوائم المالية والإيضاحات والنسب والتدفقات النقدية وتقرير المراقب والملف الائتماني
+  public buildStatementModel(
+    clientId: string,
+    fiscalYear?: number,
+    version?: number
+  ): StatementModel {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('ممنوع بناء نموذج القوائم المالية بدون تحديد العميل (clientId إلزامي).');
+    }
+    const cleanClientId = clientId.trim();
+    const client = this.state.clients.find((c) => c.id === cleanClientId);
+    const targetYear =
+      fiscalYear ||
+      this.state.activeClientContext?.selectedFiscalYear ||
+      client?.fiscalYear ||
+      client?.activeFiscalYear ||
+      getCairoCurrentYear();
+    const compYear = targetYear - 1;
+
+    const currentBounds = this.getClientFiscalYearBounds(cleanClientId, targetYear);
+    const compBounds = this.getClientFiscalYearBounds(cleanClientId, compYear);
+
+    const currentAccounts = this.getClientAccounts(cleanClientId, targetYear);
+    const compAccounts = this.getClientAccounts(cleanClientId, compYear);
+    const clientEntries = (this.state.journalEntries || []).filter((j) => j.clientId === cleanClientId);
+    const statementMapping = this.getClientStatementMapping(cleanClientId);
+
+    const workingKey = this.getAdjustmentLayerStorageKey(cleanClientId, targetYear);
+    const hasOpenWorkingDraft = Boolean(
+      this.state.managerAdjustmentLayers?.[workingKey] &&
+        this.state.managerAdjustmentLayers[workingKey].status === 'DRAFT'
+    );
+
+    let approvedSnapshot: ApprovedStatementsSnapshot | undefined;
+    if (version !== undefined && version !== null && Number(version) > 0) {
+      approvedSnapshot = this.getApprovedStatementsForClient(cleanClientId, targetYear).find(
+        (s) => s.version === Number(version) || s.versionNo === Number(version)
+      );
+    } else if (!hasOpenWorkingDraft) {
+      approvedSnapshot = this.getLatestApprovedStatementForClient(cleanClientId, targetYear);
+    }
+
+    const adjustmentLayer = this.getManagerAdjustmentLayer(cleanClientId, targetYear, version);
+    const savedNotes = this.state.statementNotes?.[`${cleanClientId}:${targetYear}`] || {};
+
+    return AccountingCalculator.buildStatementModel({
+      clientId: cleanClientId,
+      fiscalYear: targetYear,
+      version: version ?? approvedSnapshot?.version ?? adjustmentLayer.version ?? 1,
+      client: client
+        ? {
+            id: client.id,
+            name: client.name,
+            taxId: client.taxId,
+            taxCardNo: client.taxCardNo,
+            commercialRegister: client.commercialRegister,
+            commercialRegNo: client.commercialRegNo,
+          }
+        : { id: cleanClientId, name: cleanClientId },
+      accounts: currentAccounts,
+      comparativeAccounts: compAccounts,
+      entries: clientEntries,
+      fiscalBounds: currentBounds,
+      comparativeFiscalBounds: compBounds,
+      statementMapping,
+      adjustmentLayer,
+      savedNotes,
+      officeProfile: this.state.officeProfile,
+      approvedSnapshot: approvedSnapshot || null,
+    });
+  }
+
+  /**
+   * Requirement ب-2 & ج-1 & ج-3 & د-4 & هـ:
+   * Apply or update a manager adjustment on a statement line (CURRENT or COMPARATIVE).
+   * Requires EDIT_FINAL_STATEMENTS permission. Period lock does NOT block this (only blocks ledger mutations).
+   * Never modifies ledger accounts or journal entries.
+   */
+  public upsertManagerStatementAdjustment(params: {
+    clientId: string;
+    fiscalYear: number;
+    lineKey: FinancialStatementLineKey | string;
+    period?: StatementAdjustmentPeriod;
+    overrideAmount: number;
+    reason: string;
+    version?: number;
+  }): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'STATEMENT_ADJUSTMENT',
+    });
+
+    const cleanReason = String(params.reason || '').trim();
+    if (!cleanReason) {
+      throw new Error('سبب التعديل اليدوي على القوائم المالية مطلوب ولا يمكن تركه فارغاً.');
+    }
+
+    const period: StatementAdjustmentPeriod = params.period || 'CURRENT';
+    const overrideAmount = Math.round((Number(params.overrideAmount) || 0) * 100) / 100;
+
+    // Build baseline model without this line's override to capture accurate ledgerAmount
+    const currentModelBefore = this.buildStatementModel(resolvedClientId, params.fiscalYear, params.version);
+    const targetLineBefore = currentModelBefore.linesMap[params.lineKey];
+    const ledgerAmount = targetLineBefore
+      ? period === 'CURRENT'
+        ? targetLineBefore.ledgerCurrent
+        : targetLineBefore.ledgerComparative
+      : 0;
+    const previousAmount = targetLineBefore
+      ? period === 'CURRENT'
+        ? targetLineBefore.currentAmount
+        : targetLineBefore.comparativeAmount
+      : ledgerAmount;
+
+    if (!this.state.managerAdjustmentLayers || typeof this.state.managerAdjustmentLayers !== 'object') {
+      this.state.managerAdjustmentLayers = {};
+    }
+
+    const workingKey = this.getAdjustmentLayerStorageKey(resolvedClientId, params.fiscalYear);
+    const existingLayer = this.getManagerAdjustmentLayer(resolvedClientId, params.fiscalYear);
+    const nextAdjustments = [...(existingLayer.adjustments || [])];
+
+    const adjIdx = nextAdjustments.findIndex(
+      (a) => a.lineKey === params.lineKey && a.period === period
+    );
+
+    const nowTs = getCairoTimestamp();
+    const newAdj: ManagerStatementAdjustment = {
+      id: adjIdx >= 0 ? nextAdjustments[adjIdx].id : `madj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      lineKey: params.lineKey,
+      lineLabelAr:
+        targetLineBefore?.labelAr ||
+        (STATEMENT_LINE_LABELS_AR[params.lineKey] as any)?.labelAr ||
+        String(params.lineKey),
+      period,
+      ledgerAmount,
+      overrideAmount,
+      diff: Math.round((overrideAmount - ledgerAmount) * 100) / 100,
+      reason: cleanReason,
+      by: user.name,
+      byUserId: user.id,
+      at: nowTs,
+    };
+
+    if (adjIdx >= 0) {
+      nextAdjustments[adjIdx] = newAdj;
+    } else {
+      nextAdjustments.push(newAdj);
+    }
+
+    const latestApproved = this.getLatestApprovedStatementForClient(resolvedClientId, params.fiscalYear);
+    const updatedLayer: ManagerAdjustmentLayer = {
+      ...existingLayer,
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      version: existingLayer.basedOnVersion
+        ? existingLayer.basedOnVersion + 1
+        : latestApproved
+        ? latestApproved.version + 1
+        : 1,
+      basedOnVersion: existingLayer.basedOnVersion ?? latestApproved?.version,
+      status: 'DRAFT',
+      adjustments: nextAdjustments,
+      updatedAt: nowTs,
+      updatedBy: user.name,
+    };
+
+    this.state.managerAdjustmentLayers[workingKey] = updatedLayer;
+
+    this.recordAuditMutation({
+      action: 'MANAGER_STATEMENT_LINE_OVERRIDE',
+      entityType: 'FINANCIAL_STATEMENT_LINE',
+      entityId: `${resolvedClientId}:${params.fiscalYear}:${params.lineKey}:${period}`,
+      clientId: resolvedClientId,
+      beforeValue: {
+        lineKey: params.lineKey,
+        period,
+        ledgerAmount,
+        previousAmount,
+      },
+      afterValue: {
+        lineKey: params.lineKey,
+        period,
+        ledgerAmount,
+        overrideAmount,
+        diff: newAdj.diff,
+        reason: cleanReason,
+      },
+      reason: cleanReason,
+      details: `تعديل يدوي لبند القوائم المالية (${newAdj.lineLabelAr} - ${period}) من (${previousAmount}) إلى (${overrideAmount}) [رصيد الأستاذ: ${ledgerAmount}] — السبب: ${cleanReason}`,
+    });
+
+    this.saveState('APPROVED_STATEMENTS');
+    return this.buildStatementModel(resolvedClientId, params.fiscalYear);
+  }
+
+  /**
+   * Batch apply multiple line adjustments with a single shared reason (Requirement ج-3).
+   */
+  public batchUpsertManagerStatementAdjustments(params: {
+    clientId: string;
+    fiscalYear: number;
+    items: Array<{
+      lineKey: FinancialStatementLineKey | string;
+      period?: StatementAdjustmentPeriod;
+      overrideAmount: number;
+    }>;
+    reason: string;
+  }): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'STATEMENT_ADJUSTMENT',
+    });
+
+    const cleanReason = String(params.reason || '').trim();
+    if (!cleanReason) {
+      throw new Error('سبب دفعة التعديلات اليدوية مطلوب ولا يمكن تركه فارغاً.');
+    }
+
+    for (const item of params.items) {
+      this.upsertManagerStatementAdjustment({
+        clientId: resolvedClientId,
+        fiscalYear: params.fiscalYear,
+        lineKey: item.lineKey,
+        period: item.period || 'CURRENT',
+        overrideAmount: item.overrideAmount,
+        reason: cleanReason,
+      });
+    }
+
+    return this.buildStatementModel(resolvedClientId, params.fiscalYear);
+  }
+
+  /**
+   * Requirement ب-2: Revert a single statement line back to its Ledger value ("إرجاع للأستاذ" لكل سطر).
+   */
+  public resetManagerStatementAdjustmentLine(params: {
+    clientId: string;
+    fiscalYear: number;
+    lineKey: FinancialStatementLineKey | string;
+    period?: StatementAdjustmentPeriod;
+    reason?: string;
+  }): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'STATEMENT_ADJUSTMENT',
+    });
+
+    const workingKey = this.getAdjustmentLayerStorageKey(resolvedClientId, params.fiscalYear);
+    const existingLayer = this.getManagerAdjustmentLayer(resolvedClientId, params.fiscalYear);
+    const beforeAdjustments = [...(existingLayer.adjustments || [])];
+    const removed = beforeAdjustments.filter(
+      (a) => a.lineKey === params.lineKey && (!params.period || a.period === params.period)
+    );
+    const remaining = beforeAdjustments.filter(
+      (a) => !(a.lineKey === params.lineKey && (!params.period || a.period === params.period))
+    );
+
+    if (!this.state.managerAdjustmentLayers) {
+      this.state.managerAdjustmentLayers = {};
+    }
+
+    this.state.managerAdjustmentLayers[workingKey] = {
+      ...existingLayer,
+      status: 'DRAFT',
+      adjustments: remaining,
+      updatedAt: getCairoTimestamp(),
+      updatedBy: user.name,
+    };
+
+    if (removed.length > 0) {
+      this.recordAuditMutation({
+        action: 'RESET_STATEMENT_LINE_TO_LEDGER',
+        entityType: 'FINANCIAL_STATEMENT_LINE',
+        entityId: `${resolvedClientId}:${params.fiscalYear}:${params.lineKey}`,
+        clientId: resolvedClientId,
+        beforeValue: removed,
+        afterValue: null,
+        reason: params.reason || 'إرجاع البند لرصيد دفتر الأستاذ',
+        details: `إرجاع بند القوائم المالية (${params.lineKey}) إلى رصيد الأستاذ الأصلي للعميل (${resolvedClientId}) للسنة (${params.fiscalYear})`,
+      });
+      this.saveState('APPROVED_STATEMENTS');
+    }
+
+    return this.buildStatementModel(resolvedClientId, params.fiscalYear);
+  }
+
+  /**
+   * Requirement ب-2: Revert ALL statement adjustments back to Ledger ("إرجاع للأستاذ" لكل القائمة).
+   */
+  public resetAllManagerStatementAdjustments(
+    clientId: string,
+    fiscalYear: number,
+    reason = 'إرجاع جميع بنود القوائم المالية لأرصدة دفتر الأستاذ'
+  ): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear,
+      entityType: 'STATEMENT_ADJUSTMENT',
+    });
+
+    const workingKey = this.getAdjustmentLayerStorageKey(resolvedClientId, fiscalYear);
+    const existingLayer = this.getManagerAdjustmentLayer(resolvedClientId, fiscalYear);
+    const beforeAdjustments = [...(existingLayer.adjustments || [])];
+
+    if (!this.state.managerAdjustmentLayers) {
+      this.state.managerAdjustmentLayers = {};
+    }
+
+    this.state.managerAdjustmentLayers[workingKey] = {
+      ...existingLayer,
+      status: 'DRAFT',
+      adjustments: [],
+      updatedAt: getCairoTimestamp(),
+      updatedBy: user.name,
+    };
+
+    this.recordAuditMutation({
+      action: 'RESET_ALL_STATEMENT_ADJUSTMENTS_TO_LEDGER',
+      entityType: 'FINANCIAL_STATEMENT',
+      entityId: `${resolvedClientId}:${fiscalYear}`,
+      clientId: resolvedClientId,
+      beforeValue: beforeAdjustments,
+      afterValue: [],
+      reason,
+      details: `إرجاع جميع التعديلات اليدوية (${beforeAdjustments.length} تعديل) إلى أرصدة دفتر الأستاذ للعميل (${resolvedClientId}) للسنة (${fiscalYear})`,
+    });
+
+    this.saveState('APPROVED_STATEMENTS');
+    return this.buildStatementModel(resolvedClientId, fiscalYear);
+  }
+
+  /**
+   * Requirement هـ: Rename statement line display name protected by assertCan('EDIT_FINAL_STATEMENTS') inside db.
+   */
+  public setStatementLineDisplayName(params: {
+    clientId: string;
+    fiscalYear: number;
+    lineKey: FinancialStatementLineKey | string;
+    customLabelAr: string;
+    reason?: string;
+  }): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'STATEMENT_LINE_NAME',
+    });
+
+    const cleanLabel = String(params.customLabelAr || '').trim();
+    if (!cleanLabel) {
+      throw new Error('اسم البند في القوائم المالية لا يمكن أن يكون فارغاً.');
+    }
+
+    const workingKey = this.getAdjustmentLayerStorageKey(resolvedClientId, params.fiscalYear);
+    const existingLayer = this.getManagerAdjustmentLayer(resolvedClientId, params.fiscalYear);
+    const prevLabels = { ...(existingLayer.customLineLabels || {}) };
+    const beforeLabel = prevLabels[params.lineKey] || STATEMENT_LINE_LABELS_AR[params.lineKey] || params.lineKey;
+
+    if (!this.state.managerAdjustmentLayers) {
+      this.state.managerAdjustmentLayers = {};
+    }
+
+    const nextLabels = {
+      ...prevLabels,
+      [params.lineKey]: cleanLabel,
+    };
+
+    this.state.managerAdjustmentLayers[workingKey] = {
+      ...existingLayer,
+      customLineLabels: nextLabels,
+      updatedAt: getCairoTimestamp(),
+      updatedBy: user.name,
+    };
+
+    this.recordAuditMutation({
+      action: 'RENAME_STATEMENT_LINE_LABEL',
+      entityType: 'FINANCIAL_STATEMENT_LINE',
+      entityId: `${resolvedClientId}:${params.fiscalYear}:${params.lineKey}`,
+      clientId: resolvedClientId,
+      beforeValue: { lineKey: params.lineKey, labelAr: beforeLabel },
+      afterValue: { lineKey: params.lineKey, labelAr: cleanLabel },
+      reason: params.reason || `تعديل مسمى بند القوائم المالية (${params.lineKey})`,
+      details: `تعديل اسم البند (${params.lineKey}) في القوائم المالية من "${beforeLabel}" إلى "${cleanLabel}"`,
+    });
+
+    this.saveState('APPROVED_STATEMENTS');
+    return this.buildStatementModel(resolvedClientId, params.fiscalYear);
+  }
+
+  /**
+   * Requirement د-5: Save manual paragraph edit on an explanatory note and record baseline numbers.
+   */
+  public saveStatementNoteManualEdit(params: {
+    clientId: string;
+    fiscalYear: number;
+    noteId: string;
+    manualParagraph: string;
+    customTitle?: string;
+    reason?: string;
+  }): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'STATEMENT_NOTE',
+    });
+
+    const currentModel = this.buildStatementModel(resolvedClientId, params.fiscalYear);
+    const targetNote = currentModel.notes.find((n) => n.id === params.noteId);
+
+    const baselineNumbers: Record<string, number> = {};
+    for (const lk of targetNote?.linkedLineKeys || []) {
+      baselineNumbers[lk] = currentModel.linesMap[lk]?.currentAmount ?? 0;
+    }
+
+    if (!this.state.statementNotes || typeof this.state.statementNotes !== 'object') {
+      this.state.statementNotes = {};
+    }
+    const clientYearKey = `${resolvedClientId}:${params.fiscalYear}`;
+    if (!this.state.statementNotes[clientYearKey]) {
+      this.state.statementNotes[clientYearKey] = {};
+    }
+
+    const beforeNote = this.state.statementNotes[clientYearKey][params.noteId] || null;
+    const nowTs = getCairoTimestamp();
+    this.state.statementNotes[clientYearKey][params.noteId] = {
+      manualParagraph: params.manualParagraph,
+      customTitle: params.customTitle ?? beforeNote?.customTitle,
+      baselineNumbers,
+      lastConfirmedAt: nowTs,
+      lastConfirmedBy: user.name,
+      updatedAt: nowTs,
+      updatedBy: user.name,
+    };
+
+    this.recordAuditMutation({
+      action: 'EDIT_STATEMENT_NOTE_TEXT',
+      entityType: 'STATEMENT_NOTE',
+      entityId: `${resolvedClientId}:${params.fiscalYear}:${params.noteId}`,
+      clientId: resolvedClientId,
+      beforeValue: beforeNote,
+      afterValue: this.state.statementNotes[clientYearKey][params.noteId],
+      reason: params.reason || `تعديل نص الإيضاح المتمم (${targetNote?.title || params.noteId})`,
+      details: `تعديل نص الإيضاح المتمم رقم (${targetNote?.noteNumber || params.noteId}) للعميل (${resolvedClientId}) للسنة (${params.fiscalYear})`,
+    });
+
+    this.saveState('APPROVED_STATEMENTS');
+    return this.buildStatementModel(resolvedClientId, params.fiscalYear);
+  }
+
+  /**
+   * Requirement د-5: Confirm a note flagged with "تحتاج مراجعة" after linked numbers changed.
+   */
+  public confirmStatementNoteReview(params: {
+    clientId: string;
+    fiscalYear: number;
+    noteId: string;
+  }): StatementModel {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'STATEMENT_NOTE',
+    });
+
+    const currentModel = this.buildStatementModel(resolvedClientId, params.fiscalYear);
+    const targetNote = currentModel.notes.find((n) => n.id === params.noteId);
+
+    const baselineNumbers: Record<string, number> = {};
+    for (const lk of targetNote?.linkedLineKeys || []) {
+      baselineNumbers[lk] = currentModel.linesMap[lk]?.currentAmount ?? 0;
+    }
+
+    if (!this.state.statementNotes || typeof this.state.statementNotes !== 'object') {
+      this.state.statementNotes = {};
+    }
+    const clientYearKey = `${resolvedClientId}:${params.fiscalYear}`;
+    if (!this.state.statementNotes[clientYearKey]) {
+      this.state.statementNotes[clientYearKey] = {};
+    }
+
+    const existing = this.state.statementNotes[clientYearKey][params.noteId] || {};
+    const nowTs = getCairoTimestamp();
+    this.state.statementNotes[clientYearKey][params.noteId] = {
+      ...existing,
+      baselineNumbers,
+      lastConfirmedAt: nowTs,
+      lastConfirmedBy: user.name,
+      updatedAt: nowTs,
+      updatedBy: user.name,
+    };
+
+    this.recordAuditMutation({
+      action: 'CONFIRM_STATEMENT_NOTE_REVIEW',
+      entityType: 'STATEMENT_NOTE',
+      entityId: `${resolvedClientId}:${params.fiscalYear}:${params.noteId}`,
+      clientId: resolvedClientId,
+      beforeValue: { needsReview: true },
+      afterValue: { needsReview: false, baselineNumbers, confirmedBy: user.name },
+      details: `تأكيد مراجعة الإيضاح المتمم (${targetNote?.title || params.noteId}) بعد تحديث أرقامه المشتقة من النموذج`,
+    });
+
+    this.saveState('APPROVED_STATEMENTS');
+    return this.buildStatementModel(resolvedClientId, params.fiscalYear);
+  }
+
+  /**
+   * Requirement د-1: "تعديل الإصدار النهائي" — Opens a working draft copy from current approved version N.
+   */
+  public startEditingApprovedStatementVersion(
+    clientId: string,
+    fiscalYear: number,
+    sourceVersion?: number
+  ): { draftLayer: ManagerAdjustmentLayer; model: StatementModel } {
+    const resolvedClientId = this.resolveMandatoryClientId(clientId);
+    const user = this.assertCan('EDIT_FINAL_STATEMENTS', {
+      clientId: resolvedClientId,
+      fiscalYear,
+      entityType: 'APPROVED_STATEMENT',
+    });
+
+    const sourceSnap =
+      sourceVersion !== undefined
+        ? this.getApprovedStatementsForClient(resolvedClientId, fiscalYear).find(
+            (s) => s.version === sourceVersion || s.versionNo === sourceVersion
+          )
+        : this.getLatestApprovedStatementForClient(resolvedClientId, fiscalYear);
+
+    const baseLayer = sourceSnap?.adjustmentLayer || this.getManagerAdjustmentLayer(resolvedClientId, fiscalYear, sourceSnap?.version);
+    const nextVersionNumber = (sourceSnap?.version || 0) + 1;
+
+    const draftLayer: ManagerAdjustmentLayer = {
+      clientId: resolvedClientId,
+      fiscalYear,
+      version: nextVersionNumber,
+      basedOnVersion: sourceSnap?.version || 1,
+      status: 'DRAFT',
+      adjustments: (baseLayer.adjustments || []).map((a) => ({ ...a })),
+      customLineLabels: { ...(baseLayer.customLineLabels || {}) },
+      updatedAt: getCairoTimestamp(),
+      updatedBy: user.name,
+    };
+
+    if (!this.state.managerAdjustmentLayers) {
+      this.state.managerAdjustmentLayers = {};
+    }
+    const workingKey = this.getAdjustmentLayerStorageKey(resolvedClientId, fiscalYear);
+    this.state.managerAdjustmentLayers[workingKey] = draftLayer;
+
+    this.recordAuditMutation({
+      action: 'OPEN_DRAFT_FROM_APPROVED_STATEMENT',
+      entityType: 'APPROVED_STATEMENT',
+      entityId: sourceSnap?.id || `${resolvedClientId}:${fiscalYear}`,
+      clientId: resolvedClientId,
+      beforeValue: { version: sourceSnap?.version || 1, status: sourceSnap?.status || 'APPROVED' },
+      afterValue: { draftVersion: nextVersionNumber, basedOnVersion: sourceSnap?.version || 1, status: 'DRAFT' },
+      details: `فتح نسخة عمل (مسودة تعديل الإصدار النهائي) من الإصدار المعتمد رقم (${sourceSnap?.version || 1}) للعميل (${resolvedClientId}) للسنة (${fiscalYear})`,
+    });
+
+    this.saveState('APPROVED_STATEMENTS');
+    return {
+      draftLayer,
+      model: this.buildStatementModel(resolvedClientId, fiscalYear),
+    };
+  }
+
+  /**
+   * Requirement د-1, د-2, د-3, هـ:
+   * Approve current working statement model -> produces Version N+1 with new SHA-256 fingerprint,
+   * new verificationCode, marks Version N as SUPERSEDED (with link to N+1, never deleted),
+   * updates QR status, and logs line-by-line before/after diffs & mandatory reissue reason in Audit Trail.
+   */
+  public approveStatementModelVersion(params: {
+    clientId: string;
+    fiscalYear: number;
+    reissueReason?: string;
+    reason?: string;
+  }): {
+    snapshot: ApprovedStatementsSnapshot;
+    supersededSnapshot?: ApprovedStatementsSnapshot;
+    versionDiffs: StatementVersionDiffItem[];
+    model: StatementModel;
+  } {
+    const resolvedClientId = this.resolveMandatoryClientId(params.clientId);
+    const existingActive = this.getLatestApprovedStatementForClient(resolvedClientId, params.fiscalYear);
+    const allForPeriod = this.getApprovedStatementsForClient(resolvedClientId, params.fiscalYear);
+    const isReissue = allForPeriod.length > 0;
+
+    const user = this.assertCan(isReissue ? 'EDIT_FINAL_STATEMENTS' : 'APPROVE_STATEMENT', {
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      entityType: 'APPROVED_STATEMENT',
+    });
+
+    const cleanReason = String(params.reissueReason || params.reason || '').trim();
+    if (isReissue && !cleanReason) {
+      throw new Error('سبب إعادة الإصدار مطلوب ولا يمكن اعتماد تعديل الإصدار النهائي بدون إدخال السبب.');
+    }
+
+    const maxExistingVersion = allForPeriod.reduce(
+      (maxV, s) => Math.max(maxV, Number(s.version || s.versionNo || 0)),
+      0
+    );
+    const nextVersion = maxExistingVersion + 1;
+
+    // Build previous version model if re-issuing to compute exact line-by-line before/after diffs
+    const prevModel = existingActive
+      ? this.buildStatementModel(resolvedClientId, params.fiscalYear, existingActive.version)
+      : null;
+
+    // Ensure working layer is used to build the new model
+    const workingKey = this.getAdjustmentLayerStorageKey(resolvedClientId, params.fiscalYear);
+    const workingLayer = this.getManagerAdjustmentLayer(resolvedClientId, params.fiscalYear);
+    const approvedLayer: ManagerAdjustmentLayer = {
+      ...workingLayer,
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      version: nextVersion,
+      basedOnVersion: existingActive?.version,
+      status: 'APPROVED',
+      reissueReason: isReissue ? cleanReason : undefined,
+      updatedAt: getCairoTimestamp(),
+      updatedBy: user.name,
+    };
+
+    if (!this.state.managerAdjustmentLayers) {
+      this.state.managerAdjustmentLayers = {};
+    }
+    const versionLayerKey = this.getAdjustmentLayerStorageKey(resolvedClientId, params.fiscalYear, nextVersion);
+    this.state.managerAdjustmentLayers[versionLayerKey] = approvedLayer;
+    // Clear working draft status to APPROVED so subsequent reads default to the newly approved version
+    this.state.managerAdjustmentLayers[workingKey] = approvedLayer;
+
+    const nextModel = this.buildStatementModel(resolvedClientId, params.fiscalYear, nextVersion);
+
+    // Compute line-by-line diffs between previous version N and new version N+1 (Requirement د-3)
+    const versionDiffs: StatementVersionDiffItem[] = [];
+    if (prevModel) {
+      for (const lineKey of Object.keys(nextModel.linesMap)) {
+        const prevLine = prevModel.linesMap[lineKey];
+        const nextLine = nextModel.linesMap[lineKey];
+        if (!nextLine) continue;
+        const beforeCur = prevLine ? prevLine.currentAmount : 0;
+        const afterCur = nextLine.currentAmount;
+        const diffCur = Math.round((afterCur - beforeCur) * 100) / 100;
+        const beforeComp = prevLine ? prevLine.comparativeAmount : 0;
+        const afterComp = nextLine.comparativeAmount;
+        const diffComp = Math.round((afterComp - beforeComp) * 100) / 100;
+        if (Math.abs(diffCur) >= 0.005 || Math.abs(diffComp) >= 0.005) {
+          versionDiffs.push({
+            lineKey,
+            labelAr: nextLine.labelAr,
+            beforeCurrent: beforeCur,
+            afterCurrent: afterCur,
+            diffCurrent: diffCur,
+            beforeComparative: beforeComp,
+            afterComparative: afterComp,
+            diffComparative: diffComp,
+          });
+        }
+      }
+    }
+
+    const verificationCode = generateVerificationCode();
+    const nowTs = getCairoTimestamp();
+    const canonicalPayload = JSON.stringify({
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      version: nextVersion,
+      verificationCode,
+      totals: {
+        incomeStatement: nextModel.incomeStatement?.totals || {
+          netProfit: nextModel.incomeStatement?.netProfit,
+        },
+        balanceSheet: nextModel.balanceSheet?.totals || {
+          totalAssets: nextModel.balanceSheet?.totalAssets,
+        },
+        cashFlow: nextModel.cashFlow?.totals || {
+          endingCash: nextModel.cashFlow?.endingCash,
+        },
+        equityStatement: nextModel.equityStatement?.totals || {
+          totalClosingEquity: nextModel.equityStatement?.totalClosingEquity,
+        },
+      },
+      lines: Object.fromEntries(
+        Object.entries(nextModel.linesMap || nextModel.lines || {}).map(([k, v]: [string, any]) => [
+          k,
+          { current: v?.currentAmount ?? 0, comparative: v?.comparativeAmount ?? 0 },
+        ])
+      ),
+      adjustments: approvedLayer.adjustments,
+    });
+    const sha256Fingerprint = computeSha256Hex(canonicalPayload);
+
+    const tb = this.getTrialBalance(resolvedClientId, params.fiscalYear);
+
+    const newSnap = this.addApprovedStatement({
+      id: `as-${resolvedClientId}-${params.fiscalYear}-v${nextVersion}-${Date.now().toString(36)}`,
+      clientId: resolvedClientId,
+      fiscalYear: params.fiscalYear,
+      version: nextVersion,
+      versionNo: nextVersion,
+      status: 'APPROVED',
+      approvedAt: nowTs,
+      approvedBy: user.name,
+      source: approvedLayer.adjustments.length > 0 ? 'MANUAL' : 'LEDGER',
+      trialBalanceRows: tb.rows,
+      incomeStatement: nextModel.incomeStatement,
+      balanceSheet: nextModel.balanceSheet,
+      cashFlow: nextModel.cashFlow,
+      equityStatement: nextModel.equityStatement,
+      notes: nextModel.notes,
+      ratios: nextModel.ratios,
+      adjustmentLayer: approvedLayer,
+      reissueReason: isReissue ? cleanReason : undefined,
+      previousVersionId: existingActive?.id,
+      previousVersion: existingActive?.version,
+      supersededFromVersion: existingActive?.version,
+      versionDiffs,
+      verificationCode,
+      sha256Fingerprint,
+      model: nextModel,
+    } as any);
+
+    if (isReissue) {
+      this.recordAuditMutation({
+        action: 'APPROVE_REISSUED_STATEMENT_VERSION_DIFF',
+        entityType: 'APPROVED_STATEMENT',
+        entityId: newSnap.id,
+        clientId: resolvedClientId,
+        beforeValue: {
+          previousVersion: existingActive?.version,
+          previousVerificationCode: existingActive?.verificationCode,
+          previousSha256: existingActive?.sha256Fingerprint,
+          previousTotals: prevModel
+            ? {
+                totalAssets: prevModel.balanceSheet?.totals?.totalAssets ?? prevModel.balanceSheet?.totalAssets,
+                totalLiabilitiesAndEquity:
+                  prevModel.balanceSheet?.totals?.totalLiabilitiesAndEquity ??
+                  prevModel.balanceSheet?.totalLiabilitiesAndEquity,
+                netProfit:
+                  prevModel.incomeStatement?.totals?.netProfit ?? prevModel.incomeStatement?.netProfit,
+                endingCash:
+                  prevModel.cashFlow?.totals?.endingCash ?? prevModel.cashFlow?.endingCash,
+              }
+            : null,
+          changedLinesBefore: versionDiffs.map((d) => ({
+            lineKey: d.lineKey,
+            labelAr: d.labelAr,
+            beforeCurrent: d.beforeCurrent,
+            beforeComparative: d.beforeComparative,
+          })),
+        },
+        afterValue: {
+          newVersion: nextVersion,
+          newVerificationCode: verificationCode,
+          newSha256: sha256Fingerprint,
+          supersededVersion: existingActive?.version,
+          supersededStatus: 'SUPERSEDED',
+          newTotals: {
+            totalAssets: nextModel.balanceSheet?.totals?.totalAssets ?? nextModel.balanceSheet?.totalAssets,
+            totalLiabilitiesAndEquity:
+              nextModel.balanceSheet?.totals?.totalLiabilitiesAndEquity ??
+              nextModel.balanceSheet?.totalLiabilitiesAndEquity,
+            netProfit:
+              nextModel.incomeStatement?.totals?.netProfit ?? nextModel.incomeStatement?.netProfit,
+            endingCash:
+              nextModel.cashFlow?.totals?.endingCash ?? nextModel.cashFlow?.endingCash,
+          },
+          changedLinesAfter: versionDiffs.map((d) => ({
+            lineKey: d.lineKey,
+            labelAr: d.labelAr,
+            afterCurrent: d.afterCurrent,
+            diffCurrent: d.diffCurrent,
+            afterComparative: d.afterComparative,
+            diffComparative: d.diffComparative,
+          })),
+        },
+        reason: cleanReason,
+        details: `إعادة إصدار القوائم المالية المعتمدة للعميل (${resolvedClientId}) للسنة (${params.fiscalYear}): إنشاء الإصدار (${nextVersion}) ووسم الإصدار (${existingActive?.version}) بالحالة SUPERSEDED. عدد البنود المتغيرة: (${versionDiffs.length}). السبب: ${cleanReason}`,
+      });
+      this.saveState('APPROVED_STATEMENTS');
+    }
+
+    return {
+      snapshot: newSnap,
+      supersededSnapshot: existingActive,
+      versionDiffs,
+      model: this.buildStatementModel(resolvedClientId, params.fiscalYear, nextVersion),
+    };
+  }
 }
 
 export const db = new LocalDatabase();
+

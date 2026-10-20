@@ -904,10 +904,11 @@ export const UnifiedTaxFilingAgendaView: React.FC<UnifiedTaxFilingAgendaViewProp
       // عند تغيير نوع الإقرار
       if (field === 'declarationType') {
         if (value === 'INCOME_27_CORP' || value === 'INCOME_28_INDIV') {
-          updated.startDate = `${updated.taxYear}-01-01`;
-          updated.endDate = `${updated.taxYear}-12-31`;
+          const clientBounds = db.getClientFiscalYearBounds(clientId || null, updated.taxYear);
+          updated.startDate = clientBounds.startDate;
+          updated.endDate = clientBounds.endDate;
           updated.dueDate = `${updated.taxYear + 1}-04-30`;
-          updated.period = `سنة ${updated.taxYear} المالية`;
+          updated.period = `سنة ${updated.taxYear} المالية (${clientBounds.labelAr})`;
         } else if (value === 'VAT_10' || value === 'STAMP_TAX') {
           const pInfo = calculateTaxPeriodDates(updated.periodMonth || selectedIsoMonth);
           updated.startDate = pInfo.startDate;

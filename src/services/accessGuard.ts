@@ -24,6 +24,7 @@ export type AccessGuardAction =
   | 'TREASURY'
   | 'TAX'
   | 'AUDIT_TRAIL'
+  | 'EDIT_FINAL_STATEMENTS'
   | 'ADMIN';
 
 export interface AccessGuardContext {
@@ -383,6 +384,24 @@ export function assertCan(
         );
       }
       break;
+
+    case 'EDIT_FINAL_STATEMENTS': {
+      const hasEditFinalFlag = isAdminRole
+        ? user.canEditFinalStatements !== false
+        : Boolean(user.canEditFinalStatements);
+      if (!hasEditFinalFlag) {
+        throw new PermissionError(
+          'عملية مرفوضة: ليس لديك صلاحية التعديل اليدوي على القوائم المالية أو تعديل الإصدار النهائي المعتمد (EDIT_FINAL_STATEMENTS - افتراضياً لمدير النظام ADMIN).',
+          {
+            action: normalizedAction,
+            clientId: targetClientId,
+            fiscalYear: context.fiscalYear,
+            entityType: context.entityType || 'STATEMENT_ADJUSTMENT',
+          }
+        );
+      }
+      break;
+    }
 
     case 'ISSUE_CERTIFICATE':
       if (

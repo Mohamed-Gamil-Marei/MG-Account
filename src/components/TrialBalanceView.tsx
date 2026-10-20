@@ -58,8 +58,7 @@ export const TrialBalanceView: React.FC<TrialBalanceViewProps> = ({
   }, [selectedClientId, activeClient]);
 
   const officialBounds = useMemo(() => {
-    if (!selectedClientId) return { startDate: `${fiscalYear}-01-01`, endDate: `${fiscalYear}-12-31`, labelAr: '31 ديسمبر' };
-    return db.getClientFiscalYearBounds(selectedClientId, fiscalYear);
+    return db.getClientFiscalYearBounds(selectedClientId || null, fiscalYear);
   }, [selectedClientId, fiscalYear]);
 
   const [fromDate, setFromDate] = useState<string>(officialBounds.startDate);

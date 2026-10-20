@@ -63,6 +63,7 @@ import { WhatsAppLiveChatPanel } from './components/practice/WhatsAppLiveChatPan
 import { UnifiedTaxFilingAgendaView } from './components/tax/UnifiedTaxFilingAgendaView';
 import { ClientTaxPortalCredentialsModal } from './components/tax/ClientTaxPortalCredentialsModal';
 import { DensityProvider } from './components/common/CompactDensityContext';
+import { computeFiscalYearBoundsByStartMonth } from './services/AccountingCalculator';
 import {
   getVisibleClients,
   isCrossClientTab,
@@ -138,10 +139,10 @@ export const App: React.FC = () => {
   const [newClientFiscalYear, setNewClientFiscalYear] = useState<number>(() => getCairoCurrentYear());
   const [newClientEndMonth, setNewClientEndMonth] = useState<number>(12);
   const [newClientFiscalStart, setNewClientFiscalStart] = useState<string>(
-    () => `${getCairoCurrentYear()}-01-01`
+    () => computeFiscalYearBoundsByStartMonth(getCairoCurrentYear(), 1).startDate
   );
   const [newClientFiscalEnd, setNewClientFiscalEnd] = useState<string>(
-    () => `${getCairoCurrentYear()}-12-31`
+    () => computeFiscalYearBoundsByStartMonth(getCairoCurrentYear(), 1).endDate
   );
   const [newClientIsVat, setNewClientIsVat] = useState<boolean>(true);
   const [newClientIsIncome, setNewClientIsIncome] = useState<boolean>(true);
@@ -2467,16 +2468,10 @@ export const App: React.FC = () => {
                         onChange={(e) => {
                           const yr = Number(e.target.value) || 2026;
                           setNewClientFiscalYear(yr);
-                          if (newClientEndMonth === 6) {
-                            setNewClientFiscalStart(`${yr - 1}-07-01`);
-                            setNewClientFiscalEnd(`${yr}-06-30`);
-                          } else if (newClientEndMonth === 3) {
-                            setNewClientFiscalStart(`${yr - 1}-04-01`);
-                            setNewClientFiscalEnd(`${yr}-03-31`);
-                          } else {
-                            setNewClientFiscalStart(`${yr}-01-01`);
-                            setNewClientFiscalEnd(`${yr}-12-31`);
-                          }
+                          const startMonth = newClientEndMonth === 12 ? 1 : newClientEndMonth + 1;
+                          const bounds = computeFiscalYearBoundsByStartMonth(yr, startMonth);
+                          setNewClientFiscalStart(bounds.startDate);
+                          setNewClientFiscalEnd(bounds.endDate);
                         }}
                         className="w-24 rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold"
                       />
@@ -2486,16 +2481,10 @@ export const App: React.FC = () => {
                           const m = Number(e.target.value) || 12;
                           setNewClientEndMonth(m);
                           const yr = newClientFiscalYear;
-                          if (m === 6) {
-                            setNewClientFiscalStart(`${yr - 1}-07-01`);
-                            setNewClientFiscalEnd(`${yr}-06-30`);
-                          } else if (m === 3) {
-                            setNewClientFiscalStart(`${yr - 1}-04-01`);
-                            setNewClientFiscalEnd(`${yr}-03-31`);
-                          } else {
-                            setNewClientFiscalStart(`${yr}-01-01`);
-                            setNewClientFiscalEnd(`${yr}-12-31`);
-                          }
+                          const startMonth = m === 12 ? 1 : m + 1;
+                          const bounds = computeFiscalYearBoundsByStartMonth(yr, startMonth);
+                          setNewClientFiscalStart(bounds.startDate);
+                          setNewClientFiscalEnd(bounds.endDate);
                         }}
                         className="flex-1 rounded-lg border border-slate-300 px-2.5 py-2 text-xs"
                       >

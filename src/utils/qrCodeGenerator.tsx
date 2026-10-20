@@ -109,23 +109,70 @@ export function buildFinancialStatementsQrText(params: {
   taxId?: string;
   fiscalYear: number | string;
   totalAssets: number;
+  totalLiabilities?: number;
+  totalEquity?: number;
+  totalRevenues?: number;
   netProfit: number;
   auditorName?: string;
+  licenseNumber?: string;
   verificationCode?: string;
+  securityHash?: string;
+  version?: number;
+  status?: 'DRAFT' | 'APPROVED' | 'SUPERSEDED' | string;
+  supersededAt?: string;
+  supersededByVersion?: number;
+  supersededByVerificationCode?: string;
   statementId?: string;
   clientId?: string;
   [key: string]: any;
 }): string {
-  return [
+  const code =
+    params.verificationCode ||
+    generateDocumentSecurityHash(
+      params.companyName,
+      params.fiscalYear,
+      params.version || 1,
+      params.totalAssets,
+      params.netProfit
+    );
+  const isSuperseded = Boolean(params.status === 'SUPERSEDED' || params.supersededAt);
+  const supDate = (params.supersededAt || '').slice(0, 10);
+  const statusText = isSuperseded
+    ? `هذا الإصدار تم استبداله بإصدار أحدث بتاريخ ${supDate}${
+        params.supersededByVersion ? ` (الإصدار رقم ${params.supersededByVersion})` : ''
+      }`
+    : params.status === 'DRAFT'
+    ? 'مسودة غير معتمدة'
+    : 'سليم';
+
+  const parts = [
     `CPA-FS-CERTIFIED`,
     `CO:${params.companyName}`,
     `TAX:${params.taxId || 'N/A'}`,
     `FY:${params.fiscalYear}`,
-    `ASSETS:${Math.round(params.totalAssets)}`,
-    `NET:${Math.round(params.netProfit)}`,
-    `AUD:${params.auditorName || 'Mohamed Gameel Marie'}`,
-    `CODE:${params.verificationCode || generateDocumentSecurityHash(params.companyName + params.fiscalYear)}`,
-  ].join('|');
+    `VER:${params.version || 1}`,
+    `STATUS:${statusText}`,
+    `ASSETS:${Math.round(Number(params.totalAssets) || 0)}`,
+    ...(params.totalLiabilities !== undefined
+      ? [`LIAB:${Math.round(Number(params.totalLiabilities) || 0)}`]
+      : []),
+    ...(params.totalEquity !== undefined
+      ? [`EQ:${Math.round(Number(params.totalEquity) || 0)}`]
+      : []),
+    ...(params.totalRevenues !== undefined
+      ? [`REV:${Math.round(Number(params.totalRevenues) || 0)}`]
+      : []),
+    `NET:${Math.round(Number(params.netProfit) || 0)}`,
+    `AUD:${params.auditorName || ''}`,
+    ...(params.licenseNumber ? [`LIC:${params.licenseNumber}`] : []),
+    ...(params.securityHash ? [`SHA256:${params.securityHash}`] : []),
+    `CODE:${code}`,
+    `كود التحقق: ${code}`,
+  ];
+  if (isSuperseded && params.supersededByVerificationCode) {
+    parts.push(`NEW_CODE:${params.supersededByVerificationCode}`);
+  }
+  return parts.join('|');
 }
 
 export function buildAuditorReportQrText(params: {
@@ -136,20 +183,54 @@ export function buildAuditorReportQrText(params: {
   reportDate?: string;
   auditorName?: string;
   licenseNumber?: string;
+  totalAssets?: number;
+  totalRevenues?: number;
+  netProfit?: number;
+  version?: number;
+  status?: 'DRAFT' | 'APPROVED' | 'SUPERSEDED' | string;
+  supersededAt?: string;
+  supersededByVersion?: number;
   verificationCode?: string;
   reportId?: string;
   [key: string]: any;
 }): string {
   const rDate = params.reportDate || new Date().toISOString().slice(0, 10);
+  const opinionVal = String(params.opinionType || params.opinion || '').trim();
+  const isSuperseded = Boolean(params.status === 'SUPERSEDED' || params.supersededAt);
+  const statusText = isSuperseded
+    ? `هذا الإصدار تم استبداله بإصدار أحدث بتاريخ ${(params.supersededAt || '').slice(0, 10)}`
+    : 'سليم';
+  const code =
+    params.verificationCode ||
+    generateDocumentSecurityHash(
+      params.companyName,
+      params.fiscalYear,
+      rDate,
+      opinionVal,
+      params.totalAssets,
+      params.netProfit
+    );
   return [
     `CPA-AUDIT-REPORT`,
     `CO:${params.companyName}`,
     `FY:${params.fiscalYear}`,
-    `OPINION:${params.opinionType || params.opinion || 'UNQUALIFIED'}`,
+    `VER:${params.version || 1}`,
+    `STATUS:${statusText}`,
+    `OPINION:${opinionVal || 'NONE_SELECTED'}`,
+    ...(params.totalAssets !== undefined
+      ? [`ASSETS:${Math.round(Number(params.totalAssets) || 0)}`]
+      : []),
+    ...(params.totalRevenues !== undefined
+      ? [`REV:${Math.round(Number(params.totalRevenues) || 0)}`]
+      : []),
+    ...(params.netProfit !== undefined
+      ? [`NET:${Math.round(Number(params.netProfit) || 0)}`]
+      : []),
     `DATE:${rDate}`,
-    `AUD:${params.auditorName || 'Mohamed Gameel Marie'}`,
-    `LIC:${params.licenseNumber || '43122'}`,
-    `CODE:${params.verificationCode || generateDocumentSecurityHash(params.companyName + rDate)}`,
+    `AUD:${params.auditorName || ''}`,
+    `LIC:${params.licenseNumber || ''}`,
+    `CODE:${code}`,
+    `كود التحقق: ${code}`,
   ].join('|');
 }
 

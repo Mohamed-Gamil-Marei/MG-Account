@@ -23,7 +23,9 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({
     activeClient?.activeFiscalYear ||
     selectedYear;
   const fiscalBounds = db.getClientFiscalYearBounds(activeClientId, targetYear);
-  const unassignedEntries = db.getUnassignedJournalEntries();
+  const unassignedSummary = useMemo(() => {
+    return db.getUnassignedRecordsSummary();
+  }, [state.journalEntries, state.invoices, state.treasuryTransactions, state.fixedAssets, state.taxDeclarations]);
 
   // Principle 8: No default professional opinion — user must explicitly select one
   const [opinionType, setOpinionType] = useState<
@@ -32,59 +34,31 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({
   const [basisParagraph, setBasisParagraph] = useState('');
   const [keyAuditMatters, setKeyAuditMatters] = useState('');
 
-  const financialMetrics = useMemo(() => {
-    if (!activeClientId) return { totalAssets: 0, totalRevenues: 0, netIncome: 0, entriesCount: 0 };
-    const clientAccounts = db.getClientAccounts(activeClientId, targetYear);
-    const postedEntries = (state.journalEntries || []).filter((je) => {
-      if (je.clientId !== activeClientId) return false;
-      if (!je.isPosted && je.status !== 'POSTED') return false;
-      if (je.fiscalYear) return je.fiscalYear === targetYear;
-      return je.date >= fiscalBounds.startDate && je.date <= fiscalBounds.endDate;
-    });
-
-    const movMap = new Map<string, { debit: number; credit: number }>();
-    for (const je of postedEntries) {
-      for (const l of je.lines || []) {
-        const key = l.accountCode || l.accountId || '';
-        const prev = movMap.get(key) || { debit: 0, credit: 0 };
-        prev.debit += Number(l.debit) || 0;
-        prev.credit += Number(l.credit) || 0;
-        movMap.set(key, prev);
-      }
-    }
-
-    let totalAssets = 0;
-    let totalRevenues = 0;
-    let totalExpenses = 0;
-
-    for (const acc of clientAccounts) {
-      const mov = movMap.get(acc.code) || movMap.get(acc.id) || { debit: 0, credit: 0 };
-      const openDr = Number(acc.openingBalanceDebit) || 0;
-      const openCr = Number(acc.openingBalanceCredit) || 0;
-      const netDebit = openDr + mov.debit - (openCr + mov.credit);
-      const balance = acc.nature === 'CREDIT' ? -netDebit : netDebit;
-
-      if (acc.category === 'ASSETS') totalAssets += balance;
-      if (acc.category === 'REVENUE') totalRevenues += balance;
-      if (acc.category === 'EXPENSES' || acc.category === 'COGS') totalExpenses += balance;
-    }
-
-    return {
-      totalAssets,
-      totalRevenues,
-      netIncome: totalRevenues - totalExpenses,
-      entriesCount: postedEntries.length,
-    };
+  // Read financial numbers directly from the unified StatementModel (incorporating manager adjustments)
+  const statementModel = useMemo(() => {
+    if (!activeClientId) return null;
+    return db.buildStatementModel(activeClientId, targetYear);
   }, [
     activeClientId,
     targetYear,
-    fiscalBounds.startDate,
-    fiscalBounds.endDate,
     state.accounts,
     state.journalEntries,
     state.openingBalances,
     state.clientOpeningBalances,
+    state.statementMappings,
+    state.managerAdjustmentLayers,
+    state.approvedStatements,
   ]);
+
+  const financialMetrics = useMemo(() => {
+    if (!statementModel) return { totalAssets: 0, totalRevenues: 0, netIncome: 0, entriesCount: 0 };
+    return {
+      totalAssets: statementModel.balanceSheet?.totals?.totalAssets ?? statementModel.balanceSheet?.totalAssets ?? 0,
+      totalRevenues: statementModel.incomeStatement?.operatingRevenue ?? statementModel.incomeStatement?.totals?.operatingRevenue ?? statementModel.incomeStatement?.totalRevenues ?? 0,
+      netIncome: statementModel.incomeStatement?.netIncome ?? statementModel.incomeStatement?.totals?.netProfit ?? statementModel.incomeStatement?.netProfit ?? 0,
+      entriesCount: statementModel.entriesCount ?? (statementModel.trialBalanceSummary?.rows?.length || 0),
+    };
+  }, [statementModel]);
 
   if (!activeClient) {
     return (
@@ -98,17 +72,18 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({
     );
   }
 
-  if (unassignedEntries.length > 0) {
+  if (unassignedSummary.totalCount > 0) {
     return (
       <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-rose-900 text-xs flex items-center justify-between gap-4" dir="rtl">
         <div className="flex items-center gap-3">
           <AlertCircle className="w-6 h-6 shrink-0 text-rose-700" />
           <div>
             <p className="font-black text-sm">
-              لا يمكن إصدار تقرير مراقب الحسابات قبل نسب القيود غير المنسوبة ({unassignedEntries.length} قيد)
+              لا يمكن إصدار تقرير مراقب الحسابات قبل نسب السجلات غير المنسوبة ({unassignedSummary.totalCount} سجل)
             </p>
             <p className="mt-1">
-              يرجى الانتقال إلى شاشة &quot;قيود غير منسوبة&quot; ونسب القيود المعلقة إلى المنشأة المختصة أولاً.
+              يوجد سجلات معلقة غير منسوبة لعميل (قيود: {unassignedSummary.journalEntriesCount}، فواتير: {unassignedSummary.invoicesCount}، خزنة: {unassignedSummary.treasuryTransactionsCount}، أصول: {unassignedSummary.fixedAssetsCount}، إقرارات: {unassignedSummary.taxDeclarationsCount}).
+              يرجى الانتقال إلى شاشة &quot;السجلات غير المنسوبة&quot; ونسبها إلى المنشأة المختصة أولاً لضمان سلامة التقرير المهني.
             </p>
           </div>
         </div>
@@ -118,7 +93,7 @@ export const AuditorReportView: React.FC<AuditorReportViewProps> = ({
             onClick={() => onNavigateToTab('UNASSIGNED_ENTRIES')}
             className="px-4 py-2 rounded-xl bg-rose-600 text-white font-bold shrink-0 hover:bg-rose-700"
           >
-            فتح شاشة قيود غير منسوبة
+            فتح شاشة السجلات غير المنسوبة
           </button>
         )}
       </div>
